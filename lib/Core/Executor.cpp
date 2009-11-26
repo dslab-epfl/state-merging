@@ -713,7 +713,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   if (!success) {
     current.pc = current.prevPC;
     terminateStateEarly(current, "query timed out");
-    return StatePair(0, 0);
+    return StatePair((klee::ExecutionState*)NULL, (klee::ExecutionState*)NULL);
   }
 
   if (!isSeeding) {
@@ -810,7 +810,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    return StatePair(&current, 0);
+    return StatePair(&current, (klee::ExecutionState*)NULL);
   } else if (res==Solver::False) {
     if (!isInternal) {
       if (pathWriter) {
@@ -818,7 +818,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    return StatePair(0, &current);
+    return StatePair((klee::ExecutionState*)NULL, &current);
   } else {
     TimerStatIncrementer timer(stats::forkTime);
     ExecutionState *falseState, *trueState = &current;
@@ -891,7 +891,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     if (MaxDepth && MaxDepth<=trueState->depth) {
       terminateStateEarly(*trueState, "max-depth exceeded");
       terminateStateEarly(*falseState, "max-depth exceeded");
-      return StatePair(0, 0);
+      return StatePair((klee::ExecutionState*)NULL, (klee::ExecutionState*)NULL);
     }
 
     return StatePair(trueState, falseState);

@@ -13,3 +13,9 @@ stp/AST/ASTKind.h
 stp/Makefile.common
 stp/include/
 
+test/*/Output/
+test/*/*/Output/
+test/site.exp
+test/testrun.log
+test/testrun.sum
+
