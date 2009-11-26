@@ -14,6 +14,8 @@ ifeq ($(USE_PARSER), 1)
 DIRS += parser
 endif
 
+CXXFLAGS += -std=c++0x
+
 # NB: the TAGS target is a hack to get around this recursive make nonsense
 # we want all the source and header files generated before we make tags
 .PHONY: all
