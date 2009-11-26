@@ -26,6 +26,8 @@ endif
 #
 include $(LEVEL)/Makefile.common
 
+CXXFLAGS += -std=c++0x
+
 .PHONY: doxygen
 doxygen:
 	doxygen docs/doxygen.cfg

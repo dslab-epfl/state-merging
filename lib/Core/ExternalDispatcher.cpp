@@ -23,6 +23,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <iostream>
+#include <cstdint>
 
 using namespace llvm;
 using namespace klee;

@@ -8,6 +8,8 @@
 // -*- c++ -*-
 
 #include "AST.h"
+#include <cstdint>
+
 namespace BEEV {
   //some global variables that are set through commandline options. it
   //is best that these variables remain global. Default values set
