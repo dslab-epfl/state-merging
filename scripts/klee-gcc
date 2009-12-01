@@ -20,7 +20,7 @@ def main():
     linkArgs = []
     for a in args:
         if a in ('-g', '-W', '-O', '-D', '-f',
-                 '-fnested-functions', '-pthread'):
+                 '-fnested-functions', '-pthread', '-std'):
             continue
         elif a.startswith('-Wl,'):
             continue
