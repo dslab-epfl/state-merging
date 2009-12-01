@@ -1,0 +1,6 @@
+package cloud9;
+
+message ExecutionPath {
+	required uint32 length = 1;
+	required bytes path = 2;
+}

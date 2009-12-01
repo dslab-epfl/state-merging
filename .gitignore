@@ -19,3 +19,5 @@ test/site.exp
 test/testrun.log
 test/testrun.sum
 
+lib/Cloud9/Cloud9Data.pb.*
+
