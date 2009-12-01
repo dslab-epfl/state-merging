@@ -10,7 +10,7 @@
 
 /* Cloud9 features and capabilities */
 
-//#define CLOUD9_HAVE_WATCHDOG			// Implement a fork-based watchdog mechanism
+#define CLOUD9_HAVE_WATCHDOG			// Implement a fork-based watchdog mechanism
 //#define CLOUD9_HAVE_ADVANCED_LOGGING	// Use log4cxx for logging purposes
 
 

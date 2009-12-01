@@ -11,23 +11,40 @@
 
 #include <cstdlib>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetSelect.h"
 
+#include "klee/Internal/System/Time.h"
+
+#include "cloud9/common.h"
 #include "cloud9/Logger.h"
 
-///////////////////
-/* Definitions */
+// This is a temporary hack. If the running process has access to
+// externals then it can disable interrupts, which screws up the
+// normal "nice" watchdog termination process. We try to request the
+// interpreter to halt using this mechanism as a last resort to save
+// the state data before going ahead and killing it.
+static void halt_via_gdb(int pid) {
+  char buffer[256];
+  sprintf(buffer,
+          "gdb --batch --eval-command=\"p halt_execution()\" "
+          "--eval-command=detach --pid=%d &> /dev/null",
+          pid);
+
+  if (system(buffer)==-1)
+    perror("system");
+}
 
 
 #ifdef CLOUD9_HAVE_WATCHDOG
 static void watchdog(int pid) {
-	fprintf(stderr, "KLEE: WATCHDOG: watching %d\n", pid);
-	fflush( stderr);
+	CLOUD9_DEBUG("Watchdog: Watching " << pid);
 
-	double nextStep = util::getWallTime() + MaxTime * 1.1;
+	double nextStep = klee::util::getWallTime() + MaxTime * 1.1;
 	int level = 0;
 
 	// Simple stupid code...
@@ -40,38 +57,35 @@ static void watchdog(int pid) {
 			if (errno == ECHILD) { // No child, no need to watch but
 				// return error since we didn't catch
 				// the exit.
-				fprintf(stderr, "KLEE: watchdog exiting (no child)\n");
+				CLOUD9_DEBUG("Watchdog exiting (no child)");
 				return 1;
 			} else if (errno != EINTR) {
-				perror("watchdog waitpid");
+				perror("Watchdog waitpid");
 				exit(1);
 			}
 		} else if (res == pid && WIFEXITED(status)) {
 			return WEXITSTATUS(status);
 		} else {
-			double time = util::getWallTime();
+			double time = klee::util::getWallTime();
 
 			if (time > nextStep) {
 				++level;
 
 				if (level == 1) {
-					fprintf(stderr,
-							"KLEE: WATCHDOG: time expired, attempting halt via INT\n");
+					CLOUD9_WARNING("Watchdog: time expired, attempting halt via INT");
 					kill(pid, SIGINT);
 				} else if (level == 2) {
-					fprintf(stderr,
-							"KLEE: WATCHDOG: time expired, attempting halt via gdb\n");
-					halt_via_gdb( pid);
+					CLOUD9_WARNING("Watchdog: time expired, attempting halt via gdb");
+					halt_via_gdb(pid);
 				} else {
-					fprintf(stderr,
-							"KLEE: WATCHDOG: kill(9)ing child (I tried to be nice)\n");
+					CLOUD9_WARNING("Watchdog: kill(9)ing child (I tried to be nice)");
 					kill(pid, SIGKILL);
 					return 1; // what more can we do
 				}
 
 				// Ideally this triggers a dump, which may take a while,
 				// so try and give the process extra time to clean up.
-				nextStep = util::getWallTime() + std::max(15., MaxTime * .1);
+				nextStep = klee::util::getWallTime() + std::max(15., MaxTime * .1);
 			}
 		}
 	}
@@ -89,14 +103,14 @@ int main(int argc, char **argv, char **envp) {
 
 #ifdef CLOUD9_HAVE_WATCHDOG
 	if (MaxTime == 0) {
-		klee_error("--watchdog used without --max-time");
+		CLOUD9_EXIT("--watchdog used without --max-time");
 	}
 
 	int pid = fork();
 	if (pid < 0) {
-		klee_error("unable to fork watchdog");
+		CLOUD9_EXIT("unable to fork watchdog");
 	} else if (pid) {
-		watchdog(pid)
+		watchdog(pid);
 	}
 #endif
 

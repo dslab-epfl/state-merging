@@ -26,6 +26,8 @@
 #define CLOUD9_DEBUG(msg)	cloud9::Logger::getLogger().getDebugStream() << \
 	CLOUD9_LOG_PREFIX << CLOUD9_DEBUG_PREFIX << msg << std::endl
 
+#define CLOUD9_EXIT(msg) do { CLOUD9_ERROR(msg); exit(1); } while(0)
+
 
 
 namespace cloud9 {
