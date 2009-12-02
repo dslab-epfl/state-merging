@@ -10,6 +10,8 @@
 #include <iostream>
 
 #include <cstdlib>
+#include <cstdio>
+#include <cerrno>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -17,11 +19,21 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetSelect.h"
+#include "llvm/System/Signals.h"
 
 #include "klee/Internal/System/Time.h"
 
 #include "cloud9/common.h"
 #include "cloud9/Logger.h"
+
+using namespace llvm;
+
+cl::opt<double>
+MaxTime("max-time",
+		cl::desc("Halt execution after the specified number of seconds (0=off)"),
+		cl::init(0));
+
+
 
 // This is a temporary hack. If the running process has access to
 // externals then it can disable interrupts, which screws up the
@@ -39,9 +51,15 @@ static void halt_via_gdb(int pid) {
     perror("system");
 }
 
+static void parseArguments(int argc, char **argv) {
+	// TODO: Implement some filtering, or reading from a settings file, or
+	// from stdin
+	cl::ParseCommandLineOptions(argc, argv);
+}
+
 
 #ifdef CLOUD9_HAVE_WATCHDOG
-static void watchdog(int pid) {
+static int watchdog(int pid) {
 	CLOUD9_DEBUG("Watchdog: Watching " << pid);
 
 	double nextStep = klee::util::getWallTime() + MaxTime * 1.1;
@@ -98,19 +116,23 @@ int main(int argc, char **argv, char **envp) {
 	atexit(llvm::llvm_shutdown);
 
 	llvm::InitializeNativeTarget();
+	sys::PrintStackTraceOnErrorSignal();
+
+	parseArguments(argc, argv);
+
 
 	CLOUD9_DEBUG("Bubu " << 17 << " " << 3.3);
 
 #ifdef CLOUD9_HAVE_WATCHDOG
 	if (MaxTime == 0) {
-		CLOUD9_EXIT("--watchdog used without --max-time");
-	}
-
-	int pid = fork();
-	if (pid < 0) {
-		CLOUD9_EXIT("unable to fork watchdog");
-	} else if (pid) {
-		watchdog(pid);
+		CLOUD9_DEBUG("No max time specified; running without watchdog");
+	} else {
+		int pid = fork();
+		if (pid < 0) {
+			CLOUD9_EXIT("unable to fork watchdog");
+		} else if (pid) {
+			return watchdog(pid);
+		}
 	}
 #endif
 
