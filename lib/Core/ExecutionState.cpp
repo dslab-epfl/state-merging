@@ -32,7 +32,7 @@ using namespace klee;
 
 namespace { 
   cl::opt<bool>
-  DebugLogStateMerge("debug-log-state-merge");
+  DebugLogStateMerge("klee-debug-log-state-merge");
 }
 
 /***/

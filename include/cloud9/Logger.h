@@ -14,14 +14,14 @@
 
 #define CLOUD9_LOG_PREFIX			"Cloud9:\t"
 #define CLOUD9_ERROR_PREFIX			"ERROR:\t"
-#define CLOUD9_WARNING_PREFIX		"Warning:\t"
+#define CLOUD9_INFO_PREFIX		"Info:\t"
 #define CLOUD9_DEBUG_PREFIX			"Debug:\t"
 
-#define CLOUD9_ERROR(msg)	cloud9::Logger::getLogger().getErrorStream() << \
+#define CLOUD9_ERROR(msg)	cloud9::Logger::getLogger().getInfoStream() << \
 	CLOUD9_LOG_PREFIX << CLOUD9_ERROR_PREFIX << msg << std::endl
 
-#define CLOUD9_WARNING(msg)	cloud9::Logger::getLogger().getWarningStream() << \
-	CLOUD9_LOG_PREFIX << CLOUD9_WARNING_PREFIX << msg << std::endl
+#define CLOUD9_INFO(msg)	cloud9::Logger::getLogger().getInfoStream() << \
+	CLOUD9_LOG_PREFIX << CLOUD9_INFO_PREFIX << msg << std::endl
 
 #define CLOUD9_DEBUG(msg)	cloud9::Logger::getLogger().getDebugStream() << \
 	CLOUD9_LOG_PREFIX << CLOUD9_DEBUG_PREFIX << msg << std::endl
@@ -44,7 +44,7 @@ protected:
 public:
 	static Logger &getLogger();
 
-	virtual std::ostream &getWarningStream() { return std::cerr; };
+	virtual std::ostream &getInfoStream() { return std::cerr; };
 	virtual std::ostream &getErrorStream() { return std::cerr; };
 	virtual std::ostream &getDebugStream() { return std::cerr; };
 };

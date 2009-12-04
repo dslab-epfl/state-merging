@@ -21,37 +21,37 @@ using namespace klee;
 
 namespace {
   cl::opt<bool>
-  UseRandomSearch("use-random-search");
+  UseRandomSearch("klee-use-random-search");
 
   cl::opt<bool>
-  UseInterleavedRS("use-interleaved-RS");
+  UseInterleavedRS("klee-use-interleaved-RS");
 
   cl::opt<bool>
-  UseInterleavedNURS("use-interleaved-NURS");
+  UseInterleavedNURS("klee-use-interleaved-NURS");
 
   cl::opt<bool>
-  UseInterleavedMD2UNURS("use-interleaved-MD2U-NURS");
+  UseInterleavedMD2UNURS("klee-use-interleaved-MD2U-NURS");
 
   cl::opt<bool>
-  UseInterleavedInstCountNURS("use-interleaved-icnt-NURS");
+  UseInterleavedInstCountNURS("klee-use-interleaved-icnt-NURS");
 
   cl::opt<bool>
-  UseInterleavedCPInstCountNURS("use-interleaved-cpicnt-NURS");
+  UseInterleavedCPInstCountNURS("klee-use-interleaved-cpicnt-NURS");
 
   cl::opt<bool>
-  UseInterleavedQueryCostNURS("use-interleaved-query-cost-NURS");
+  UseInterleavedQueryCostNURS("klee-use-interleaved-query-cost-NURS");
 
   cl::opt<bool>
-  UseInterleavedCovNewNURS("use-interleaved-covnew-NURS");
+  UseInterleavedCovNewNURS("klee-use-interleaved-covnew-NURS");
 
   cl::opt<bool>
-  UseNonUniformRandomSearch("use-non-uniform-random-search");
+  UseNonUniformRandomSearch("klee-use-non-uniform-random-search");
 
   cl::opt<bool>
-  UseRandomPathSearch("use-random-path");
+  UseRandomPathSearch("klee-use-random-path");
 
   cl::opt<WeightedRandomSearcher::WeightType>
-  WeightType("weight-type", cl::desc("Set the weight type for --use-non-uniform-random-search"),
+  WeightType("klee-weight-type", cl::desc("Set the weight type for --use-non-uniform-random-search"),
              cl::values(clEnumValN(WeightedRandomSearcher::Depth, "none", "use (2^depth)"),
                         clEnumValN(WeightedRandomSearcher::InstCount, "icnt", "use current pc exec count"),
                         clEnumValN(WeightedRandomSearcher::CPInstCount, "cpicnt", "use current pc exec count"),
@@ -61,28 +61,28 @@ namespace {
                         clEnumValEnd));
   
   cl::opt<bool>
-  UseMerge("use-merge", 
+  UseMerge("klee-use-merge",
            cl::desc("Enable support for klee_merge() (experimental)"));
  
   cl::opt<bool>
-  UseBumpMerge("use-bump-merge", 
+  UseBumpMerge("klee-use-bump-merge",
            cl::desc("Enable support for klee_merge() (extra experimental)"));
  
   cl::opt<bool>
-  UseIterativeDeepeningTimeSearch("use-iterative-deepening-time-search", 
+  UseIterativeDeepeningTimeSearch("klee-use-iterative-deepening-time-search",
                                     cl::desc("(experimental)"));
 
   cl::opt<bool>
-  UseBatchingSearch("use-batching-search", 
+  UseBatchingSearch("klee-use-batching-search",
            cl::desc("Use batching searcher (keep running selected state for N instructions/time, see --batch-instructions and --batch-time"));
 
   cl::opt<unsigned>
-  BatchInstructions("batch-instructions",
+  BatchInstructions("klee-batch-instructions",
                     cl::desc("Number of instructions to batch when using --use-batching-search"),
                     cl::init(10000));
   
   cl::opt<double>
-  BatchTime("batch-time",
+  BatchTime("klee-batch-time",
             cl::desc("Amount of time to batch when using --use-batching-search"),
             cl::init(5.0));
 }

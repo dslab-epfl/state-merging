@@ -23,19 +23,19 @@ using namespace klee;
 
 namespace {
   llvm::cl::opt<bool>
-  PCWidthAsArg("pc-width-as-arg", llvm::cl::init(true));
+  PCWidthAsArg("klee-pc-width-as-arg", llvm::cl::init(true));
 
   llvm::cl::opt<bool>
-  PCAllWidths("pc-all-widths", llvm::cl::init(false));
+  PCAllWidths("klee-pc-all-widths", llvm::cl::init(false));
 
   llvm::cl::opt<bool>
-  PCPrefixWidth("pc-prefix-width", llvm::cl::init(true));
+  PCPrefixWidth("klee-pc-prefix-width", llvm::cl::init(true));
 
   llvm::cl::opt<bool>
-  PCMultibyteReads("pc-multibyte-reads", llvm::cl::init(true));
+  PCMultibyteReads("klee-pc-multibyte-reads", llvm::cl::init(true));
 
   llvm::cl::opt<bool>
-  PCAllConstWidths("pc-all-const-widths",  llvm::cl::init(false));
+  PCAllConstWidths("klee-pc-all-const-widths",  llvm::cl::init(false));
 }
 
 /// PrintContext - Helper class for storing extra information for
