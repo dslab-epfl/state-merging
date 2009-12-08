@@ -1,4 +1,4 @@
-package cloud9;
+package cloud9.data;
 
 message ExecutionPath {
 	required uint32 length = 1;
