@@ -21,5 +21,17 @@ JobExecutor::~JobExecutor() {
 	// TODO Auto-generated destructor stub
 }
 
+WorkerTree::Node *JobExecutor::getNextNode() {
+	return NULL;
+}
+
+void JobExecutor::exploreNode(WorkerTree::Node *node) {
+
+}
+
+void JobExecutor::executeJob(ExplorationJob *job) {
+
+}
+
 }
 }

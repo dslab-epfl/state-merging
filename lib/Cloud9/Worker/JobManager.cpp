@@ -11,11 +11,6 @@ namespace cloud9 {
 
 namespace worker {
 
-JobManager::JobManager() {
-	// TODO Auto-generated constructor stub
-
-}
-
 JobManager::~JobManager() {
 	// TODO Auto-generated destructor stub
 }

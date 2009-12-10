@@ -11,60 +11,45 @@
 #include <cassert>
 #include <vector>
 
-template<class NodeInfo, class ArcInfo>
+#include "cloud9/ExecutionPath.h"
+
+namespace cloud9 {
+
+template<class NodeInfo>
 class ExecutionTree {
 public:
-	class Node;
-
-	class Arc {
-	private:
-		Node *parent;
-		Node *child;
-
-		ArcInfo info;
-
-		Arc(Node *p, Node *c) : parent(p), child(c) {
-			assert(p != NULL);
-			assert(c != NULL);
-		};
-	public:
-
-		Node *getParent() { return parent; }
-		Node *getChild() { return child; }
-
-		ArcInfo getInfo() { return info; };
-		void setInfo(ArcInfo info) { this->info = info; };
-	};
-
 	class Node {
 	private:
 		unsigned int degree;
-		std::vector<Arc*> children;
+		std::vector<Node*> children;
 		Node* parent;
 
-		NodeInfo info;
+		unsigned int level;
+		unsigned int index;
+		unsigned int count;
 
-		Node(int deg, Node* p) : degree(deg), children(deg, (Node*)NULL){
-			assert(deg >= 2);
-		}
+		/*
+		 * Creates a new node and connects it in position "index" in a parent
+		 * node
+		 */
+		Node(int deg, Node* p, int index);
 	public:
 		Node* getLeft() { return getChild(0); };
 
 		Node* getRight() { return getChild(degree-1); };
 		Node* getParent() { return parent; };
 
-		Arc* getArc(int index) { return children[index]; }
+		Node* getChild(int index) { return children[index]; }
 
-		Node* getChild(int index) {
-			Arc *arc = getArc(index);
-			if (arc)
-				return arc->getChild();
-			else
-				return NULL;
-		}
+		int getLevel() { return level; }
+		int getIndex() { return index; }
+		int getCount() { return count; }
 
-		NodeInfo getInfo() { return info; }
-		void setInfo(ArcInfo info) { this->info = info; }
+		NodeInfo info;
+	};
+
+	struct NodeCompare {
+		bool operator() (const Node *a, const Node *b);
 	};
 
 private:
@@ -79,6 +64,14 @@ public:
 
 	Node* getRoot() { return root; }
 
+	Node* getNode(ExecutionPath *path) {
+		return getNode(path, root);
+	}
+
+	Node* getNode(ExecutionPath *path, Node* root);
+
 };
+
+}
 
 #endif /* EXECUTIONTREE_H_ */

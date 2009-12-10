@@ -27,5 +27,5 @@ CXX.Flags += -DKLEE_DIR=\"$(PROJ_SRC_ROOT)\"
 
 PROTOC ?= protoc
 
-%.pb.cpp %.pb.h: %.proto
+%.pb.cc %.pb.h: %.proto
 	$(PROTOC) --cpp_out=./ $<
