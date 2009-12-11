@@ -11,8 +11,7 @@
 #include "klee/Interpreter.h"
 
 #include "cloud9/ExecutionTree.h"
-
-#include "ExplorationJob.h"
+#include "cloud9/worker/ExplorationJob.h"
 
 namespace cloud9 {
 

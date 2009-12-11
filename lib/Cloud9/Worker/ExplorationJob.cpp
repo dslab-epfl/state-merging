@@ -5,7 +5,7 @@
  *      Author: stefan
  */
 
-#include "ExplorationJob.h"
+#include "cloud9/worker/ExplorationJob.h"
 
 namespace cloud9 {
 

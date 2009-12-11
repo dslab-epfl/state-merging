@@ -45,8 +45,12 @@
 
 #include "cloud9/common.h"
 #include "cloud9/Logger.h"
+#include "cloud9/ExecutionTree.h"
+#include "cloud9/worker/TreeNodeInfo.h"
+#include "cloud9/worker/JobManager.h"
 
 using namespace llvm;
+using namespace cloud9::worker;
 
 namespace {
 cl::opt<std::string> InputFile(cl::desc("<input bytecode>"), cl::Positional,
@@ -482,6 +486,19 @@ int main(int argc, char **argv, char **envp) {
 	Module *mainModule = loadByteCode();
 
 	mainModule = prepareModule(mainModule);
+
+	// Create the symbolic tree data structure
+	WorkerTree *tree = new WorkerTree();
+
+	// Create the job manager
+	JobManager *manager = new JobManager(tree);
+
+	// Start exploring the root node
+	ExplorationJob *rootJob = manager->createJob(tree->getRoot());
+
+	manager->submitJob(rootJob);
+
+	manager->processJobs();
 
 	return 0;
 }

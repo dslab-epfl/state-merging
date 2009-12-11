@@ -12,7 +12,7 @@
 
 #include "cloud9/ExecutionTree.h"
 
-#include "TreeNodeInfo.h"
+#include "cloud9/worker/TreeNodeInfo.h"
 
 #include <list>
 #include <vector>

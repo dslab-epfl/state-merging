@@ -5,7 +5,7 @@
  *      Author: stefan
  */
 
-#include "TreeNodeInfo.h"
+#include "cloud9/worker/TreeNodeInfo.h"
 
 namespace cloud9 {
 

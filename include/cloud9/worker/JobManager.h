@@ -31,8 +31,10 @@ private:
 	 *
 	 */
 	void finalizeJob(ExplorationJob* job);
+
+	void setupExecutor();
 public:
-	JobManager(WorkerTree *tree) {};
+	JobManager(WorkerTree *tree);
 	virtual ~JobManager();
 
 	WorkerTree *getTree() { return tree; }

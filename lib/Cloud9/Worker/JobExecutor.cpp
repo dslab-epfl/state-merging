@@ -5,7 +5,7 @@
  *      Author: stefan
  */
 
-#include "JobExecutor.h"
+#include "cloud9/worker/JobExecutor.h"
 
 namespace cloud9 {
 
