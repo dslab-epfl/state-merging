@@ -11,18 +11,18 @@ namespace cloud9 {
 
 namespace worker {
 
-JobManager::JobManager(WorkerTree *tree) {
+JobManager::JobManager(WorkerTree *tree, llvm::Module *module, int argc, char **argv) {
 	this->tree = tree;
 
-	setupExecutor();
+	setupExecutor(module, argc, argv);
 }
 
 JobManager::~JobManager() {
 	// TODO Auto-generated destructor stub
 }
 
-void JobManager::setupExecutor() {
-	executor = new JobExecutor();
+void JobManager::setupExecutor(llvm::Module *module, int argc, char **argv) {
+	executor = new JobExecutor(module, argc, argv);
 }
 
 void JobManager::submitJob(ExplorationJob* job) {

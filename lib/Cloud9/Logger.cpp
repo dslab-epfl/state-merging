@@ -5,7 +5,7 @@
  *      Author: stefan
  */
 
-#include "cloud9/common.h"
+#include "cloud9/Common.h"
 #include "cloud9/Logger.h"
 
 #ifdef CLOUD9_HAVE_ADVANCED_LOGGING

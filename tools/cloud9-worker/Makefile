@@ -2,7 +2,7 @@ LEVEL = ../..
 
 TOOLNAME = c9-worker
 USEDLIBS = cloud9common.a cloud9worker.a kleeCore.a kleeModule.a kleaverSolver.a kleaverExpr.a kleeSupport.a kleeBasic.a
-LINK_COMPONENTS = jit engine bitreader linker
+LINK_COMPONENTS = jit engine bitreader bitwriter linker ipo
 
 include $(LEVEL)/Makefile.common
 

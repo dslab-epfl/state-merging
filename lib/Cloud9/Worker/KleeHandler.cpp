@@ -17,6 +17,7 @@
 
 // FIXME
 #include "../../Core/Common.h"
+#include "cloud9/Common.h"
 
 
 #include "klee/Config/config.h"
@@ -29,8 +30,10 @@
 
 using namespace llvm;
 
+
+extern bool WriteTraces;
+
 namespace {
-extern cl::opt<std::string> InputFile;
 
 cl::opt<std::string>
 		OutputDir("output-dir", cl::desc(
@@ -63,9 +66,6 @@ cl::opt<unsigned>
 StopAfterNTests("stop-after-n-tests",
 	     cl::desc("Stop execution after generating the given number of tests.  Extra tests corresponding to partially explored paths will also be dumped."),
 	     cl::init(0));
-
-extern bool WriteTraces;
-
 }
 
 namespace cloud9 {

@@ -8,14 +8,25 @@
 #ifndef JOBEXECUTOR_H_
 #define JOBEXECUTOR_H_
 
-#include "klee/Interpreter.h"
+#include "llvm/System/Path.h"
 
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/worker/ExplorationJob.h"
 
+
+namespace klee {
+class Interpreter;
+}
+
+namespace llvm {
+class Module;
+}
+
 namespace cloud9 {
 
 namespace worker {
+
+class KleeHandler;
 
 /*
  * Encapsulates a sequential symbolic execution engine.
@@ -23,6 +34,8 @@ namespace worker {
 class JobExecutor {
 private:
 	klee::Interpreter *interpreter;
+	KleeHandler *kleeHandler;
+	const llvm::Module *finalModule;
 
 	ExplorationJob *currentJob;
 
@@ -32,8 +45,10 @@ private:
 	WorkerTree::Node *getNextNode();
 
 	void exploreNode(WorkerTree::Node *node);
+
+	void externalsAndGlobalsCheck(const llvm::Module *m);
 public:
-	JobExecutor();
+	JobExecutor(llvm::Module *module, int argc, char **argv);
 	virtual ~JobExecutor();
 
 	ExplorationJob *getCurrentJob() { return currentJob; }

@@ -14,6 +14,10 @@
 #include <list>
 #include <set>
 
+namespace llvm {
+class Module;
+}
+
 namespace cloud9 {
 
 namespace worker {
@@ -32,9 +36,9 @@ private:
 	 */
 	void finalizeJob(ExplorationJob* job);
 
-	void setupExecutor();
+	void setupExecutor(llvm::Module *module, int argc, char **argv);
 public:
-	JobManager(WorkerTree *tree);
+	JobManager(WorkerTree *tree, llvm::Module *module, int argc, char **argv);
 	virtual ~JobManager();
 
 	WorkerTree *getTree() { return tree; }

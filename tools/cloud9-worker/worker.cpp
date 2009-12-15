@@ -6,6 +6,7 @@
  */
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <cstdlib>
 #include <cstdio>
@@ -33,17 +34,11 @@
 #include "llvm/System/Signals.h"
 
 // All the KLEE includes below
-#undef PACKAGE_BUGREPORT
-#undef PACKAGE_NAME
-#undef PACKAGE_STRING
-#undef PACKAGE_TARNAME
-#undef PACKAGE_VERSION
-#include "klee/Config/config.h"
+
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/Support/ModuleUtil.h"
 
-
-#include "cloud9/common.h"
+#include "cloud9/Common.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/worker/TreeNodeInfo.h"
@@ -53,33 +48,21 @@ using namespace llvm;
 using namespace cloud9::worker;
 
 namespace {
-cl::opt<std::string> InputFile(cl::desc("<input bytecode>"), cl::Positional,
-		cl::init("-"));
 
 cl::opt<double> MaxTime("c9-max-time", cl::desc(
 		"Halt execution after the specified number of seconds (0=off)"),
 		cl::init(0));
 
 cl::opt<bool>
-  InitEnv("c9-init-env",
-	  cl::desc("Create custom environment.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"));
+		InitEnv("c9-init-env",
+				cl::desc("Create custom environment.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"));
 
-enum LibcType {
-  NoLibc, UcLibc
-};
 
-cl::opt<LibcType>
-Libc("c9-libc",
-     cl::desc("Choose libc version (none by default)."),
-     cl::values(clEnumValN(NoLibc, "none", "Don't link in a libc"),
-		  clEnumValN(UcLibc, "uclibc", "Link in uclibc (adapted for klee)"),
-		  clEnumValEnd),
-     cl::init(NoLibc));
+cl::opt<std::string> Environ("c9-environ", cl::desc(
+		"Parse environ from given file (in \"env\" format)"));
 
-cl::opt<bool>
-WithPOSIXRuntime("c9-posix-runtime",
-		cl::desc("Link with POSIX runtime"),
-		cl::init(false));
+cl::list<std::string> InputArgv(cl::ConsumeAfter, cl::desc(
+		"<program arguments>..."));
 
 }
 
@@ -169,9 +152,6 @@ static void initEnv(Module *mainModule) {
 	new StoreInst(oldArgv, argvPtr, initEnvCall);
 }
 
-
-
-
 #ifndef KLEE_UCLIBC
 static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 	CLOUD9_EXIT("Invalid libc, no uclibc support!");
@@ -180,49 +160,42 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 	Function *f;
 	// force import of __uClibc_main
-	mainModule->getOrInsertFunction("__uClibc_main",
-			FunctionType::get(Type::getVoidTy(getGlobalContext()),
-					std::vector<const Type*>(),
-					true));
+	mainModule->getOrInsertFunction("__uClibc_main", FunctionType::get(
+			Type::getVoidTy(getGlobalContext()), std::vector<const Type*>(),
+			true));
 
 	// force various imports
 	if (WithPOSIXRuntime) {
 		const llvm::Type *i8Ty = Type::getInt8Ty(getGlobalContext());
 		mainModule->getOrInsertFunction("realpath",
-				PointerType::getUnqual(i8Ty),
-				PointerType::getUnqual(i8Ty),
-				PointerType::getUnqual(i8Ty),
-				NULL);
+				PointerType::getUnqual(i8Ty), PointerType::getUnqual(i8Ty),
+				PointerType::getUnqual(i8Ty), NULL);
 		mainModule->getOrInsertFunction("getutent",
-				PointerType::getUnqual(i8Ty),
-				NULL);
-		mainModule->getOrInsertFunction("__fgetc_unlocked",
-				Type::getInt32Ty(getGlobalContext()),
-				PointerType::getUnqual(i8Ty),
-				NULL);
-		mainModule->getOrInsertFunction("__fputc_unlocked",
-				Type::getInt32Ty(getGlobalContext()),
-				Type::getInt32Ty(getGlobalContext()),
-				PointerType::getUnqual(i8Ty),
-				NULL);
+				PointerType::getUnqual(i8Ty), NULL);
+		mainModule->getOrInsertFunction("__fgetc_unlocked", Type::getInt32Ty(
+				getGlobalContext()), PointerType::getUnqual(i8Ty), NULL);
+		mainModule->getOrInsertFunction("__fputc_unlocked", Type::getInt32Ty(
+				getGlobalContext()), Type::getInt32Ty(getGlobalContext()),
+				PointerType::getUnqual(i8Ty), NULL);
 	}
 
 	f = mainModule->getFunction("__ctype_get_mb_cur_max");
-	if (f) f->setName("_stdlib_mb_cur_max");
+	if (f)
+		f->setName("_stdlib_mb_cur_max");
 
 	// Strip of asm prefixes for 64 bit versions because they are not
 	// present in uclibc and we want to make sure stuff will get
 	// linked. In the off chance that both prefixed and unprefixed
 	// versions are present in the module, make sure we don't create a
 	// naming conflict.
-	for (Module::iterator fi = mainModule->begin(), fe = mainModule->end();
-			fi != fe;) {
+	for (Module::iterator fi = mainModule->begin(), fe = mainModule->end(); fi
+			!= fe;) {
 		Function *f = fi;
 		++fi;
 		const std::string &name = f->getName();
-		if (name[0]=='\01') {
+		if (name[0] == '\01') {
 			unsigned size = name.size();
-			if (name[size-2]=='6' && name[size-1]=='4') {
+			if (name[size - 2] == '6' && name[size - 1] == '4') {
 				std::string unprefixed = name.substr(1);
 
 				// See if the unprefixed version exists.
@@ -236,8 +209,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 		}
 	}
 
-	mainModule = klee::linkWithLibrary(mainModule,
-			KLEE_UCLIBC "/lib/libc.a");
+	mainModule = klee::linkWithLibrary(mainModule, KLEE_UCLIBC "/lib/libc.a");
 	assert(mainModule && "unable to link with uclibc");
 
 	// more sighs, this is horrible but just a temp hack
@@ -293,15 +265,14 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 	std::vector<const Type*> fArgs;
 	fArgs.push_back(ft->getParamType(1)); // argc
 	fArgs.push_back(ft->getParamType(2)); // argv
-	Function *stub = Function::Create(FunctionType::get(Type::getInt32Ty(getGlobalContext()), fArgs, false),
-			GlobalVariable::ExternalLinkage,
-			"main",
-			mainModule);
+	Function *stub = Function::Create(FunctionType::get(Type::getInt32Ty(
+			getGlobalContext()), fArgs, false),
+			GlobalVariable::ExternalLinkage, "main", mainModule);
 	BasicBlock *bb = BasicBlock::Create(getGlobalContext(), "entry", stub);
 
 	std::vector<llvm::Value*> args;
-	args.push_back(llvm::ConstantExpr::getBitCast(userMainFn,
-					ft->getParamType(0)));
+	args.push_back(llvm::ConstantExpr::getBitCast(userMainFn, ft->getParamType(
+			0)));
 	args.push_back(stub->arg_begin()); // argc
 	args.push_back(++stub->arg_begin()); // argv
 	args.push_back(Constant::getNullValue(ft->getParamType(3))); // app_init
@@ -315,7 +286,6 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 	return mainModule;
 }
 #endif
-
 
 static Module* prepareModule(Module *module) {
 	if (WithPOSIXRuntime)
@@ -333,7 +303,7 @@ static Module* prepareModule(Module *module) {
 		break;
 	}
 
-	llvm::sys::Path libraryDir(KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib");
+	llvm::sys::Path libraryDir(KLEE_LIBRARY_PATH);
 
 	if (WithPOSIXRuntime) {
 		sys::Path path(libraryDir);
@@ -372,6 +342,16 @@ extern "C" void haltExecution() {
 	//theInterpreter->setHaltExecution(true);
 }
 
+static std::string strip(std::string &in) {
+	unsigned len = in.size();
+	unsigned lead = 0, trail = len;
+	while (lead < len && isspace(in[lead]))
+		++lead;
+	while (trail > lead && isspace(in[trail - 1]))
+		--trail;
+	return in.substr(lead, trail - lead);
+}
+
 /*
  *
  */
@@ -379,6 +359,43 @@ static void parseArguments(int argc, char **argv) {
 	// TODO: Implement some filtering, or reading from a settings file, or
 	// from stdin
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 worker");
+}
+
+static void readProgramArguments(int &pArgc, char **&pArgv, char **&pEnvp, char **envp) {
+	if (Environ != "") {
+		std::vector<std::string> items;
+		std::ifstream f(Environ.c_str());
+		if (!f.good())
+			CLOUD9_EXIT("unable to open --environ file: " << Environ.c_str());
+		while (!f.eof()) {
+			std::string line;
+			std::getline(f, line);
+			line = strip(line);
+			if (!line.empty())
+				items.push_back(line);
+		}
+		f.close();
+		pEnvp = new char *[items.size() + 1];
+		unsigned i = 0;
+		for (; i != items.size(); ++i)
+			pEnvp[i] = strdup(items[i].c_str());
+		pEnvp[i] = 0;
+	} else {
+		pEnvp = envp;
+	}
+
+	pArgc = InputArgv.size() + 1;
+	pArgv = new char *[pArgc];
+	for (unsigned i = 0; i < InputArgv.size() + 1; i++) {
+		std::string &arg = (i == 0 ? InputFile : InputArgv[i - 1]);
+		unsigned size = arg.size() + 1;
+		char *pArg = new char[size];
+
+		std::copy(arg.begin(), arg.end(), pArg);
+		pArg[size - 1] = 0;
+
+		pArgv[i] = pArg;
+	}
 }
 
 /*
@@ -484,14 +501,18 @@ int main(int argc, char **argv, char **envp) {
 	sys::SetInterruptFunction(interrupt_handle);
 
 	Module *mainModule = loadByteCode();
-
 	mainModule = prepareModule(mainModule);
+
+	int pArgc;
+	char **pArgv;
+	char **pEnvp;
+	readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
 	// Create the symbolic tree data structure
 	WorkerTree *tree = new WorkerTree();
 
 	// Create the job manager
-	JobManager *manager = new JobManager(tree);
+	JobManager *manager = new JobManager(tree, mainModule, pArgc, pArgv);
 
 	// Start exploring the root node
 	ExplorationJob *rootJob = manager->createJob(tree->getRoot());
