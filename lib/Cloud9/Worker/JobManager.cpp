@@ -43,8 +43,6 @@ void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc, char **arg
 	setupExecutor(module, argc, argv, envp);
 
 	initialized = true;
-
-	executor->interpreter->runFunctionAsMain(mainFn, argc, argv, envp);
 }
 
 void JobManager::setupStartingPoint(std::string mainFnName, int argc, char **argv, char **envp) {

@@ -21,6 +21,7 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "llvm/Support/CallSite.h"
+#include "cloud9/worker/SymbolicEngine.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -70,7 +71,7 @@ namespace klee {
   /// during an instruction step. Should contain addedStates,
   /// removedStates, and haltExecution, among others.
 
-class Executor : public Interpreter {
+class Executor : public Interpreter, public cloud9::worker::SymbolicEngine {
   friend class BumpMergingSearcher;
   friend class MergingSearcher;
   friend class RandomPathSearcher;
@@ -447,6 +448,12 @@ public:
 
   virtual void getCoveredLines(const ExecutionState &state,
                                std::map<const std::string*, std::set<unsigned> > &res);
+
+
+  /*** Cloud9 symbolic execution engine methods ***/
+
+  ExecutionState *initRootState(llvm::Function *f, int argc,
+  			char **argv, char **envp);
 };
   
 } // End klee namespace

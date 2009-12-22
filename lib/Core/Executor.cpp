@@ -3063,112 +3063,119 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
 
 /***/
 
-void Executor::runFunctionAsMain(Function *f,
-				 int argc,
-				 char **argv,
-				 char **envp) {
-  std::vector<ref<Expr> > arguments;
+ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
+		char **argv, char **envp) {
+	std::vector<ref<Expr> > arguments;
 
-  // force deterministic initialization of memory objects
-  srand(1);
-  srandom(1);
-  
-  MemoryObject *argvMO = 0;
+	// force deterministic initialization of memory objects
+	srand(1);
+	srandom(1);
 
-  // In order to make uclibc happy and be closer to what the system is
-  // doing we lay out the environments at the end of the argv array
-  // (both are terminated by a null). There is also a final terminating
-  // null that uclibc seems to expect, possibly the ELF header?
+	MemoryObject *argvMO = 0;
 
-  int envc;
-  for (envc=0; envp[envc]; ++envc) ;
+	// In order to make uclibc happy and be closer to what the system is
+	// doing we lay out the environments at the end of the argv array
+	// (both are terminated by a null). There is also a final terminating
+	// null that uclibc seems to expect, possibly the ELF header?
 
-  unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
-  KFunction *kf = kmodule->functionMap[f];
-  assert(kf);
-  Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
-  if (ai!=ae) {
-    arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
+	int envc;
+	for (envc = 0; envp[envc]; ++envc)
+		;
 
-    if (++ai!=ae) {
-      argvMO = memory->allocate((argc+1+envc+1+1) * NumPtrBytes, false, true,
-                                f->begin()->begin());
-      
-      arguments.push_back(argvMO->getBaseExpr());
+	unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
+	KFunction *kf = kmodule->functionMap[f];
+	assert(kf);
+	Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
+	if (ai != ae) {
+		arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
 
-      if (++ai!=ae) {
-        uint64_t envp_start = argvMO->address + (argc+1)*NumPtrBytes;
-        arguments.push_back(Expr::createPointer(envp_start));
+		if (++ai != ae) {
+			argvMO = memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
+					false, true, f->begin()->begin());
 
-        if (++ai!=ae)
-          klee_error("invalid main function (expect 0-3 arguments)");
-      }
-    }
-  }
+			arguments.push_back(argvMO->getBaseExpr());
 
-  ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
-  
-  if (pathWriter) 
-    state->pathOS = pathWriter->open();
-  if (symPathWriter) 
-    state->symPathOS = symPathWriter->open();
+			if (++ai != ae) {
+				uint64_t envp_start = argvMO->address + (argc + 1)
+						* NumPtrBytes;
+				arguments.push_back(Expr::createPointer(envp_start));
 
+				if (++ai != ae)
+					klee_error("invalid main function (expect 0-3 arguments)");
+			}
+		}
+	}
 
-  if (statsTracker)
-    statsTracker->framePushed(*state, 0);
+	ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
 
-  assert(arguments.size() == f->arg_size() && "wrong number of arguments");
-  for (unsigned i = 0, e = f->arg_size(); i != e; ++i)
-    bindArgument(kf, i, *state, arguments[i]);
+	if (pathWriter)
+		state->pathOS = pathWriter->open();
+	if (symPathWriter)
+		state->symPathOS = symPathWriter->open();
 
-  if (argvMO) {
-    ObjectState *argvOS = bindObjectInState(*state, argvMO, false);
+	if (statsTracker)
+		statsTracker->framePushed(*state, 0);
 
-    for (int i=0; i<argc+1+envc+1+1; i++) {
-      MemoryObject *arg;
-      
-      if (i==argc || i>=argc+1+envc) {
-        arg = 0;
-      } else {
-        char *s = i<argc ? argv[i] : envp[i-(argc+1)];
-        int j, len = strlen(s);
-        
-        arg = memory->allocate(len+1, false, true, state->pc->inst);
-        ObjectState *os = bindObjectInState(*state, arg, false);
-        for (j=0; j<len+1; j++)
-          os->write8(j, s[j]);
-      }
+	assert(arguments.size() == f->arg_size() && "wrong number of arguments");
+	for (unsigned i = 0, e = f->arg_size(); i != e; ++i)
+		bindArgument(kf, i, *state, arguments[i]);
 
-      if (arg) {
-        argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
-      } else {
-        argvOS->write(i * NumPtrBytes, Expr::createPointer(0));
-      }
-    }
-  }
-  
-  initializeGlobals(*state);
+	if (argvMO) {
+		ObjectState *argvOS = bindObjectInState(*state, argvMO, false);
 
-  processTree = new PTree(state);
-  state->ptreeNode = processTree->root;
-  run(*state);
-  delete processTree;
-  processTree = 0;
+		for (int i = 0; i < argc + 1 + envc + 1 + 1; i++) {
+			MemoryObject *arg;
 
-  // hack to clear memory objects
-  delete memory;
-  memory = new MemoryManager();
-  
-  globalObjects.clear();
-  globalAddresses.clear();
+			if (i == argc || i >= argc + 1 + envc) {
+				arg = 0;
+			} else {
+				char *s = i < argc ? argv[i] : envp[i - (argc + 1)];
+				int j, len = strlen(s);
 
-  if (statsTracker)
-    statsTracker->done();
+				arg = memory->allocate(len + 1, false, true, state->pc->inst);
+				ObjectState *os = bindObjectInState(*state, arg, false);
+				for (j = 0; j < len + 1; j++)
+					os->write8(j, s[j]);
+			}
 
-  if (theMMap) {
-    munmap(theMMap, theMMapSize);
-    theMMap = 0;
-  }
+			if (arg) {
+				argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
+			} else {
+				argvOS->write(i * NumPtrBytes, Expr::createPointer(0));
+			}
+		}
+	}
+
+	initializeGlobals(*state);
+
+	return state;
+}
+
+void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
+		char **envp) {
+
+	ExecutionState *state = initRootState(f, argc, argv, envp);
+
+	processTree = new PTree(state);
+	state->ptreeNode = processTree->root;
+	run(*state);
+	delete processTree;
+	processTree = 0;
+
+	// hack to clear memory objects
+	delete memory;
+	memory = new MemoryManager();
+
+	globalObjects.clear();
+	globalAddresses.clear();
+
+	if (statsTracker)
+		statsTracker->done();
+
+	if (theMMap) {
+		munmap(theMMap, theMMapSize);
+		theMMap = 0;
+	}
 }
 
 unsigned Executor::getPathStreamID(const ExecutionState &state) {

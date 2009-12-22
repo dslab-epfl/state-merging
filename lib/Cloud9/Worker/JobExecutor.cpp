@@ -6,6 +6,7 @@
  */
 
 #include "cloud9/worker/JobExecutor.h"
+#include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/Common.h"
 
 #include "klee/Interpreter.h"
@@ -198,8 +199,19 @@ JobExecutor::JobExecutor(llvm::Module *module, int argc, char **argv) {
 	interpreter = klee::Interpreter::create(iOpts, kleeHandler);
 	kleeHandler->setInterpreter(interpreter);
 
+	symbEngine = dynamic_cast<SymbolicEngine*>(interpreter);
+
 	finalModule = interpreter->setModule(module, mOpts);
 	externalsAndGlobalsCheck(finalModule);
+}
+
+void JobExecutor::initRootState(WorkerTree::Node *node, llvm::Function *f, int argc,
+			char **argv, char **envp) {
+	klee::ExecutionState *state = symbEngine->initRootState(f, argc, argv, envp);
+
+	assert(!node->getParent());
+
+	node->info.symState = state;
 }
 
 JobExecutor::~JobExecutor() {

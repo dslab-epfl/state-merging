@@ -19,6 +19,7 @@ namespace worker {
 class ExplorationJob;
 
 class TreeNodeInfo {
+	friend class JobExecutor;
 private:
 	klee::ExecutionState *symState;
 	ExplorationJob *job;

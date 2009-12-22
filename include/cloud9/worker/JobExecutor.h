@@ -20,6 +20,7 @@ class Interpreter;
 
 namespace llvm {
 class Module;
+class Function;
 }
 
 namespace cloud9 {
@@ -27,12 +28,15 @@ namespace cloud9 {
 namespace worker {
 
 class KleeHandler;
+class SymbolicEngine;
 
 /*
  * Encapsulates a sequential symbolic execution engine.
  */
 class JobExecutor {
 private:
+	klee::Interpreter *interpreter;
+	SymbolicEngine *symbEngine;
 
 	KleeHandler *kleeHandler;
 	const llvm::Module *finalModule;
@@ -51,12 +55,13 @@ public:
 	JobExecutor(llvm::Module *module, int argc, char **argv);
 	virtual ~JobExecutor();
 
+	void initRootState(WorkerTree::Node *node, llvm::Function *f, int argc,
+			char **argv, char **envp);
+
 	ExplorationJob *getCurrentJob() { return currentJob; }
 
 	void executeJob(ExplorationJob *job);
 
-
-	klee::Interpreter *interpreter;
 };
 
 }
