@@ -508,14 +508,13 @@ int main(int argc, char **argv, char **envp) {
 	char **pEnvp;
 	readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
-	// Create the symbolic tree data structure
-	WorkerTree *tree = new WorkerTree();
-
 	// Create the job manager
-	JobManager *manager = new JobManager(tree, mainModule, pArgc, pArgv);
+	JobManager *manager = new JobManager(mainModule);
+
+	manager->setupStartingPoint("main", pArgc, pArgv, envp);
 
 	// Start exploring the root node
-	ExplorationJob *rootJob = manager->createJob(tree->getRoot());
+	ExplorationJob *rootJob = manager->createJob(manager->getTree()->getRoot());
 
 	manager->submitJob(rootJob);
 

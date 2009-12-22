@@ -13,9 +13,11 @@
 
 #include <list>
 #include <set>
+#include <string>
 
 namespace llvm {
 class Module;
+class Function;
 }
 
 namespace cloud9 {
@@ -31,15 +33,24 @@ private:
 	std::set<ExplorationJob*> waitingPool;
 	std::set<ExplorationJob*> executingPool;
 
+	bool initialized;
+	llvm::Module *module;
+	llvm::Function *mainFn;
+
 	/*
 	 *
 	 */
 	void finalizeJob(ExplorationJob* job);
 
-	void setupExecutor(llvm::Module *module, int argc, char **argv);
+	void setupExecutor(llvm::Module *module, int argc, char **argv, char **envp);
+
+	JobManager(WorkerTree *tree, llvm::Module *module);
 public:
-	JobManager(WorkerTree *tree, llvm::Module *module, int argc, char **argv);
+	JobManager(llvm::Module *module);
 	virtual ~JobManager();
+
+	void setupStartingPoint(llvm::Function *mainFn, int argc, char **argv, char **envp);
+	void setupStartingPoint(std::string mainFnName, int argc, char **argv, char **envp);
 
 	WorkerTree *getTree() { return tree; }
 

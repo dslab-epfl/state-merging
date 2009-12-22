@@ -33,7 +33,7 @@ class KleeHandler;
  */
 class JobExecutor {
 private:
-	klee::Interpreter *interpreter;
+
 	KleeHandler *kleeHandler;
 	const llvm::Module *finalModule;
 
@@ -54,6 +54,9 @@ public:
 	ExplorationJob *getCurrentJob() { return currentJob; }
 
 	void executeJob(ExplorationJob *job);
+
+
+	klee::Interpreter *interpreter;
 };
 
 }
