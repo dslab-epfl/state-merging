@@ -34,8 +34,8 @@ public:
 		 * Creates a new node and connects it in position "index" in a parent
 		 * node
 		 */
-		Node(int deg, Node* p, int index) {
-			assert(deg >= 2);
+		Node(int deg, Node* p, int index) :
+			degree(deg), parent(p), children(deg) {
 
 			if (p != NULL) {
 				p->children[index] = this;

@@ -34,7 +34,9 @@ private:
 	std::set<ExplorationJob*> executingPool;
 
 	bool initialized;
-	llvm::Module *module;
+
+	llvm::Module *origModule;
+	const llvm::Module *finalModule;
 	llvm::Function *mainFn;
 
 	/*
@@ -42,7 +44,7 @@ private:
 	 */
 	void finalizeJob(ExplorationJob* job);
 
-	void setupExecutor(llvm::Module *module, int argc, char **argv, char **envp);
+	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 
 	JobManager(WorkerTree *tree, llvm::Module *module);
 public:

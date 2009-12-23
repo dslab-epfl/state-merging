@@ -18,14 +18,14 @@ namespace worker {
 
 JobManager::JobManager(WorkerTree *tree, llvm::Module *module) {
 	this->tree = tree;
-	this->module = module;
+	this->origModule = module;
 
 	initialized = false;
 }
 
 JobManager::JobManager(llvm::Module *module) {
 	this->tree = new WorkerTree();
-	this->module = module;
+	this->origModule = module;
 
 	initialized = false;
 }
@@ -40,19 +40,23 @@ void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc, char **arg
 
 	this->mainFn = mainFn;
 
-	setupExecutor(module, argc, argv, envp);
+	executor = createExecutor(origModule, argc, argv);
+
+	// Update the module with the optimizations
+	finalModule = executor->getModule();
+	executor->initRootState(tree->getRoot(), mainFn, argc, argv, envp);
 
 	initialized = true;
 }
 
 void JobManager::setupStartingPoint(std::string mainFnName, int argc, char **argv, char **envp) {
-	llvm::Function *mainFn = module->getFunction(mainFnName);
+	llvm::Function *mainFn = origModule->getFunction(mainFnName);
 
 	setupStartingPoint(mainFn, argc, argv, envp);
 }
 
-void JobManager::setupExecutor(llvm::Module *module, int argc, char **argv, char **envp) {
-	executor = new JobExecutor(module, argc, argv);
+JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **argv) {
+	return new JobExecutor(module, argc, argv);
 }
 
 void JobManager::submitJob(ExplorationJob* job) {

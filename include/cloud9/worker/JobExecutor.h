@@ -58,7 +58,9 @@ public:
 	void initRootState(WorkerTree::Node *node, llvm::Function *f, int argc,
 			char **argv, char **envp);
 
-	ExplorationJob *getCurrentJob() { return currentJob; }
+	const llvm::Module *getModule() const { return finalModule; }
+
+	ExplorationJob *getCurrentJob() const { return currentJob; }
 
 	void executeJob(ExplorationJob *job);
 
