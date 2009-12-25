@@ -21,11 +21,13 @@ void SymbolicEngine::deregisterStateEventHandler(StateEventHandler *handler) {
 	seHandlers.erase(handler);
 }
 
-void SymbolicEngine::fireStateCreated(klee::ExecutionState *state) {
+void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
+		klee::ExecutionState *parent, int index) {
+
 	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
 		StateEventHandler *h = *it;
 
-		h->onStateCreated(state);
+		h->onStateBranched(state, parent, index);
 	}
 }
 

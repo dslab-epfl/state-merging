@@ -203,6 +203,8 @@ JobExecutor::JobExecutor(llvm::Module *module, int argc, char **argv) {
 
 	finalModule = interpreter->setModule(module, mOpts);
 	externalsAndGlobalsCheck(finalModule);
+
+	symbEngine->registerStateEventHandler(&seHandler);
 }
 
 void JobExecutor::initRootState(WorkerTree::Node *node, llvm::Function *f, int argc,
@@ -216,6 +218,8 @@ void JobExecutor::initRootState(WorkerTree::Node *node, llvm::Function *f, int a
 
 JobExecutor::~JobExecutor() {
 	if (symbEngine != NULL) {
+		symbEngine->deregisterStateEventHandler(&seHandler);
+
 		symbEngine->destroyStates();
 	}
 }
@@ -229,6 +233,15 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
+
+}
+
+void JobExecutor::SEHandler::onStateBranched(klee::ExecutionState *state,
+		klee::ExecutionState *parent, int index) {
+
+}
+
+void JobExecutor::SEHandler::onStateDestroy(klee::ExecutionState *state, bool &allow) {
 
 }
 

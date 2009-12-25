@@ -21,7 +21,8 @@ public:
 	StateEventHandler() {};
 	virtual ~StateEventHandler() {};
 
-	virtual void onStateCreated(klee::ExecutionState *state) = 0;
+	virtual void onStateBranched(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index) = 0;
 	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
 
 };

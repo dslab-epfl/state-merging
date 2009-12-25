@@ -12,10 +12,12 @@
 
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/worker/ExplorationJob.h"
+#include "cloud9/worker/StateEventHandler.h"
 
 
 namespace klee {
 class Interpreter;
+class ExecutionState;
 }
 
 namespace llvm {
@@ -35,8 +37,18 @@ class SymbolicEngine;
  */
 class JobExecutor {
 private:
+	class SEHandler: public StateEventHandler {
+	private:
+		ExplorationJob *job;
+	public:
+		virtual void onStateBranched(klee::ExecutionState *state,
+				klee::ExecutionState *parent, int index);
+		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
+	};
+
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
+	SEHandler seHandler;
 
 	KleeHandler *kleeHandler;
 	const llvm::Module *finalModule;

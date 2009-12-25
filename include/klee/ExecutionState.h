@@ -97,6 +97,8 @@ private:
   ExecutionState &operator=(const ExecutionState&); 
   std::map< std::string, std::string > fnAliases;
 
+  void *customData;
+
 public:
   bool fakeState;
   // Are we currently underconstrained?  Hack: value is size to make fake
@@ -164,6 +166,9 @@ public:
   }
 
   bool merge(const ExecutionState &b);
+
+  void *getCustomData() { return customData; }
+  void setCustomData(void *data) { this->customData = data; }
 };
 
 

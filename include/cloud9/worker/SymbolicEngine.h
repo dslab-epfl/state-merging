@@ -29,7 +29,8 @@ private:
 	typedef std::set<StateEventHandler*> handlers_t;
 	handlers_t seHandlers;
 protected:
-	void fireStateCreated(klee::ExecutionState *state);
+	void fireStateBranched(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index);
 	void fireStateDestroy(klee::ExecutionState *state, bool &allow);
 public:
 	SymbolicEngine() {};

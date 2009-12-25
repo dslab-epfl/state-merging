@@ -611,6 +611,7 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=1; i<N; ++i) {
     ExecutionState *es = result[theRNG.getInt32() % i];
     ExecutionState *ns = es->branch();
+
     addedStates.insert(ns);
     result.push_back(ns);
     es->ptreeNode->data = 0;
@@ -618,6 +619,8 @@ void Executor::branch(ExecutionState &state,
       processTree->split(es->ptreeNode, ns, es);
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
+
+    fireStateBranched(ns, es, 0);
   }
 
   // If necessary redistribute seeds to match conditions, killing
@@ -870,6 +873,11 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       processTree->split(current.ptreeNode, falseState, trueState);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
+
+    if (&current == falseState)
+    	fireStateBranched(trueState, falseState, 1);
+    else
+    	fireStateBranched(falseState, trueState, 0);
 
     if (!isInternal) {
       if (pathWriter) {
@@ -2443,29 +2451,38 @@ std::string Executor::getAddressInfo(ExecutionState &state,
   return info.str();
 }
 
-void Executor::terminateState(ExecutionState &state) {
-  if (replayOut && replayPosition!=replayOut->numObjects) {
-    klee_warning_once(replayOut, 
-                      "replay did not consume all objects in test input.");
-  }
+bool Executor::terminateState(ExecutionState &state) {
+	bool allow = true;
 
-  interpreterHandler->incPathsExplored();
+	fireStateDestroy(&state, allow);
 
-  std::set<ExecutionState*>::iterator it = addedStates.find(&state);
-  if (it==addedStates.end()) {
-    state.pc = state.prevPC;
+	if (!allow)
+		return false;
 
-    removedStates.insert(&state);
-  } else {
-    // never reached searcher, just delete immediately
-    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 = 
-      seedMap.find(&state);
-    if (it3 != seedMap.end())
-      seedMap.erase(it3);
-    addedStates.erase(it);
-    processTree->remove(state.ptreeNode);
-    delete &state;
-  }
+	if (replayOut && replayPosition != replayOut->numObjects) {
+		klee_warning_once(replayOut,
+				"replay did not consume all objects in test input.");
+	}
+
+	interpreterHandler->incPathsExplored();
+
+	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
+	if (it == addedStates.end()) {
+		state.pc = state.prevPC;
+
+		removedStates.insert(&state);
+	} else {
+		// never reached searcher, just delete immediately
+		std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 =
+				seedMap.find(&state);
+		if (it3 != seedMap.end())
+			seedMap.erase(it3);
+		addedStates.erase(it);
+		processTree->remove(state.ptreeNode);
+		delete &state;
+	}
+
+	return true;
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, 
