@@ -2259,12 +2259,6 @@ void Executor::bindModuleConstants() {
 }
 
 void Executor::run(ExecutionState &initialState) {
-  bindModuleConstants();
-
-  // Delay init till now so that ticks don't accrue during
-  // optimization and such.
-  initTimers();
-
   states.insert(&initialState);
 
   if (usingSeeds) {
@@ -3148,17 +3142,19 @@ ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
 
 	initializeGlobals(*state);
 
+	processTree = new PTree(state);
+	state->ptreeNode = processTree->root;
+
+	bindModuleConstants();
+
+	// Delay init till now so that ticks don't accrue during
+	// optimization and such.
+	initTimers();
+
 	return state;
 }
 
-void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
-		char **envp) {
-
-	ExecutionState *state = initRootState(f, argc, argv, envp);
-
-	processTree = new PTree(state);
-	state->ptreeNode = processTree->root;
-	run(*state);
+void Executor::destroyStates() {
 	delete processTree;
 	processTree = 0;
 
@@ -3176,6 +3172,17 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
 		munmap(theMMap, theMMapSize);
 		theMMap = 0;
 	}
+}
+
+void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
+		char **envp) {
+
+	ExecutionState *state = initRootState(f, argc, argv, envp);
+
+	run(*state);
+
+	destroyStates();
+
 }
 
 unsigned Executor::getPathStreamID(const ExecutionState &state) {

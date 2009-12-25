@@ -35,7 +35,7 @@ public:
 		 * node
 		 */
 		Node(int deg, Node* p, int index) :
-			degree(deg), parent(p), children(deg) {
+			degree(deg), children(deg), parent(p) {
 
 			if (p != NULL) {
 				p->children[index] = this;

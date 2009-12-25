@@ -215,7 +215,9 @@ void JobExecutor::initRootState(WorkerTree::Node *node, llvm::Function *f, int a
 }
 
 JobExecutor::~JobExecutor() {
-	// TODO Auto-generated destructor stub
+	if (symbEngine != NULL) {
+		symbEngine->destroyStates();
+	}
 }
 
 WorkerTree::Node *JobExecutor::getNextNode() {

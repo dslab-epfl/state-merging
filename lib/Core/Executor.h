@@ -454,6 +454,8 @@ public:
 
   ExecutionState *initRootState(llvm::Function *f, int argc,
   			char **argv, char **envp);
+
+  void destroyStates();
 };
   
 } // End klee namespace
