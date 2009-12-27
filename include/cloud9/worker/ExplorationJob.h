@@ -23,6 +23,8 @@ namespace cloud9 {
 namespace worker {
 
 class ExplorationJob {
+	friend class JobExecutor;
+	friend class JobManager;
 public:
 	struct JobCompare {
 	private:
@@ -32,13 +34,9 @@ public:
 			return nodeCompare(a->jobRoot, b->jobRoot);
 		}
 	};
+
 private:
-	friend class JobExecutor;
-	friend class JobManager;
-
-	typedef std::set<WorkerTree::Node*, WorkerTree::NodeCompare> Frontier;
-
-	WorkerTree *tree;
+	typedef std::set<WorkerTree::Node*, WorkerTree::NodeCompare> frontier_t;
 
 	int size;
 	int depth;
@@ -47,20 +45,24 @@ private:
 	bool finished;
 
 	WorkerTree::Node *jobRoot;
-	Frontier frontier;
+	frontier_t frontier;
 
 	ExplorationJob *parent;
 	std::vector<ExplorationJob*> children;
 
+	void addToFrontier(WorkerTree::Node *node);
+	void removeFromFrontier(WorkerTree::Node *node);
+
+	ExplorationJob(ExplorationJob *parent, WorkerTree::Node *jobRoot);
+
 public:
-	ExplorationJob();
 	virtual ~ExplorationJob();
 
 	int getSize() { return size; }
 	int getDepth() { return depth; }
 
-	bool isStarted() { return started; }
-	bool isFinished() { return finished; }
+	bool isStarted() const { return started; }
+	bool isFinished() const { return finished; }
 };
 
 }

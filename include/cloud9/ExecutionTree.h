@@ -93,13 +93,15 @@ private:
 	unsigned int degree;
 	Node* root;
 public:
-	ExecutionTree(int deg = 2): degree(deg){
+	ExecutionTree(int deg): degree(deg){
 		root = new Node(deg, NULL, 0);
 	};
 
 	virtual ~ExecutionTree() { };
 
-	Node* getRoot() { return root; }
+	Node* getRoot() const { return root; }
+
+	int getDegree() const { return degree; }
 
 	Node* getNode(ExecutionPath *path) {
 		return getNode(path, root);
@@ -116,11 +118,22 @@ public:
 				continue;
 			}
 
-			newNode = new Node(degree, crtNode);
+			newNode = new Node(degree, crtNode, *it);
 			crtNode = newNode;
 		}
 
 		return crtNode;
+	}
+
+	Node *getNode(Node* root, int index) {
+		Node *result = root->getChild(index);
+
+		if (result != NULL)
+			return result;
+
+		result = new Node(degree, root, index);
+
+		return result;
 	}
 
 };

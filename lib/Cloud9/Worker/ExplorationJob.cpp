@@ -11,13 +11,33 @@ namespace cloud9 {
 
 namespace worker {
 
-ExplorationJob::ExplorationJob() {
-	// TODO Auto-generated constructor stub
+ExplorationJob::ExplorationJob(ExplorationJob *p, WorkerTree::Node *r)
+		: size(1),
+		  depth(1),
+		  started(false),
+		  finished(false),
+		  jobRoot(r),
+		  parent(p){
 
+	frontier.insert(jobRoot);
 }
 
 ExplorationJob::~ExplorationJob() {
-	// TODO Auto-generated destructor stub
+}
+
+void ExplorationJob::addToFrontier(WorkerTree::Node *node) {
+	frontier.insert(node);
+
+	// The only way to grow is to add to the frontier
+	size++;
+	int nodeDepth = node->getLevel() - jobRoot->getLevel() + 1;
+
+	if (nodeDepth > depth)
+		depth = nodeDepth;
+}
+
+void ExplorationJob::removeFromFrontier(WorkerTree::Node *node) {
+	frontier.erase(node);
 }
 
 }

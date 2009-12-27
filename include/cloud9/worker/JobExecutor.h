@@ -35,23 +35,15 @@ class SymbolicEngine;
 /*
  * Encapsulates a sequential symbolic execution engine.
  */
-class JobExecutor {
-private:
-	class SEHandler: public StateEventHandler {
-	private:
-		ExplorationJob *job;
-	public:
-		virtual void onStateBranched(klee::ExecutionState *state,
-				klee::ExecutionState *parent, int index);
-		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
-	};
+class JobExecutor: public StateEventHandler {
 
+private:
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
-	SEHandler seHandler;
 
 	KleeHandler *kleeHandler;
 	const llvm::Module *finalModule;
+	WorkerTree *tree;
 
 	ExplorationJob *currentJob;
 
@@ -63,11 +55,17 @@ private:
 	void exploreNode(WorkerTree::Node *node);
 
 	void externalsAndGlobalsCheck(const llvm::Module *m);
+
+protected:
+	virtual void onStateBranched(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index);
+	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
+
 public:
-	JobExecutor(llvm::Module *module, int argc, char **argv);
+	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
 	virtual ~JobExecutor();
 
-	void initRootState(WorkerTree::Node *node, llvm::Function *f, int argc,
+	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
 
 	const llvm::Module *getModule() const { return finalModule; }

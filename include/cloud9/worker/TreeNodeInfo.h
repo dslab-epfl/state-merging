@@ -20,6 +20,7 @@ class ExplorationJob;
 
 class TreeNodeInfo {
 	friend class JobExecutor;
+	friend class JobManager;
 private:
 	klee::ExecutionState *symState;
 	ExplorationJob *job;

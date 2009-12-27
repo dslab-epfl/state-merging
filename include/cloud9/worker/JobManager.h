@@ -42,7 +42,7 @@ private:
 	/*
 	 *
 	 */
-	void finalizeJob(ExplorationJob* job);
+	void explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 
@@ -51,8 +51,10 @@ public:
 	JobManager(llvm::Module *module);
 	virtual ~JobManager();
 
-	void setupStartingPoint(llvm::Function *mainFn, int argc, char **argv, char **envp);
-	void setupStartingPoint(std::string mainFnName, int argc, char **argv, char **envp);
+	void setupStartingPoint(llvm::Function *mainFn, int argc, char **argv,
+			char **envp);
+	void setupStartingPoint(std::string mainFnName, int argc, char **argv,
+			char **envp);
 
 	WorkerTree *getTree() { return tree; }
 

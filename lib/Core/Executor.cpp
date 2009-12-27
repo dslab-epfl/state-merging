@@ -813,6 +813,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    fireStateBranched(NULL, &current, 0);
+
     return StatePair(&current, (klee::ExecutionState*)NULL);
   } else if (res==Solver::False) {
     if (!isInternal) {
@@ -820,6 +822,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         current.pathOS << "0";
       }
     }
+
+    fireStateBranched(NULL, &current, 1);
 
     return StatePair((klee::ExecutionState*)NULL, &current);
   } else {

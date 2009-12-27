@@ -184,7 +184,9 @@ void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 	}
 }
 
-JobExecutor::JobExecutor(llvm::Module *module, int argc, char **argv) {
+JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
+		int argc, char **argv) : tree(t) {
+
 	klee::Interpreter::InterpreterOptions iOpts;
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
 
@@ -204,21 +206,23 @@ JobExecutor::JobExecutor(llvm::Module *module, int argc, char **argv) {
 	finalModule = interpreter->setModule(module, mOpts);
 	externalsAndGlobalsCheck(finalModule);
 
-	symbEngine->registerStateEventHandler(&seHandler);
+	symbEngine->registerStateEventHandler(this);
+
+	assert(tree->getDegree() == 2);
 }
 
-void JobExecutor::initRootState(WorkerTree::Node *node, llvm::Function *f, int argc,
+void JobExecutor::initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp) {
 	klee::ExecutionState *state = symbEngine->initRootState(f, argc, argv, envp);
-
-	assert(!node->getParent());
+	WorkerTree::Node *node = tree->getRoot();
 
 	node->info.symState = state;
+	state->setCustomData(node);
 }
 
 JobExecutor::~JobExecutor() {
 	if (symbEngine != NULL) {
-		symbEngine->deregisterStateEventHandler(&seHandler);
+		symbEngine->deregisterStateEventHandler(this);
 
 		symbEngine->destroyStates();
 	}
@@ -232,17 +236,67 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 
 }
 
-void JobExecutor::executeJob(ExplorationJob *job) {
-
-}
-
-void JobExecutor::SEHandler::onStateBranched(klee::ExecutionState *state,
+void JobExecutor::onStateBranched(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
+	assert(parent && parent->getCustomData());
 
+	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
+
+	if (pNode->info.job != currentJob) {
+		// It's not for us
+		return;
+	}
+
+	WorkerTree::Node *newNode, *oldNode;
+
+	// Obtain the new node pointers
+	newNode = tree->getNode(pNode, index);
+	oldNode = tree->getNode(pNode, 1 - index);
+
+	// Update state -> node references
+	if (state)
+		state->setCustomData(newNode);
+	parent->setCustomData(oldNode);
+
+	// Update node -> state references
+	pNode->info.symState = NULL;
+
+	newNode->info.symState = state;
+	newNode->info.job = currentJob;
+
+	oldNode->info.symState = parent;
+	newNode->info.job = currentJob;
+
+	// Update frontier
+	currentJob->removeFromFrontier(pNode);
+
+	if (state) {
+		currentJob->addToFrontier(newNode);
+	}
+	currentJob->addToFrontier(oldNode);
 }
 
-void JobExecutor::SEHandler::onStateDestroy(klee::ExecutionState *state, bool &allow) {
+void JobExecutor::onStateDestroy(klee::ExecutionState *state,
+		bool &allow) {
+	assert(state && state->getCustomData());
 
+	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
+
+	if (pNode->info.job != currentJob) {
+		return;
+	}
+
+	state->setCustomData(NULL);
+	pNode->info.symState = NULL;
+
+	currentJob->removeFromFrontier(pNode);
+}
+
+void JobExecutor::executeJob(ExplorationJob *job) {
+	job->started = true;
+	currentJob = job;
+
+	job->finished = true;
 }
 
 }

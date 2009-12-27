@@ -24,7 +24,7 @@ JobManager::JobManager(WorkerTree *tree, llvm::Module *module) {
 }
 
 JobManager::JobManager(llvm::Module *module) {
-	this->tree = new WorkerTree();
+	this->tree = new WorkerTree(2);
 	this->origModule = module;
 
 	initialized = false;
@@ -32,6 +32,20 @@ JobManager::JobManager(llvm::Module *module) {
 
 JobManager::~JobManager() {
 	// TODO Auto-generated destructor stub
+}
+
+void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs) {
+	assert(job->isFinished());
+
+	for (ExplorationJob::frontier_t::iterator it = job->frontier.begin();
+			it != job->frontier.end(); it++) {
+		WorkerTree::Node *node = *it;
+
+		ExplorationJob *newJob = new ExplorationJob(job, node);
+		node->info.job = newJob;
+
+		newJobs.insert(newJob);
+	}
 }
 
 void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc, char **argv, char **envp) {
@@ -44,7 +58,7 @@ void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc, char **arg
 
 	// Update the module with the optimizations
 	finalModule = executor->getModule();
-	executor->initRootState(tree->getRoot(), mainFn, argc, argv, envp);
+	executor->initRootState(mainFn, argc, argv, envp);
 
 	initialized = true;
 }
@@ -56,7 +70,7 @@ void JobManager::setupStartingPoint(std::string mainFnName, int argc, char **arg
 }
 
 JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **argv) {
-	return new JobExecutor(module, argc, argv);
+	return new JobExecutor(module, tree, argc, argv);
 }
 
 void JobManager::submitJob(ExplorationJob* job) {
