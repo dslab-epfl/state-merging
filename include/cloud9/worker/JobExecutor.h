@@ -12,7 +12,7 @@
 
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/worker/ExplorationJob.h"
-#include "cloud9/worker/StateEventHandler.h"
+#include "cloud9/worker/SymbolicEngine.h"
 
 
 namespace klee {
@@ -30,12 +30,39 @@ namespace cloud9 {
 namespace worker {
 
 class KleeHandler;
-class SymbolicEngine;
 
 /*
  * Encapsulates a sequential symbolic execution engine.
  */
-class JobExecutor: public StateEventHandler {
+class JobExecutor: public SymbolicEngine::StateEventHandler {
+public:
+	class BehaviorHandler {
+	public:
+		BehaviorHandler() {};
+		virtual ~BehaviorHandler() {};
+
+	public:
+		virtual void onJobStarted(ExplorationJob *job) = 0;
+		virtual void onJobTerminated(ExplorationJob *job) = 0;
+	};
+
+	class SizingHandler: public BehaviorHandler {
+	public:
+		SizingHandler() {};
+		virtual ~SizingHandler() {};
+
+	public:
+		virtual void onTerminationQuery(ExplorationJob *job, bool &term) = 0;
+	};
+
+	class ExplorationHandler: public BehaviorHandler {
+	public:
+		ExplorationHandler() {};
+		virtual ~ExplorationHandler() {};
+
+	public:
+
+	};
 
 private:
 	klee::Interpreter *interpreter;
@@ -56,11 +83,6 @@ private:
 
 	void externalsAndGlobalsCheck(const llvm::Module *m);
 
-protected:
-	virtual void onStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index);
-	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
-
 public:
 	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
 	virtual ~JobExecutor();
@@ -73,6 +95,10 @@ public:
 	ExplorationJob *getCurrentJob() const { return currentJob; }
 
 	void executeJob(ExplorationJob *job);
+
+	virtual void onStateBranched(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index);
+	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
 
 };
 

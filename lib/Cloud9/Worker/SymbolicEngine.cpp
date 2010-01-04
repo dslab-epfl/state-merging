@@ -7,8 +7,6 @@
 
 #include "cloud9/worker/SymbolicEngine.h"
 
-#include "cloud9/worker/StateEventHandler.h"
-
 namespace cloud9 {
 
 namespace worker {

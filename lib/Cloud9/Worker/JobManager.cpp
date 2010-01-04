@@ -42,7 +42,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 		WorkerTree::Node *node = *it;
 
 		ExplorationJob *newJob = new ExplorationJob(job, node);
-		node->info.job = newJob;
+		(**node).job = newJob;
 
 		newJobs.insert(newJob);
 	}

@@ -22,9 +22,19 @@ namespace cloud9 {
 
 namespace worker {
 
-class StateEventHandler;
-
 class SymbolicEngine {
+public:
+	class StateEventHandler {
+	public:
+		StateEventHandler() {};
+		virtual ~StateEventHandler() {};
+
+	public:
+		virtual void onStateBranched(klee::ExecutionState *state,
+				klee::ExecutionState *parent, int index) = 0;
+		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
+
+	};
 private:
 	typedef std::set<StateEventHandler*> handlers_t;
 	handlers_t seHandlers;

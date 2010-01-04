@@ -30,6 +30,8 @@ public:
 		unsigned int index;
 		unsigned int count;
 
+		NodeInfo _info;
+
 		/*
 		 * Creates a new node and connects it in position "index" in a parent
 		 * node
@@ -60,7 +62,9 @@ public:
 		int getIndex() const { return index; }
 		int getCount() const { return count; }
 
-		NodeInfo info;
+		NodeInfo& operator*() {
+			return _info;
+		}
 	};
 
 	struct NodeCompare {

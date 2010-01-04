@@ -216,7 +216,7 @@ void JobExecutor::initRootState(llvm::Function *f, int argc,
 	klee::ExecutionState *state = symbEngine->initRootState(f, argc, argv, envp);
 	WorkerTree::Node *node = tree->getRoot();
 
-	node->info.symState = state;
+	(**node).symState = state;
 	state->setCustomData(node);
 }
 
@@ -242,7 +242,7 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
-	if (pNode->info.job != currentJob) {
+	if ((**pNode).job != currentJob) {
 		// It's not for us
 		return;
 	}
@@ -259,13 +259,13 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 	parent->setCustomData(oldNode);
 
 	// Update node -> state references
-	pNode->info.symState = NULL;
+	(**pNode).symState = NULL;
 
-	newNode->info.symState = state;
-	newNode->info.job = currentJob;
+	(**newNode).symState = state;
+	(**newNode).job = currentJob;
 
-	oldNode->info.symState = parent;
-	newNode->info.job = currentJob;
+	(**oldNode).symState = parent;
+	(**newNode).job = currentJob;
 
 	// Update frontier
 	currentJob->removeFromFrontier(pNode);
@@ -282,12 +282,12 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
-	if (pNode->info.job != currentJob) {
+	if ((**pNode).job != currentJob) {
 		return;
 	}
 
 	state->setCustomData(NULL);
-	pNode->info.symState = NULL;
+	(**pNode).symState = NULL;
 
 	currentJob->removeFromFrontier(pNode);
 }
