@@ -32,5 +32,10 @@ extern std::string InputFile;
 extern LibcType Libc;
 extern bool WithPOSIXRuntime;
 
+namespace klee {
+	class RNG;
+	extern RNG theRNG;
+}
+
 
 #endif /* COMMON_H_ */

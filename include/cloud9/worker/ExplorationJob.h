@@ -35,8 +35,8 @@ public:
 		}
 	};
 
-private:
 	typedef std::set<WorkerTree::Node*, WorkerTree::NodeCompare> frontier_t;
+private:
 
 	int size;
 	int depth;
@@ -60,6 +60,9 @@ public:
 
 	int getSize() { return size; }
 	int getDepth() { return depth; }
+
+	frontier_t &getFrontier() { return frontier; }
+	WorkerTree::Node *getJobRoot() { return jobRoot; }
 
 	bool isStarted() const { return started; }
 	bool isFinished() const { return finished; }

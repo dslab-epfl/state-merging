@@ -42,8 +42,12 @@ public:
 		virtual ~BehaviorHandler() {};
 
 	public:
-		virtual void onJobStarted(ExplorationJob *job) = 0;
-		virtual void onJobTerminated(ExplorationJob *job) = 0;
+		virtual void onJobStarted(ExplorationJob *job) {};
+		virtual void onJobTerminated(ExplorationJob *job) {};
+
+		virtual void onNodeExplored(WorkerTree::Node *node,
+				WorkerTree::Node *left, WorkerTree::Node *right) {};
+		virtual void onNodeDeleted(WorkerTree::Node *node) {};
 	};
 
 	class SizingHandler: public BehaviorHandler {
@@ -61,7 +65,7 @@ public:
 		virtual ~ExplorationHandler() {};
 
 	public:
-
+		virtual void onNextStateQuery(ExplorationJob *job, WorkerTree::Node *&node) = 0;
 	};
 
 private:
@@ -74,6 +78,10 @@ private:
 
 	ExplorationJob *currentJob;
 
+	// Behavior Handlers
+	SizingHandler *sizingHandler;
+	ExplorationHandler *expHandler;
+
 	/*
 	 * Returns the next node to be explored
 	 */
@@ -81,10 +89,15 @@ private:
 
 	void exploreNode(WorkerTree::Node *node);
 
+	void updateTreeOnBranch(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index);
+	void updateTreeOnDestroy(klee::ExecutionState *state);
+
 	void externalsAndGlobalsCheck(const llvm::Module *m);
 
 public:
-	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
+	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv,
+			SizingHandler *s, ExplorationHandler *e);
 	virtual ~JobExecutor();
 
 	void initRootState(llvm::Function *f, int argc,

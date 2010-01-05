@@ -185,7 +185,13 @@ void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 }
 
 JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
-		int argc, char **argv) : tree(t) {
+		int argc, char **argv, SizingHandler *s, ExplorationHandler *e)
+		: tree(t),
+		  sizingHandler(s),
+		  expHandler(e) {
+
+	assert(s != NULL);
+	assert(e != NULL);
 
 	klee::Interpreter::InterpreterOptions iOpts;
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
@@ -236,7 +242,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 
 }
 
-void JobExecutor::onStateBranched(klee::ExecutionState *state,
+void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
 	assert(parent && parent->getCustomData());
 
@@ -276,8 +282,7 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 	currentJob->addToFrontier(oldNode);
 }
 
-void JobExecutor::onStateDestroy(klee::ExecutionState *state,
-		bool &allow) {
+void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	assert(state && state->getCustomData());
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
@@ -292,9 +297,26 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 	currentJob->removeFromFrontier(pNode);
 }
 
+void JobExecutor::onStateBranched(klee::ExecutionState *state,
+		klee::ExecutionState *parent, int index) {
+
+	updateTreeOnBranch(state, parent, index);
+
+}
+
+void JobExecutor::onStateDestroy(klee::ExecutionState *state,
+		bool &allow) {
+
+	updateTreeOnDestroy(state);
+}
+
 void JobExecutor::executeJob(ExplorationJob *job) {
 	job->started = true;
 	currentJob = job;
+
+	while (!job->frontier.empty()) {
+
+	}
 
 	job->finished = true;
 }
