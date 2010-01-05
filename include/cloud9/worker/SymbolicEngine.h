@@ -49,6 +49,8 @@ public:
 	virtual klee::ExecutionState *initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp) = 0;
 
+	virtual void stepInState(klee::ExecutionState *state) = 0;
+
 	virtual void destroyStates() = 0;
 
 	void registerStateEventHandler(StateEventHandler *handler);

@@ -235,7 +235,11 @@ JobExecutor::~JobExecutor() {
 }
 
 WorkerTree::Node *JobExecutor::getNextNode() {
-	return NULL;
+	WorkerTree::Node *nextNode = NULL;
+
+	expHandler->onNextStateQuery(currentJob, nextNode);
+
+	return nextNode;
 }
 
 void JobExecutor::exploreNode(WorkerTree::Node *node) {
@@ -315,7 +319,11 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	currentJob = job;
 
 	while (!job->frontier.empty()) {
+		// Select a new state to explore next
+		WorkerTree::Node *node = getNextNode();
+		assert(node);
 
+		exploreNode(node);
 	}
 
 	job->finished = true;

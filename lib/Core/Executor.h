@@ -452,10 +452,12 @@ public:
 
   /*** Cloud9 symbolic execution engine methods ***/
 
-  ExecutionState *initRootState(llvm::Function *f, int argc,
+  virtual ExecutionState *initRootState(llvm::Function *f, int argc,
   			char **argv, char **envp);
 
-  void destroyStates();
+  virtual void stepInState(ExecutionState *state);
+
+  virtual void destroyStates();
 };
   
 } // End klee namespace

@@ -2270,6 +2270,55 @@ void Executor::bindModuleConstants() {
   }
 }
 
+void Executor::stepInState(ExecutionState *state) {
+	KInstruction *ki = state->pc;
+	stepInstruction(*state);
+
+	executeInstruction(*state, ki);
+	processTimers(state, MaxInstructionTime);
+
+	if (MaxMemory) {
+		if ((stats::instructions & 0xFFFF) == 0) {
+			// We need to avoid calling GetMallocUsage() often because it
+			// is O(elts on freelist). This is really bad since we start
+			// to pummel the freelist once we hit the memory cap.
+			unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
+
+			if (mbs > MaxMemory) {
+				if (mbs > MaxMemory + 100) {
+					// just guess at how many to kill
+					unsigned numStates = states.size();
+					unsigned toKill = std::max(1U, numStates - numStates
+							* MaxMemory / mbs);
+
+					if (MaxMemoryInhibit)
+						klee_warning("killing %d states (over memory cap)",
+								toKill);
+
+					std::vector<ExecutionState*> arr(states.begin(),
+							states.end());
+					for (unsigned i = 0, N = arr.size(); N && i < toKill; ++i, --N) {
+						unsigned idx = rand() % N;
+
+						// Make two pulls to try and not hit a state that
+						// covered new code.
+						if (arr[idx]->coveredNew)
+							idx = rand() % N;
+
+						std::swap(arr[idx], arr[N - 1]);
+						terminateStateEarly(*arr[N - 1], "memory limit");
+					}
+				}
+				atMemoryLimit = true;
+			} else {
+				atMemoryLimit = false;
+			}
+		}
+	}
+
+	updateStates(state);
+}
+
 void Executor::run(ExecutionState &initialState) {
   states.insert(&initialState);
 
@@ -2343,50 +2392,8 @@ void Executor::run(ExecutionState &initialState) {
 
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
-    KInstruction *ki = state.pc;
-    stepInstruction(state);
 
-    executeInstruction(state, ki);
-    processTimers(&state, MaxInstructionTime);
-
-    if (MaxMemory) {
-      if ((stats::instructions & 0xFFFF) == 0) {
-        // We need to avoid calling GetMallocUsage() often because it
-        // is O(elts on freelist). This is really bad since we start
-        // to pummel the freelist once we hit the memory cap.
-        unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
-        
-        if (mbs > MaxMemory) {
-          if (mbs > MaxMemory + 100) {
-            // just guess at how many to kill
-            unsigned numStates = states.size();
-            unsigned toKill = std::max(1U, numStates - numStates*MaxMemory/mbs);
-
-            if (MaxMemoryInhibit)
-              klee_warning("killing %d states (over memory cap)",
-                           toKill);
-
-            std::vector<ExecutionState*> arr(states.begin(), states.end());
-            for (unsigned i=0,N=arr.size(); N && i<toKill; ++i,--N) {
-              unsigned idx = rand() % N;
-
-              // Make two pulls to try and not hit a state that
-              // covered new code.
-              if (arr[idx]->coveredNew)
-                idx = rand() % N;
-
-              std::swap(arr[idx], arr[N-1]);
-              terminateStateEarly(*arr[N-1], "memory limit");
-            }
-          }
-          atMemoryLimit = true;
-        } else {
-          atMemoryLimit = false;
-        }
-      }
-    }
-
-    updateStates(&state);
+    stepInState(&state);
   }
 
   delete searcher;
