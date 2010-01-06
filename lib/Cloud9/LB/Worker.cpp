@@ -5,7 +5,11 @@
  *      Author: stefan
  */
 
-#include "Worker.h"
+#include "cloud9/lb/Worker.h"
+
+namespace cloud9 {
+
+namespace lb {
 
 Worker::Worker() {
 	// TODO Auto-generated constructor stub
@@ -14,4 +18,8 @@ Worker::Worker() {
 
 Worker::~Worker() {
 	// TODO Auto-generated destructor stub
+}
+
+}
+
 }

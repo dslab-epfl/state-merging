@@ -28,14 +28,14 @@ class ExplorationJob {
 public:
 	struct JobCompare {
 	private:
-		WorkerTree::NodeCompare nodeCompare;
+		WorkerTree::NodeBreadthCompare nodeCompare;
 	public:
 		bool operator() (const ExplorationJob *a, const ExplorationJob *b) {
 			return nodeCompare(a->jobRoot, b->jobRoot);
 		}
 	};
 
-	typedef std::set<WorkerTree::Node*, WorkerTree::NodeCompare> frontier_t;
+	typedef std::set<WorkerTree::Node*, WorkerTree::NodeBreadthCompare> frontier_t;
 private:
 
 	int size;

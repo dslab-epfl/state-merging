@@ -11,10 +11,32 @@
 #include <cassert>
 #include <vector>
 #include <stack>
-
-#include "cloud9/ExecutionPath.h"
+#include <set>
+#include <algorithm>
 
 namespace cloud9 {
+
+class ExecutionPath {
+	template<class>
+	friend class ExecutionTree;
+private:
+	std::vector<int> path;
+
+	ExecutionPath *parent;
+	int parentIndex;
+
+	ExecutionPath();
+public:
+	virtual ~ExecutionPath();
+
+	std::vector<int> getPath() const { return path; };
+	ExecutionPath *getParent() { return parent; }
+	int getParentIndex() { return parentIndex; }
+
+	ExecutionPath *getAbsolutePath();
+
+	typedef std::vector<int>::iterator iterator;
+};
 
 template<class NodeInfo>
 class ExecutionTree {
@@ -29,6 +51,8 @@ public:
 		unsigned int level;
 		unsigned int index;
 		unsigned int count;
+
+		unsigned int _label;
 
 		NodeInfo _info;
 
@@ -67,7 +91,7 @@ public:
 		}
 	};
 
-	struct NodeCompare {
+	struct NodeBreadthCompare {
 		bool operator() (const Node *a, const Node *b) {
 			if (a->level > b->level)
 				while (a->level > b->level)
@@ -90,6 +114,12 @@ public:
 			}
 
 			return false;
+		}
+	};
+
+	struct NodeDepthCompare {
+		bool operator() (const Node *a, const Node *b) {
+			return a->level < b->level;
 		}
 	};
 
@@ -172,6 +202,41 @@ public:
 			}
 
 		}
+	}
+
+	void buildPathSet(std::vector<Node*> &seeds, std::vector<ExecutionPath*> &paths) {
+		paths.clear();
+
+		for (int i = 0; i < seeds.size(); i++) {
+			Node* crtNode = seeds[i];
+
+			ExecutionPath *path = new ExecutionPath();
+
+			ExecutionPath *p = NULL;
+			int pIndex = 0;
+
+			while (crtNode != root) {
+				if (crtNode->_label > 0) {
+					// We hit an already built path
+					p = paths[crtNode->_label - 1];
+					pIndex = p->path.size() -
+							(seeds[crtNode->_label - 1]->level - crtNode->level);
+					break;
+				} else {
+					path->path.push_back(crtNode->index);
+					crtNode->_label = i + 1;
+
+					crtNode = crtNode->parent;
+				}
+			}
+
+			std::reverse(path->path.begin(), path->path.end());
+			path->parent = p;
+			path->parentIndex = pIndex;
+
+			paths.push_back(path);
+		}
+
 	}
 
 };
