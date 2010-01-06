@@ -7,6 +7,8 @@
 
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/ExplorationJob.h"
+#include "cloud9/Common.h"
+#include "cloud9/worker/JobManagerBehaviors.h"
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"
@@ -17,12 +19,18 @@ namespace cloud9 {
 
 namespace worker {
 
-JobManager::JobManager(llvm::Module *module, SelectionHandler *s) :
-		initialized(false), origModule(module), selHandler(s) {
-
-	assert(s);
+JobManager::JobManager(llvm::Module *module) :
+		initialized(false), origModule(module) {
 
 	this->tree = new WorkerTree(2);
+
+	switch (JobSelection) {
+	case RandomSel:
+		selHandler = new RandomSelectionHandler();
+		break;
+	default:
+		assert(0);
+	}
 }
 
 JobManager::~JobManager() {

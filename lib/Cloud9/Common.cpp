@@ -16,6 +16,10 @@ std::string InputFile;
 LibcType Libc;
 bool WithPOSIXRuntime;
 
+JobSelectionType JobSelection;
+JobSizingType JobSizing;
+JobExplorationType JobExploration;
+
 namespace {
 static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"), cl::Positional,
 		cl::location(InputFile), cl::init("-"));
@@ -29,4 +33,24 @@ static cl::opt<LibcType, true> LibcOpt("c9-libc", cl::desc(
 static cl::opt<bool, true> WithPOSIXRuntimeOpt("c9-posix-runtime", cl::desc(
 		"Link with POSIX runtime"), cl::location(WithPOSIXRuntime), cl::init(false));
 
+static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
+		cl::desc("Job selection strategy"), cl::values(
+				clEnumValN(RandomSel, "random", "Random selection"),
+				clEnumValEnd),
+		cl::location(JobSelection), cl::init(RandomSel));
+
+static cl::opt<JobSizingType, true> JobSizingOpt("c9-jobsizing",
+		cl::desc("Job sizing strategy"), cl::values(
+				clEnumValN(UnlimitedSize, "unlimited", "Use a single, large job"),
+				clEnumValEnd),
+		cl::location(JobSizing), cl::init(UnlimitedSize));
+
+static cl::opt<JobExplorationType, true> JobExplorationOpt("c9-jobexpl",
+		cl::desc("Job exploration strategy"), cl::values(
+				clEnumValN(RandomExpl, "random", "Random exploration"),
+				clEnumValEnd),
+		cl::location(JobExploration), cl::init(RandomExpl));
+
 }
+
+

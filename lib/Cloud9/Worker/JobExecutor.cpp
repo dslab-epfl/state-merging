@@ -7,6 +7,7 @@
 
 #include "cloud9/worker/JobExecutor.h"
 #include "cloud9/worker/SymbolicEngine.h"
+#include "cloud9/worker/JobExecutorBehaviors.h"
 #include "cloud9/Common.h"
 
 #include "klee/Interpreter.h"
@@ -185,13 +186,8 @@ void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 }
 
 JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
-		int argc, char **argv, SizingHandler *s, ExplorationHandler *e)
-		: tree(t),
-		  sizingHandler(s),
-		  expHandler(e) {
-
-	assert(s != NULL);
-	assert(e != NULL);
+		int argc, char **argv)
+		: tree(t){
 
 	klee::Interpreter::InterpreterOptions iOpts;
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
@@ -215,6 +211,26 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 	symbEngine->registerStateEventHandler(this);
 
 	assert(tree->getDegree() == 2);
+
+	initHandlers();
+}
+
+void JobExecutor::initHandlers() {
+	switch (JobSizing) {
+	case UnlimitedSize:
+		sizingHandler = new UnlimitedSizingHandler();
+		break;
+	default:
+		assert(0);
+	}
+
+	switch (JobExploration) {
+	case RandomExpl:
+		expHandler = new RandomExplorationHandler();
+		break;
+	default:
+		assert(0);
+	}
 }
 
 void JobExecutor::initRootState(llvm::Function *f, int argc,

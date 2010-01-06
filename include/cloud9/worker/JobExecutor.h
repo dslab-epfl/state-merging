@@ -115,12 +115,12 @@ private:
 	}
 
 public:
-	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv,
-			SizingHandler *s, ExplorationHandler *e);
+	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
 	virtual ~JobExecutor();
 
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
+	void initHandlers();
 
 	const llvm::Module *getModule() const { return finalModule; }
 

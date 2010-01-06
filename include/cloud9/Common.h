@@ -28,9 +28,25 @@ enum LibcType {
 	NoLibc, UcLibc
 };
 
+enum JobSelectionType {
+	RandomSel
+};
+
+enum JobSizingType {
+	UnlimitedSize
+};
+
+enum JobExplorationType {
+	RandomExpl
+};
+
 extern std::string InputFile;
 extern LibcType Libc;
 extern bool WithPOSIXRuntime;
+
+extern JobSelectionType JobSelection;
+extern JobSizingType JobSizing;
+extern JobExplorationType JobExploration;
 
 namespace klee {
 	class RNG;

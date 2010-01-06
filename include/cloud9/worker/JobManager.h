@@ -63,7 +63,7 @@ private:
 
 	JobManager(WorkerTree *tree, llvm::Module *module);
 public:
-	JobManager(llvm::Module *module, SelectionHandler *s);
+	JobManager(llvm::Module *module);
 	virtual ~JobManager();
 
 	void setupStartingPoint(llvm::Function *mainFn, int argc, char **argv,
