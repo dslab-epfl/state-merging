@@ -237,6 +237,19 @@ public:
 			paths.push_back(path);
 		}
 
+		// Clean up the labels
+		for (int i = 0; i < seeds.size(); i++) {
+			Node *crtNode = seeds[i];
+
+			while (crtNode != root) {
+				if (crtNode->_label == 0)
+					break;
+				else {
+					crtNode->_label = 0;
+					crtNode = crtNode->parent;
+				}
+			}
+		}
 	}
 
 };
