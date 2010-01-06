@@ -45,8 +45,7 @@ public:
 		virtual void onJobStarted(ExplorationJob *job) {};
 		virtual void onJobTerminated(ExplorationJob *job) {};
 
-		virtual void onNodeExplored(WorkerTree::Node *node,
-				WorkerTree::Node *left, WorkerTree::Node *right) {};
+		virtual void onNodeExplored(WorkerTree::Node *node) {};
 		virtual void onNodeDeleted(WorkerTree::Node *node) {};
 	};
 
@@ -94,6 +93,26 @@ private:
 	void updateTreeOnDestroy(klee::ExecutionState *state);
 
 	void externalsAndGlobalsCheck(const llvm::Module *m);
+
+	void fireJobStarted(ExplorationJob *job) {
+		expHandler->onJobStarted(job);
+		sizingHandler->onJobStarted(job);
+	}
+
+	void fireJobTerminated(ExplorationJob *job) {
+		expHandler->onJobTerminated(job);
+		sizingHandler->onJobTerminated(job);
+	}
+
+	void fireNodeExplored(WorkerTree::Node *node) {
+		expHandler->onNodeExplored(node);
+		sizingHandler->onNodeExplored(node);
+	}
+
+	void fireNodeDeleted(WorkerTree::Node *node) {
+		expHandler->onNodeDeleted(node);
+		sizingHandler->onNodeDeleted(node);
+	}
 
 public:
 	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv,

@@ -243,12 +243,16 @@ WorkerTree::Node *JobExecutor::getNextNode() {
 }
 
 void JobExecutor::exploreNode(WorkerTree::Node *node) {
-
+	// Execute instructions until the state is destroyed or branching occurs.
+	// When a branching occurs, the node will become empty (as the state and its
+	// fork move in its children)
+	while ((**node).symState != NULL) {
+		symbEngine->stepInState((**node).symState);
+	}
 }
 
 void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
-	assert(parent && parent->getCustomData());
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
@@ -287,7 +291,6 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 }
 
 void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
-	assert(state && state->getCustomData());
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
@@ -299,24 +302,47 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	(**pNode).symState = NULL;
 
 	currentJob->removeFromFrontier(pNode);
+
+	// Delete the supporting branch of the state
+	while (pNode->getParent()) { // Don't delete root
+		if (pNode->getCount() > 0) // Stop when joining another branch
+			break;
+
+		WorkerTree::Node *temp = pNode;
+		pNode = pNode->getParent();
+		tree->removeNode(temp);
+	}
 }
 
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
 
+	assert(parent && parent->getCustomData());
+
+	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
+
 	updateTreeOnBranch(state, parent, index);
+
+	fireNodeExplored(pNode);
 
 }
 
 void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 		bool &allow) {
 
+	assert(state && state->getCustomData());
+
+	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
+
 	updateTreeOnDestroy(state);
+
+	fireNodeDeleted(pNode);
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
 	job->started = true;
 	currentJob = job;
+	fireJobStarted(job);
 
 	while (!job->frontier.empty()) {
 		// Select a new state to explore next
@@ -327,6 +353,7 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	}
 
 	job->finished = true;
+	fireJobTerminated(job);
 }
 
 }

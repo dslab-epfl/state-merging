@@ -10,6 +10,7 @@
 
 #include <cassert>
 #include <vector>
+#include <stack>
 
 #include "cloud9/ExecutionPath.h"
 
@@ -22,7 +23,6 @@ public:
 		friend class ExecutionTree;
 
 	private:
-		unsigned int degree;
 		std::vector<Node*> children;
 		Node* parent;
 
@@ -37,7 +37,7 @@ public:
 		 * node
 		 */
 		Node(int deg, Node* p, int index) :
-			degree(deg), children(deg), parent(p) {
+			children(deg), parent(p) {
 
 			if (p != NULL) {
 				p->children[index] = this;
@@ -51,10 +51,10 @@ public:
 			}
 		}
 	public:
-		Node* getLeft() const { return getChild(0); };
+		Node* getLeft() const { return children[0]; };
 
-		Node* getRight() const { return getChild(degree-1); };
-		Node* getParent() const { return parent; };
+		Node* getRight() const { return children.front(); };
+		Node* getParent() const { return children.back(); };
 
 		Node* getChild(int index) const { return children[index]; }
 
@@ -114,7 +114,9 @@ public:
 	Node* getNode(ExecutionPath *p, Node* root) {
 		Node *crtNode = root;
 
-		for (ExecutionPath::iterator it = p->path.begin(); it != p->path.end(); it++) {
+		for (ExecutionPath::iterator it = p->path.begin();
+				it != p->path.end(); it++) {
+
 			Node *newNode = crtNode->getChild(*it);
 
 			if (newNode != NULL) {
@@ -129,7 +131,7 @@ public:
 		return crtNode;
 	}
 
-	Node *getNode(Node* root, int index) {
+	Node *getNode(Node *root, int index) {
 		Node *result = root->getChild(index);
 
 		if (result != NULL)
@@ -138,6 +140,38 @@ public:
 		result = new Node(degree, root, index);
 
 		return result;
+	}
+
+	void removeNode(Node *node) {
+		assert(node->count == 0);
+
+		if (node->parent != NULL) {
+			node->parent->children[node->index] = NULL;
+			node->parent->count--;
+		}
+
+		delete node;
+	}
+
+	void removeSubTree(Node *root) {
+		std::stack<Node*> nodes;
+
+		nodes.push(root);
+
+		while (!nodes.empty()) {
+			Node *node = nodes.top();
+
+			if (node->count == 0) {
+				nodes.pop();
+				removeNode(node);
+			} else {
+				for (int i = 0; i < degree; i++) {
+					if (node->children[i] != NULL)
+						nodes.push(node->children[i]);
+				}
+			}
+
+		}
 	}
 
 };

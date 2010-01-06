@@ -6,6 +6,7 @@
  */
 
 #include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/ExplorationJob.h"
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"
@@ -16,18 +17,12 @@ namespace cloud9 {
 
 namespace worker {
 
-JobManager::JobManager(WorkerTree *tree, llvm::Module *module) {
-	this->tree = tree;
-	this->origModule = module;
+JobManager::JobManager(llvm::Module *module, SelectionHandler *s) :
+		initialized(false), origModule(module), selHandler(s) {
 
-	initialized = false;
-}
+	assert(s);
 
-JobManager::JobManager(llvm::Module *module) {
 	this->tree = new WorkerTree(2);
-	this->origModule = module;
-
-	initialized = false;
 }
 
 JobManager::~JobManager() {
@@ -41,7 +36,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 			it != job->frontier.end(); it++) {
 		WorkerTree::Node *node = *it;
 
-		ExplorationJob *newJob = new ExplorationJob(job, node);
+		ExplorationJob *newJob = new ExplorationJob(node);
 		(**node).job = newJob;
 
 		newJobs.insert(newJob);
@@ -74,15 +69,32 @@ JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **a
 }
 
 void JobManager::submitJob(ExplorationJob* job) {
-
+	selHandler->onJobEnqueued(job);
 }
 
 ExplorationJob *JobManager::createJob(WorkerTree::Node *root) {
-	return NULL;
+	return new ExplorationJob(root);
 }
 
 void JobManager::processJobs() {
+	ExplorationJob *job = NULL;
+	selHandler->onNextJobSelection(job);
 
+	while (job != NULL) {
+		selHandler->onJobExecutionStarted(job);
+		executor->executeJob(job);
+		selHandler->onJobExecutionFinished(job);
+
+		std::set<ExplorationJob*> newJobs;
+		explodeJob(job, newJobs);
+
+		for (std::set<ExplorationJob*>::iterator it = newJobs.begin();
+				it != newJobs.end(); it++) {
+			submitJob(*it);
+		}
+
+		selHandler->onNextJobSelection(job);
+	}
 }
 
 }

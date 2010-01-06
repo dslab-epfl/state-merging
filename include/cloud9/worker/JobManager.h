@@ -8,8 +8,8 @@
 #ifndef JOBMANAGER_H_
 #define JOBMANAGER_H_
 
-#include "ExplorationJob.h"
-#include "JobExecutor.h"
+#include "cloud9/worker/ExplorationJob.h"
+#include "cloud9/worker/JobExecutor.h"
 
 #include <list>
 #include <set>
@@ -26,18 +26,33 @@ namespace worker {
 
 
 class JobManager {
+public:
+	class SelectionHandler {
+	public:
+		SelectionHandler() {};
+		virtual ~SelectionHandler() {};
+
+	public:
+		virtual void onJobEnqueued(ExplorationJob *job) = 0;
+		virtual void onJobExecutionStarted(ExplorationJob *job) = 0;
+		virtual void onJobExecutionFinished(ExplorationJob *job) = 0;
+
+		virtual void onNextJobSelection(ExplorationJob *&job) = 0;
+	};
 private:
 	WorkerTree* tree;
 	JobExecutor *executor;
 
-	std::set<ExplorationJob*> waitingPool;
-	std::set<ExplorationJob*> executingPool;
+	//std::set<ExplorationJob*> waitingPool;
+	//std::set<ExplorationJob*> executingPool;
 
 	bool initialized;
 
 	llvm::Module *origModule;
 	const llvm::Module *finalModule;
 	llvm::Function *mainFn;
+
+	SelectionHandler *selHandler;
 
 	/*
 	 *
@@ -48,7 +63,7 @@ private:
 
 	JobManager(WorkerTree *tree, llvm::Module *module);
 public:
-	JobManager(llvm::Module *module);
+	JobManager(llvm::Module *module, SelectionHandler *s);
 	virtual ~JobManager();
 
 	void setupStartingPoint(llvm::Function *mainFn, int argc, char **argv,

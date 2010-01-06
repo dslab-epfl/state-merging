@@ -47,13 +47,13 @@ private:
 	WorkerTree::Node *jobRoot;
 	frontier_t frontier;
 
-	ExplorationJob *parent;
-	std::vector<ExplorationJob*> children;
+	//ExplorationJob *parent;
+	//std::vector<ExplorationJob*> children;
 
 	void addToFrontier(WorkerTree::Node *node);
 	void removeFromFrontier(WorkerTree::Node *node);
 
-	ExplorationJob(ExplorationJob *parent, WorkerTree::Node *jobRoot);
+	ExplorationJob(WorkerTree::Node *jobRoot);
 
 public:
 	virtual ~ExplorationJob();
