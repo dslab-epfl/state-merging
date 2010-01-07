@@ -7,6 +7,7 @@
 
 #include "cloud9/lb/LBServer.h"
 #include "cloud9/lb/WorkerConnection.h"
+#include "cloud9/Logger.h"
 
 #include <boost/bind.hpp>
 
@@ -17,7 +18,7 @@ namespace lb {
 LBServer::LBServer(boost::asio::io_service &io_service, int port) :
 	acceptor(io_service, tcp::endpoint(tcp::v4(), port)) {
 
-
+	startAccept();
 }
 
 LBServer::~LBServer() {
@@ -26,6 +27,9 @@ LBServer::~LBServer() {
 
 void LBServer::startAccept() {
 	WorkerConnection *conn = new WorkerConnection(acceptor.io_service());
+
+	CLOUD9_INFO("Listening for connections on port " <<
+			acceptor.local_endpoint().port());
 
 	acceptor.async_accept(conn->getSocket(), boost::bind(&LBServer::handleAccept,
 			this, conn, boost::asio::placeholders::error));
