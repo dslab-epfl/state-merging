@@ -25,12 +25,23 @@ private:
 	tcp::socket socket;
 	Worker *worker;
 
+
+	size_t msgSize;
+	char *msgData;
+
 	WorkerConnection(boost::asio::io_service &service);
 
 	/*
 	 * Starts the asynchronous communication process with the worker
 	 */
-	void start();
+	void readMessageHeader();
+
+	void readMessageContents(const boost::system::error_code &error, size_t);
+
+	void processMessage(const boost::system::error_code &error, size_t size);
+
+	void finishMessageHandling(const boost::system::error_code &error, size_t);
+
 public:
 	virtual ~WorkerConnection();
 

@@ -15,3 +15,16 @@ message ExecutionPath {
 message ExecutionPathSet {
 	repeated ExecutionPath path = 1;
 }
+
+message WorkerReportMessage {
+	message NodeSetUpdate {
+		required ExecutionPathSet pathSet = 1;
+	}
+	
+	message NodeDataUpdate {
+		repeated uint32 data = 1;
+	}
+	
+	optional NodeSetUpdate nodeSetUpdate = 1;
+	optional NodeDataUpdate nodeDataUpdate = 2;
+}

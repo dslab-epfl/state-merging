@@ -40,9 +40,10 @@ void LBServer::startAccept() {
 void LBServer::handleAccept(WorkerConnection *conn,
 		const boost::system::error_code &error) {
 	if (!error) {
+		CLOUD9_INFO("Connection received from " << conn->socket.remote_endpoint().address());
 		activeConns.insert(conn);
 
-		conn->start();
+		conn->readMessageHeader();
 
 		// Go back and accept another connection
 		startAccept();
