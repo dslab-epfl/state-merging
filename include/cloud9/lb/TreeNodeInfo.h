@@ -20,6 +20,7 @@ namespace lb {
 class Worker;
 
 class TreeNodeInfo {
+	friend class LoadBalancer;
 public:
 	struct WorkerInfo {
 		int jobCount;

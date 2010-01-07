@@ -29,8 +29,8 @@ private:
 	void registerWorker(int id);
 	void deregisterWorker(int id);
 
-	void updateWorkerStatNodes(std::vector<LBTree::Node*> &newNodes);
-	void updateWorkerStats(std::vector<int> &stats);
+	void updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &newNodes);
+	void updateWorkerStats(int id, std::vector<int> &stats);
 public:
 	LoadBalancer();
 	virtual ~LoadBalancer();

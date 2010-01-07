@@ -18,11 +18,13 @@ namespace lb {
 
 
 class Worker {
+	friend class LoadBalancer;
 private:
 	int id;
 	std::vector<LBTree::Node*> nodes;
-public:
+
 	Worker();
+public:
 	virtual ~Worker();
 
 	int getID() const { return id; }
