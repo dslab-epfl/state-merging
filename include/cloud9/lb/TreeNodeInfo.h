@@ -10,11 +10,23 @@
 
 #include "cloud9/ExecutionTree.h"
 
+#include <set>
+#include <map>
+
 namespace cloud9 {
 
 namespace lb {
 
+class Worker;
+
 class TreeNodeInfo {
+public:
+	struct WorkerInfo {
+		int jobCount;
+	};
+
+private:
+	std::map<Worker*, WorkerInfo> workerData;
 public:
 	TreeNodeInfo() {};
 	virtual ~TreeNodeInfo() {};
