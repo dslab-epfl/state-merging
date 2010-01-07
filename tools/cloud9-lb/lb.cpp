@@ -7,6 +7,7 @@
 
 #include "cloud9/lb/LBServer.h"
 #include "cloud9/Logger.h"
+#include "cloud9/Protocols.h"
 
 #include "llvm/Support/CommandLine.h"
 
@@ -26,6 +27,8 @@ cl::opt<int> ServerPort("port",
 
 int main(int argc, char **argv, char **envp) {
 	boost::asio::io_service io_service;
+
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
 

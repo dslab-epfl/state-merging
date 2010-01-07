@@ -9,6 +9,7 @@
 #include "cloud9/Logger.h"
 
 #include <boost/bind.hpp>
+#include <string>
 
 namespace cloud9 {
 
@@ -52,6 +53,9 @@ void WorkerConnection::processMessage(const boost::system::error_code &error, si
 	if (!error) {
 		assert(size == msgSize);
 
+		std::string message(msgData, msgSize);
+
+		// Construct the protocol buffer message
 
 	} else {
 		CLOUD9_ERROR("Could not read message contents");

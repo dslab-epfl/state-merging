@@ -6,4 +6,4 @@ LINK_COMPONENTS = ipo
 
 include $(LEVEL)/Makefile.common
 
-LIBS += -lboost_system-mt
+LIBS += -lboost_system-mt -lprotoc
