@@ -23,17 +23,21 @@ class LoadBalancer {
 private:
 	LBTree *tree;
 
+	int nextID;
+
 
 	std::map<int, Worker*> workers;
-
-	void registerWorker(int id);
-	void deregisterWorker(int id);
-
-	void updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &newNodes);
-	void updateWorkerStats(int id, std::vector<int> &stats);
 public:
 	LoadBalancer();
 	virtual ~LoadBalancer();
+
+	int registerWorker();
+	void deregisterWorker(int id);
+
+	LBTree *getTree() const { return tree; }
+
+	void updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &newNodes);
+	void updateWorkerStats(int id, std::vector<int> &stats);
 };
 
 }

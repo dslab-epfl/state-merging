@@ -14,6 +14,10 @@
 #include <set>
 #include <algorithm>
 
+#include "cloud9/Protocols.h"
+
+
+
 namespace cloud9 {
 
 class ExecutionPath {
@@ -34,6 +38,11 @@ public:
 	int getParentIndex() { return parentIndex; }
 
 	ExecutionPath *getAbsolutePath();
+
+	static void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,
+			std::vector<ExecutionPath*> &result);
+	static void serializeSet(const std::vector<ExecutionPath*> &set,
+			cloud9::data::ExecutionPathSet &result);
 
 	typedef std::vector<int>::iterator iterator;
 };
@@ -126,6 +135,38 @@ public:
 private:
 	unsigned int degree;
 	Node* root;
+
+	Node *getNode(ExecutionPath *p, Node* root, int pos) {
+		Node *crtNode = root;
+
+		if (p->parent != NULL) {
+			crtNode = getNode(p->parent, root, p->parentIndex);
+		}
+
+		if (pos == 0)
+			pos = p->path.size();
+
+		for (ExecutionPath::iterator it = p->path.begin();
+				it != p->path.end(); it++) {
+
+			if (pos == 0)
+				return crtNode;
+
+			Node *newNode = crtNode->getChild(*it);
+
+			if (newNode != NULL) {
+				crtNode = newNode;
+				continue;
+			}
+
+			newNode = new Node(degree, crtNode, *it);
+			crtNode = newNode;
+
+			pos--;
+		}
+
+		return crtNode;
+	}
 public:
 	ExecutionTree(int deg): degree(deg){
 		root = new Node(deg, NULL, 0);
@@ -137,28 +178,12 @@ public:
 
 	int getDegree() const { return degree; }
 
-	Node* getNode(ExecutionPath *path) {
-		return getNode(path, root);
+	Node *getNode(ExecutionPath *p) {
+		return getNode(p, root, 0);
 	}
 
-	Node* getNode(ExecutionPath *p, Node* root) {
-		Node *crtNode = root;
-
-		for (ExecutionPath::iterator it = p->path.begin();
-				it != p->path.end(); it++) {
-
-			Node *newNode = crtNode->getChild(*it);
-
-			if (newNode != NULL) {
-				crtNode = newNode;
-				continue;
-			}
-
-			newNode = new Node(degree, crtNode, *it);
-			crtNode = newNode;
-		}
-
-		return crtNode;
+	Node *getNode(ExecutionPath *p, int pos) {
+		return getNode(p, root, pos);
 	}
 
 	Node *getNode(Node *root, int index) {
@@ -204,7 +229,7 @@ public:
 		}
 	}
 
-	void buildPathSet(std::vector<Node*> &seeds, std::vector<ExecutionPath*> &paths) {
+	void buildPathSet(const std::vector<Node*> &seeds, std::vector<ExecutionPath*> &paths) {
 		paths.clear();
 
 		for (int i = 0; i < seeds.size(); i++) {
@@ -250,6 +275,19 @@ public:
 				}
 			}
 		}
+	}
+
+	void getNodes(const std::vector<ExecutionPath*> &paths,
+			std::vector<Node*> &nodes) {
+
+		nodes.clear();
+
+		for (int i = 0; i < paths.size(); i++) {
+			Node *crtNode = getNode(paths[i]);
+
+			nodes.push_back(crtNode);
+		}
+
 	}
 
 };

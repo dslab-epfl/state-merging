@@ -14,7 +14,7 @@ namespace cloud9 {
 
 namespace lb {
 
-LoadBalancer::LoadBalancer() {
+LoadBalancer::LoadBalancer() : nextID(1) {
 	// TODO Auto-generated constructor stub
 
 }
@@ -23,13 +23,17 @@ LoadBalancer::~LoadBalancer() {
 	// TODO Auto-generated destructor stub
 }
 
-void LoadBalancer::registerWorker(int id) {
-	assert(workers[id] == NULL);
+int LoadBalancer::registerWorker() {
+	assert(workers[nextID] == NULL);
 
 	Worker *worker = new Worker();
-	worker->id = id;
+	worker->id = nextID;
 
-	workers[id] = worker;
+	workers[nextID] = worker;
+
+	nextID++;
+
+	return worker->id;
 }
 
 void LoadBalancer::deregisterWorker(int id) {

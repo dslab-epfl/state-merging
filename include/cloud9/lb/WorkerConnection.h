@@ -20,6 +20,7 @@ namespace lb {
 
 class LBServer;
 class Worker;
+class LoadBalancer;
 
 class WorkerConnection {
 	friend class LBServer;
@@ -31,7 +32,9 @@ private:
 	size_t msgSize;
 	char *msgData;
 
-	WorkerConnection(boost::asio::io_service &service);
+	LoadBalancer *lb;
+
+	WorkerConnection(boost::asio::io_service &service, LoadBalancer *lb);
 
 	/*
 	 * Starts the asynchronous communication process with the worker
@@ -43,10 +46,10 @@ private:
 
 
 
-	void processNodeSetUpdate(const WorkerReportMessage_NodeSetUpdate &message,
+	void processNodeSetUpdate(int id, const WorkerReportMessage_NodeSetUpdate &message,
 			LBResponseMessage &response);
 
-	void processNodeDataUpdate(const WorkerReportMessage_NodeDataUpdate &message,
+	void processNodeDataUpdate(int id, const WorkerReportMessage_NodeDataUpdate &message,
 			LBResponseMessage &response);
 
 public:

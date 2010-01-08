@@ -10,6 +10,7 @@
 
 #include <boost/bind.hpp>
 #include <string>
+#include <vector>
 
 using namespace cloud9::data;
 
@@ -17,8 +18,9 @@ namespace cloud9 {
 
 namespace lb {
 
-WorkerConnection::WorkerConnection(boost::asio::io_service &service)
-		: socket(service) {
+WorkerConnection::WorkerConnection(boost::asio::io_service &service, LoadBalancer *_lb)
+		: socket(service), lb(_lb) {
+
 	// TODO Auto-generated constructor stub
 
 }
@@ -66,7 +68,7 @@ void WorkerConnection::processMessage(const boost::system::error_code &error, si
 			int id = message.id();
 
 			if (id == 0) {
-				// We need to register the worker
+				id = lb->registerWorker();
 			}
 
 			if (message.has_nodesetupdate()) {
@@ -101,6 +103,10 @@ void WorkerConnection::processMessage(const boost::system::error_code &error, si
 }
 
 void WorkerConnection::finishMessageHandling(const boost::system::error_code &error, size_t) {
+	if (error) {
+		CLOUD9_ERROR("Could not set worker reply");
+	}
+
 	if (msgData) {
 		delete[] msgData;
 		msgData = NULL;
@@ -112,17 +118,23 @@ void WorkerConnection::finishMessageHandling(const boost::system::error_code &er
 }
 
 
-void WorkerConnection::processNodeSetUpdate(
+void WorkerConnection::processNodeSetUpdate(int id,
 				const WorkerReportMessage_NodeSetUpdate &message,
 				LBResponseMessage &response) {
+
+	std::vector<LBTree::Node*> nodes;
 
 
 }
 
-void WorkerConnection::processNodeDataUpdate(
+void WorkerConnection::processNodeDataUpdate(int id,
 		const WorkerReportMessage_NodeDataUpdate &message,
 		LBResponseMessage &response) {
+	std::vector<int> data;
 
+	data.insert(data.begin(), message.data().begin(), message.data().end());
+
+	lb->updateWorkerStats(id, data);
 }
 
 }

@@ -5,14 +5,13 @@ message PathData {
 	required bytes path = 2;
 }
 
-message ExecutionPath {
-	required uint32 id = 1;
-	optional uint32 parent_id = 3;
-	optional uint32 parent_pos = 4;
-	required PathData data = 2;
-}
-
 message ExecutionPathSet {
+	message ExecutionPath {
+		optional uint32 parent = 3;
+		optional uint32 parent_pos = 4;
+		required PathData data = 2;
+	}
+	
 	repeated ExecutionPath path = 1;
 }
 
