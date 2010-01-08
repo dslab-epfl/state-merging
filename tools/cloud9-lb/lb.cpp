@@ -6,6 +6,7 @@
  */
 
 #include "cloud9/lb/LBServer.h"
+#include "cloud9/lb/LoadBalancer.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Protocols.h"
 
@@ -32,7 +33,9 @@ int main(int argc, char **argv, char **envp) {
 
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
 
-	LBServer *server = new LBServer(io_service, ServerPort);
+	LoadBalancer *lb = new LoadBalancer();
+
+	LBServer *server = new LBServer(lb, io_service, ServerPort);
 
 	CLOUD9_INFO("Running message handling loop...");
 	io_service.run();

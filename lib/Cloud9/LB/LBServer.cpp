@@ -15,8 +15,8 @@ namespace cloud9 {
 
 namespace lb {
 
-LBServer::LBServer(boost::asio::io_service &io_service, int port) :
-	acceptor(io_service, tcp::endpoint(tcp::v4(), port)) {
+LBServer::LBServer(LoadBalancer *_lb, boost::asio::io_service &io_service, int port) :
+	acceptor(io_service, tcp::endpoint(tcp::v4(), port)), lb(_lb) {
 
 	startAccept();
 }
@@ -26,7 +26,7 @@ LBServer::~LBServer() {
 }
 
 void LBServer::startAccept() {
-	WorkerConnection *conn = new WorkerConnection(acceptor.io_service());
+	WorkerConnection *conn = new WorkerConnection(acceptor.io_service(), lb);
 
 	CLOUD9_INFO("Listening for connections on port " <<
 			acceptor.local_endpoint().port());

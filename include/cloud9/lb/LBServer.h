@@ -18,6 +18,7 @@ namespace cloud9 {
 namespace lb {
 
 class WorkerConnection;
+class LoadBalancer;
 
 class LBServer {
 private:
@@ -25,12 +26,14 @@ private:
 
 	std::set<WorkerConnection*> activeConns;
 
+	LoadBalancer *lb;
+
 	void startAccept();
 
 	void handleAccept(WorkerConnection *conn,
 			const boost::system::error_code &code);
 public:
-	LBServer(boost::asio::io_service &io_service, int port);
+	LBServer(LoadBalancer *lb, boost::asio::io_service &io_service, int port);
 	virtual ~LBServer();
 
 	void run();

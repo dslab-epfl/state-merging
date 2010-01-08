@@ -29,9 +29,9 @@ private:
 	ExecutionPath *parent;
 	int parentIndex;
 
-	ExecutionPath();
+	ExecutionPath() { };
 public:
-	virtual ~ExecutionPath();
+	virtual ~ExecutionPath() { };
 
 	std::vector<int> getPath() const { return path; };
 	ExecutionPath *getParent() { return parent; }

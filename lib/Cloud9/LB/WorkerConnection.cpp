@@ -6,6 +6,7 @@
  */
 
 #include "cloud9/lb/WorkerConnection.h"
+#include "cloud9/lb/LoadBalancer.h"
 #include "cloud9/Logger.h"
 
 #include <boost/bind.hpp>
@@ -75,14 +76,14 @@ void WorkerConnection::processMessage(const boost::system::error_code &error, si
 				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
 						message.nodesetupdate();
 
-				processNodeSetUpdate(nodeSetUpdateMsg, response);
+				processNodeSetUpdate(id, nodeSetUpdateMsg, response);
 			}
 
 			if (message.has_nodedataupdate()) {
 				const WorkerReportMessage_NodeDataUpdate &nodeDataUpdateMsg =
 						message.nodedataupdate();
 
-				processNodeDataUpdate(nodeDataUpdateMsg, response);
+				processNodeDataUpdate(id, nodeDataUpdateMsg, response);
 			}
 
 			std::string respString;
@@ -123,7 +124,13 @@ void WorkerConnection::processNodeSetUpdate(int id,
 				LBResponseMessage &response) {
 
 	std::vector<LBTree::Node*> nodes;
+	std::vector<ExecutionPath*> paths;
 
+	ExecutionPath::parseExecutionPathSet(message.pathset(), paths);
+
+	lb->getTree()->getNodes(paths, nodes);
+
+	lb->updateWorkerStatNodes(id, nodes);
 
 }
 
