@@ -25,6 +25,12 @@ message WorkerReportMessage {
 		repeated uint32 data = 1;
 	}
 	
+	required uint32 id = 3;
+	
 	optional NodeSetUpdate nodeSetUpdate = 1;
 	optional NodeDataUpdate nodeDataUpdate = 2;
+}
+
+message LBResponseMessage {
+	required uint32 id = 1;
 }

@@ -9,8 +9,10 @@
 #define WORKERCONNECTION_H_
 
 #include <boost/asio.hpp>
+#include "cloud9/Protocols.h"
 
-using boost::asio::ip::tcp;
+using namespace boost::asio::ip;
+using namespace cloud9::data;
 
 namespace cloud9 {
 
@@ -35,12 +37,17 @@ private:
 	 * Starts the asynchronous communication process with the worker
 	 */
 	void readMessageHeader();
-
 	void readMessageContents(const boost::system::error_code &error, size_t);
-
 	void processMessage(const boost::system::error_code &error, size_t size);
-
 	void finishMessageHandling(const boost::system::error_code &error, size_t);
+
+
+
+	void processNodeSetUpdate(const WorkerReportMessage_NodeSetUpdate &message,
+			LBResponseMessage &response);
+
+	void processNodeDataUpdate(const WorkerReportMessage_NodeDataUpdate &message,
+			LBResponseMessage &response);
 
 public:
 	virtual ~WorkerConnection();
