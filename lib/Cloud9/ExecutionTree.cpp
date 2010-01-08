@@ -9,6 +9,8 @@
 #include "cloud9/Protocols.h"
 
 #include <string>
+#include <vector>
+#include <map>
 
 using namespace cloud9::data;
 
@@ -44,6 +46,36 @@ void ExecutionPath::parseExecutionPathSet(const ExecutionPathSet &ps,
 void ExecutionPath::serializeSet(const std::vector<ExecutionPath*> &set,
 		cloud9::data::ExecutionPathSet &result) {
 
+	std::map<ExecutionPath*, int> indices;
+
+	for (int i = 0; i < set.size(); i++) {
+		ExecutionPath *path = set[i];
+
+		ExecutionPathSet_ExecutionPath *pDest = result.mutable_path()->Add();
+
+		if (set[i]->parent != NULL) {
+			assert(indices.find(path->parent) != indices.end());
+
+			pDest->set_parent(indices[path->parent]);
+			pDest->set_parent_pos(path->parentIndex);
+
+			PathData *pData = pDest->mutable_data();
+			pData->set_length(path->path.size());
+
+			std::string dataStr(path->path.size() / 8 + 1, 0);
+
+			for (int j = 0; j < path->path.size(); j++) {
+				if (path->path[j])
+					dataStr[j / 8] |= (1 << (j % 8));
+				else
+					dataStr[j / 8] &= ~(1 << (j % 8));
+			}
+
+			pData->set_path(dataStr);
+		}
+
+		indices[path] = i;
+	}
 
 }
 
