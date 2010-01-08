@@ -13,6 +13,8 @@
 #include <stack>
 #include <set>
 #include <algorithm>
+#include <iostream>
+#include <string>
 
 #include "cloud9/Protocols.h"
 
@@ -47,61 +49,82 @@ public:
 	typedef std::vector<int>::iterator iterator;
 };
 
+
+template<class NodeInfo>
+class TreeNode {
+	template<class>
+	friend class ExecutionTree;
+private:
+	std::vector<TreeNode*> children;
+	TreeNode* parent;
+
+	unsigned int level;
+	unsigned int index;
+	unsigned int count;
+
+	unsigned int _label;
+
+	NodeInfo _info;
+
+	/*
+	 * Creates a new node and connects it in position "index" in a parent
+	 * node
+	 */
+	TreeNode(int deg, TreeNode* p, int index) :
+		children(deg), parent(p) {
+
+		if (p != NULL) {
+			p->children[index] = this;
+			p->count++;
+
+			level = p->level + 1;
+			this->index = index;
+		} else {
+			level = 0;
+			index = 0;
+		}
+	}
+public:
+	TreeNode* getLeft() const {
+		return children.front();
+	}
+
+	TreeNode* getRight() const {
+		return children.back();
+	}
+
+	TreeNode* getParent() const {
+		return parent;
+	}
+
+
+	TreeNode* getChild(int index) const {
+		return children[index];
+	}
+
+	int getLevel() const {
+		return level;
+	}
+	int getIndex() const {
+		return index;
+	}
+	int getCount() const {
+		return count;
+	}
+
+	NodeInfo& operator*() {
+		return _info;
+	}
+
+};
+
 template<class NodeInfo>
 class ExecutionTree {
 public:
-	class Node {
-		friend class ExecutionTree;
-
-	private:
-		std::vector<Node*> children;
-		Node* parent;
-
-		unsigned int level;
-		unsigned int index;
-		unsigned int count;
-
-		unsigned int _label;
-
-		NodeInfo _info;
-
-		/*
-		 * Creates a new node and connects it in position "index" in a parent
-		 * node
-		 */
-		Node(int deg, Node* p, int index) :
-			children(deg), parent(p) {
-
-			if (p != NULL) {
-				p->children[index] = this;
-				p->count++;
-
-				level = p->level + 1;
-				this->index = index;
-			} else {
-				level = 0;
-				index = 0;
-			}
-		}
-	public:
-		Node* getLeft() const { return children[0]; };
-
-		Node* getRight() const { return children.front(); };
-		Node* getParent() const { return children.back(); };
-
-		Node* getChild(int index) const { return children[index]; }
-
-		int getLevel() const { return level; }
-		int getIndex() const { return index; }
-		int getCount() const { return count; }
-
-		NodeInfo& operator*() {
-			return _info;
-		}
-	};
+	typedef TreeNode<NodeInfo> Node;
 
 	struct NodeBreadthCompare {
-		bool operator() (const Node *a, const Node *b) {
+		bool operator()(const Node *a, const Node *b) {
 			if (a->level > b->level)
 				while (a->level > b->level)
 					a = a->getParent();
@@ -119,7 +142,8 @@ public:
 				if (pa == pb)
 					return a->index < b->index;
 
-				a = pa; b = pb;
+				a = pa;
+				b = pb;
 			}
 
 			return false;
@@ -127,11 +151,10 @@ public:
 	};
 
 	struct NodeDepthCompare {
-		bool operator() (const Node *a, const Node *b) {
+		bool operator()(const Node *a, const Node *b) {
 			return a->level < b->level;
 		}
 	};
-
 private:
 	unsigned int degree;
 	Node* root;
@@ -291,6 +314,27 @@ public:
 	}
 
 };
+
+template<class NI>
+std::ostream& operator<<(std::ostream &os,
+		const TreeNode<NI> &node) {
+
+	std::string str;
+
+	const TreeNode<NI> *crtNode = &node;
+
+	while (crtNode->getParent() != NULL) {
+		str.push_back(crtNode->getIndex());
+
+		crtNode = crtNode->getParent();
+	}
+
+	std::reverse(str.begin(), str.end());
+
+	os << "<" << str << ">";
+
+	return os;
+}
 
 }
 

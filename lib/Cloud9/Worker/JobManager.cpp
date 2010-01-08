@@ -9,11 +9,14 @@
 #include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/Common.h"
 #include "cloud9/worker/JobManagerBehaviors.h"
+#include "cloud9/Logger.h"
+#include "cloud9/ExecutionTree.h"
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"
 
 #include "klee/Interpreter.h"
+
 
 namespace cloud9 {
 
@@ -27,6 +30,7 @@ JobManager::JobManager(llvm::Module *module) :
 	switch (JobSelection) {
 	case RandomSel:
 		selHandler = new RandomSelectionHandler();
+		CLOUD9_INFO("Using RandomSelectionHandler");
 		break;
 	default:
 		assert(0);
@@ -78,6 +82,8 @@ JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **a
 
 void JobManager::submitJob(ExplorationJob* job) {
 	selHandler->onJobEnqueued(job);
+
+	CLOUD9_DEBUG("Submitted job: " << *(job->jobRoot));
 }
 
 ExplorationJob *JobManager::createJob(WorkerTree::Node *root) {
@@ -89,6 +95,8 @@ void JobManager::processJobs() {
 	selHandler->onNextJobSelection(job);
 
 	while (job != NULL) {
+		CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
+
 		selHandler->onJobExecutionStarted(job);
 		executor->executeJob(job);
 		selHandler->onJobExecutionFinished(job);
