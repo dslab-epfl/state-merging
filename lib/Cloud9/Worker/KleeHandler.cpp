@@ -17,7 +17,7 @@
 
 // FIXME
 #include "../../Core/Common.h"
-#include "cloud9/Common.h"
+#include "cloud9/worker/WorkerCommon.h"
 
 
 #include "klee/Config/config.h"

@@ -7,7 +7,7 @@
 
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/ExplorationJob.h"
-#include "cloud9/Common.h"
+#include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManagerBehaviors.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
@@ -49,7 +49,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 		WorkerTree::Node *node = *it;
 
 		ExplorationJob *newJob = new ExplorationJob(node);
-		(**node).job = newJob;
+		//(**node).job = newJob;
 
 		newJobs.insert(newJob);
 	}

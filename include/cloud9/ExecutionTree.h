@@ -71,7 +71,7 @@ private:
 	 * node
 	 */
 	TreeNode(int deg, TreeNode* p, int index) :
-		children(deg), parent(p) {
+		children(deg), parent(p), count(0), _label(0) {
 
 		if (p != NULL) {
 			p->children[index] = this;
@@ -324,7 +324,7 @@ std::ostream& operator<<(std::ostream &os,
 	const TreeNode<NI> *crtNode = &node;
 
 	while (crtNode->getParent() != NULL) {
-		str.push_back(crtNode->getIndex());
+		str.push_back(crtNode->getIndex() ? '1' : '0');
 
 		crtNode = crtNode->getParent();
 	}

@@ -8,7 +8,8 @@
 #include "cloud9/worker/JobExecutor.h"
 #include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/worker/JobExecutorBehaviors.h"
-#include "cloud9/Common.h"
+#include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/Logger.h"
 
 #include "klee/Interpreter.h"
 
@@ -263,7 +264,18 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	// When a branching occurs, the node will become empty (as the state and its
 	// fork move in its children)
 	while ((**node).symState != NULL) {
+		//CLOUD9_DEBUG("Stepping in state " << *node);
 		symbEngine->stepInState((**node).symState);
+	}
+
+	// Delete the supporting branch of the state, if empty
+	while (node->getParent()) { // Don't delete root
+		if (node->getCount() > 0) // Stop when joining another branch
+			break;
+
+		WorkerTree::Node *temp = node;
+		node = node->getParent();
+		tree->removeNode(temp);
 	}
 }
 
@@ -272,62 +284,58 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
+	/*
 	if ((**pNode).job != currentJob) {
 		// It's not for us
 		return;
 	}
+	*/
 
 	WorkerTree::Node *newNode, *oldNode;
 
 	// Obtain the new node pointers
-	newNode = tree->getNode(pNode, index);
+
 	oldNode = tree->getNode(pNode, 1 - index);
 
 	// Update state -> node references
-	if (state)
-		state->setCustomData(newNode);
 	parent->setCustomData(oldNode);
 
 	// Update node -> state references
 	(**pNode).symState = NULL;
 
-	(**newNode).symState = state;
-	(**newNode).job = currentJob;
+	//(**newNode).job = currentJob;
 
 	(**oldNode).symState = parent;
-	(**newNode).job = currentJob;
+	//(**newNode).job = currentJob;
 
 	// Update frontier
 	currentJob->removeFromFrontier(pNode);
+	currentJob->addToFrontier(oldNode);
 
 	if (state) {
+		newNode = tree->getNode(pNode, index);
+		state->setCustomData(newNode);
+
+		(**newNode).symState = state;
+
 		currentJob->addToFrontier(newNode);
 	}
-	currentJob->addToFrontier(oldNode);
 }
 
 void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
+	/*
 	if ((**pNode).job != currentJob) {
 		return;
 	}
+	*/
 
 	state->setCustomData(NULL);
 	(**pNode).symState = NULL;
 
 	currentJob->removeFromFrontier(pNode);
-
-	// Delete the supporting branch of the state
-	while (pNode->getParent()) { // Don't delete root
-		if (pNode->getCount() > 0) // Stop when joining another branch
-			break;
-
-		WorkerTree::Node *temp = pNode;
-		pNode = pNode->getParent();
-		tree->removeNode(temp);
-	}
 }
 
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
@@ -336,6 +344,8 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 	assert(parent && parent->getCustomData());
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
+
+	CLOUD9_DEBUG("State branched: " << *pNode);
 
 	updateTreeOnBranch(state, parent, index);
 
@@ -350,6 +360,8 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
+	CLOUD9_DEBUG("State destroyed: " << *pNode);
+
 	updateTreeOnDestroy(state);
 
 	fireNodeDeleted(pNode);
@@ -363,6 +375,7 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	while (!job->frontier.empty()) {
 		// Select a new state to explore next
 		WorkerTree::Node *node = getNextNode();
+		CLOUD9_DEBUG("State selected: " << *node);
 		assert(node);
 
 		exploreNode(node);

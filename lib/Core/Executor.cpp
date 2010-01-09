@@ -2320,8 +2320,6 @@ void Executor::stepInState(ExecutionState *state) {
 }
 
 void Executor::run(ExecutionState &initialState) {
-  states.insert(&initialState);
-
   if (usingSeeds) {
     std::vector<SeedInfo> &v = seedMap[&initialState];
     
@@ -2333,7 +2331,7 @@ void Executor::run(ExecutionState &initialState) {
     double lastTime, startTime = lastTime = util::getWallTime();
     ExecutionState *lastState = 0;
     while (!seedMap.empty()) {
-      if (haltExecution) goto dump;
+      if (haltExecution) return;
 
       std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it = 
         seedMap.upper_bound(lastState);
@@ -2383,7 +2381,7 @@ void Executor::run(ExecutionState &initialState) {
     }
 
     if (OnlySeed)
-      goto dump;
+      return;
   }
 
   searcher = constructUserSearcher(*this);
@@ -2398,19 +2396,7 @@ void Executor::run(ExecutionState &initialState) {
 
   delete searcher;
   searcher = 0;
-  
- dump:
-  if (DumpStatesOnHalt && !states.empty()) {
-    std::cerr << "KLEE: halting execution, dumping remaining states\n";
-    for (std::set<ExecutionState*>::iterator
-           it = states.begin(), ie = states.end();
-         it != ie; ++it) {
-      ExecutionState &state = **it;
-      stepInstruction(state); // keep stats rolling
-      terminateStateEarly(state, "execution halting");
-    }
-    updateStates(0);
-  }
+
 }
 
 std::string Executor::getAddressInfo(ExecutionState &state, 
@@ -3179,10 +3165,23 @@ ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
 	// optimization and such.
 	initTimers();
 
+	states.insert(state);
+
 	return state;
 }
 
 void Executor::destroyStates() {
+	if (DumpStatesOnHalt && !states.empty()) {
+		std::cerr << "KLEE: halting execution, dumping remaining states\n";
+		for (std::set<ExecutionState*>::iterator it = states.begin(), ie =
+				states.end(); it != ie; ++it) {
+			ExecutionState &state = **it;
+			stepInstruction(state); // keep stats rolling
+			terminateStateEarly(state, "execution halting");
+		}
+		updateStates(0);
+	}
+
 	delete processTree;
 	processTree = 0;
 

@@ -25,6 +25,8 @@ ExplorationJob::~ExplorationJob() {
 }
 
 void ExplorationJob::addToFrontier(WorkerTree::Node *node) {
+	assert(frontier.find(node) == frontier.end());
+
 	frontier.insert(node);
 
 	// The only way to grow is to add to the frontier
@@ -36,6 +38,8 @@ void ExplorationJob::addToFrontier(WorkerTree::Node *node) {
 }
 
 void ExplorationJob::removeFromFrontier(WorkerTree::Node *node) {
+	assert(frontier.find(node) != frontier.end());
+
 	frontier.erase(node);
 }
 

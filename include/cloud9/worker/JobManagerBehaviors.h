@@ -10,6 +10,8 @@
 
 #include "cloud9/worker/JobManager.h"
 
+#include <vector>
+
 namespace cloud9 {
 
 namespace worker {
@@ -17,10 +19,12 @@ namespace worker {
 class ExplorationJob;
 
 class RandomSelectionHandler: public JobManager::SelectionHandler {
+private:
+	std::vector<ExplorationJob*> jobs;
 public:
 	RandomSelectionHandler() {};
 	virtual ~RandomSelectionHandler() {};
-public:
+
 	virtual void onJobEnqueued(ExplorationJob *job);
 	virtual void onJobExecutionStarted(ExplorationJob *job);
 	virtual void onJobExecutionFinished(ExplorationJob *job);

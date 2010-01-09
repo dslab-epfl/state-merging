@@ -5,7 +5,7 @@
  *      Author: stefan
  */
 
-#include "cloud9/Common.h"
+#include "cloud9/worker/WorkerCommon.h"
 
 #include "llvm/Support/CommandLine.h"
 

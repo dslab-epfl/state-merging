@@ -38,11 +38,11 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/Support/ModuleUtil.h"
 
-#include "cloud9/Common.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/WorkerCommon.h"
 
 using namespace llvm;
 using namespace cloud9::worker;

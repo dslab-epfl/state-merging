@@ -22,3 +22,5 @@ test/testrun.sum
 *.pb.h
 *.pb.cc
 
+klee-last
+klee-out-*

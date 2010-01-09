@@ -7,7 +7,8 @@
 
 
 #include "cloud9/worker/JobExecutorBehaviors.h"
-#include "cloud9/Common.h"
+#include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/Logger.h"
 
 #include "klee/Internal/ADT/RNG.h"
 
@@ -28,7 +29,14 @@ void RandomExplorationHandler::onNextStateQuery(ExplorationJob *job,
 	WorkerTree::Node *crtNode = job->getJobRoot();
 
 	while ((**crtNode).getSymbolicState() == NULL) {
-		crtNode = crtNode->getChild((int)theRNG.getBool());
+		int index = (int)theRNG.getBool();
+
+		//CLOUD9_DEBUG(index);
+
+		if (crtNode->getChild(index) == NULL)
+			index = 1 - index;
+
+		crtNode = crtNode->getChild(index);
 		assert(crtNode);
 	}
 
