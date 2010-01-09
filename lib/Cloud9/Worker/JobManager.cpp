@@ -48,7 +48,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 			it != job->frontier.end(); it++) {
 		WorkerTree::Node *node = *it;
 
-		ExplorationJob *newJob = new ExplorationJob(node);
+		ExplorationJob *newJob = new ExplorationJob(node, false);
 		//(**node).job = newJob;
 
 		newJobs.insert(newJob);
@@ -95,8 +95,8 @@ void JobManager::submitJob(ExplorationJob* job) {
 	CLOUD9_DEBUG("Submitted job: " << *(job->jobRoot));
 }
 
-ExplorationJob *JobManager::createJob(WorkerTree::Node *root) {
-	return new ExplorationJob(root);
+ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
+	return new ExplorationJob(root, foreign);
 }
 
 void JobManager::consumeJob(ExplorationJob *job) {

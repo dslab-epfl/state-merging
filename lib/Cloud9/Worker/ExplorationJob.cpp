@@ -11,12 +11,13 @@ namespace cloud9 {
 
 namespace worker {
 
-ExplorationJob::ExplorationJob(WorkerTree::Node *r)
+ExplorationJob::ExplorationJob(WorkerTree::Node *r, bool f)
 		: size(1),
 		  depth(1),
 		  operations(0),
 		  started(false),
 		  finished(false),
+		  foreign(f),
 		  jobRoot(r) {
 
 	frontier.insert(jobRoot);

@@ -128,6 +128,8 @@ public:
 
 	void executeJob(ExplorationJob *job);
 
+	void replayPath(WorkerTree::Node *pathEnd);
+
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);

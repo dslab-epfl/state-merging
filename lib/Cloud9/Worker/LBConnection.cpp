@@ -5,7 +5,11 @@
  *      Author: stefan
  */
 
-#include "LBConnection.h"
+#include "cloud9/worker/LBConnection.h"
+
+namespace cloud9 {
+
+namespace worker {
 
 LBConnection::LBConnection() {
 	// TODO Auto-generated constructor stub
@@ -14,4 +18,8 @@ LBConnection::LBConnection() {
 
 LBConnection::~LBConnection() {
 	// TODO Auto-generated destructor stub
+}
+
+}
+
 }

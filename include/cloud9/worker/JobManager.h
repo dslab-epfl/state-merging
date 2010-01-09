@@ -77,7 +77,7 @@ public:
 
 	void submitJob(ExplorationJob* job);
 
-	ExplorationJob *createJob(WorkerTree::Node *root);
+	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	void processJobs();
 

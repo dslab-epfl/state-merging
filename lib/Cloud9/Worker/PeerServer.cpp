@@ -1,22 +1,22 @@
 /*
- * PeerConnection.cpp
+ * PeerServer.cpp
  *
- *  Created on: Jan 8, 2010
+ *  Created on: Jan 9, 2010
  *      Author: stefan
  */
 
-#include "cloud9/worker/PeerConnection.h"
+#include "cloud9/worker/PeerServer.h"
 
 namespace cloud9 {
 
 namespace worker {
 
-PeerConnection::PeerConnection() {
+PeerServer::PeerServer() {
 	// TODO Auto-generated constructor stub
 
 }
 
-PeerConnection::~PeerConnection() {
+PeerServer::~PeerServer() {
 	// TODO Auto-generated destructor stub
 }
 

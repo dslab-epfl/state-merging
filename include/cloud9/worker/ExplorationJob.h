@@ -45,6 +45,8 @@ private:
 	bool started;
 	bool finished;
 
+	bool foreign;
+
 	WorkerTree::Node *jobRoot;
 	frontier_t frontier;
 
@@ -54,7 +56,7 @@ private:
 	void addToFrontier(WorkerTree::Node *node);
 	void removeFromFrontier(WorkerTree::Node *node);
 
-	ExplorationJob(WorkerTree::Node *jobRoot);
+	ExplorationJob(WorkerTree::Node *jobRoot, bool foreign);
 
 public:
 	virtual ~ExplorationJob();

@@ -8,10 +8,18 @@
 #ifndef LBCONNECTION_H_
 #define LBCONNECTION_H_
 
+namespace cloud9 {
+
+namespace worker {
+
+
 class LBConnection {
 public:
 	LBConnection();
 	virtual ~LBConnection();
 };
 
+}
+
+}
 #endif /* LBCONNECTION_H_ */

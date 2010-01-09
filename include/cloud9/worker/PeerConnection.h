@@ -8,10 +8,19 @@
 #ifndef PEERCONNECTION_H_
 #define PEERCONNECTION_H_
 
+
+namespace cloud9 {
+
+namespace worker {
+
 class PeerConnection {
 public:
 	PeerConnection();
 	virtual ~PeerConnection();
 };
+
+}
+
+}
 
 #endif /* PEERCONNECTION_H_ */

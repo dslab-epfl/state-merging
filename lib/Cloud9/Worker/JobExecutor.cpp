@@ -188,7 +188,7 @@ void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 
 JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 		int argc, char **argv)
-		: tree(t){
+		: tree(t), currentJob(NULL) {
 
 	klee::Interpreter::InterpreterOptions iOpts;
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
@@ -271,11 +271,13 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 		//CLOUD9_DEBUG("Stepping in state " << *node);
 		symbEngine->stepInState((**node).symState);
 
-		currentJob->operations++;
+		if (currentJob)
+			currentJob->operations++;
 	}
 
 	// Delete the supporting branch of the state, if empty
-	tree->removeSupportingBranch(node, currentJob->jobRoot);
+	if (currentJob)
+		tree->removeSupportingBranch(node, currentJob->jobRoot);
 }
 
 void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
@@ -308,8 +310,10 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 	//(**newNode).job = currentJob;
 
 	// Update frontier
-	currentJob->removeFromFrontier(pNode);
-	currentJob->addToFrontier(oldNode);
+	if (currentJob) {
+		currentJob->removeFromFrontier(pNode);
+		currentJob->addToFrontier(oldNode);
+	}
 
 	if (state) {
 		newNode = tree->getNode(pNode, index);
@@ -317,7 +321,8 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 		(**newNode).symState = state;
 
-		currentJob->addToFrontier(newNode);
+		if (currentJob)
+			currentJob->addToFrontier(newNode);
 	}
 }
 
@@ -334,7 +339,8 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	state->setCustomData(NULL);
 	(**pNode).symState = NULL;
 
-	currentJob->removeFromFrontier(pNode);
+	if (currentJob)
+		currentJob->removeFromFrontier(pNode);
 }
 
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
@@ -367,6 +373,11 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
+	if (job->foreign) {
+		replayPath(job->jobRoot);
+		job->foreign = false;
+	}
+
 	job->started = true;
 	currentJob = job;
 	fireJobStarted(job);
@@ -388,6 +399,37 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 
 	job->finished = true;
 	fireJobTerminated(job);
+	currentJob = NULL;
+}
+
+void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
+	std::vector<int> path;
+
+	WorkerTree::Node *crtNode = pathEnd;
+
+	while (crtNode != NULL && (**crtNode).symState == NULL) {
+		path.push_back(crtNode->getIndex());
+
+		crtNode = crtNode->getParent();
+	}
+
+	assert(crtNode);
+
+	std::reverse(path.begin(), path.end());
+
+	// Don't run this as a job - the generated states must
+	// not be explored
+	currentJob = NULL;
+
+	// Perform the replay work
+	for (int i = 0; i < path.size(); i++) {
+		exploreNode(crtNode);
+
+		crtNode = crtNode->getChild(path[i]);
+		assert(crtNode);
+	}
+
+	assert(crtNode == pathEnd);
 }
 
 }
