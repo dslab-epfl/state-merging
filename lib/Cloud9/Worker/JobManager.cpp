@@ -30,7 +30,7 @@ JobManager::JobManager(llvm::Module *module) :
 	switch (JobSelection) {
 	case RandomSel:
 		selHandler = new RandomSelectionHandler();
-		CLOUD9_INFO("Using RandomSelectionHandler");
+		CLOUD9_INFO("Using random job selection strategy");
 		break;
 	default:
 		assert(0);
@@ -83,11 +83,42 @@ JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **a
 void JobManager::submitJob(ExplorationJob* job) {
 	selHandler->onJobEnqueued(job);
 
+	// Update job statistics
+	WorkerTree::Node *crtNode = job->jobRoot;
+
+	while (crtNode != NULL) {
+		(**crtNode).jobCount++;
+
+		crtNode = crtNode->getParent();
+	}
+
 	CLOUD9_DEBUG("Submitted job: " << *(job->jobRoot));
 }
 
 ExplorationJob *JobManager::createJob(WorkerTree::Node *root) {
 	return new ExplorationJob(root);
+}
+
+void JobManager::consumeJob(ExplorationJob *job) {
+	selHandler->onJobExecutionStarted(job);
+	executor->executeJob(job);
+	selHandler->onJobExecutionFinished(job);
+
+	// Update job statistics
+	WorkerTree::Node *crtNode = job->jobRoot;
+
+	while (crtNode != NULL) {
+		(**crtNode).jobCount--;
+
+		crtNode = crtNode->getParent();
+	}
+
+	if (job->frontier.size() == 0) {
+		// No more jobs to explore from this point
+		// Remove the supporting branch
+		tree->removeSupportingBranch(job->jobRoot, NULL);
+	}
+
 }
 
 void JobManager::processJobs() {
@@ -97,9 +128,7 @@ void JobManager::processJobs() {
 	while (job != NULL) {
 		CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
 
-		selHandler->onJobExecutionStarted(job);
-		executor->executeJob(job);
-		selHandler->onJobExecutionFinished(job);
+		consumeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
 		explodeJob(job, newJobs);

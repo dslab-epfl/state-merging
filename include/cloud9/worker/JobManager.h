@@ -57,7 +57,9 @@ private:
 	/*
 	 *
 	 */
-	void explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs);
+	void explodeJob(ExplorationJob *job, std::set<ExplorationJob*> &newJobs);
+
+	void consumeJob(ExplorationJob *job);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 

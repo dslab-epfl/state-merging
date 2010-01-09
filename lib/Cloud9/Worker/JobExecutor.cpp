@@ -275,14 +275,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	}
 
 	// Delete the supporting branch of the state, if empty
-	while (node->getParent()) { // Don't delete root
-		if (node->getCount() > 0) // Stop when joining another branch
-			break;
-
-		WorkerTree::Node *temp = node;
-		node = node->getParent();
-		tree->removeNode(temp);
-	}
+	tree->removeSupportingBranch(node, currentJob->jobRoot);
 }
 
 void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
@@ -351,7 +344,7 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
-	CLOUD9_DEBUG("State branched: " << *pNode);
+	//CLOUD9_DEBUG("State branched: " << *pNode);
 
 	updateTreeOnBranch(state, parent, index);
 
@@ -366,7 +359,7 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
-	CLOUD9_DEBUG("State destroyed: " << *pNode);
+	//CLOUD9_DEBUG("State destroyed: " << *pNode);
 
 	updateTreeOnDestroy(state);
 
@@ -381,10 +374,16 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	while (!job->frontier.empty()) {
 		// Select a new state to explore next
 		WorkerTree::Node *node = getNextNode();
-		CLOUD9_DEBUG("State selected: " << *node);
+		//CLOUD9_DEBUG("State selected: " << *node);
 		assert(node);
 
 		exploreNode(node);
+
+		bool finish = false;
+		sizingHandler->onTerminationQuery(job, finish);
+
+		if (finish)
+			break;
 	}
 
 	job->finished = true;

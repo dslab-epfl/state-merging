@@ -23,13 +23,14 @@ class TreeNodeInfo {
 	friend class JobManager;
 private:
 	klee::ExecutionState *symState;
-	//ExplorationJob *job;
-public:
-	TreeNodeInfo();
-	virtual ~TreeNodeInfo();
 
-	klee::ExecutionState* getSymbolicState() { return symState; }
-	//ExplorationJob *getJob() { return job; }
+	int jobCount;
+public:
+	TreeNodeInfo() : symState(NULL), jobCount(0) {};
+	virtual ~TreeNodeInfo() {};
+
+	klee::ExecutionState* getSymbolicState() const { return symState; }
+	int getJobCount() const { return jobCount; }
 };
 
 typedef ExecutionTree<TreeNodeInfo> WorkerTree;

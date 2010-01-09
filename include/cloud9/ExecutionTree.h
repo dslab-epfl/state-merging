@@ -252,6 +252,17 @@ public:
 		}
 	}
 
+	void removeSupportingBranch(Node *node, Node *root) {
+		while (node->parent && node != root) {
+			if (node->count > 0) // Stop when joining another branch, or hitting the job root
+				break;
+
+			Node *temp = node;
+			node = node->parent;
+			removeNode(temp);
+		}
+	}
+
 	void buildPathSet(const std::vector<Node*> &seeds, std::vector<ExecutionPath*> &paths) {
 		paths.clear();
 
