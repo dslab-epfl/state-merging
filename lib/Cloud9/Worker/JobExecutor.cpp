@@ -221,6 +221,10 @@ void JobExecutor::initHandlers() {
 	case UnlimitedSize:
 		sizingHandler = new UnlimitedSizingHandler();
 		break;
+	case FixedSize:
+		sizingHandler = new FixedSizingHandler(MaxJobSize, MaxJobDepth,
+				MaxJobOperations);
+		break;
 	default:
 		assert(0);
 	}
@@ -266,6 +270,8 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	while ((**node).symState != NULL) {
 		//CLOUD9_DEBUG("Stepping in state " << *node);
 		symbEngine->stepInState((**node).symState);
+
+		currentJob->operations++;
 	}
 
 	// Delete the supporting branch of the state, if empty

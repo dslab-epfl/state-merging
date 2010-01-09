@@ -40,6 +40,7 @@ private:
 
 	int size;
 	int depth;
+	int operations;
 
 	bool started;
 	bool finished;
@@ -60,6 +61,7 @@ public:
 
 	int getSize() { return size; }
 	int getDepth() { return depth; }
+	int getOperations() { return operations; }
 
 	frontier_t &getFrontier() { return frontier; }
 	WorkerTree::Node *getJobRoot() { return jobRoot; }

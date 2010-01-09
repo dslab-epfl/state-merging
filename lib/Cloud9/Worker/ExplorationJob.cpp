@@ -14,6 +14,7 @@ namespace worker {
 ExplorationJob::ExplorationJob(WorkerTree::Node *r)
 		: size(1),
 		  depth(1),
+		  operations(1),
 		  started(false),
 		  finished(false),
 		  jobRoot(r) {

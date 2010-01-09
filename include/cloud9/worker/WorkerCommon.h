@@ -30,7 +30,8 @@ enum JobSelectionType {
 };
 
 enum JobSizingType {
-	UnlimitedSize
+	UnlimitedSize,
+	FixedSize
 };
 
 enum JobExplorationType {
@@ -44,6 +45,10 @@ extern bool WithPOSIXRuntime;
 extern JobSelectionType JobSelection;
 extern JobSizingType JobSizing;
 extern JobExplorationType JobExploration;
+
+extern int MaxJobSize;
+extern int MaxJobDepth;
+extern int MaxJobOperations;
 
 namespace klee {
 	class RNG;
