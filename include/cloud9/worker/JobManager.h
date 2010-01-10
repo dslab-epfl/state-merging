@@ -45,6 +45,7 @@ private:
 
 
 	std::set<WorkerTree::Node*> stats;
+	bool statChanged;
 
 	bool initialized;
 
@@ -89,11 +90,15 @@ public:
 	void getStatisticsData(std::vector<int> &data);
 	void getStatisticsNodes(std::vector<ExecutionPath*> &paths);
 
+	bool isStatStructureChanged() { return statChanged; }
+	void resetStatStructureChanged() { statChanged = false; }
+
+
 	/*
 	 * Job import/export methods
 	 */
 	void importJobs(std::vector<ExecutionPath*> &paths);
-	void exportJobs(int count);
+	void exportJobs(int count, std::vector<ExecutionPath*> &paths);
 
 
 

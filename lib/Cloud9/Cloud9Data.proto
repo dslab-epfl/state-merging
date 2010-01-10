@@ -37,7 +37,7 @@ message WorkerReportMessage {
 }
 
 message LBResponseMessage {
-	message StateTransfer {
+	message StateTransfer { // TODO: rename it into JobTransfer
 		required uint32 count = 1;
 		required string dest_address = 2;
 		required uint32 dest_port = 3;

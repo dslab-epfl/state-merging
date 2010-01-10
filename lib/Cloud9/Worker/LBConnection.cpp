@@ -22,9 +22,9 @@ namespace cloud9 {
 
 namespace worker {
 
-LBConnection::LBConnection(boost::asio::io_service &service,
+LBConnection::LBConnection(boost::asio::io_service &s,
 		JobManager *jm)
-	: socket(service), jobManager(jm), resendStatNodes(false), id(0) {
+	: service(s), socket(s), jobManager(jm), id(0) {
 
 	boost::system::error_code error;
 	connectSocket(service, socket, LBAddress, LBPort, error);
@@ -38,7 +38,7 @@ LBConnection::LBConnection(boost::asio::io_service &service,
 }
 
 LBConnection::~LBConnection() {
-	// TODO Auto-generated destructor stub
+	socket.close();
 }
 
 void LBConnection::registerWorker() {
@@ -80,7 +80,7 @@ void LBConnection::sendUpdates() {
 		dataUpdate->add_data(*it);
 	}
 
-	if (resendStatNodes) {
+	if (jobManager->isStatStructureChanged()) {
 			WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();
 			ExecutionPathSet *pathSet = setUpdate->mutable_pathset();
 
@@ -90,6 +90,8 @@ void LBConnection::sendUpdates() {
 			assert(paths.size() == data.size());
 
 			serializeExecutionPathSet(paths, *pathSet);
+
+			jobManager->resetStatStructureChanged();
 		}
 
 	std::string msgString;
@@ -115,7 +117,38 @@ void LBConnection::sendUpdates() {
 		int jobCount = transDetails.count();
 		std::string destAddress = transDetails.dest_address();
 		int destPort = transDetails.dest_port();
+
+		transferJobs(jobCount, destAddress, destPort);
 	}
+}
+
+void LBConnection::transferJobs(int jobCount, std::string &address,
+		int port) {
+	std::vector<ExecutionPath*> paths;
+
+	jobManager->exportJobs(jobCount, paths);
+
+	tcp::socket peerSocket(service);
+	boost::system::error_code error;
+
+	connectSocket(service, peerSocket, address, port, error);
+
+	if (error) {
+		CLOUD9_ERROR("Could not connect to the peer worker");
+		return;
+	}
+
+	PeerTransferMessage message;
+	ExecutionPathSet *pSet = message.mutable_path_set();
+
+	serializeExecutionPathSet(paths, *pSet);
+
+	std::string msgString;
+	message.SerializeToString(&msgString);
+
+	sendMessage(peerSocket, msgString);
+
+	peerSocket.close();
 }
 
 }

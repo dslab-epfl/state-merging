@@ -20,12 +20,15 @@ class JobManager;
 
 class LBConnection {
 private:
+	boost::asio::io_service &service;
+
 	tcp::socket socket;
 
 	JobManager *jobManager;
 
-	bool resendStatNodes;	// Whether to re-send statistics structure, or just values
 	int id; // The worker ID assigned by the load balancer
+
+	void transferJobs(int jobCount, std::string &address, int port);
 
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);

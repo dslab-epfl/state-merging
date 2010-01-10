@@ -122,6 +122,7 @@ void JobManager::consumeJob(ExplorationJob *job) {
 			assert(stats.find(crtNode) != stats.end());
 
 			stats.erase(crtNode);
+			statChanged = true;
 		}
 
 		crtNode = crtNode->getParent();
@@ -186,6 +187,7 @@ void JobManager::refineStatistics() {
 	}
 
 	stats = newStats;
+	statChanged = true;
 }
 
 void JobManager::getStatisticsData(std::vector<int> &data) {
@@ -200,7 +202,7 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 
 }
 
-void JobManager::exportJobs(int count) {
+void JobManager::exportJobs(int count, std::vector<ExecutionPath*> &paths) {
 
 }
 
