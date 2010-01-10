@@ -18,8 +18,6 @@
 
 #include "cloud9/Protocols.h"
 
-
-
 namespace cloud9 {
 
 class ExecutionPath {
@@ -47,6 +45,12 @@ public:
 			cloud9::data::ExecutionPathSet &result);
 
 	typedef std::vector<int>::iterator iterator;
+
+	friend void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,
+			std::vector<ExecutionPath*> &result);
+
+	friend void serializeExecutionPathSet(const std::vector<ExecutionPath*> &set,
+			cloud9::data::ExecutionPathSet &result);
 };
 
 

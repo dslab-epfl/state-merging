@@ -55,7 +55,9 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 	}
 }
 
-void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc, char **argv, char **envp) {
+void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc,
+		char **argv, char **envp) {
+
 	assert(!initialized);
 	assert(mainFn);
 
@@ -70,7 +72,9 @@ void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc, char **arg
 	initialized = true;
 }
 
-void JobManager::setupStartingPoint(std::string mainFnName, int argc, char **argv, char **envp) {
+void JobManager::setupStartingPoint(std::string mainFnName, int argc,
+		char **argv, char **envp) {
+
 	llvm::Function *mainFn = origModule->getFunction(mainFnName);
 
 	setupStartingPoint(mainFn, argc, argv, envp);
@@ -107,8 +111,18 @@ void JobManager::consumeJob(ExplorationJob *job) {
 	// Update job statistics
 	WorkerTree::Node *crtNode = job->jobRoot;
 
+	bool emptyBranch = job->frontier.size();
+	bool hitStats = false;
+
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
+
+		if (!hitStats && (**crtNode).stats && (**crtNode).jobCount == 0) {
+			hitStats = true;
+			assert(stats.find(crtNode) != stats.end());
+
+			stats.erase(crtNode);
+		}
 
 		crtNode = crtNode->getParent();
 	}
@@ -140,6 +154,54 @@ void JobManager::processJobs() {
 
 		selHandler->onNextJobSelection(job);
 	}
+}
+
+void JobManager::refineStatistics() {
+	std::set<WorkerTree::Node*> newStats;
+
+	for (std::set<WorkerTree::Node*>::iterator it = stats.begin();
+			it != stats.end(); it++) {
+		WorkerTree::Node *node = *it;
+
+		assert((**node).jobCount > 0);
+		assert((**node).stats);
+
+		WorkerTree::Node *left = node->getChild(0);
+		WorkerTree::Node *right = node->getChild(1);
+
+		if (left) {
+			assert(!(**left).stats);
+			(**left).stats = true;
+
+			newStats.insert(left);
+		}
+
+		if (right) {
+			assert(!(**right).stats);
+			(**right).stats = true;
+
+			newStats.insert(right);
+		}
+
+	}
+
+	stats = newStats;
+}
+
+void JobManager::getStatisticsData(std::vector<int> &data) {
+
+}
+
+void JobManager::getStatisticsNodes(std::vector<ExecutionPath*> &paths) {
+
+}
+
+void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
+
+}
+
+void JobManager::exportJobs(int count) {
+
 }
 
 }

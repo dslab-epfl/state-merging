@@ -25,12 +25,15 @@ private:
 	klee::ExecutionState *symState;
 
 	int jobCount;
+	bool stats;
 public:
-	TreeNodeInfo() : symState(NULL), jobCount(0) {};
+	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false) {};
 	virtual ~TreeNodeInfo() {};
 
 	klee::ExecutionState* getSymbolicState() const { return symState; }
 	int getJobCount() const { return jobCount; }
+
+	bool isStats() const { return stats; }
 };
 
 typedef ExecutionTree<TreeNodeInfo> WorkerTree;

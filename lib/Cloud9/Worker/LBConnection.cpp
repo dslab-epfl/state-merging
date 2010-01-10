@@ -7,9 +7,9 @@
 
 #include "cloud9/worker/LBConnection.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/JobManager.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Protocols.h"
-#include "cloud9/CommUtils.h"
 
 #include "llvm/Support/CommandLine.h"
 
@@ -22,20 +22,12 @@ namespace cloud9 {
 
 namespace worker {
 
-LBConnection::LBConnection(boost::asio::io_service &service)
-	: resolver(service), socket(service), resendStatNodes(false), id(0) {
+LBConnection::LBConnection(boost::asio::io_service &service,
+		JobManager *jm)
+	: socket(service), jobManager(jm), resendStatNodes(false), id(0) {
 
-	tcp::resolver::query query(LBAddress, LBPort);
-
-	tcp::resolver::iterator it = resolver.resolve(query);
-	tcp::resolver::iterator end;
-
-	boost::system::error_code error = boost::asio::error::host_not_found;
-	while (error && it != end) {
-		socket.close();
-		socket.connect(*it, error);
-		it++;
-	}
+	boost::system::error_code error;
+	connectSocket(service, socket, LBAddress, LBPort, error);
 
 	if (error) {
 		CLOUD9_ERROR("Could not connect to the load balancer");
@@ -58,10 +50,21 @@ void LBConnection::registerWorker() {
 	reg->set_address(LocalAddress);
 	reg->set_port(LocalPort);
 
+	// Send the message
 	std::string msgString;
 	message.SerializeToString(&msgString);
-	embedMessageLength(msgString);
+	sendMessage(socket, msgString);
 
+	std::string respString;
+	// Wait for the response
+	recvMessage(socket, respString);
+
+	LBResponseMessage response;
+	response.ParseFromString(respString);
+
+	id = response.id();
+
+	CLOUD9_INFO("Worker registered with the load balancer - ID: " << id);
 }
 
 void LBConnection::sendUpdates() {
@@ -69,15 +72,50 @@ void LBConnection::sendUpdates() {
 	WorkerReportMessage message;
 	message.set_id(id);
 
-	if (resendStatNodes) {
-		WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();
+	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
+	std::vector<int> data;
+	jobManager->getStatisticsData(data);
+
+	for (std::vector<int>::iterator it = data.begin(); it != data.end(); it++) {
+		dataUpdate->add_data(*it);
 	}
 
-	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
+	if (resendStatNodes) {
+			WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();
+			ExecutionPathSet *pathSet = setUpdate->mutable_pathset();
+
+			std::vector<ExecutionPath*> paths;
+			jobManager->getStatisticsNodes(paths);
+
+			assert(paths.size() == data.size());
+
+			serializeExecutionPathSet(paths, *pathSet);
+		}
 
 	std::string msgString;
 	message.SerializeToString(&msgString);
-	embedMessageLength(msgString);
+	sendMessage(socket, msgString);
+
+	std::string respString;
+	recvMessage(socket, respString);
+
+	LBResponseMessage response;
+	response.ParseFromString(respString);
+
+	assert(id == response.id());
+
+	if (response.more_details()) {
+		jobManager->refineStatistics();
+	}
+
+	if (response.has_statetransfer()) {
+		const LBResponseMessage_StateTransfer &transDetails =
+				response.statetransfer();
+
+		int jobCount = transDetails.count();
+		std::string destAddress = transDetails.dest_address();
+		int destPort = transDetails.dest_port();
+	}
 }
 
 }

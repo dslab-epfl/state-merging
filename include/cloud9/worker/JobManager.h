@@ -43,8 +43,8 @@ private:
 	WorkerTree* tree;
 	JobExecutor *executor;
 
-	//std::set<ExplorationJob*> waitingPool;
-	//std::set<ExplorationJob*> executingPool;
+
+	std::set<WorkerTree::Node*> stats;
 
 	bool initialized;
 
@@ -80,6 +80,21 @@ public:
 	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	void processJobs();
+
+	/*
+	 * Statistics methods
+	 */
+
+	void refineStatistics();
+	void getStatisticsData(std::vector<int> &data);
+	void getStatisticsNodes(std::vector<ExecutionPath*> &paths);
+
+	/*
+	 * Job import/export methods
+	 */
+	void importJobs(std::vector<ExecutionPath*> &paths);
+	void exportJobs(int count);
+
 
 
 };

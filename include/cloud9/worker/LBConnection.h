@@ -16,16 +16,19 @@ namespace cloud9 {
 
 namespace worker {
 
+class JobManager;
 
 class LBConnection {
 private:
-	tcp::resolver resolver;
 	tcp::socket socket;
+
+	JobManager *jobManager;
 
 	bool resendStatNodes;	// Whether to re-send statistics structure, or just values
 	int id; // The worker ID assigned by the load balancer
+
 public:
-	LBConnection(boost::asio::io_service &service);
+	LBConnection(boost::asio::io_service &service, JobManager *jobManager);
 	virtual ~LBConnection();
 
 	void registerWorker();
