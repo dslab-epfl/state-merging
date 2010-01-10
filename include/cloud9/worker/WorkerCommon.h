@@ -50,6 +50,12 @@ extern int MaxJobSize;
 extern int MaxJobDepth;
 extern int MaxJobOperations;
 
+extern std::string LBAddress;
+extern int LBPort;
+
+extern std::string LocalAddress;
+extern int LocalPort;
+
 namespace klee {
 	class RNG;
 	extern RNG theRNG;

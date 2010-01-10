@@ -10,4 +10,4 @@ ifeq ($(ENABLE_STPLOG), 1)
 	LIBS += -lstplog
 endif
 
-LIBS += -lstp 
+LIBS += -lstp -lboost_system-mt -lboost_thread-mt -lprotoc

@@ -43,6 +43,7 @@
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/CommManager.h"
 
 using namespace llvm;
 using namespace cloud9::worker;
@@ -509,16 +510,23 @@ int main(int argc, char **argv, char **envp) {
 	readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
 	// Create the job manager
-	JobManager *manager = new JobManager(mainModule);
+	JobManager *jobManager = new JobManager(mainModule);
+	CommManager *commManager = new CommManager();
 
-	manager->setupStartingPoint("main", pArgc, pArgv, envp);
+
+	jobManager->setupStartingPoint("main", pArgc, pArgv, envp);
 
 	// Start exploring the root node
-	ExplorationJob *rootJob = manager->createJob(manager->getTree()->getRoot(), false);
+	ExplorationJob *rootJob = jobManager->createJob(jobManager->getTree()->getRoot(), false);
 
-	manager->submitJob(rootJob);
+	jobManager->submitJob(rootJob);
 
-	manager->processJobs();
+
+	commManager->setup();
+
+	jobManager->processJobs();
+
+	commManager->finalize();
 
 	return 0;
 }

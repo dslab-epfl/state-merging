@@ -16,6 +16,11 @@ message ExecutionPathSet {
 }
 
 message WorkerReportMessage {
+	message Registration {
+		required string address = 1;
+		required uint32 port = 2;
+	}
+	
 	message NodeSetUpdate {
 		required ExecutionPathSet pathSet = 1;
 	}
@@ -24,12 +29,27 @@ message WorkerReportMessage {
 		repeated uint32 data = 1;
 	}
 	
-	required uint32 id = 3;
+	required uint32 id = 1;
 	
-	optional NodeSetUpdate nodeSetUpdate = 1;
-	optional NodeDataUpdate nodeDataUpdate = 2;
+	optional NodeSetUpdate nodeSetUpdate = 2;
+	optional NodeDataUpdate nodeDataUpdate = 3;
+	optional Registration registration = 4;
 }
 
 message LBResponseMessage {
+	message StateTransfer {
+		required uint32 count = 1;
+		required string dest_address = 2;
+		required uint32 dest_port = 3;
+	}
+	
 	required uint32 id = 1;
+	
+	optional StateTransfer stateTransfer = 2;
+	
+	required bool more_details = 3;
+}
+
+message PeerTransferMessage {
+	required ExecutionPathSet path_set = 1;
 }

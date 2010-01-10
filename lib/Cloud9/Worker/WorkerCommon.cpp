@@ -24,6 +24,12 @@ int MaxJobSize;
 int MaxJobDepth;
 int MaxJobOperations;
 
+std::string LBAddress;
+int LBPort;
+
+std::string LocalAddress;
+int LocalPort;
+
 namespace {
 static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"), cl::Positional,
 		cl::location(InputFile), cl::init("-"));
@@ -67,6 +73,24 @@ static cl::opt<int, true> MaxJobDepthOpt("c9-job-max-depth",
 static cl::opt<int, true> MaxJobOperationsOpt("c9-job-max-ops",
 		cl::desc("Maximum count of operations for a job in a fixed size strategy"),
 		cl::location(MaxJobOperations), cl::init(0));
+
+
+static cl::opt<std::string, true> LBAddressOpt("c9-lb-host",
+		cl::desc("Host name of the load balancer"),
+		cl::location(LBAddress), cl::init("localhost"));
+
+static cl::opt<int, true> LBPortOpt("c9-lb-port",
+		cl::desc("Port number of the load balancer"),
+		cl::location(LBPort), cl::init(1337));
+
+
+static cl::opt<std::string, true> LocalAddressOpt("c9-local-host",
+		cl::desc("Host name of the local peer server"),
+		cl::location(LocalAddress), cl::init("localhost"));
+
+static cl::opt<int, true> LocalPortOpt("c9-local-port",
+		cl::desc("Port number of the local peer server"),
+		cl::location(LocalPort), cl::init(1234));
 
 }
 
