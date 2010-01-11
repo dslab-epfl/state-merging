@@ -8,7 +8,6 @@
 #include "cloud9/worker/CommManager.h"
 
 #include "cloud9/worker/PeerServer.h"
-#include "cloud9/worker/PeerConnection.h"
 #include "cloud9/worker/LBConnection.h"
 
 #include <boost/asio.hpp>

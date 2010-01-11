@@ -11,7 +11,7 @@
 #include <boost/asio.hpp>
 #include <set>
 
-using boost::asio::ip::tcp;
+using namespace boost::asio::ip;
 
 namespace cloud9 {
 
