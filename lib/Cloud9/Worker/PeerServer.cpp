@@ -7,10 +7,15 @@
 
 #include "cloud9/worker/PeerServer.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/JobManager.h"
+#include "cloud9/Protocols.h"
 #include "cloud9/Logger.h"
 
 #include <boost/shared_ptr.hpp>
 #include <boost/bind.hpp>
+#include <vector>
+
+using namespace cloud9::data;
 
 namespace cloud9 {
 
@@ -25,12 +30,26 @@ PeerConnection::PeerConnection(boost::asio::io_service& service,
 }
 
 void PeerConnection::start() {
+	// All we do is to read the job transfer request
 	msgReader.recvMessage();
 }
 
-void PeerConnection::handleMessageReceived(std::string &message,
+void PeerConnection::handleMessageReceived(std::string &msgString,
 		const boost::system::error_code &error) {
+	if (!error) {
+		// Decode the message and apply the changes
+		PeerTransferMessage message;
+		message.ParseFromString(msgString);
 
+		const ExecutionPathSet &pathSet = message.path_set();
+
+		std::vector<ExecutionPath*> paths;
+		parseExecutionPathSet(pathSet, paths);
+
+		jobManager->importJobs(paths);
+	} else {
+		CLOUD9_ERROR("Error receiving message from peer");
+	}
 }
 
 PeerServer::PeerServer(boost::asio::io_service &service, JobManager *jm) :
@@ -59,10 +78,11 @@ void PeerServer::handleAccept(PeerConnection::pointer conn,
 		const boost::system::error_code &error) {
 
 	if (!error) {
-
-	} else {
-
+		conn->start();
 	}
+
+	// Go back accepting other connections
+	startAccept();
 }
 
 }
