@@ -7,6 +7,9 @@
 
 #include "cloud9/Protocols.h"
 #include "cloud9/ExecutionTree.h"
+#include "cloud9/Logger.h"
+
+#include <boost/lexical_cast.hpp>
 
 namespace cloud9 {
 
@@ -14,10 +17,10 @@ void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port,
 		boost::system::error_code &error) {
 
-
 	tcp::resolver resolver(service);
 
-	tcp::resolver::query query(address, port);
+	CLOUD9_DEBUG("Connecting to " << address << ":" << port);
+	tcp::resolver::query query(address, boost::lexical_cast<std::string>(port));
 
 	tcp::resolver::iterator it = resolver.resolve(query, error);
 
