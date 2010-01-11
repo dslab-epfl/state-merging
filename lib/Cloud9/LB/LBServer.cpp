@@ -26,7 +26,8 @@ LBServer::~LBServer() {
 }
 
 void LBServer::startAccept() {
-	WorkerConnection *conn = new WorkerConnection(acceptor.io_service(), lb);
+	WorkerConnection::pointer conn =
+			WorkerConnection::create(acceptor.io_service(), lb);
 
 	CLOUD9_INFO("Listening for connections on port " <<
 			acceptor.local_endpoint().port());
@@ -37,17 +38,19 @@ void LBServer::startAccept() {
 
 }
 
-void LBServer::handleAccept(WorkerConnection *conn,
+void LBServer::handleAccept(WorkerConnection::pointer conn,
 		const boost::system::error_code &error) {
 	if (!error) {
-		CLOUD9_INFO("Connection received from " << conn->socket.remote_endpoint().address());
-		activeConns.insert(conn);
+		CLOUD9_INFO("Connection received from " << conn->getSocket().remote_endpoint().address());
 
-		conn->readMessageHeader();
+		conn->start();
 
 		// Go back and accept another connection
 		startAccept();
+	} else {
+		CLOUD9_ERROR("Error accepting worker connection");
 	}
+
 }
 
 }

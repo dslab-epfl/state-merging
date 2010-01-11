@@ -79,10 +79,13 @@ void PeerServer::handleAccept(PeerConnection::pointer conn,
 
 	if (!error) {
 		conn->start();
+		// Go back accepting other connections
+		startAccept();
+	} else {
+		CLOUD9_ERROR("Error accepting peer connection");
 	}
 
-	// Go back accepting other connections
-	startAccept();
+
 }
 
 }

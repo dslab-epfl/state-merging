@@ -8,6 +8,8 @@
 #ifndef LBSERVER_H_
 #define LBSERVER_H_
 
+#include "cloud9/lb/WorkerConnection.h"
+
 #include <boost/asio.hpp>
 #include <set>
 
@@ -17,20 +19,17 @@ namespace cloud9 {
 
 namespace lb {
 
-class WorkerConnection;
 class LoadBalancer;
 
 class LBServer {
 private:
 	tcp::acceptor acceptor;
 
-	std::set<WorkerConnection*> activeConns;
-
 	LoadBalancer *lb;
 
 	void startAccept();
 
-	void handleAccept(WorkerConnection *conn,
+	void handleAccept(WorkerConnection::pointer conn,
 			const boost::system::error_code &code);
 public:
 	LBServer(LoadBalancer *lb, boost::asio::io_service &io_service, int port);

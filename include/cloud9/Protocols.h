@@ -122,7 +122,7 @@ public:
 
 	virtual ~AsyncMessageWriter() { }
 
-	void sendMessage(std::string &message) {
+	void sendMessage(const std::string &message) {
 		size_t msgSize = message.size();
 		this->message.append((char*)&msgSize, sizeof(msgSize));
 		this->message.append(message.begin(), message.end());

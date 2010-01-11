@@ -39,11 +39,6 @@ public:
 
 	ExecutionPath *getAbsolutePath();
 
-	static void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,
-			std::vector<ExecutionPath*> &result);
-	static void serializeSet(const std::vector<ExecutionPath*> &set,
-			cloud9::data::ExecutionPathSet &result);
-
 	typedef std::vector<int>::iterator iterator;
 
 	friend void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,

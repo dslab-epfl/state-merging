@@ -8,8 +8,12 @@
 #ifndef WORKERCONNECTION_H_
 #define WORKERCONNECTION_H_
 
-#include <boost/asio.hpp>
 #include "cloud9/Protocols.h"
+
+#include <boost/asio.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/enable_shared_from_this.hpp>
+
 
 using namespace boost::asio::ip;
 using namespace cloud9::data;
@@ -22,29 +26,24 @@ class LBServer;
 class Worker;
 class LoadBalancer;
 
-class WorkerConnection {
-	friend class LBServer;
+class WorkerConnection: public boost::enable_shared_from_this<WorkerConnection> {
 private:
 	tcp::socket socket;
-	Worker *worker;
-
-
-	size_t msgSize;
-	char *msgData;
 
 	LoadBalancer *lb;
 
+	Worker *worker;
+
+	AsyncMessageReader msgReader;
+	AsyncMessageWriter msgWriter;
+
 	WorkerConnection(boost::asio::io_service &service, LoadBalancer *lb);
 
-	/*
-	 * Starts the asynchronous communication process with the worker
-	 */
-	void readMessageHeader();
-	void readMessageContents(const boost::system::error_code &error, size_t);
-	void processMessage(const boost::system::error_code &error, size_t size);
-	void finishMessageHandling(const boost::system::error_code &error, size_t);
 
+	void handleMessageReceived(std::string &message,
+				const boost::system::error_code &error);
 
+	void handleMessageSent(const boost::system::error_code &error);
 
 	void processNodeSetUpdate(int id, const WorkerReportMessage_NodeSetUpdate &message,
 			LBResponseMessage &response);
@@ -53,6 +52,14 @@ private:
 			LBResponseMessage &response);
 
 public:
+	typedef boost::shared_ptr<WorkerConnection> pointer;
+
+	static pointer create(boost::asio::io_service &service, LoadBalancer *lb) {
+		return pointer(new WorkerConnection(service, lb));
+	}
+
+	void start();
+
 	virtual ~WorkerConnection();
 
 	tcp::socket &getSocket() { return socket; }

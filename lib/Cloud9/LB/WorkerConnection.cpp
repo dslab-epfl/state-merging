@@ -20,7 +20,11 @@ namespace cloud9 {
 namespace lb {
 
 WorkerConnection::WorkerConnection(boost::asio::io_service &service, LoadBalancer *_lb)
-		: socket(service), lb(_lb) {
+		: socket(service), lb(_lb),
+		  msgReader(socket, boost::bind(&WorkerConnection::handleMessageReceived,
+				  shared_from_this(), _1, _2)),
+		  msgWriter(socket, boost::bind(&WorkerConnection::handleMessageSent,
+				  shared_from_this(), _1)) {
 
 	// TODO Auto-generated constructor stub
 
@@ -30,38 +34,18 @@ WorkerConnection::~WorkerConnection() {
 	// TODO Auto-generated destructor stub
 }
 
-void WorkerConnection::readMessageHeader() {
-	boost::asio::async_read(socket,
-			boost::asio::buffer(&msgSize, sizeof(msgSize)),
-			boost::bind(&WorkerConnection::readMessageContents, this,
-					boost::asio::placeholders::error,
-					boost::asio::placeholders::bytes_transferred));
+void WorkerConnection::start() {
+	msgReader.recvMessage();
 }
 
-void WorkerConnection::readMessageContents(const boost::system::error_code &error, size_t size) {
+void WorkerConnection::handleMessageReceived(std::string &msgString,
+			const boost::system::error_code &error) {
 	if (!error) {
-		assert(size == sizeof(msgSize));
-
-		msgData = new char[msgSize];
-
-		boost::asio::async_read(socket,
-				boost::asio::buffer(msgData, msgSize),
-				boost::bind(&WorkerConnection::processMessage, this,
-						boost::asio::placeholders::error,
-						boost::asio::placeholders::bytes_transferred));
-	} else {
-		CLOUD9_ERROR("Could not read message header");
-	}
-}
-
-void WorkerConnection::processMessage(const boost::system::error_code &error, size_t size) {
-	if (!error) {
-		assert(size == msgSize);
 
 		// Construct the protocol buffer message
 		WorkerReportMessage message;
 
-		if (!message.ParseFromArray(msgData, msgSize)) {
+		if (!message.ParseFromString(msgString)) {
 			CLOUD9_ERROR("Could not parse message contents");
 		} else {
 			LBResponseMessage response;
@@ -88,14 +72,8 @@ void WorkerConnection::processMessage(const boost::system::error_code &error, si
 
 			std::string respString;
 			response.SerializeToString(&respString);
-			size_t respSize = respString.size();
-			respString.insert(0, (char*)&respSize, sizeof(respSize));
 
-			boost::asio::async_write(socket,
-					boost::asio::buffer(respString),
-					boost::bind(&WorkerConnection::finishMessageHandling,
-							this, boost::asio::placeholders::error,
-							boost::asio::placeholders::bytes_transferred));
+			msgWriter.sendMessage(respString);
 		}
 
 	} else {
@@ -103,19 +81,15 @@ void WorkerConnection::processMessage(const boost::system::error_code &error, si
 	}
 }
 
-void WorkerConnection::finishMessageHandling(const boost::system::error_code &error, size_t) {
-	if (error) {
-		CLOUD9_ERROR("Could not set worker reply");
+void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
+	if (!error) {
+
+	} else {
+		CLOUD9_ERROR("Could not send reply");
 	}
 
-	if (msgData) {
-		delete[] msgData;
-		msgData = NULL;
-		msgSize = 0;
-	}
-
-	// Start over
-	readMessageHeader();
+	// Wait for another message, again
+	msgReader.recvMessage();
 }
 
 
@@ -126,7 +100,7 @@ void WorkerConnection::processNodeSetUpdate(int id,
 	std::vector<LBTree::Node*> nodes;
 	std::vector<ExecutionPath*> paths;
 
-	ExecutionPath::parseExecutionPathSet(message.pathset(), paths);
+	parseExecutionPathSet(message.pathset(), paths);
 
 	lb->getTree()->getNodes(paths, nodes);
 
