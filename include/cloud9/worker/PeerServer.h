@@ -12,7 +12,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/function.hpp>
 #include <boost/enable_shared_from_this.hpp>
 
 using namespace boost::asio::ip;
@@ -27,9 +26,10 @@ class PeerConnection: public boost::enable_shared_from_this<PeerConnection> {
 private:
 	tcp::socket socket;
 	JobManager *jobManager;
-	AsyncMessageReader<boost::function<void ()> > msgReader;
+	AsyncMessageReader msgReader;
 
-	void handleMessageReceived();
+	void handleMessageReceived(std::string &message,
+			const boost::system::error_code &error);
 
 	PeerConnection(boost::asio::io_service& service, JobManager *jobManager);
 public:

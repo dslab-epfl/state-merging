@@ -15,6 +15,7 @@
 #include <cassert>
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/function.hpp>
 #include <cstring>
 
 
@@ -39,15 +40,15 @@ static inline void sendMessage(tcp::socket &socket, std::string &message) {
 void recvMessage(tcp::socket &socket, std::string &message);
 
 
-template<typename Handler>
 class AsyncMessageReader {
+public:
+	typedef boost::function<void (std::string&,
+				const boost::system::error_code&)> Handler;
 private:
 	tcp::socket &socket;
+
 	char *msgData;
 	size_t msgSize;
-
-	std::string message;
-	boost::system::error_code error;
 
 	Handler handler;
 
@@ -57,7 +58,6 @@ private:
 			msgData = NULL;
 			msgSize = 0;
 		}
-		message.clear();
 	}
 
 	void handleHeaderRead(const boost::system::error_code &error, size_t size) {
@@ -71,20 +71,20 @@ private:
 							this, boost::asio::placeholders::error,
 							boost::asio::placeholders::bytes_transferred));
 		} else {
-			this->error = error;
-			handler();
+			std::string message;
+
+			handler(message, error);
 			reset();
 		}
 	}
 
 	void handleMessageRead(const boost::system::error_code &error, size_t size) {
+		std::string message;
 		if (!error) {
 			message = std::string(msgData, msgSize);
 		}
 
-		this->error = error;
-
-		handler();
+		handler(message, error);
 		reset();
 	}
 public:
@@ -101,33 +101,31 @@ public:
 						this, boost::asio::placeholders::error,
 						boost::asio::placeholders::bytes_transferred));
 	}
-
-	const std::string &getMessage() { return message; }
-
-	const boost::system::error_code &getError() { return error; }
 };
 
-template<typename Handler>
 class AsyncMessageWriter {
+public:
+	typedef boost::function<void (const boost::system::error_code&)> Handler;
 private:
 	tcp::socket &socket;
 
 	std::string message;
-	const boost::system::error_code error;
 
 	Handler handler;
 
-	void handleMessageWrite(const boost::system::error_code &error, size_t size,
-				Handler handler) {
-		this->error = error;
-
-		handler();
+	void handleMessageWrite(const boost::system::error_code &error, size_t size) {
+		handler(error);
 	}
 public:
+	AsyncMessageWriter(tcp::socket &s, Handler h) :
+		socket(s), handler(h) { }
+
+	virtual ~AsyncMessageWriter() { }
+
 	void sendMessage(std::string &message) {
 		size_t msgSize = message.size();
-		this->message.append(&msgSize, sizeof(msgSize));
-		this->message.appen(message.begin(), message.end());
+		this->message.append((char*)&msgSize, sizeof(msgSize));
+		this->message.append(message.begin(), message.end());
 
 		boost::asio::async_write(socket, boost::asio::buffer(this->message),
 				boost::bind(&AsyncMessageWriter::handleMessageWrite,

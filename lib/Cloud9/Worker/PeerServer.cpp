@@ -20,7 +20,7 @@ PeerConnection::PeerConnection(boost::asio::io_service& service,
 		JobManager *jm) :
 	socket(service), jobManager(jm),
 	msgReader(socket, boost::bind(&PeerConnection::handleMessageReceived,
-			shared_from_this())) {
+			shared_from_this(), _1, _2)) {
 
 }
 
@@ -28,7 +28,8 @@ void PeerConnection::start() {
 	msgReader.recvMessage();
 }
 
-void PeerConnection::handleMessageReceived() {
+void PeerConnection::handleMessageReceived(std::string &message,
+		const boost::system::error_code &error) {
 
 }
 
