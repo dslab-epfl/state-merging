@@ -103,15 +103,10 @@ ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
 	return new ExplorationJob(root, foreign);
 }
 
-void JobManager::consumeJob(ExplorationJob *job) {
-	selHandler->onJobExecutionStarted(job);
-	executor->executeJob(job);
-	selHandler->onJobExecutionFinished(job);
-
+void JobManager::finalizeJob(ExplorationJob *job) {
 	// Update job statistics
 	WorkerTree::Node *crtNode = job->jobRoot;
 
-	bool emptyBranch = job->frontier.size();
 	bool hitStats = false;
 
 	while (crtNode != NULL) {
@@ -136,28 +131,48 @@ void JobManager::consumeJob(ExplorationJob *job) {
 
 }
 
+ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
+	ExplorationJob *job;
+
+	selHandler->onNextJobSelection(job);
+	while (job == NULL) {
+		CLOUD9_DEBUG("No jobs in the queue, waiting for...");
+		jobsAvailabe.wait(lock);
+		selHandler->onNextJobSelection(job);
+	}
+
+	return job;
+}
+
 void JobManager::processJobs() {
 	ExplorationJob *job = NULL;
-	selHandler->onNextJobSelection(job);
 
-	while (job != NULL) {
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+	// TODO: Put an abort condition here
+	while (true) {
+		job = dequeueJob(lock);
+
+		lock.unlock();
+
 		CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
 
-		consumeJob(job);
+		executor->executeJob(job);
+
+		lock.lock();
+
+		finalizeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
 		explodeJob(job, newJobs);
 
-		for (std::set<ExplorationJob*>::iterator it = newJobs.begin();
-				it != newJobs.end(); it++) {
-			submitJob(*it);
-		}
-
-		selHandler->onNextJobSelection(job);
+		submitJobs(newJobs.begin(), newJobs.end());
 	}
 }
 
 void JobManager::refineStatistics() {
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
+
 	std::set<WorkerTree::Node*> newStats;
 
 	for (std::set<WorkerTree::Node*>::iterator it = stats.begin();
@@ -190,20 +205,17 @@ void JobManager::refineStatistics() {
 	statChanged = true;
 }
 
-void JobManager::getStatisticsData(std::vector<int> &data) {
-
-}
-
-void JobManager::getStatisticsNodes(std::vector<ExecutionPath*> &paths) {
-
+void JobManager::getStatisticsData(std::vector<int> &data,
+		std::vector<ExecutionPath*> &paths, bool onlyChanged) {
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
 }
 
 void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
-
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
 }
 
 void JobManager::exportJobs(int count, std::vector<ExecutionPath*> &paths) {
-
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
 }
 
 }

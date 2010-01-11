@@ -74,25 +74,23 @@ void LBConnection::sendUpdates() {
 
 	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
 	std::vector<int> data;
-	jobManager->getStatisticsData(data);
+	std::vector<ExecutionPath*> paths;
+
+	jobManager->getStatisticsData(data, paths, true);
 
 	for (std::vector<int>::iterator it = data.begin(); it != data.end(); it++) {
 		dataUpdate->add_data(*it);
 	}
 
-	if (jobManager->isStatStructureChanged()) {
-			WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();
-			ExecutionPathSet *pathSet = setUpdate->mutable_pathset();
+	if (paths.size() > 0) {
+		assert(paths.size() == data.size());
 
-			std::vector<ExecutionPath*> paths;
-			jobManager->getStatisticsNodes(paths);
+		WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();
+		ExecutionPathSet *pathSet = setUpdate->mutable_pathset();
 
-			assert(paths.size() == data.size());
+		serializeExecutionPathSet(paths, *pathSet);
+	}
 
-			serializeExecutionPathSet(paths, *pathSet);
-
-			jobManager->resetStatStructureChanged();
-		}
 
 	std::string msgString;
 	message.SerializeToString(&msgString);

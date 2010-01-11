@@ -517,9 +517,9 @@ int main(int argc, char **argv, char **envp) {
 	jobManager->setupStartingPoint("main", pArgc, pArgv, envp);
 
 	// Start exploring the root node
-	ExplorationJob *rootJob = jobManager->createJob(jobManager->getTree()->getRoot(), false);
+	//ExplorationJob *rootJob = jobManager->createJob(jobManager->getTree()->getRoot(), false);
 
-	jobManager->submitJob(rootJob);
+	//jobManager->submitJob(rootJob);
 
 
 	commManager->setup();

@@ -19,14 +19,6 @@ void RandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
 	jobs.push_back(job);
 }
 
-void RandomSelectionHandler::onJobExecutionStarted(ExplorationJob *job) {
-
-}
-
-void RandomSelectionHandler::onJobExecutionFinished(ExplorationJob *job) {
-
-}
-
 void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 	if (jobs.empty()) {
 		job = NULL;

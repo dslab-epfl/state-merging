@@ -11,6 +11,7 @@
 #include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/worker/JobExecutor.h"
 
+#include <boost/thread.hpp>
 #include <list>
 #include <set>
 #include <string>
@@ -34,8 +35,6 @@ public:
 
 	public:
 		virtual void onJobEnqueued(ExplorationJob *job) = 0;
-		virtual void onJobExecutionStarted(ExplorationJob *job) = 0;
-		virtual void onJobExecutionFinished(ExplorationJob *job) = 0;
 
 		virtual void onNextJobSelection(ExplorationJob *&job) = 0;
 	};
@@ -43,6 +42,9 @@ private:
 	WorkerTree* tree;
 	JobExecutor *executor;
 
+	boost::condition_variable jobsAvailabe;
+
+	boost::mutex jobsMutex;
 
 	std::set<WorkerTree::Node*> stats;
 	bool statChanged;
@@ -60,7 +62,20 @@ private:
 	 */
 	void explodeJob(ExplorationJob *job, std::set<ExplorationJob*> &newJobs);
 
-	void consumeJob(ExplorationJob *job);
+	void submitJob(ExplorationJob* job);
+
+	template<typename JobIterator>
+	void submitJobs(JobIterator begin, JobIterator end) {
+		for (JobIterator it = begin; it != end; it++) {
+			submitJob(*it);
+		}
+
+		jobsAvailabe.notify_all();
+	}
+
+	void finalizeJob(ExplorationJob *job);
+
+	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 
@@ -76,8 +91,6 @@ public:
 
 	WorkerTree *getTree() { return tree; }
 
-	void submitJob(ExplorationJob* job);
-
 	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	void processJobs();
@@ -87,11 +100,8 @@ public:
 	 */
 
 	void refineStatistics();
-	void getStatisticsData(std::vector<int> &data);
-	void getStatisticsNodes(std::vector<ExecutionPath*> &paths);
-
-	bool isStatStructureChanged() { return statChanged; }
-	void resetStatStructureChanged() { statChanged = false; }
+	void getStatisticsData(std::vector<int> &data,
+			std::vector<ExecutionPath*> &paths, bool onlyChanged);
 
 
 	/*

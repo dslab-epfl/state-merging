@@ -26,8 +26,6 @@ public:
 	virtual ~RandomSelectionHandler() {};
 
 	virtual void onJobEnqueued(ExplorationJob *job);
-	virtual void onJobExecutionStarted(ExplorationJob *job);
-	virtual void onJobExecutionFinished(ExplorationJob *job);
 
 	virtual void onNextJobSelection(ExplorationJob *&job);
 };
