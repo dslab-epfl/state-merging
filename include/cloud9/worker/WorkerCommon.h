@@ -56,6 +56,8 @@ extern int LBPort;
 extern std::string LocalAddress;
 extern int LocalPort;
 
+extern int RetryConnectTime;
+
 namespace klee {
 	class RNG;
 	extern RNG theRNG;

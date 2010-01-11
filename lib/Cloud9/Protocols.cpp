@@ -13,13 +13,20 @@ namespace cloud9 {
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port,
 		boost::system::error_code &error) {
-	error = boost::asio::error::host_not_found;
+
 
 	tcp::resolver resolver(service);
 
 	tcp::resolver::query query(address, port);
 
-	tcp::resolver::iterator it = resolver.resolve(query);
+	tcp::resolver::iterator it = resolver.resolve(query, error);
+
+	if (!error) {
+		error = boost::asio::error::host_not_found;
+	} else {
+		return;
+	}
+
 	tcp::resolver::iterator end;
 
 	while (error && it != end) {

@@ -30,6 +30,8 @@ int LBPort;
 std::string LocalAddress;
 int LocalPort;
 
+int RetryConnectTime;
+
 namespace {
 static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"), cl::Positional,
 		cl::location(InputFile), cl::init("-"));
@@ -91,6 +93,10 @@ static cl::opt<std::string, true> LocalAddressOpt("c9-local-host",
 static cl::opt<int, true> LocalPortOpt("c9-local-port",
 		cl::desc("Port number of the local peer server"),
 		cl::location(LocalPort), cl::init(1234));
+
+static cl::opt<int, true> RetryConnectTimeOpt("c9-lb-connect-retry",
+		cl::desc("The time in seconds after the next connection retry"),
+		cl::location(RetryConnectTime), cl::init(2));
 
 }
 

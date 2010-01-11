@@ -14,13 +14,23 @@ namespace cloud9 {
 
 namespace worker {
 
+class JobManager;
+
 class CommManager {
 private:
-	struct LBCommThread {
+	class LBCommThread {
+	private:
+		JobManager *jobManager;
+	public:
+		LBCommThread(JobManager *jm) : jobManager(jm) { }
 		void operator()();
 	};
 
-	struct PeerCommThread {
+	class PeerCommThread {
+	private:
+		JobManager *jobManager;
+	public:
+		PeerCommThread(JobManager *jm) : jobManager(jm) { }
 		void operator()();
 	};
 
@@ -31,7 +41,7 @@ private:
 	boost::thread lbCommThread;
 
 public:
-	CommManager();
+	CommManager(JobManager *jobManager);
 	virtual ~CommManager();
 
 	void setup();

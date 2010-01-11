@@ -6,9 +6,11 @@
  */
 
 #include "cloud9/worker/CommManager.h"
+#include "cloud9/worker/WorkerCommon.h"
 
 #include "cloud9/worker/PeerServer.h"
 #include "cloud9/worker/LBConnection.h"
+#include "cloud9/Logger.h"
 
 #include <boost/asio.hpp>
 
@@ -18,8 +20,30 @@ namespace worker {
 
 void CommManager::LBCommThread::operator()() {
 	boost::asio::io_service service;
+	boost::system::error_code error;
 
-	LBConnection lbConnection();
+	CLOUD9_INFO("Connecting to the load balancer...");
+	LBConnection lbConnection(service, jobManager);
+
+	for (;;) {
+		lbConnection.connect(error);
+
+		if (error) {
+			CLOUD9_ERROR("Could not connect to the load balancer: " <<
+					error.message() << " Retrying in " << RetryConnectTime << " seconds");
+
+			boost::asio::deadline_timer t(service, boost::posix_time::seconds(RetryConnectTime));
+			t.wait();
+			continue;
+		}
+
+		break;
+	}
+
+	CLOUD9_INFO("Connected to the load balancer");
+
+	CLOUD9_INFO("Registering worker with the load balancer...");
+	lbConnection.registerWorker();
 }
 
 void CommManager::PeerCommThread::operator()() {
@@ -28,7 +52,8 @@ void CommManager::PeerCommThread::operator()() {
 	service.run();
 }
 
-CommManager::CommManager() {
+CommManager::CommManager(JobManager *jm) :
+		peerCommControl(jm), lbCommControl(jm) {
 	// TODO Auto-generated constructor stub
 
 }

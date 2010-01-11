@@ -26,15 +26,13 @@ LBConnection::LBConnection(boost::asio::io_service &s,
 		JobManager *jm)
 	: service(s), socket(s), jobManager(jm), id(0) {
 
-	boost::system::error_code error;
+
+}
+
+void LBConnection::connect(boost::system::error_code &error) {
 	connectSocket(service, socket, LBAddress, LBPort, error);
 
-	if (error) {
-		CLOUD9_ERROR("Could not connect to the load balancer");
-		return;
-	}
 
-	CLOUD9_INFO("Connected to the load balancer");
 }
 
 LBConnection::~LBConnection() {

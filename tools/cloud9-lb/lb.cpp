@@ -22,7 +22,7 @@ namespace {
 
 cl::opt<int> ServerPort("port",
 		cl::desc("The port the load balancing server listens on"),
-		cl::init(1234)); // TODO: Move this in a #define
+		cl::init(1337)); // TODO: Move this in a #define
 
 }
 

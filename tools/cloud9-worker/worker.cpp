@@ -510,11 +510,11 @@ int main(int argc, char **argv, char **envp) {
 	readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
 	// Create the job manager
-	JobManager *jobManager = new JobManager(mainModule);
-	CommManager *commManager = new CommManager();
+	JobManager jobManager(mainModule);
+	CommManager commManager(&jobManager);
 
 
-	jobManager->setupStartingPoint("main", pArgc, pArgv, envp);
+	jobManager.setupStartingPoint("main", pArgc, pArgv, envp);
 
 	// Start exploring the root node
 	//ExplorationJob *rootJob = jobManager->createJob(jobManager->getTree()->getRoot(), false);
@@ -522,11 +522,11 @@ int main(int argc, char **argv, char **envp) {
 	//jobManager->submitJob(rootJob);
 
 
-	commManager->setup();
+	commManager.setup();
 
-	jobManager->processJobs();
+	jobManager.processJobs();
 
-	commManager->finalize();
+	commManager.finalize();
 
 	return 0;
 }

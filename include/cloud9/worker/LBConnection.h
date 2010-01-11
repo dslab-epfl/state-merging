@@ -34,6 +34,8 @@ public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);
 	virtual ~LBConnection();
 
+	void connect(boost::system::error_code &error);
+
 	void registerWorker();
 
 	void sendUpdates();
