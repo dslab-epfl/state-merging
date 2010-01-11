@@ -24,12 +24,14 @@ namespace worker {
 PeerConnection::PeerConnection(boost::asio::io_service& service,
 		JobManager *jm) :
 	socket(service), jobManager(jm),
-	msgReader(socket, boost::bind(&PeerConnection::handleMessageReceived,
-			shared_from_this(), _1, _2)) {
+	msgReader(socket) {
 
 }
 
 void PeerConnection::start() {
+	msgReader.setHandler(boost::bind(&PeerConnection::handleMessageReceived,
+				shared_from_this(), _1, _2));
+
 	// All we do is to read the job transfer request
 	msgReader.recvMessage();
 }

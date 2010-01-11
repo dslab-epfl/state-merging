@@ -21,12 +21,7 @@ namespace lb {
 
 WorkerConnection::WorkerConnection(boost::asio::io_service &service, LoadBalancer *_lb)
 		: socket(service), lb(_lb),
-		  msgReader(socket, boost::bind(&WorkerConnection::handleMessageReceived,
-				  shared_from_this(), _1, _2)),
-		  msgWriter(socket, boost::bind(&WorkerConnection::handleMessageSent,
-				  shared_from_this(), _1)) {
-
-	// TODO Auto-generated constructor stub
+		  msgReader(socket), msgWriter(socket) {
 
 }
 
@@ -35,6 +30,11 @@ WorkerConnection::~WorkerConnection() {
 }
 
 void WorkerConnection::start() {
+	msgReader.setHandler(boost::bind(&WorkerConnection::handleMessageReceived,
+			shared_from_this(), _1, _2));
+	msgWriter.setHandler( boost::bind(&WorkerConnection::handleMessageSent,
+			shared_from_this(), _1));
+
 	msgReader.recvMessage();
 }
 

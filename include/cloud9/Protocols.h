@@ -91,7 +91,13 @@ public:
 	AsyncMessageReader(tcp::socket &s, Handler h) :
 		socket(s), msgData(NULL), msgSize(0), handler(h) { }
 
+	AsyncMessageReader(tcp::socket &s) :
+		socket(s), msgData(NULL), msgSize(0) { }
+
 	virtual ~AsyncMessageReader() {}
+
+	void setHandler(Handler h) { handler = h; }
+	Handler getHandler() { return handler; }
 
 	void recvMessage() {
 		assert(msgData == NULL);
@@ -120,7 +126,13 @@ public:
 	AsyncMessageWriter(tcp::socket &s, Handler h) :
 		socket(s), handler(h) { }
 
+	AsyncMessageWriter(tcp::socket &s) :
+		socket(s) { }
+
 	virtual ~AsyncMessageWriter() { }
+
+	void setHandler(Handler h) { handler = h; }
+	Handler getHandler() { return handler; }
 
 	void sendMessage(const std::string &message) {
 		size_t msgSize = message.size();

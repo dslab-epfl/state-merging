@@ -1,7 +1,7 @@
 LEVEL = ../..
 
 TOOLNAME = c9-lb
-USEDLIBS = cloud9lb.a cloud9common.a 
+USEDLIBS = cloud9lb.a cloud9common.a
 LINK_COMPONENTS = ipo
 
 include $(LEVEL)/Makefile.common
