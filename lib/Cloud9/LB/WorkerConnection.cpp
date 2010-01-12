@@ -75,6 +75,9 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				serializeExecutionPathSet(paths, *pathSet);
 			}
 		} else {
+			response.set_id(id);
+			response.set_more_details(false);
+
 			if (message.has_nodesetupdate()) {
 				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
 						message.nodesetupdate();
