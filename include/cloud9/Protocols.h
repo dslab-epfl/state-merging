@@ -31,6 +31,7 @@ namespace cloud9 {
 
 class ExecutionPath;
 
+#if 0
 // XXX Debugging
 static inline std::string getASCIIMessage(std::string &message) {
 	std::string result;
@@ -46,6 +47,7 @@ static inline std::string getASCIIMessage(std::string &message) {
 	}
 	return result;
 }
+#endif
 
 void embedMessageLength(std::string &message);
 
@@ -96,7 +98,7 @@ private:
 		std::string message;
 		if (!error) {
 			message = std::string(msgData, msgSize);
-			CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
+			//CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
 		} else {
 			CLOUD9_DEBUG("Message read error: " << error.message());
 		}
@@ -138,7 +140,7 @@ private:
 
 	void handleMessageWrite(const boost::system::error_code &error, size_t size) {
 		if (!error) {
-			CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
+			//CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
 		} else {
 			CLOUD9_DEBUG("Message write error" << error.message());
 		}

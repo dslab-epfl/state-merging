@@ -134,8 +134,6 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 	}
 
 	if (response.has_jobseed()) {
-		CLOUD9_DEBUG("Job seed request");
-
 		const LBResponseMessage_JobSeed &seedDetails =
 				response.jobseed();
 
@@ -143,6 +141,8 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		std::vector<ExecutionPath*> paths;
 
 		parseExecutionPathSet(pathSet, paths);
+
+		CLOUD9_DEBUG("Job seed request: " << paths.size() << " paths");
 
 		jobManager->importJobs(paths);
 	}

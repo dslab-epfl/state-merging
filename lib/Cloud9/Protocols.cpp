@@ -47,7 +47,7 @@ void sendMessage(tcp::socket &socket, std::string &message) {
 	boost::asio::write(socket, boost::asio::buffer(&msgSize, sizeof(msgSize)));
 	boost::asio::write(socket, boost::asio::buffer(message));
 
-	CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
+	//CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
 }
 
 void recvMessage(tcp::socket &socket, std::string &message) {
@@ -63,7 +63,7 @@ void recvMessage(tcp::socket &socket, std::string &message) {
 
 	delete[] msgBuff;
 
-	CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
+	//CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
 }
 
 void parseExecutionPathSet(const ExecutionPathSet &ps,
@@ -88,8 +88,9 @@ void parseExecutionPathSet(const ExecutionPathSet &ps,
 			path->path.push_back((pathBytes[j / 8] &
 					(unsigned char)(1 << (j % 8))) != 0);
 
-			result.push_back(path);
 		}
+
+		result.push_back(path);
 	}
 }
 

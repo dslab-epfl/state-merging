@@ -304,10 +304,7 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 	// Update node -> state references
 	(**pNode).symState = NULL;
 
-	//(**newNode).job = currentJob;
-
 	(**oldNode).symState = parent;
-	//(**newNode).job = currentJob;
 
 	// Update frontier
 	if (currentJob) {
@@ -413,7 +410,11 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 		crtNode = crtNode->getParent();
 	}
 
-	assert(crtNode);
+	if (!crtNode) {
+		CLOUD9_INFO("Cloud not replay path. Must have been already explored or "
+				"exported: " << *pathEnd);
+		return;
+	}
 
 	std::reverse(path.begin(), path.end());
 

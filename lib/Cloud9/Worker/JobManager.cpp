@@ -136,8 +136,10 @@ ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
 
 	selHandler->onNextJobSelection(job);
 	while (job == NULL) {
-		CLOUD9_DEBUG("No jobs in the queue, waiting for...");
+		CLOUD9_INFO("No jobs in the queue, waiting for...");
 		jobsAvailabe.wait(lock);
+		CLOUD9_INFO("More jobs available. Resuming exploration...");
+
 		selHandler->onNextJobSelection(job);
 	}
 
@@ -155,7 +157,7 @@ void JobManager::processJobs() {
 
 		lock.unlock();
 
-		CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
+		//CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
 
 		executor->executeJob(job);
 
@@ -212,10 +214,27 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 
 void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+	std::vector<WorkerTree::Node*> nodes;
+	std::vector<ExplorationJob*> jobs;
+
+	tree->getNodes(paths, nodes);
+
+	CLOUD9_DEBUG("Importing jobs: " << getASCIINodeSet(nodes.begin(), nodes.end()));
+
+	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
+			it != nodes.end(); it++) {
+		ExplorationJob *job = new ExplorationJob(*it, true);
+		jobs.push_back(job);
+	}
+
+	submitJobs(jobs.begin(), jobs.end());
 }
 
 void JobManager::exportJobs(int count, std::vector<ExecutionPath*> &paths) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+
 }
 
 }

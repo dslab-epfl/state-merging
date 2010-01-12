@@ -29,7 +29,7 @@ private:
 	ExecutionPath *parent;
 	int parentIndex;
 
-	ExecutionPath() { };
+	ExecutionPath() : parent(NULL), parentIndex(0) { };
 public:
 	virtual ~ExecutionPath() { };
 
@@ -325,26 +325,60 @@ public:
 
 };
 
+
+template<class NI>
+void getASCIINode(const TreeNode<NI> &node, std::string &result) {
+	result.push_back('<');
+
+	const TreeNode<NI> *crtNode = &node;
+
+	while (crtNode->getParent() != NULL) {
+		result.push_back(crtNode->getIndex() ? '1' : '0');
+
+		crtNode = crtNode->getParent();
+	}
+
+	result.push_back('>');
+
+	std::reverse(result.begin() + 1, result.end() - 1);
+}
+
 template<class NI>
 std::ostream& operator<<(std::ostream &os,
 		const TreeNode<NI> &node) {
 
 	std::string str;
-
-	const TreeNode<NI> *crtNode = &node;
-
-	while (crtNode->getParent() != NULL) {
-		str.push_back(crtNode->getIndex() ? '1' : '0');
-
-		crtNode = crtNode->getParent();
-	}
-
-	std::reverse(str.begin(), str.end());
-
-	os << "<" << str << ">";
+	getASCIINode(node, str);
+	os << str;
 
 	return os;
 }
+
+#if 1 // XXX: debug
+template<typename NodeIterator>
+std::string getASCIINodeSet(NodeIterator begin, NodeIterator end) {
+	std::string result;
+	bool first = true;
+
+	result.push_back('[');
+
+	for (NodeIterator it = begin; it != end; it++) {
+		if (!first)
+			result.append(", ");
+		else
+			first = false;
+
+		std::string nodeStr;
+		getASCIINode(**it, nodeStr);
+
+		result.append(nodeStr);
+	}
+
+	result.push_back(']');
+
+	return result;
+}
+#endif
 
 }
 
