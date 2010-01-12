@@ -70,7 +70,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 				std::vector<ExecutionPath*> paths;
 
-				lb->getTree()->buildPathSet(nodes, paths);
+				lb->getTree()->buildPathSet(nodes.begin(), nodes.end(), paths);
 
 				serializeExecutionPathSet(paths, *pathSet);
 			}
@@ -126,7 +126,7 @@ void WorkerConnection::processNodeSetUpdate(int id,
 
 	parseExecutionPathSet(message.pathset(), paths);
 
-	lb->getTree()->getNodes(paths, nodes);
+	lb->getTree()->getNodes(paths.begin(), paths.end(), nodes);
 
 	lb->updateWorkerStatNodes(id, nodes);
 

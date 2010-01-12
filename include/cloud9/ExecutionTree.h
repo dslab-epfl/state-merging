@@ -262,11 +262,16 @@ public:
 		}
 	}
 
-	void buildPathSet(const std::vector<Node*> &seeds, std::vector<ExecutionPath*> &paths) {
-		paths.clear();
+	template<typename NodeIterator>
+	void buildPathSet(NodeIterator begin, NodeIterator end,
+			std::vector<ExecutionPath*> &paths) {
 
-		for (int i = 0; i < seeds.size(); i++) {
-			Node* crtNode = seeds[i];
+		paths.clear();
+		std::vector<Node*> processed; // XXX: Require a random access iterator
+
+		int i = 0;
+		for (NodeIterator it = begin; it != end; it++) {
+			Node* crtNode = *it;
 
 			ExecutionPath *path = new ExecutionPath();
 
@@ -278,7 +283,7 @@ public:
 					// We hit an already built path
 					p = paths[crtNode->_label - 1];
 					pIndex = p->path.size() -
-							(seeds[crtNode->_label - 1]->level - crtNode->level);
+							(processed[crtNode->_label - 1]->level - crtNode->level);
 					break;
 				} else {
 					path->path.push_back(crtNode->index);
@@ -293,11 +298,13 @@ public:
 			path->parentIndex = pIndex;
 
 			paths.push_back(path);
+			processed.push_back(*it);
+			i++;
 		}
 
 		// Clean up the labels
-		for (int i = 0; i < seeds.size(); i++) {
-			Node *crtNode = seeds[i];
+		for (NodeIterator it = begin; it != end; it++) {
+			Node *crtNode = *it;
 
 			while (crtNode != root) {
 				if (crtNode->_label == 0)
@@ -310,13 +317,14 @@ public:
 		}
 	}
 
-	void getNodes(const std::vector<ExecutionPath*> &paths,
+	template<typename NodeIterator>
+	void getNodes(NodeIterator begin, NodeIterator end,
 			std::vector<Node*> &nodes) {
 
 		nodes.clear();
 
-		for (int i = 0; i < paths.size(); i++) {
-			Node *crtNode = getNode(paths[i]);
+		for (NodeIterator it = begin; it != end; it++) {
+			Node *crtNode = getNode(*it);
 
 			nodes.push_back(crtNode);
 		}

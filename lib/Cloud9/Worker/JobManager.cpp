@@ -35,6 +35,9 @@ JobManager::JobManager(llvm::Module *module) :
 	default:
 		assert(0);
 	}
+
+	stats.insert(this->tree->getRoot());
+	statChanged = true;
 }
 
 JobManager::~JobManager() {
@@ -213,6 +216,19 @@ void JobManager::refineStatistics() {
 void JobManager::getStatisticsData(std::vector<int> &data,
 		std::vector<ExecutionPath*> &paths, bool onlyChanged) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+	if (statChanged || !onlyChanged) {
+		tree->buildPathSet(stats.begin(), stats.end(), paths);
+		statChanged = false;
+	}
+
+	data.clear();
+
+	for (std::set<WorkerTree::Node*>::iterator it = stats.begin();
+			it != stats.end(); it++) {
+		WorkerTree::Node *crtNode = *it;
+		data.push_back((**crtNode).jobCount);
+	}
 }
 
 void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
@@ -221,7 +237,7 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 	std::vector<WorkerTree::Node*> nodes;
 	std::vector<ExplorationJob*> jobs;
 
-	tree->getNodes(paths, nodes);
+	tree->getNodes(paths.begin(), paths.end(), nodes);
 
 	CLOUD9_DEBUG("Importing jobs: " << getASCIINodeSet(nodes.begin(), nodes.end()));
 
