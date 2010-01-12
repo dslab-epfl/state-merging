@@ -76,7 +76,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			}
 		} else {
 			response.set_id(id);
-			response.set_more_details(false);
+			response.set_more_details(true);
 
 			if (message.has_nodesetupdate()) {
 				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
@@ -128,6 +128,9 @@ void WorkerConnection::processNodeSetUpdate(int id,
 
 	lb->getTree()->getNodes(paths.begin(), paths.end(), nodes);
 
+	CLOUD9_DEBUG("Received node set: " << getASCIINodeSet(nodes.begin(),
+			nodes.end()));
+
 	lb->updateWorkerStatNodes(id, nodes);
 
 }
@@ -138,6 +141,8 @@ void WorkerConnection::processNodeDataUpdate(int id,
 	std::vector<int> data;
 
 	data.insert(data.begin(), message.data().begin(), message.data().end());
+
+	CLOUD9_DEBUG("Received data set: " << getASCIIDataSet(data.begin(), data.end()));
 
 	lb->updateWorkerStats(id, data);
 }

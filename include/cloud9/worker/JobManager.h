@@ -48,6 +48,7 @@ private:
 
 	std::set<WorkerTree::Node*> stats;
 	bool statChanged;
+	bool refineStats;
 
 	bool initialized;
 
@@ -77,6 +78,8 @@ private:
 
 	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock);
 
+	void refineStatistics();
+
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 
 	JobManager(WorkerTree *tree, llvm::Module *module);
@@ -99,10 +102,10 @@ public:
 	 * Statistics methods
 	 */
 
-	void refineStatistics();
 	void getStatisticsData(std::vector<int> &data,
 			std::vector<ExecutionPath*> &paths, bool onlyChanged);
 
+	void setRefineStatistics() { refineStats = true; }
 
 	/*
 	 * Job import/export methods

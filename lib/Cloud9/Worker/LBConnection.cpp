@@ -82,7 +82,7 @@ void LBConnection::sendUpdates() {
 	jobManager->getStatisticsData(data, paths, true);
 
 	CLOUD9_DEBUG("Sending " << data.size() << " update values and " <<
-			paths.size() << "update nodes");
+			paths.size() << " update nodes");
 
 	for (std::vector<int>::iterator it = data.begin(); it != data.end(); it++) {
 		dataUpdate->add_data(*it);
@@ -117,7 +117,7 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 	assert(id == response.id());
 
 	if (response.more_details()) {
-		jobManager->refineStatistics();
+		jobManager->setRefineStatistics();
 	}
 
 	if (response.has_jobtransfer()) {

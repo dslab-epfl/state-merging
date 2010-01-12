@@ -317,13 +317,13 @@ public:
 		}
 	}
 
-	template<typename NodeIterator>
-	void getNodes(NodeIterator begin, NodeIterator end,
+	template<typename PathIterator>
+	void getNodes(PathIterator begin, PathIterator end,
 			std::vector<Node*> &nodes) {
 
 		nodes.clear();
 
-		for (NodeIterator it = begin; it != end; it++) {
+		for (PathIterator it = begin; it != end; it++) {
 			Node *crtNode = getNode(*it);
 
 			nodes.push_back(crtNode);
@@ -363,6 +363,8 @@ std::ostream& operator<<(std::ostream &os,
 }
 
 #if 1 // XXX: debug
+#include <boost/lexical_cast.hpp>
+
 template<typename NodeIterator>
 std::string getASCIINodeSet(NodeIterator begin, NodeIterator end) {
 	std::string result;
@@ -380,6 +382,27 @@ std::string getASCIINodeSet(NodeIterator begin, NodeIterator end) {
 		getASCIINode(**it, nodeStr);
 
 		result.append(nodeStr);
+	}
+
+	result.push_back(']');
+
+	return result;
+}
+
+template<typename DataIterator>
+std::string getASCIIDataSet(DataIterator begin, DataIterator end) {
+	std::string result;
+
+	bool first = true;
+	result.push_back('[');
+
+	for (DataIterator it = begin; it != end; it++) {
+		if (!first)
+			result.append(", ");
+		else
+			first = false;
+
+		result.append(boost::lexical_cast<std::string>(*it));
 	}
 
 	result.push_back(']');

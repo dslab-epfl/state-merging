@@ -36,8 +36,13 @@ JobManager::JobManager(llvm::Module *module) :
 		assert(0);
 	}
 
-	stats.insert(this->tree->getRoot());
+	// Configure the root as a statistics node
+	WorkerTree::Node *root = this->tree->getRoot();
+	(**root).stats = true;
+
+	stats.insert(root);
 	statChanged = true;
+	refineStats = false;
 }
 
 JobManager::~JobManager() {
@@ -175,12 +180,15 @@ void JobManager::processJobs() {
 		explodeJob(job, newJobs);
 
 		submitJobs(newJobs.begin(), newJobs.end());
+
+		if (refineStats) {
+			refineStatistics();
+			refineStats = false;
+		}
 	}
 }
 
 void JobManager::refineStatistics() {
-	boost::unique_lock<boost::mutex> lock(jobsMutex);
-
 	std::set<WorkerTree::Node*> newStats;
 
 	for (std::set<WorkerTree::Node*>::iterator it = stats.begin();
@@ -220,6 +228,8 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 	if (statChanged || !onlyChanged) {
 		tree->buildPathSet(stats.begin(), stats.end(), paths);
 		statChanged = false;
+
+		CLOUD9_DEBUG("Sent node set: " << getASCIINodeSet(stats.begin(), stats.end()));
 	}
 
 	data.clear();
@@ -229,6 +239,8 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 		WorkerTree::Node *crtNode = *it;
 		data.push_back((**crtNode).jobCount);
 	}
+
+	CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
 }
 
 void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
