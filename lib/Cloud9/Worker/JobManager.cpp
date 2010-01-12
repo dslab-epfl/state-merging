@@ -101,6 +101,9 @@ void JobManager::submitJob(ExplorationJob* job) {
 	while (crtNode != NULL) {
 		(**crtNode).jobCount++;
 
+		if ((**crtNode).stats)
+			break;
+
 		crtNode = crtNode->getParent();
 	}
 
@@ -115,13 +118,17 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	// Update job statistics
 	WorkerTree::Node *crtNode = job->jobRoot;
 
+	bool emptyJob = job->frontier.size() == 0;
+
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
 
 		if ((**crtNode).stats) {
 			assert(stats.find(crtNode) != stats.end());
 
-			if  ((**crtNode).jobCount == 0) {
+			if  ((**crtNode).jobCount == 0 && emptyJob) {
+				// The supporting branch will disappear, make sure stats
+				// doesn't catch a bad pointer
 				stats.erase(crtNode);
 				statChanged = true;
 			}
@@ -132,7 +139,10 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 		crtNode = crtNode->getParent();
 	}
 
-	if (job->frontier.size() == 0) {
+	assert(crtNode != NULL);
+
+	if (emptyJob) {
+		// The empty job doesn't have any inner supporting branches as well
 		assert(job->jobRoot->getCount() == 0);
 
 		// No more jobs to explore from this point
@@ -219,6 +229,8 @@ void JobManager::refineStatistics() {
 
 	stats = newStats;
 	statChanged = true;
+
+	//CLOUD9_DEBUG("New refined statistics: " << getASCIINodeSet(stats.begin(), stats.end()));
 }
 
 void JobManager::getStatisticsData(std::vector<int> &data,

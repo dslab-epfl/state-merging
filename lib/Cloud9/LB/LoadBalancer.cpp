@@ -48,27 +48,22 @@ void LoadBalancer::updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &new
 	Worker *worker = workers[id];
 	assert(worker);
 
-	// Remove the old stat nodes
-	for (std::vector<LBTree::Node*>::iterator it = worker->nodes.begin();
-			it != worker->nodes.end(); it++) {
-		LBTree::Node *node = *it;
-
-		// Remove the worker from the node stats
-		(**node).workerData.erase(id);
-	}
+	int revision = worker->nodesRevision++;
 
 	// Add the new stat nodes
-
 	for (std::vector<LBTree::Node*>::iterator it = newNodes.begin();
 			it != newNodes.end(); it++) {
 		LBTree::Node *node = *it;
 
 		// Update upstream information
-		while ((**node).workerData.find(id) == (**node).workerData.end()) {
-			(**node).workerData[id] = TreeNodeInfo::WorkerInfo();
-			node = node->getParent();
-			if (!node)
+		while (node) {
+			TreeNodeInfo::WorkerInfo &info = (**node).workerData[id];
+			if (info.revision > 0 && info.revision == revision)
 				break;
+
+			info.revision = revision;
+
+			node = node->getParent();
 		}
 
 		node = *it;
@@ -85,27 +80,21 @@ void LoadBalancer::updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &new
 		}
 	}
 
-	// Remove hanging branches
+	// Remove old branches
 	for (std::vector<LBTree::Node*>::iterator it = worker->nodes.begin();
 			it != worker->nodes.end(); it++) {
 
 		LBTree::Node *node = *it;
 
-		// Skip nodes that are part of the new statistics
-		if ((**node).workerData.find(id) != (**node).workerData.end())
-			continue;
-
-		int crtIndex = node->getIndex();
-		node = node->getParent();
-
 		while (node) {
-			LBTree::Node *sibling = node->getChild(1 - crtIndex);
-			if ((**sibling).workerData.find(id) != (**node).workerData.end())
+			TreeNodeInfo::WorkerInfo &info = (**node).workerData[id];
+			assert(info.revision > 0);
+
+			if (info.revision == revision)
 				break;
 
 			(**node).workerData.erase(id);
 
-			crtIndex = node->getIndex();
 			node = node->getParent();
 		}
 	}

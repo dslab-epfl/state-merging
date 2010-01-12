@@ -22,8 +22,12 @@ class Worker;
 class TreeNodeInfo {
 	friend class LoadBalancer;
 public:
-	struct WorkerInfo {
+	class WorkerInfo {
+	public:
 		int jobCount;
+		int revision;
+
+		WorkerInfo() : jobCount(0), revision(0) { }
 	};
 
 private:

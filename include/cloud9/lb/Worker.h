@@ -25,12 +25,15 @@ private:
 	int port;
 
 	std::vector<LBTree::Node*> nodes;
+	int nodesRevision;
 
 	int totalJobs;
 
-	Worker();
+
+
+	Worker() : nodesRevision(1), totalJobs(0) { };
 public:
-	virtual ~Worker();
+	virtual ~Worker() { };
 
 	int getID() const { return id; }
 
