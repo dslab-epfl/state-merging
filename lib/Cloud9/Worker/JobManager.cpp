@@ -96,7 +96,7 @@ void JobManager::submitJob(ExplorationJob* job) {
 		crtNode = crtNode->getParent();
 	}
 
-	CLOUD9_DEBUG("Submitted job: " << *(job->jobRoot));
+	//CLOUD9_DEBUG("Submitted job: " << *(job->jobRoot));
 }
 
 ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
@@ -107,23 +107,26 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	// Update job statistics
 	WorkerTree::Node *crtNode = job->jobRoot;
 
-	bool hitStats = false;
-
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
 
-		if (!hitStats && (**crtNode).stats && (**crtNode).jobCount == 0) {
-			hitStats = true;
+		if ((**crtNode).stats) {
 			assert(stats.find(crtNode) != stats.end());
 
-			stats.erase(crtNode);
-			statChanged = true;
+			if  ((**crtNode).jobCount == 0) {
+				stats.erase(crtNode);
+				statChanged = true;
+			}
+
+			break;
 		}
 
 		crtNode = crtNode->getParent();
 	}
 
 	if (job->frontier.size() == 0) {
+		assert(job->jobRoot->getCount() == 0);
+
 		// No more jobs to explore from this point
 		// Remove the supporting branch
 		tree->removeSupportingBranch(job->jobRoot, NULL);
