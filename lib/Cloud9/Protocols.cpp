@@ -9,8 +9,6 @@
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/Logger.h"
 
-#include <boost/lexical_cast.hpp>
-
 namespace cloud9 {
 
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
@@ -39,6 +37,19 @@ void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 	}
 }
 
+void embedMessageLength(std::string &message) {
+	size_t msgSize = message.size();
+	message.insert(0, (char*)&msgSize, sizeof(msgSize));
+}
+
+void sendMessage(tcp::socket &socket, std::string &message) {
+	size_t msgSize = message.size();
+	boost::asio::write(socket, boost::asio::buffer(&msgSize, sizeof(msgSize)));
+	boost::asio::write(socket, boost::asio::buffer(message));
+
+	CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
+}
+
 void recvMessage(tcp::socket &socket, std::string &message) {
 	size_t msgSize = 0;
 	char *msgBuff = NULL;
@@ -51,6 +62,8 @@ void recvMessage(tcp::socket &socket, std::string &message) {
 	message.append(msgBuff, msgSize);
 
 	delete[] msgBuff;
+
+	CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
 }
 
 void parseExecutionPathSet(const ExecutionPathSet &ps,

@@ -37,17 +37,24 @@ message WorkerReportMessage {
 }
 
 message LBResponseMessage {
-	message StateTransfer { // TODO: rename it into JobTransfer
+	message JobTransfer {
 		required uint32 count = 1;
 		required string dest_address = 2;
 		required uint32 dest_port = 3;
+		required ExecutionPathSet path_set = 4;
+	}
+	
+	message JobSeed {
+		required ExecutionPathSet path_set = 1;
 	}
 	
 	required uint32 id = 1;
 	
-	optional StateTransfer stateTransfer = 2;
+	optional JobTransfer jobTransfer = 2;
 	
-	required bool more_details = 3;
+	optional JobSeed jobSeed = 3;
+	
+	required bool more_details = 4;
 }
 
 message PeerTransferMessage {

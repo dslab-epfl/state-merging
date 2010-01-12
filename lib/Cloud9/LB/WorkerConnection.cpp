@@ -41,21 +41,25 @@ void WorkerConnection::start() {
 void WorkerConnection::handleMessageReceived(std::string &msgString,
 			const boost::system::error_code &error) {
 	if (!error) {
-
 		// Construct the protocol buffer message
 		WorkerReportMessage message;
 
-		if (!message.ParseFromString(msgString)) {
-			CLOUD9_ERROR("Could not parse message contents");
+		bool result = message.ParseFromString(msgString);
+		assert(result);
+
+		LBResponseMessage response;
+
+		int id = message.id();
+
+		if (id == 0) {
+			const WorkerReportMessage_Registration &regInfo =
+					message.registration();
+
+			id = lb->registerWorker(regInfo.address(), regInfo.port());
+
+			response.set_id(id);
+			response.set_more_details(false);
 		} else {
-			LBResponseMessage response;
-
-			int id = message.id();
-
-			if (id == 0) {
-				id = lb->registerWorker();
-			}
-
 			if (message.has_nodesetupdate()) {
 				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
 						message.nodesetupdate();
@@ -69,12 +73,14 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 				processNodeDataUpdate(id, nodeDataUpdateMsg, response);
 			}
-
-			std::string respString;
-			response.SerializeToString(&respString);
-
-			msgWriter.sendMessage(respString);
 		}
+
+		std::string respString;
+		result = response.SerializeToString(&respString);
+		assert(result);
+
+		msgWriter.sendMessage(respString);
+
 
 	} else {
 		CLOUD9_ERROR("Could not fully read message contents");

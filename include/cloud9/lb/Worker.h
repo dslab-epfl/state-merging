@@ -21,6 +21,9 @@ class Worker {
 	friend class LoadBalancer;
 private:
 	int id;
+	std::string address;
+	int port;
+
 	std::vector<LBTree::Node*> nodes;
 
 	Worker();
@@ -28,6 +31,9 @@ public:
 	virtual ~Worker();
 
 	int getID() const { return id; }
+
+	const std::string &getAddress() const { return address; }
+	int getPort() const { return port; }
 
 	bool operator< (const Worker& w) {
 		return id < w.id;

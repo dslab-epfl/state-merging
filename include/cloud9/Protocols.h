@@ -11,12 +11,17 @@
 // TODO Fix this hack in the Makefile
 #include "../../lib/Cloud9/Cloud9Data.pb.h"
 
+#include "cloud9/Logger.h"
+
 #include <string>
 #include <cassert>
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
+#include <boost/lexical_cast.hpp>
 #include <cstring>
+
+
 
 
 using namespace boost::asio::ip;
@@ -26,17 +31,25 @@ namespace cloud9 {
 
 class ExecutionPath;
 
-static inline void embedMessageLength(std::string &message) {
-	size_t msgSize = message.size();
-	message.insert(0, (char*)&msgSize, sizeof(msgSize));
+// XXX Debugging
+static inline std::string getASCIIMessage(std::string &message) {
+	std::string result;
+	bool first = true;
+
+	for (std::string::iterator it = message.begin(); it != message.end(); it++) {
+		if (!first)
+			result.push_back(':');
+		else
+			first = false;
+
+		result.append(boost::lexical_cast<std::string>((int)(*it)));
+	}
+	return result;
 }
 
-static inline void sendMessage(tcp::socket &socket, std::string &message) {
-	size_t msgSize = message.size();
-	boost::asio::write(socket, boost::asio::buffer(&msgSize, sizeof(msgSize)));
-	boost::asio::write(socket, boost::asio::buffer(message));
-}
+void embedMessageLength(std::string &message);
 
+void sendMessage(tcp::socket &socket, std::string &message);
 void recvMessage(tcp::socket &socket, std::string &message);
 
 
@@ -82,6 +95,7 @@ private:
 		std::string message;
 		if (!error) {
 			message = std::string(msgData, msgSize);
+			CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
 		}
 
 		handler(message, error);
@@ -120,6 +134,10 @@ private:
 	Handler handler;
 
 	void handleMessageWrite(const boost::system::error_code &error, size_t size) {
+		if (!error) {
+			CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
+		}
+
 		handler(error);
 	}
 public:

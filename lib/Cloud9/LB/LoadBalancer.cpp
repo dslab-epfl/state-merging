@@ -23,11 +23,13 @@ LoadBalancer::~LoadBalancer() {
 	// TODO Auto-generated destructor stub
 }
 
-int LoadBalancer::registerWorker() {
+int LoadBalancer::registerWorker(const std::string &address, int port) {
 	assert(workers[nextID] == NULL);
 
 	Worker *worker = new Worker();
 	worker->id = nextID;
+	worker->address = address;
+	worker->port = port;
 
 	workers[nextID] = worker;
 

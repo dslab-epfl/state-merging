@@ -31,7 +31,7 @@ public:
 	LoadBalancer();
 	virtual ~LoadBalancer();
 
-	int registerWorker();
+	int registerWorker(const std::string &address, int port);
 	void deregisterWorker(int id);
 
 	LBTree *getTree() const { return tree; }

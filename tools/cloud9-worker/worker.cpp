@@ -40,6 +40,7 @@
 
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
+#include "cloud9/Protocols.h"
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/WorkerCommon.h"
@@ -472,6 +473,8 @@ static int watchdog(int pid) {
 int main(int argc, char **argv, char **envp) {
 	// Make sure to clean up properly before any exit point in the program
 	atexit(llvm::llvm_shutdown);
+
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 	// JIT initialization
 	llvm::InitializeNativeTarget();

@@ -50,7 +50,9 @@ void LBConnection::registerWorker() {
 
 	// Send the message
 	std::string msgString;
-	message.SerializeToString(&msgString);
+	bool result = message.SerializeToString(&msgString);
+	assert(result);
+
 	sendMessage(socket, msgString);
 
 	std::string respString;
@@ -58,7 +60,8 @@ void LBConnection::registerWorker() {
 	recvMessage(socket, respString);
 
 	LBResponseMessage response;
-	response.ParseFromString(respString);
+	result = response.ParseFromString(respString);
+	assert(result);
 
 	id = response.id();
 
@@ -106,9 +109,9 @@ void LBConnection::sendUpdates() {
 		jobManager->refineStatistics();
 	}
 
-	if (response.has_statetransfer()) {
-		const LBResponseMessage_StateTransfer &transDetails =
-				response.statetransfer();
+	if (response.has_jobtransfer()) {
+		const LBResponseMessage_JobTransfer &transDetails =
+				response.jobtransfer();
 
 		int jobCount = transDetails.count();
 		std::string destAddress = transDetails.dest_address();
