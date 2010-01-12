@@ -26,6 +26,8 @@ private:
 
 	std::vector<LBTree::Node*> nodes;
 
+	int totalJobs;
+
 	Worker();
 public:
 	virtual ~Worker();

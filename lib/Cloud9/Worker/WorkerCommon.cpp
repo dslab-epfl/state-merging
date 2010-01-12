@@ -31,6 +31,7 @@ std::string LocalAddress;
 int LocalPort;
 
 int RetryConnectTime;
+int UpdateTime;
 
 namespace {
 static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"), cl::Positional,
@@ -97,6 +98,10 @@ static cl::opt<int, true> LocalPortOpt("c9-local-port",
 static cl::opt<int, true> RetryConnectTimeOpt("c9-lb-connect-retry",
 		cl::desc("The time in seconds after the next connection retry"),
 		cl::location(RetryConnectTime), cl::init(2));
+
+static cl::opt<int, true> UpdateTimeOpt("c9-lb-update",
+		cl::desc("The time in seconds between load balancing updates"),
+		cl::location(UpdateTime), cl::init(5));
 
 }
 

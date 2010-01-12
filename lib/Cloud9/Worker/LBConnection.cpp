@@ -66,6 +66,8 @@ void LBConnection::registerWorker() {
 	id = response.id();
 
 	CLOUD9_INFO("Worker registered with the load balancer - ID: " << id);
+
+	processResponse(response);
 }
 
 void LBConnection::sendUpdates() {
@@ -78,6 +80,9 @@ void LBConnection::sendUpdates() {
 	std::vector<ExecutionPath*> paths;
 
 	jobManager->getStatisticsData(data, paths, true);
+
+	CLOUD9_DEBUG("Sending " << data.size() << " update values and " <<
+			paths.size() << "update nodes");
 
 	for (std::vector<int>::iterator it = data.begin(); it != data.end(); it++) {
 		dataUpdate->add_data(*it);
@@ -94,15 +99,21 @@ void LBConnection::sendUpdates() {
 
 
 	std::string msgString;
-	message.SerializeToString(&msgString);
+	bool result = message.SerializeToString(&msgString);
+	assert(result);
 	sendMessage(socket, msgString);
 
 	std::string respString;
 	recvMessage(socket, respString);
 
 	LBResponseMessage response;
-	response.ParseFromString(respString);
+	result = response.ParseFromString(respString);
+	assert(result);
 
+	processResponse(response);
+}
+
+void LBConnection::processResponse(LBResponseMessage &response) {
 	assert(id == response.id());
 
 	if (response.more_details()) {
@@ -110,6 +121,8 @@ void LBConnection::sendUpdates() {
 	}
 
 	if (response.has_jobtransfer()) {
+		CLOUD9_DEBUG("Job transfer request");
+
 		const LBResponseMessage_JobTransfer &transDetails =
 				response.jobtransfer();
 
@@ -118,6 +131,20 @@ void LBConnection::sendUpdates() {
 		int destPort = transDetails.dest_port();
 
 		transferJobs(jobCount, destAddress, destPort);
+	}
+
+	if (response.has_jobseed()) {
+		CLOUD9_DEBUG("Job seed request");
+
+		const LBResponseMessage_JobSeed &seedDetails =
+				response.jobseed();
+
+		const ExecutionPathSet &pathSet = seedDetails.path_set();
+		std::vector<ExecutionPath*> paths;
+
+		parseExecutionPathSet(pathSet, paths);
+
+		jobManager->importJobs(paths);
 	}
 }
 

@@ -59,6 +59,21 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 			response.set_id(id);
 			response.set_more_details(false);
+
+			if (lb->getWorkers().size() == 1) {
+				// Send the seed information
+				LBResponseMessage_JobSeed *jobSeed = response.mutable_jobseed();
+				ExecutionPathSet *pathSet = jobSeed->mutable_path_set();
+
+				std::vector<LBTree::Node*> nodes;
+				nodes.push_back(lb->getTree()->getRoot());
+
+				std::vector<ExecutionPath*> paths;
+
+				lb->getTree()->buildPathSet(nodes, paths);
+
+				serializeExecutionPathSet(paths, *pathSet);
+			}
 		} else {
 			if (message.has_nodesetupdate()) {
 				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
@@ -89,7 +104,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
 	if (!error) {
-
+		CLOUD9_DEBUG("Sent reply to worker");
 	} else {
 		CLOUD9_ERROR("Could not send reply");
 	}

@@ -8,9 +8,12 @@
 #ifndef LBCONNECTION_H_
 #define LBCONNECTION_H_
 
+#include "cloud9/Protocols.h"
+
 #include <boost/asio.hpp>
 
 using namespace boost::asio::ip;
+using namespace cloud9::data;
 
 namespace cloud9 {
 
@@ -29,6 +32,8 @@ private:
 	int id; // The worker ID assigned by the load balancer
 
 	void transferJobs(int jobCount, std::string &address, int port);
+
+	void processResponse(LBResponseMessage &response);
 
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);

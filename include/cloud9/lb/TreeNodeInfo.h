@@ -27,7 +27,7 @@ public:
 	};
 
 private:
-	std::map<Worker*, WorkerInfo> workerData;
+	std::map<int, WorkerInfo> workerData;
 public:
 	TreeNodeInfo() {};
 	virtual ~TreeNodeInfo() {};

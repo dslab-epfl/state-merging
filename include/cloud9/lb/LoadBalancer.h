@@ -27,6 +27,7 @@ private:
 
 
 	std::map<int, Worker*> workers;
+	std::set<int> reqDetails;
 public:
 	LoadBalancer();
 	virtual ~LoadBalancer();
@@ -34,10 +35,14 @@ public:
 	int registerWorker(const std::string &address, int port);
 	void deregisterWorker(int id);
 
+	void analyzeBalance();
+
 	LBTree *getTree() const { return tree; }
 
 	void updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &newNodes);
 	void updateWorkerStats(int id, std::vector<int> &stats);
+
+	const std::map<int, Worker*> &getWorkers() { return workers; }
 };
 
 }

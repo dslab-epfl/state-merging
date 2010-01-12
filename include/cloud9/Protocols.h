@@ -84,6 +84,7 @@ private:
 							this, boost::asio::placeholders::error,
 							boost::asio::placeholders::bytes_transferred));
 		} else {
+			CLOUD9_DEBUG("Header read error: " << error.message());
 			std::string message;
 
 			handler(message, error);
@@ -96,6 +97,8 @@ private:
 		if (!error) {
 			message = std::string(msgData, msgSize);
 			CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
+		} else {
+			CLOUD9_DEBUG("Message read error: " << error.message());
 		}
 
 		handler(message, error);
@@ -136,6 +139,8 @@ private:
 	void handleMessageWrite(const boost::system::error_code &error, size_t size) {
 		if (!error) {
 			CLOUD9_DEBUG("Sent message " << getASCIIMessage(message));
+		} else {
+			CLOUD9_DEBUG("Message write error" << error.message());
 		}
 
 		handler(error);
@@ -154,6 +159,7 @@ public:
 
 	void sendMessage(const std::string &message) {
 		size_t msgSize = message.size();
+		this->message.clear();
 		this->message.append((char*)&msgSize, sizeof(msgSize));
 		this->message.append(message.begin(), message.end());
 

@@ -57,6 +57,7 @@ extern std::string LocalAddress;
 extern int LocalPort;
 
 extern int RetryConnectTime;
+extern int UpdateTime;
 
 namespace klee {
 	class RNG;
