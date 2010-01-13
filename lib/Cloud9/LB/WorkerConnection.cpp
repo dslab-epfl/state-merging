@@ -91,6 +91,8 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				processNodeDataUpdate(id, nodeDataUpdateMsg);
 			}
 
+			lb->analyzeBalance();
+
 			response.set_id(id);
 			response.set_more_details(lb->requestAndResetDetails(id));
 

@@ -28,7 +28,7 @@ private:
 	bool stats;
 	ExplorationJob *job;
 public:
-	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false) {};
+	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false), job(NULL) {};
 	virtual ~TreeNodeInfo() {};
 
 	klee::ExecutionState* getSymbolicState() const { return symState; }

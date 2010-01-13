@@ -82,12 +82,14 @@ public:
 	TransferRequest *requestAndResetTransfer(int id) {
 		if (reqTransfer.count(id) > 0) {
 			TransferRequest *result = reqTransfer[id];
-			reqTransfer.erase(id);
-
-			return result;
+			if (result->fromID == id) {
+				reqTransfer.erase(result->fromID);
+				reqTransfer.erase(result->toID);
+				return result;
+			}
 		}
-		else
-			return NULL;
+
+		return NULL;
 	}
 };
 

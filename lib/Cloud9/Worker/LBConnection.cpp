@@ -132,7 +132,12 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		std::vector<ExecutionPath*> paths;
 		std::vector<int> counts;
 
-		//transferJobs(jobCount, destAddress, destPort);
+		parseExecutionPathSet(transDetails.path_set(), paths);
+
+		counts.insert(counts.begin(), transDetails.count().begin(),
+				transDetails.count().end());
+
+		transferJobs(destAddress, destPort, paths, counts);
 	}
 
 	if (response.has_jobseed()) {

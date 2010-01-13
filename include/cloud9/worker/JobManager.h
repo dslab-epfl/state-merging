@@ -35,6 +35,7 @@ public:
 
 	public:
 		virtual void onJobEnqueued(ExplorationJob *job) = 0;
+		virtual void onJobsExported() = 0;
 
 		virtual void onNextJobSelection(ExplorationJob *&job) = 0;
 	};

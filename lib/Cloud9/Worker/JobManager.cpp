@@ -273,14 +273,15 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 
 	while (!nodes.empty() && maxCount > 0) {
 		WorkerTree::Node *node = nodes.top();
+		nodes.pop();
 
 		if ((**node).job != NULL) {
-			nodes.pop();
-
 			ExplorationJob *job = (**node).job;
 
-			if (job->isStarted())
+			if (job->isStarted()) {
+				CLOUD9_DEBUG("FOUND A STARTED JOB: " << *(job->jobRoot));
 				continue;
+			}
 
 			assert(node->getCount() == 0);
 
@@ -302,6 +303,8 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 		}
 	}
 
+	CLOUD9_DEBUG("Selected " << jobSet.size() << " jobs");
+
 }
 
 void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
@@ -312,7 +315,7 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 
 	tree->getNodes(paths.begin(), paths.end(), nodes);
 
-	CLOUD9_DEBUG("Importing jobs: " << getASCIINodeSet(nodes.begin(), nodes.end()));
+	CLOUD9_DEBUG("Importing " << paths.size() << " jobs");
 
 	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
 			it != nodes.end(); it++) {
@@ -353,20 +356,22 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 
 	tree->buildPathSet(jobRoots.begin(), jobRoots.end(), paths);
 
+	// De-register the jobs with the worker
 	for (std::vector<ExplorationJob*>::iterator it = jobs.begin();
 			it != jobs.end(); it++) {
 		// Cancel each job
 		ExplorationJob *job = *it;
 		assert(!job->isStarted());
+		assert(job->jobRoot->getCount() == 0);
 
 		job->started = true;
 		job->finished = true;
 		job->frontier.clear();
 
 		finalizeJob(job);
-
-		delete job;
 	}
+
+	selHandler->onJobsExported();
 }
 
 }

@@ -170,13 +170,18 @@ void LoadBalancer::analyzeBalance() {
 			lowLoadIt++;
 			continue;
 		}
+		if (reqTransfer.count((*highLoadIt)->id) > 0) {
+			highLoadIt--;
+			continue;
+		}
 
 		if ((*lowLoadIt)->totalJobs * 10 < loadAvg) {
-			TransferRequest *req = computeTransfer((*lowLoadIt)->id,
-					(*highLoadIt)->id,
+			TransferRequest *req = computeTransfer((*highLoadIt)->id,
+					(*lowLoadIt)->id,
 					((*highLoadIt)->totalJobs - (*lowLoadIt)->totalJobs)/2);
 
 			reqTransfer[(*lowLoadIt)->id] = req;
+			reqTransfer[(*highLoadIt)->id] = req;
 
 			highLoadIt--;
 			lowLoadIt++;
@@ -198,6 +203,9 @@ TransferRequest *LoadBalancer::computeTransfer(int fromID, int toID, int count) 
 	nodes.push_back(tree->getRoot());
 
 	tree->buildPathSet(nodes.begin(), nodes.end(), req->paths);
+
+	CLOUD9_DEBUG("Created transfer request from " << fromID << " to " <<
+				toID << " for " << count << " states");
 
 	return req;
 }
