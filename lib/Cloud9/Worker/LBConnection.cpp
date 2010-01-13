@@ -129,6 +129,9 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		std::string destAddress = transDetails.dest_address();
 		int destPort = transDetails.dest_port();
 
+		std::vector<ExecutionPath*> paths;
+		std::vector<int> counts;
+
 		//transferJobs(jobCount, destAddress, destPort);
 	}
 
@@ -147,16 +150,18 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 	}
 }
 
-void LBConnection::transferJobs(int jobCount, std::string &address,
-		int port) {
-	std::vector<ExecutionPath*> paths;
+void LBConnection::transferJobs(std::string &destAddr, int destPort,
+		std::vector<ExecutionPath*> paths,
+		std::vector<int> counts) {
 
-	//jobManager->exportJobs(jobCount, paths);
+	std::vector<ExecutionPath*> jobPaths;
+
+	jobManager->exportJobs(paths, counts, jobPaths);
 
 	tcp::socket peerSocket(service);
 	boost::system::error_code error;
 
-	connectSocket(service, peerSocket, address, port, error);
+	connectSocket(service, peerSocket, destAddr, destPort, error);
 
 	if (error) {
 		CLOUD9_ERROR("Could not connect to the peer worker");
@@ -166,7 +171,7 @@ void LBConnection::transferJobs(int jobCount, std::string &address,
 	PeerTransferMessage message;
 	ExecutionPathSet *pSet = message.mutable_path_set();
 
-	serializeExecutionPathSet(paths, *pSet);
+	serializeExecutionPathSet(jobPaths, *pSet);
 
 	std::string msgString;
 	message.SerializeToString(&msgString);

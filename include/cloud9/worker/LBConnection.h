@@ -31,7 +31,9 @@ private:
 
 	int id; // The worker ID assigned by the load balancer
 
-	void transferJobs(int jobCount, std::string &address, int port);
+	void transferJobs(std::string &destAddr, int destPort,
+			std::vector<ExecutionPath*> paths,
+			std::vector<int> counts);
 
 	void processResponse(LBResponseMessage &response);
 
