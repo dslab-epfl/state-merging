@@ -88,7 +88,7 @@ void LBConnection::sendUpdates() {
 		dataUpdate->add_data(*it);
 	}
 
-	if (paths.size() > 0) {
+	if (paths.size() > 0 || data.size() == 0) {
 		assert(paths.size() == data.size());
 
 		WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();

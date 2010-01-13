@@ -17,6 +17,7 @@
 #include <string>
 
 #include "cloud9/Protocols.h"
+#include "cloud9/Logger.h"
 
 namespace cloud9 {
 
@@ -165,25 +166,15 @@ private:
 			crtNode = getNode(p->parent, root, p->parentIndex);
 		}
 
-		if (pos == 0)
-			pos = p->path.size();
-
 		for (ExecutionPath::iterator it = p->path.begin();
 				it != p->path.end(); it++) {
 
 			if (pos == 0)
 				return crtNode;
 
-			Node *newNode = crtNode->getChild(*it);
+			Node *newNode = getNode(crtNode, *it);
 
-			if (newNode != NULL) {
-				crtNode = newNode;
-				continue;
-			}
-
-			newNode = new Node(degree, crtNode, *it);
 			crtNode = newNode;
-
 			pos--;
 		}
 
@@ -201,7 +192,7 @@ public:
 	int getDegree() const { return degree; }
 
 	Node *getNode(ExecutionPath *p) {
-		return getNode(p, root, 0);
+		return getNode(p, root, p->path.size());
 	}
 
 	Node *getNode(ExecutionPath *p, int pos) {
