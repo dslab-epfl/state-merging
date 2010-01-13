@@ -17,6 +17,8 @@
 
 #include "klee/Interpreter.h"
 
+#include <stack>
+
 
 namespace cloud9 {
 
@@ -255,6 +257,42 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 	CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
 }
 
+void JobManager::selectJobs(WorkerTree::Node *root,
+		std::vector<WorkerTree::Node*> &jobSet, int maxCount) {
+	/// XXX: Prevent node creation
+	std::stack<WorkerTree::Node*> nodes;
+
+	nodes.push(root);
+
+	while (!nodes.empty()) {
+		WorkerTree::Node *node = nodes.top();
+
+		if (node->getCount() == 0) {
+			assert((**node).jobCount == 1);
+
+			nodes.pop();
+			jobSet.push_back(node);
+		} else {
+			WorkerTree::Node *left = node->getChild(0);
+			WorkerTree::Node *right = node->getChild(1);
+
+			if (left && maxCount > 0) {
+				nodes.push(left);
+				maxCount--;
+			}
+
+			if (right && maxCount > 0) {
+				nodes.push(right);
+				maxCount--;
+			}
+
+			if (maxCount == 0)
+				break;
+		}
+	}
+
+}
+
 void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
@@ -274,10 +312,22 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 	submitJobs(jobs.begin(), jobs.end());
 }
 
-void JobManager::exportJobs(int count, std::vector<ExecutionPath*> &paths) {
+void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
+		std::vector<int> &counts, std::vector<ExecutionPath*> &paths) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
+	std::vector<WorkerTree::Node*> roots;
+	std::vector<WorkerTree::Node*> jobs;
 
+	tree->getNodes(seeds.begin(), seeds.end(), roots);
+
+	assert(roots.size() == counts.size());
+
+	for (int i = 0; i < seeds.size(); i++) {
+		selectJobs(roots[i], jobs, counts[i]);
+	}
+
+	tree->buildPathSet(jobs.begin(), jobs.end(), paths);
 }
 
 }

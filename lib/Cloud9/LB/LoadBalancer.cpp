@@ -50,8 +50,6 @@ void LoadBalancer::updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &new
 
 	int revision = worker->nodesRevision++;
 
-	//CLOUD9_DEBUG("Revision: " << revision);
-
 	// Add the new stat nodes
 	for (std::vector<LBTree::Node*>::iterator it = newNodes.begin();
 			it != newNodes.end(); it++) {
@@ -64,9 +62,6 @@ void LoadBalancer::updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &new
 				break;
 
 			info.revision = revision;
-
-			//CLOUD9_DEBUG("Node " << *node << " gets revision " << revision);
-
 
 			node = node->getParent();
 		}
@@ -96,8 +91,6 @@ void LoadBalancer::updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &new
 				break;
 
 			TreeNodeInfo::WorkerInfo &info = (**node).workerData[id];
-
-			//CLOUD9_DEBUG("Node " << *node << " has revision " << info.revision);
 
 			assert(info.revision > 0);
 

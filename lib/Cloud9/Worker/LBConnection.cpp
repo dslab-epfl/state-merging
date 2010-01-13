@@ -126,11 +126,10 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		const LBResponseMessage_JobTransfer &transDetails =
 				response.jobtransfer();
 
-		int jobCount = transDetails.count();
 		std::string destAddress = transDetails.dest_address();
 		int destPort = transDetails.dest_port();
 
-		transferJobs(jobCount, destAddress, destPort);
+		//transferJobs(jobCount, destAddress, destPort);
 	}
 
 	if (response.has_jobseed()) {
@@ -152,7 +151,7 @@ void LBConnection::transferJobs(int jobCount, std::string &address,
 		int port) {
 	std::vector<ExecutionPath*> paths;
 
-	jobManager->exportJobs(jobCount, paths);
+	//jobManager->exportJobs(jobCount, paths);
 
 	tcp::socket peerSocket(service);
 	boost::system::error_code error;

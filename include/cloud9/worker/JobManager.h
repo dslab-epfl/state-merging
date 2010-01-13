@@ -80,7 +80,11 @@ private:
 
 	void refineStatistics();
 
+	void selectJobs(WorkerTree::Node *root,
+			std::vector<WorkerTree::Node*> &jobSet, int maxCount);
+
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
+	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	JobManager(WorkerTree *tree, llvm::Module *module);
 public:
@@ -93,8 +97,6 @@ public:
 			char **envp);
 
 	WorkerTree *getTree() { return tree; }
-
-	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	void processJobs();
 
@@ -111,7 +113,8 @@ public:
 	 * Job import/export methods
 	 */
 	void importJobs(std::vector<ExecutionPath*> &paths);
-	void exportJobs(int count, std::vector<ExecutionPath*> &paths);
+	void exportJobs(std::vector<ExecutionPath*> &seeds,
+			std::vector<int> &counts, std::vector<ExecutionPath*> &paths);
 
 
 
