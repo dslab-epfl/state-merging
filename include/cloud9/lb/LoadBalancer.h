@@ -15,10 +15,25 @@
 
 namespace cloud9 {
 
+class ExecutionPath;
+
 namespace lb {
 
 class Worker;
 
+class TransferRequest {
+public:
+	int fromID;
+	int toID;
+
+	std::vector<ExecutionPath*> paths;
+	std::vector<int> counts;
+public:
+	TransferRequest(int from, int to) : fromID(from), toID(to) { }
+
+};
+
+// TODO: Refactor this into a more generic class
 class LoadBalancer {
 private:
 	LBTree *tree;
@@ -28,6 +43,10 @@ private:
 
 	std::map<int, Worker*> workers;
 	std::set<int> reqDetails;
+	std::map<int, TransferRequest*> reqTransfer;
+
+	TransferRequest *computeTransfer(int fromID, int toID, int count);
+
 public:
 	LoadBalancer();
 	virtual ~LoadBalancer();

@@ -9,6 +9,7 @@
 #include "cloud9/lb/Worker.h"
 
 #include <cassert>
+#include <algorithm>
 
 namespace cloud9 {
 
@@ -128,24 +129,77 @@ void LoadBalancer::analyzeBalance() {
 		return;
 	}
 
+	std::vector<Worker*> wList;
+	Worker::LoadCompare comp;
+
+	// TODO: optimize this further
+	for (std::map<int, Worker*>::iterator it = workers.begin();
+			it != workers.end(); it++) {
+		wList.push_back((*it).second);
+	}
+
+	std::sort(wList.begin(), wList.end(), comp);
+
 	// Compute average and deviation
 	int loadAvg = 0;
 	int sqDeviation = 0;
 
-	for (std::map<int, Worker*>::iterator it = workers.begin();
-			it != workers.end(); it++) {
-		loadAvg += (*it).second->totalJobs;
+	for (std::vector<Worker*>::iterator it = wList.begin();
+			it != wList.end(); it++) {
+		loadAvg += (*it)->totalJobs;
 	}
 
-	loadAvg /= workers.size();
+	loadAvg /= wList.size();
 
-	for (std::map<int, Worker*>::iterator it = workers.begin();
-			it != workers.end(); it++) {
-		sqDeviation += (loadAvg - (*it).second->totalJobs) *
-				(loadAvg - (*it).second->totalJobs);
+	for (std::vector<Worker*>::iterator it = wList.begin();
+			it != wList.end(); it++) {
+		sqDeviation += (loadAvg - (*it)->totalJobs) *
+				(loadAvg - (*it)->totalJobs);
 	}
 
 	sqDeviation /= workers.size() - 1;
+
+	// XXX Uuuugly
+
+
+	std::vector<Worker*>::iterator lowLoadIt = wList.begin();
+	std::vector<Worker*>::iterator highLoadIt = wList.end() - 1;
+
+	while (lowLoadIt < highLoadIt) {
+		if (reqTransfer.count((*lowLoadIt)->id) > 0) {
+			lowLoadIt++;
+			continue;
+		}
+
+		if ((*lowLoadIt)->totalJobs * 10 < loadAvg) {
+			TransferRequest *req = computeTransfer((*lowLoadIt)->id,
+					(*highLoadIt)->id,
+					((*highLoadIt)->totalJobs - (*lowLoadIt)->totalJobs)/2);
+
+			reqTransfer[(*lowLoadIt)->id] = req;
+
+			highLoadIt--;
+			lowLoadIt++;
+			continue;
+		} else
+			break; // The next ones will have a larger load anyway
+	}
+
+
+}
+
+TransferRequest *LoadBalancer::computeTransfer(int fromID, int toID, int count) {
+	// XXX Be more intelligent
+	TransferRequest *req = new TransferRequest(fromID, toID);
+
+	req->counts.push_back(count);
+
+	std::vector<LBTree::Node*> nodes;
+	nodes.push_back(tree->getRoot());
+
+	tree->buildPathSet(nodes.begin(), nodes.end(), req->paths);
+
+	return req;
 }
 
 }

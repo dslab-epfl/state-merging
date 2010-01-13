@@ -19,6 +19,18 @@ namespace lb {
 
 class Worker {
 	friend class LoadBalancer;
+public:
+	struct IDCompare {
+		bool operator() (const Worker *a, const Worker *b) {
+			return a->getID() < b->getID();
+		}
+	};
+
+	struct LoadCompare {
+		bool operator() (const Worker *a, const Worker *b) {
+			return a->getTotalJobs() < b->getTotalJobs();
+		}
+	};
 private:
 	int id;
 	std::string address;
@@ -36,6 +48,8 @@ public:
 	virtual ~Worker() { };
 
 	int getID() const { return id; }
+
+	int getTotalJobs() const { return totalJobs; }
 
 	const std::string &getAddress() const { return address; }
 	int getPort() const { return port; }
