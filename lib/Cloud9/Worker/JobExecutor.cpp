@@ -285,53 +285,56 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
-	/*
-	if ((**pNode).job != currentJob) {
-		// It's not for us
-		return;
-	}
-	*/
-
 	WorkerTree::Node *newNode, *oldNode;
 
 	// Obtain the new node pointers
 
-	oldNode = tree->getNode(pNode, 1 - index);
+	if (isReplaying)
+		oldNode = pNode->getChild(1 - index);
+	else
+		oldNode = tree->getNode(pNode, 1 - index);
 
-	// Update state -> node references
-	parent->setCustomData(oldNode);
+	if (oldNode) {
+		// Update state -> node references
+		parent->setCustomData(oldNode);
 
-	// Update node -> state references
-	(**pNode).symState = NULL;
+		// Update node -> state references
+		(**pNode).symState = NULL;
 
-	(**oldNode).symState = parent;
+		(**oldNode).symState = parent;
 
-	// Update frontier
-	if (currentJob) {
-		currentJob->removeFromFrontier(pNode);
-		currentJob->addToFrontier(oldNode);
+		// Update frontier
+		if (currentJob) {
+			currentJob->removeFromFrontier(pNode);
+			currentJob->addToFrontier(oldNode);
+		}
 	}
 
 	if (state) {
-		newNode = tree->getNode(pNode, index);
-		state->setCustomData(newNode);
+		if (isReplaying)
+			newNode = pNode->getChild(index);
+		else
+			newNode = tree->getNode(pNode, index);
 
-		(**newNode).symState = state;
+		if (newNode) {
+			state->setCustomData(newNode);
 
-		if (currentJob)
-			currentJob->addToFrontier(newNode);
+			(**newNode).symState = state;
+
+			if (currentJob)
+				currentJob->addToFrontier(newNode);
+		}
 	}
+
+	// Even during replay, at least one of them must be valid
+	assert(oldNode || newNode);
 }
 
 void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
-
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
-	/*
-	if ((**pNode).job != currentJob) {
-		return;
-	}
-	*/
+	// No states destroyed during replaying
+	assert(!isReplaying);
 
 	state->setCustomData(NULL);
 	(**pNode).symState = NULL;
@@ -347,8 +350,6 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
-	//CLOUD9_DEBUG("State branched: " << *pNode);
-
 	updateTreeOnBranch(state, parent, index);
 
 	fireNodeExplored(pNode);
@@ -362,8 +363,6 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
 
-	//CLOUD9_DEBUG("State destroyed: " << *pNode);
-
 	updateTreeOnDestroy(state);
 
 	fireNodeDeleted(pNode);
@@ -375,14 +374,14 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 		job->foreign = false;
 	}
 
-	job->started = true;
 	currentJob = job;
+	isReplaying = false;
 	fireJobStarted(job);
 
 	while (!job->frontier.empty()) {
 		// Select a new state to explore next
 		WorkerTree::Node *node = getNextNode();
-		//CLOUD9_DEBUG("State selected: " << *node);
+
 		assert(node);
 
 		exploreNode(node);
@@ -394,7 +393,6 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 			break;
 	}
 
-	job->finished = true;
 	fireJobTerminated(job);
 	currentJob = NULL;
 }
@@ -410,17 +408,19 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 		crtNode = crtNode->getParent();
 	}
 
-	if (!crtNode) {
-		CLOUD9_INFO("Cloud not replay path. Must have been already explored or "
-				"exported: " << *pathEnd);
+	assert(crtNode);
+
+	/*if (!crtNode) {
+		CLOUD9_WARNING("Cloud not replay path: " << *pathEnd);
 		return;
-	}
+	}*/
 
 	std::reverse(path.begin(), path.end());
 
 	// Don't run this as a job - the generated states must
 	// not be explored
 	currentJob = NULL;
+	isReplaying = true;
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {

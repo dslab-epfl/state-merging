@@ -81,6 +81,8 @@ private:
 	SizingHandler *sizingHandler;
 	ExplorationHandler *expHandler;
 
+	bool isReplaying;
+
 	/*
 	 * Returns the next node to be explored
 	 */

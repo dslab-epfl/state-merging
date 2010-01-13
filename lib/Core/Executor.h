@@ -458,6 +458,8 @@ public:
   virtual void stepInState(ExecutionState *state);
 
   virtual void destroyStates();
+
+  virtual void destroyState(klee::ExecutionState *state);
 };
   
 } // End klee namespace

@@ -26,6 +26,7 @@ private:
 
 	int jobCount;
 	bool stats;
+	ExplorationJob *job;
 public:
 	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false) {};
 	virtual ~TreeNodeInfo() {};
@@ -34,6 +35,8 @@ public:
 	int getJobCount() const { return jobCount; }
 
 	bool isStats() const { return stats; }
+
+	ExplorationJob *getJob() { return job; }
 };
 
 typedef ExecutionTree<TreeNodeInfo> WorkerTree;

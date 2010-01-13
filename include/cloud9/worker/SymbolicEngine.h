@@ -51,6 +51,8 @@ public:
 
 	virtual void stepInState(klee::ExecutionState *state) = 0;
 
+	virtual void destroyState(klee::ExecutionState *state) = 0;
+
 	virtual void destroyStates() = 0;
 
 	void registerStateEventHandler(StateEventHandler *handler);

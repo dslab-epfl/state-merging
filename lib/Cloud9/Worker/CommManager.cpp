@@ -56,6 +56,8 @@ void CommManager::LBCommThread::operator()() {
 void CommManager::PeerCommThread::operator()() {
 	boost::asio::io_service service;
 
+	PeerServer peerServer(service, jobManager);
+
 	service.run();
 }
 

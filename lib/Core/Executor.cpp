@@ -3201,6 +3201,10 @@ void Executor::destroyStates() {
 	}
 }
 
+void Executor::destroyState(ExecutionState *state) {
+	terminateStateEarly(*state, "cancelled");
+}
+
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
 		char **envp) {
 

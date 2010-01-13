@@ -81,7 +81,7 @@ private:
 	void refineStatistics();
 
 	void selectJobs(WorkerTree::Node *root,
-			std::vector<WorkerTree::Node*> &jobSet, int maxCount);
+			std::vector<ExplorationJob*> &jobSet, int maxCount);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);

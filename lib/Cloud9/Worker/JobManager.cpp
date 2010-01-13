@@ -59,7 +59,6 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 		WorkerTree::Node *node = *it;
 
 		ExplorationJob *newJob = new ExplorationJob(node, false);
-		//(**node).job = newJob;
 
 		newJobs.insert(newJob);
 	}
@@ -99,6 +98,7 @@ void JobManager::submitJob(ExplorationJob* job) {
 
 	// Update job statistics
 	WorkerTree::Node *crtNode = job->jobRoot;
+	(**crtNode).job = job;
 
 	while (crtNode != NULL) {
 		(**crtNode).jobCount++;
@@ -119,8 +119,9 @@ ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
 void JobManager::finalizeJob(ExplorationJob *job) {
 	// Update job statistics
 	WorkerTree::Node *crtNode = job->jobRoot;
+	(**crtNode).job = NULL;
 
-	bool emptyJob = job->frontier.size() == 0;
+	bool emptyJob = (job->frontier.size() == 0);
 
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
@@ -178,18 +179,22 @@ void JobManager::processJobs() {
 	while (true) {
 		job = dequeueJob(lock);
 
-		lock.unlock();
+		job->started = true;
 
+		lock.unlock();
 		//CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
 
 		executor->executeJob(job);
 
 		lock.lock();
 
+		job->finished = true;
 		finalizeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
 		explodeJob(job, newJobs);
+
+		delete job;
 
 		submitJobs(newJobs.begin(), newJobs.end());
 
@@ -215,6 +220,8 @@ void JobManager::refineStatistics() {
 
 		if (left) {
 			assert(!(**left).stats);
+			assert((**left).jobCount > 0);
+
 			(**left).stats = true;
 
 			newStats.insert(left);
@@ -222,6 +229,8 @@ void JobManager::refineStatistics() {
 
 		if (right) {
 			assert(!(**right).stats);
+			assert((**right).jobCount > 0);
+
 			(**right).stats = true;
 
 			newStats.insert(right);
@@ -231,8 +240,6 @@ void JobManager::refineStatistics() {
 
 	stats = newStats;
 	statChanged = true;
-
-	//CLOUD9_DEBUG("New refined statistics: " << getASCIINodeSet(stats.begin(), stats.end()));
 }
 
 void JobManager::getStatisticsData(std::vector<int> &data,
@@ -258,36 +265,40 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 }
 
 void JobManager::selectJobs(WorkerTree::Node *root,
-		std::vector<WorkerTree::Node*> &jobSet, int maxCount) {
+		std::vector<ExplorationJob*> &jobSet, int maxCount) {
 	/// XXX: Prevent node creation
 	std::stack<WorkerTree::Node*> nodes;
 
 	nodes.push(root);
 
-	while (!nodes.empty()) {
+	while (!nodes.empty() && maxCount > 0) {
 		WorkerTree::Node *node = nodes.top();
 
-		if (node->getCount() == 0) {
-			assert((**node).jobCount == 1);
-
+		if ((**node).job != NULL) {
 			nodes.pop();
-			jobSet.push_back(node);
+
+			ExplorationJob *job = (**node).job;
+
+			if (job->isStarted())
+				continue;
+
+			assert(node->getCount() == 0);
+
+			jobSet.push_back(job);
+			maxCount--;
 		} else {
 			WorkerTree::Node *left = node->getChild(0);
 			WorkerTree::Node *right = node->getChild(1);
 
-			if (left && maxCount > 0) {
+			assert(left || right);
+
+			if (left) {
 				nodes.push(left);
-				maxCount--;
 			}
 
-			if (right && maxCount > 0) {
+			if (right) {
 				nodes.push(right);
-				maxCount--;
 			}
-
-			if (maxCount == 0)
-				break;
 		}
 	}
 
@@ -305,8 +316,14 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 
 	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
 			it != nodes.end(); it++) {
-		ExplorationJob *job = new ExplorationJob(*it, true);
-		jobs.push_back(job);
+		WorkerTree::Node *crtNode = *it;
+
+		if (crtNode->getCount() > 0) {
+			CLOUD9_INFO("Discarding job as being obsolete: " << *crtNode);
+		} else {
+			ExplorationJob *job = new ExplorationJob(*it, true);
+			jobs.push_back(job);
+		}
 	}
 
 	submitJobs(jobs.begin(), jobs.end());
@@ -317,7 +334,8 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> roots;
-	std::vector<WorkerTree::Node*> jobs;
+	std::vector<ExplorationJob*> jobs;
+	std::vector<WorkerTree::Node*> jobRoots;
 
 	tree->getNodes(seeds.begin(), seeds.end(), roots);
 
@@ -327,7 +345,28 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 		selectJobs(roots[i], jobs, counts[i]);
 	}
 
-	tree->buildPathSet(jobs.begin(), jobs.end(), paths);
+	for (std::vector<ExplorationJob*>::iterator it = jobs.begin();
+			it != jobs.end(); it++) {
+		ExplorationJob *job = *it;
+		jobRoots.push_back(job->jobRoot);
+	}
+
+	tree->buildPathSet(jobRoots.begin(), jobRoots.end(), paths);
+
+	for (std::vector<ExplorationJob*>::iterator it = jobs.begin();
+			it != jobs.end(); it++) {
+		// Cancel each job
+		ExplorationJob *job = *it;
+		assert(!job->isStarted());
+
+		job->started = true;
+		job->finished = true;
+		job->frontier.clear();
+
+		finalizeJob(job);
+
+		delete job;
+	}
 }
 
 }
