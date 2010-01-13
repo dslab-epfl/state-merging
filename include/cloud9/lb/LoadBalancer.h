@@ -61,7 +61,34 @@ public:
 	void updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &newNodes);
 	void updateWorkerStats(int id, std::vector<int> &stats);
 
-	const std::map<int, Worker*> &getWorkers() { return workers; }
+	Worker* getWorker(int id) {
+		std::map<int, Worker*>::iterator it = workers.find(id);
+		if (it == workers.end())
+			return NULL;
+		else
+			return (*it).second;
+	}
+
+	int getWorkerCount() { return workers.size(); }
+
+	bool requestAndResetDetails(int id) {
+		bool result = reqDetails.count(id) > 0;
+
+		if (result) reqDetails.erase(id);
+
+		return result;
+	}
+
+	TransferRequest *requestAndResetTransfer(int id) {
+		if (reqTransfer.count(id) > 0) {
+			TransferRequest *result = reqTransfer[id];
+			reqTransfer.erase(id);
+
+			return result;
+		}
+		else
+			return NULL;
+	}
 };
 
 }

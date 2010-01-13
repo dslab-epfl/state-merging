@@ -7,6 +7,7 @@
 
 #include "cloud9/lb/WorkerConnection.h"
 #include "cloud9/lb/LoadBalancer.h"
+#include "cloud9/lb/Worker.h"
 #include "cloud9/Logger.h"
 
 #include <boost/bind.hpp>
@@ -60,7 +61,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			response.set_id(id);
 			response.set_more_details(false);
 
-			if (lb->getWorkers().size() == 1) {
+			if (lb->getWorkerCount() == 1) {
 				// Send the seed information
 				LBResponseMessage_JobSeed *jobSeed = response.mutable_jobseed();
 				ExecutionPathSet *pathSet = jobSeed->mutable_path_set();
@@ -75,21 +76,43 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				serializeExecutionPathSet(paths, *pathSet);
 			}
 		} else {
-			response.set_id(id);
-			response.set_more_details(true);
 
 			if (message.has_nodesetupdate()) {
 				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
 						message.nodesetupdate();
 
-				processNodeSetUpdate(id, nodeSetUpdateMsg, response);
+				processNodeSetUpdate(id, nodeSetUpdateMsg);
 			}
 
 			if (message.has_nodedataupdate()) {
 				const WorkerReportMessage_NodeDataUpdate &nodeDataUpdateMsg =
 						message.nodedataupdate();
 
-				processNodeDataUpdate(id, nodeDataUpdateMsg, response);
+				processNodeDataUpdate(id, nodeDataUpdateMsg);
+			}
+
+			response.set_id(id);
+			response.set_more_details(lb->requestAndResetDetails(id));
+
+			TransferRequest *transfer = lb->requestAndResetTransfer(id);
+			if (transfer) {
+				const Worker *destination = lb->getWorker(transfer->toID);
+
+				LBResponseMessage_JobTransfer *transMsg =
+						response.mutable_jobtransfer();
+
+				transMsg->set_dest_address(destination->getAddress());
+				transMsg->set_dest_port(destination->getPort());
+
+				ExecutionPathSet *pathSet = transMsg->mutable_path_set();
+				serializeExecutionPathSet(transfer->paths, *pathSet);
+
+				for (std::vector<int>::iterator it = transfer->counts.begin();
+						it != transfer->counts.end(); it++) {
+					transMsg->add_count(*it);
+				}
+
+				delete transfer;
 			}
 		}
 
@@ -101,7 +124,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 
 	} else {
-		CLOUD9_ERROR("Could not fully read message contents");
+		CLOUD9_ERROR("Error receiving message from worker");
 	}
 }
 
@@ -118,8 +141,7 @@ void WorkerConnection::handleMessageSent(const boost::system::error_code &error)
 
 
 void WorkerConnection::processNodeSetUpdate(int id,
-				const WorkerReportMessage_NodeSetUpdate &message,
-				LBResponseMessage &response) {
+				const WorkerReportMessage_NodeSetUpdate &message) {
 
 	std::vector<LBTree::Node*> nodes;
 	std::vector<ExecutionPath*> paths;
@@ -136,8 +158,7 @@ void WorkerConnection::processNodeSetUpdate(int id,
 }
 
 void WorkerConnection::processNodeDataUpdate(int id,
-		const WorkerReportMessage_NodeDataUpdate &message,
-		LBResponseMessage &response) {
+		const WorkerReportMessage_NodeDataUpdate &message) {
 	std::vector<int> data;
 
 	data.insert(data.begin(), message.data().begin(), message.data().end());

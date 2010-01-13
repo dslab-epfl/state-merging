@@ -45,11 +45,11 @@ private:
 
 	void handleMessageSent(const boost::system::error_code &error);
 
-	void processNodeSetUpdate(int id, const WorkerReportMessage_NodeSetUpdate &message,
-			LBResponseMessage &response);
+	void processNodeSetUpdate(int id,
+			const WorkerReportMessage_NodeSetUpdate &message);
 
-	void processNodeDataUpdate(int id, const WorkerReportMessage_NodeDataUpdate &message,
-			LBResponseMessage &response);
+	void processNodeDataUpdate(int id,
+			const WorkerReportMessage_NodeDataUpdate &message);
 
 public:
 	typedef boost::shared_ptr<WorkerConnection> pointer;
