@@ -110,6 +110,8 @@ JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **a
 }
 
 void JobManager::submitJob(ExplorationJob* job) {
+	assert((**job->jobRoot).symState || job->foreign);
+
 	selHandler->onJobEnqueued(job);
 
 	// Update job statistics
@@ -125,7 +127,7 @@ void JobManager::submitJob(ExplorationJob* job) {
 		crtNode = crtNode->getParent();
 	}
 
-	//CLOUD9_DEBUG("Submitted job: " << *(job->jobRoot));
+	CLOUD9_DEBUG("Submitted job on level " << (job->jobRoot->getLevel()));
 }
 
 ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
@@ -315,7 +317,9 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 			WorkerTree::Node *right = node->getChild(1);
 
 			if (left == NULL && right == NULL) {
-				assert((**node).symState != NULL);
+				if ((**node).symState == NULL) {
+					CLOUD9_ERROR("Invalid path found while selecting jobs for export");
+				}
 			}
 
 			if (left) {

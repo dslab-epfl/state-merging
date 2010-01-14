@@ -267,6 +267,10 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	// Execute instructions until the state is destroyed or branching occurs.
 	// When a branching occurs, the node will become empty (as the state and its
 	// fork move in its children)
+	if ((**node).symState == NULL) {
+		CLOUD9_INFO("Exploring empty state!");
+	}
+
 	while ((**node).symState != NULL) {
 		//CLOUD9_DEBUG("Stepping in state " << *node);
 		symbEngine->stepInState((**node).symState);
@@ -366,19 +370,24 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	currentJob = job;
 	fireJobStarted(job);
 
-	while (!job->frontier.empty()) {
-		// Select a new state to explore next
-		WorkerTree::Node *node = getNextNode();
+	if ((**(job->jobRoot)).symState == NULL) {
+		CLOUD9_INFO("Job cancelled before start");
+		job->frontier.clear();
+	} else {
+		while (!job->frontier.empty()) {
+			// Select a new state to explore next
+			WorkerTree::Node *node = getNextNode();
 
-		assert(node);
+			assert(node);
 
-		exploreNode(node);
+			exploreNode(node);
 
-		bool finish = false;
-		sizingHandler->onTerminationQuery(job, finish);
+			bool finish = false;
+			sizingHandler->onTerminationQuery(job, finish);
 
-		if (finish)
-			break;
+			if (finish)
+				break;
+		}
 	}
 
 	fireJobTerminated(job);
@@ -396,7 +405,9 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 		crtNode = crtNode->getParent();
 	}
 
-	assert(crtNode);
+	if (crtNode == NULL) {
+		CLOUD9_ERROR("Cannot find the seed execution state, abandoning the job");
+	}
 
 	/*if (!crtNode) {
 		CLOUD9_WARNING("Cloud not replay path: " << *pathEnd);
@@ -411,13 +422,15 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
+		if ((**crtNode).symState == NULL) {
+			CLOUD9_ERROR("Replay broken, found NULL state");
+			break;
+		}
 		exploreNode(crtNode);
 
 		crtNode = crtNode->getChild(path[i]);
 		assert(crtNode);
 	}
-
-	assert(crtNode == pathEnd);
 }
 
 }

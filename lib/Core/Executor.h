@@ -377,6 +377,7 @@ private:
   void initTimers();
   void processTimers(ExecutionState *current,
                      double maxInstTime);
+  void resetTimers();
                 
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);

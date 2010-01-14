@@ -2274,6 +2274,7 @@ void Executor::stepInState(ExecutionState *state) {
 	KInstruction *ki = state->pc;
 	stepInstruction(*state);
 
+	resetTimers();
 	executeInstruction(*state, ki);
 	processTimers(state, MaxInstructionTime);
 

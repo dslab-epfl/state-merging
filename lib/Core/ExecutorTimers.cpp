@@ -56,6 +56,7 @@ public:
 
 static const double kSecondsPerTick = .1;
 static volatile unsigned timerTicks = 0;
+static unsigned callsWithoutCheck = 0;
 
 // XXX hack
 extern "C" unsigned dumpStates, dumpPTree;
@@ -119,9 +120,13 @@ void Executor::addTimer(Timer *timer, double rate) {
   timers.push_back(new TimerInfo(timer, rate));
 }
 
+void Executor::resetTimers() {
+    timerTicks = 0;
+    callsWithoutCheck = 0;
+}
+
 void Executor::processTimers(ExecutionState *current,
                              double maxInstTime) {
-  static unsigned callsWithoutCheck = 0;
   unsigned ticks = timerTicks;
 
   if (!ticks && ++callsWithoutCheck > 1000) {
@@ -212,9 +217,6 @@ void Executor::processTimers(ExecutionState *current,
         }
       }
     }
-
-    timerTicks = 0;
-    callsWithoutCheck = 0;
   }
 }
 
