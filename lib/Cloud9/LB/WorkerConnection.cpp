@@ -27,7 +27,7 @@ WorkerConnection::WorkerConnection(boost::asio::io_service &service, LoadBalance
 }
 
 WorkerConnection::~WorkerConnection() {
-	// TODO Auto-generated destructor stub
+	CLOUD9_INFO("Connection interrupted");
 }
 
 void WorkerConnection::start() {

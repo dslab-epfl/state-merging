@@ -15,7 +15,7 @@ namespace cloud9 {
 
 namespace lb {
 
-LoadBalancer::LoadBalancer() : nextID(1) {
+LoadBalancer::LoadBalancer(int br) : nextID(1), balanceRate(br), rounds(0) {
 	tree = new LBTree(2);
 }
 
@@ -122,12 +122,27 @@ void LoadBalancer::updateWorkerStats(int id, std::vector<int> &stats) {
 		(**node).workerData[id].jobCount = stats[i];
 		worker->totalJobs += stats[i];
 	}
+
+	reports.insert(id);
+
+	if (reports.size() == workers.size()) {
+		// A full round finished
+		reports.clear();
+		rounds++;
+	}
 }
 
 void LoadBalancer::analyzeBalance() {
 	if (workers.size() < 2) {
 		return;
 	}
+
+	if (rounds < balanceRate)
+		return;
+
+	rounds = 0;
+
+	CLOUD9_INFO("Performing load balancing");
 
 	std::vector<Worker*> wList;
 	Worker::LoadCompare comp;

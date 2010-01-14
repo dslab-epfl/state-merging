@@ -40,15 +40,20 @@ private:
 
 	int nextID;
 
+	int balanceRate;
+	int rounds;
+
 
 	std::map<int, Worker*> workers;
 	std::set<int> reqDetails;
 	std::map<int, TransferRequest*> reqTransfer;
 
+	std::set<int> reports;
+
 	TransferRequest *computeTransfer(int fromID, int toID, int count);
 
 public:
-	LoadBalancer();
+	LoadBalancer(int balanceRate);
 	virtual ~LoadBalancer();
 
 	int registerWorker(const std::string &address, int port);

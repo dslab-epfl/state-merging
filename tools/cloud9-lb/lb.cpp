@@ -24,7 +24,11 @@ cl::opt<int> ServerPort("port",
 		cl::desc("The port the load balancing server listens on"),
 		cl::init(1337)); // TODO: Move this in a #define
 
+cl::opt<int> BalanceRate("balance-rate",
+		cl::desc("The rate at which load balancing decisions take place"),
+		cl::init(2));
 }
+
 
 int main(int argc, char **argv, char **envp) {
 	boost::asio::io_service io_service;
@@ -33,7 +37,7 @@ int main(int argc, char **argv, char **envp) {
 
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
 
-	LoadBalancer *lb = new LoadBalancer();
+	LoadBalancer *lb = new LoadBalancer(BalanceRate);
 
 	LBServer *server = new LBServer(lb, io_service, ServerPort);
 
