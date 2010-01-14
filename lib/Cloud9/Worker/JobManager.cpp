@@ -139,36 +139,33 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 
 	bool emptyJob = (job->frontier.size() == 0);
 
+	if (emptyJob) {
+		assert(job->jobRoot->getCount() == 0);
+	}
+
+	bool hitStats = false;
+
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
 
-		if ((**crtNode).stats) {
-			assert(stats.find(crtNode) != stats.end());
+		if (crtNode->getCount() == 0 && (**crtNode).symState == NULL) {
+			assert((**crtNode).jobCount == 0);
 
-			if  ((**crtNode).jobCount == 0 && emptyJob) {
-				// The supporting branch will disappear, make sure stats
-				// doesn't catch a bad pointer
+			if ((**crtNode).stats && !hitStats) {
+				hitStats = true;
+				assert(stats.find(crtNode) != stats.end());
+
 				stats.erase(crtNode);
 				statChanged = true;
 			}
 
-			break;
+			WorkerTree::Node *temp = crtNode;
+			crtNode = crtNode->getParent();
+			tree->removeNode(temp);
+		} else {
+			crtNode = crtNode->getParent();
 		}
-
-		crtNode = crtNode->getParent();
 	}
-
-	assert(crtNode != NULL);
-
-	if (emptyJob) {
-		// The empty job doesn't have any inner supporting branches as well
-		assert(job->jobRoot->getCount() == 0);
-
-		// No more jobs to explore from this point
-		// Remove the supporting branch
-		tree->removeSupportingBranch(job->jobRoot, NULL);
-	}
-
 }
 
 ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
