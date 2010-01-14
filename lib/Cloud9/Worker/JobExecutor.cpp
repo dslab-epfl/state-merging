@@ -285,56 +285,45 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
 
-	WorkerTree::Node *newNode, *oldNode;
+	WorkerTree::Node *newNode = NULL, *oldNode = NULL;
 
 	// Obtain the new node pointers
 
-	if (isReplaying)
-		oldNode = pNode->getChild(1 - index);
-	else
-		oldNode = tree->getNode(pNode, 1 - index);
 
-	if (oldNode) {
-		// Update state -> node references
-		parent->setCustomData(oldNode);
+	oldNode = tree->getNode(pNode, 1 - index);
 
-		// Update node -> state references
-		(**pNode).symState = NULL;
+	// Update state -> node references
+	parent->setCustomData(oldNode);
 
-		(**oldNode).symState = parent;
+	// Update node -> state references
+	(**pNode).symState = NULL;
 
-		// Update frontier
-		if (currentJob) {
-			currentJob->removeFromFrontier(pNode);
-			currentJob->addToFrontier(oldNode);
-		}
+	(**oldNode).symState = parent;
+
+	// Update frontier
+	if (currentJob) {
+		currentJob->removeFromFrontier(pNode);
+		currentJob->addToFrontier(oldNode);
 	}
 
 	if (state) {
-		if (isReplaying)
-			newNode = pNode->getChild(index);
-		else
-			newNode = tree->getNode(pNode, index);
+		newNode = tree->getNode(pNode, index);
 
-		if (newNode) {
-			state->setCustomData(newNode);
+		state->setCustomData(newNode);
 
-			(**newNode).symState = state;
+		(**newNode).symState = state;
 
-			if (currentJob)
-				currentJob->addToFrontier(newNode);
-		}
+		if (currentJob)
+			currentJob->addToFrontier(newNode);
+
 	}
 
 	// Even during replay, at least one of them must be valid
-	assert(oldNode || newNode);
+	assert(oldNode != NULL || newNode != NULL);
 }
 
 void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
-
-	// No states destroyed during replaying
-	assert(!isReplaying);
 
 	state->setCustomData(NULL);
 	(**pNode).symState = NULL;
@@ -375,7 +364,6 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	}
 
 	currentJob = job;
-	isReplaying = false;
 	fireJobStarted(job);
 
 	while (!job->frontier.empty()) {
@@ -420,7 +408,6 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	// Don't run this as a job - the generated states must
 	// not be explored
 	currentJob = NULL;
-	isReplaying = true;
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {

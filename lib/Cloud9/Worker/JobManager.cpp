@@ -19,6 +19,22 @@
 
 #include <stack>
 
+/*
+ * Implementation invariants, between two consecutive job executions, when the
+ * job lock is set:
+ * - Every time in the tree, there is a full frontier of symbolic states.
+ *
+ * - A job can be either on the frontier, or ahead of it (case in which
+ * replaying needs to be done). XXX: Perform a more clever way of replay.
+ *
+ * - An exported job will leave the frontier intact.
+ *
+ * - A job import cannot happen in such a way that a job lies within the limits
+ * of the frontier.
+ *
+ * - Statistics cannot grow past the frontier of symbolic states
+ */
+
 
 namespace cloud9 {
 
@@ -212,16 +228,28 @@ void JobManager::refineStatistics() {
 			it != stats.end(); it++) {
 		WorkerTree::Node *node = *it;
 
-		assert((**node).jobCount > 0);
 		assert((**node).stats);
+
+		if((**node).jobCount == 0) {
+			newStats.insert(node);
+			continue;
+		}
+
+		if ((**node).symState != NULL) {
+			newStats.insert(node);
+			continue;
+		}
 
 		WorkerTree::Node *left = node->getChild(0);
 		WorkerTree::Node *right = node->getChild(1);
 
+		if (left == NULL && right == NULL) {
+			newStats.insert(node);
+			continue;
+		}
+
 		if (left) {
 			assert(!(**left).stats);
-			assert((**left).jobCount > 0);
-
 			(**left).stats = true;
 
 			newStats.insert(left);
@@ -229,8 +257,6 @@ void JobManager::refineStatistics() {
 
 		if (right) {
 			assert(!(**right).stats);
-			assert((**right).jobCount > 0);
-
 			(**right).stats = true;
 
 			newStats.insert(right);
@@ -291,7 +317,9 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 			WorkerTree::Node *left = node->getChild(0);
 			WorkerTree::Node *right = node->getChild(1);
 
-			assert(left || right);
+			if (left == NULL && right == NULL) {
+				assert((**node).symState != NULL);
+			}
 
 			if (left) {
 				nodes.push(left);
@@ -366,7 +394,6 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 
 		job->started = true;
 		job->finished = true;
-		job->frontier.clear();
 
 		finalizeJob(job);
 	}

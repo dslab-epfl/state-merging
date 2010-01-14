@@ -31,8 +31,6 @@ void RandomExplorationHandler::onNextStateQuery(ExplorationJob *job,
 	while ((**crtNode).getSymbolicState() == NULL) {
 		int index = (int)theRNG.getBool();
 
-		//CLOUD9_DEBUG(index);
-
 		if (crtNode->getChild(index) == NULL)
 			index = 1 - index;
 
