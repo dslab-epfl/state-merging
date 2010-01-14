@@ -42,7 +42,7 @@ using namespace llvm;
 
 namespace {
   cl::opt<bool>
-  DebugLogMerge("klee-debug-log-merge");
+  DebugLogMerge("debug-log-merge");
 }
 
 namespace klee {

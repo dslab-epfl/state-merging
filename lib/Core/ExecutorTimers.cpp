@@ -33,7 +33,7 @@ using namespace llvm;
 using namespace klee;
 
 cl::opt<double>
-MaxTime("klee-max-time",
+MaxTime("max-time",
         cl::desc("Halt execution after the specified number of seconds (0=off)"),
         cl::init(0));
 

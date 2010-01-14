@@ -33,7 +33,7 @@ using namespace klee;
 
 namespace {
   cl::opt<bool>
-  UseConstantArrays("klee-use-constant-arrays",
+  UseConstantArrays("use-constant-arrays",
                     cl::init(true));
 }
 

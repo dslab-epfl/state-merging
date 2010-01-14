@@ -27,15 +27,15 @@ using namespace llvm;
 
 namespace {
   cl::opt<bool>
-  DebugCexCacheCheckBinding("klee-debug-cex-cache-check-binding");
+  DebugCexCacheCheckBinding("debug-cex-cache-check-binding");
 
   cl::opt<bool>
-  CexCacheTryAll("klee-cex-cache-try-all",
+  CexCacheTryAll("cex-cache-try-all",
                  cl::desc("try substituting all counterexamples before asking STP"),
                  cl::init(false));
 
   cl::opt<bool>
-  CexCacheExperimental("klee-cex-cache-exp", cl::init(false));
+  CexCacheExperimental("cex-cache-exp", cl::init(false));
 
 }
 

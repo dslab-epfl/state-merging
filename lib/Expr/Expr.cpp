@@ -24,7 +24,7 @@ using namespace llvm;
 
 namespace {
   cl::opt<bool>
-  ConstArrayOpt("klee-const-array-opt",
+  ConstArrayOpt("const-array-opt",
 	 cl::init(false),
 	 cl::desc("Enable various optimizations involving all-constant arrays."));
 }

@@ -50,21 +50,21 @@ namespace {
   MergeAtExit("merge-at-exit");
     
   cl::opt<bool>
-  NoTruncateSourceLines("klee-no-truncate-source-lines",
+  NoTruncateSourceLines("no-truncate-source-lines",
                         cl::desc("Don't truncate long lines in the output source"));
 
   cl::opt<bool>
-  OutputSource("klee-output-source",
+  OutputSource("output-source",
                cl::desc("Write the assembly for the final transformed source"),
                cl::init(true));
 
   cl::opt<bool>
-  OutputModule("klee-output-module",
+  OutputModule("output-module",
                cl::desc("Write the bitcode for the final transformed module"),
                cl::init(false));
 
   cl::opt<SwitchImplType>
-  SwitchType("klee-switch-type", cl::desc("Select the implementation of switch"),
+  SwitchType("switch-type", cl::desc("Select the implementation of switch"),
              cl::values(clEnumValN(eSwitchTypeSimple, "simple", 
                                    "lower to ordered branches"),
                         clEnumValN(eSwitchTypeLLVM, "llvm", 
@@ -75,7 +75,7 @@ namespace {
              cl::init(eSwitchTypeInternal));
   
   cl::opt<bool>
-  DebugPrintEscapingFunctions("klee-debug-print-escaping-functions",
+  DebugPrintEscapingFunctions("debug-print-escaping-functions",
                               cl::desc("Print functions whose address is taken."));
 }
 

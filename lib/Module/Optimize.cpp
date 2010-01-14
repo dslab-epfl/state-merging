@@ -38,32 +38,32 @@ static cl::list<const PassInfo*, bool, PassNameParser>
 #endif
 
 // Don't verify at the end
-static cl::opt<bool> DontVerify("klee-disable-verify", cl::ReallyHidden);
+static cl::opt<bool> DontVerify("disable-verify", cl::ReallyHidden);
 
-static cl::opt<bool> DisableInline("klee-disable-inlining",
+static cl::opt<bool> DisableInline("disable-inlining",
   cl::desc("Do not run the inliner pass"));
 
 static cl::opt<bool>
-DisableOptimizations("klee-disable-opt",
+DisableOptimizations("disable-opt",
   cl::desc("Do not run any optimization passes"));
 
-static cl::opt<bool> DisableInternalize("klee-disable-internalize",
+static cl::opt<bool> DisableInternalize("disable-internalize",
   cl::desc("Do not mark all symbols as internal"));
 
-static cl::opt<bool> VerifyEach("klee-verify-each",
+static cl::opt<bool> VerifyEach("verify-each",
  cl::desc("Verify intermediate results of all passes"));
 
-static cl::alias ExportDynamic("klee-export-dynamic",
+static cl::alias ExportDynamic("export-dynamic",
   cl::aliasopt(DisableInternalize),
   cl::desc("Alias for -disable-internalize"));
 
-static cl::opt<bool> Strip("klee-strip-all",
+static cl::opt<bool> Strip("strip-all",
   cl::desc("Strip all symbol info from executable"));
 
 static cl::alias A0("s", cl::desc("Alias for --strip-all"), 
   cl::aliasopt(Strip));
 
-static cl::opt<bool> StripDebug("klee-strip-debug",
+static cl::opt<bool> StripDebug("strip-debug",
   cl::desc("Strip debugger symbol info from executable"));
 
 static cl::alias A1("S", cl::desc("Alias for --strip-debug"),

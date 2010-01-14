@@ -80,181 +80,181 @@ bool WriteTraces = false;
 
 namespace {
   cl::opt<bool>
-  DumpStatesOnHalt("klee-dump-states-on-halt",
+  DumpStatesOnHalt("dump-states-on-halt",
                    cl::init(true));
  
   cl::opt<bool>
-  NoPreferCex("klee-no-prefer-cex",
+  NoPreferCex("no-prefer-cex",
               cl::init(false));
  
   cl::opt<bool>
-  UseAsmAddresses("klee-use-asm-addresses",
+  UseAsmAddresses("use-asm-addresses",
                   cl::init(false));
  
   cl::opt<bool>
-  RandomizeFork("klee-randomize-fork",
+  RandomizeFork("randomize-fork",
                 cl::init(false));
  
   cl::opt<bool>
-  AllowExternalSymCalls("klee-allow-external-sym-calls",
+  AllowExternalSymCalls("allow-external-sym-calls",
                         cl::init(false));
 
   cl::opt<bool>
-  DebugPrintInstructions("klee-debug-print-instructions",
+  DebugPrintInstructions("debug-print-instructions",
                          cl::desc("Print instructions during execution."));
 
   cl::opt<bool>
-  DebugCheckForImpliedValues("klee-debug-check-for-implied-values");
+  DebugCheckForImpliedValues("debug-check-for-implied-values");
 
 
   cl::opt<bool>
-  SimplifySymIndices("klee-simplify-sym-indices",
+  SimplifySymIndices("simplify-sym-indices",
                      cl::init(false));
 
   cl::opt<unsigned>
-  MaxSymArraySize("klee-max-sym-array-size",
+  MaxSymArraySize("max-sym-array-size",
                   cl::init(0));
 
   cl::opt<bool>
-  DebugValidateSolver("klee-debug-validate-solver",
+  DebugValidateSolver("debug-validate-solver",
 		      cl::init(false));
 
   cl::opt<bool>
-  SuppressExternalWarnings("klee-suppress-external-warnings");
+  SuppressExternalWarnings("suppress-external-warnings");
 
   cl::opt<bool>
-  AllExternalWarnings("klee-all-external-warnings");
+  AllExternalWarnings("all-external-warnings");
 
   cl::opt<bool>
-  OnlyOutputStatesCoveringNew("klee-only-output-states-covering-new",
+  OnlyOutputStatesCoveringNew("only-output-states-covering-new",
                               cl::init(false));
 
   cl::opt<bool>
-  AlwaysOutputSeeds("klee-always-output-seeds",
+  AlwaysOutputSeeds("always-output-seeds",
                               cl::init(true));
 
   cl::opt<bool>
-  UseFastCexSolver("klee-use-fast-cex-solver",
+  UseFastCexSolver("use-fast-cex-solver",
 		   cl::init(false));
 
   cl::opt<bool>
-  UseIndependentSolver("klee-use-independent-solver",
+  UseIndependentSolver("use-independent-solver",
                        cl::init(true),
 		       cl::desc("Use constraint independence"));
 
   cl::opt<bool>
-  EmitAllErrors("klee-emit-all-errors",
+  EmitAllErrors("emit-all-errors",
                 cl::init(false),
                 cl::desc("Generate tests cases for all errors "
                          "(default=one per (error,instruction) pair)"));
 
   cl::opt<bool>
-  UseCexCache("klee-use-cex-cache",
+  UseCexCache("use-cex-cache",
               cl::init(true),
 	      cl::desc("Use counterexample caching"));
 
   cl::opt<bool>
-  UseQueryLog("klee-use-query-log",
+  UseQueryLog("use-query-log",
               cl::init(false));
 
   cl::opt<bool>
-  UseQueryPCLog("klee-use-query-pc-log",
+  UseQueryPCLog("use-query-pc-log",
                 cl::init(false));
   
   cl::opt<bool>
-  UseSTPQueryPCLog("klee-use-stp-query-pc-log",
+  UseSTPQueryPCLog("use-stp-query-pc-log",
                    cl::init(false));
 
   cl::opt<bool>
-  NoExternals("klee-no-externals",
+  NoExternals("no-externals",
            cl::desc("Do not allow external functin calls"));
 
   cl::opt<bool>
-  UseCache("klee-use-cache",
+  UseCache("use-cache",
 	   cl::init(true),
 	   cl::desc("Use validity caching"));
 
   cl::opt<bool>
-  OnlyReplaySeeds("klee-only-replay-seeds",
+  OnlyReplaySeeds("only-replay-seeds",
                   cl::desc("Discard states that do not have a seed."));
  
   cl::opt<bool>
-  OnlySeed("klee-only-seed",
+  OnlySeed("only-seed",
            cl::desc("Stop execution after seeding is done without doing regular search."));
  
   cl::opt<bool>
-  AllowSeedExtension("klee-allow-seed-extension",
+  AllowSeedExtension("allow-seed-extension",
                      cl::desc("Allow extra (unbound) values to become symbolic during seeding."));
  
   cl::opt<bool>
-  ZeroSeedExtension("klee-zero-seed-extension");
+  ZeroSeedExtension("zero-seed-extension");
  
   cl::opt<bool>
-  AllowSeedTruncation("klee-allow-seed-truncation",
+  AllowSeedTruncation("allow-seed-truncation",
                       cl::desc("Allow smaller buffers than in seeds."));
  
   cl::opt<bool>
-  NamedSeedMatching("klee-named-seed-matching",
+  NamedSeedMatching("named-seed-matching",
                     cl::desc("Use names to match symbolic objects to inputs."));
 
   cl::opt<double>
-  MaxStaticForkPct("klee-max-static-fork-pct", cl::init(1.));
+  MaxStaticForkPct("max-static-fork-pct", cl::init(1.));
   cl::opt<double>
-  MaxStaticSolvePct("klee-max-static-solve-pct", cl::init(1.));
+  MaxStaticSolvePct("max-static-solve-pct", cl::init(1.));
   cl::opt<double>
-  MaxStaticCPForkPct("klee-max-static-cpfork-pct", cl::init(1.));
+  MaxStaticCPForkPct("max-static-cpfork-pct", cl::init(1.));
   cl::opt<double>
-  MaxStaticCPSolvePct("klee-max-static-cpsolve-pct", cl::init(1.));
+  MaxStaticCPSolvePct("max-static-cpsolve-pct", cl::init(1.));
 
   cl::opt<double>
-  MaxInstructionTime("klee-max-instruction-time",
+  MaxInstructionTime("max-instruction-time",
                      cl::desc("Only allow a single instruction to take this much time (default=0 (off))"),
                      cl::init(0));
   
   cl::opt<double>
-  SeedTime("klee-seed-time",
+  SeedTime("seed-time",
            cl::desc("Amount of time to dedicate to seeds, before normal search (default=0 (off))"),
            cl::init(0));
   
   cl::opt<double>
-  MaxSTPTime("klee-max-stp-time",
+  MaxSTPTime("max-stp-time",
              cl::desc("Maximum amount of time for a single query (default=120s)"),
              cl::init(120.0));
   
   cl::opt<unsigned int>
-  StopAfterNInstructions("klee-stop-after-n-instructions",
+  StopAfterNInstructions("stop-after-n-instructions",
                          cl::desc("Stop execution after specified number of instructions (0=off)"),
                          cl::init(0));
   
   cl::opt<unsigned>
-  MaxForks("klee-max-forks",
+  MaxForks("max-forks",
            cl::desc("Only fork this many times (-1=off)"),
            cl::init(~0u));
   
   cl::opt<unsigned>
-  MaxDepth("klee-max-depth",
+  MaxDepth("max-depth",
            cl::desc("Only allow this many symbolic branches (0=off)"),
            cl::init(0));
   
   cl::opt<unsigned>
-  MaxMemory("klee-max-memory",
+  MaxMemory("max-memory",
             cl::desc("Refuse to fork when more above this about of memory (in MB, 0=off)"),
             cl::init(0));
 
   cl::opt<bool>
-  MaxMemoryInhibit("klee-max-memory-inhibit",
+  MaxMemoryInhibit("max-memory-inhibit",
             cl::desc("Inhibit forking at memory cap (vs. random terminate)"),
             cl::init(true));
 
   // use 'external storage' because also needed by tools/klee/main.cpp
   cl::opt<bool, true>
-  WriteTracesProxy("klee-write-traces",
+  WriteTracesProxy("write-traces",
            cl::desc("Write .trace file for each terminated state"),
            cl::location(WriteTraces),
            cl::init(false));
 
   cl::opt<bool>
-  UseForkedSTP("klee-use-forked-stp",
+  UseForkedSTP("use-forked-stp",
                  cl::desc("Run STP in forked process"));
 }
 
