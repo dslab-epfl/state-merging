@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <boost/asio.hpp>
+#include <string>
 
 using namespace llvm;
 using namespace cloud9::lb;
@@ -27,6 +28,10 @@ cl::opt<int> ServerPort("port",
 cl::opt<int> BalanceRate("balance-rate",
 		cl::desc("The rate at which load balancing decisions take place"),
 		cl::init(2));
+
+cl::opt<std::string> ServerAddress("address",
+		cl::desc("The local address the load balancer listens on"),
+		cl::init("localhost"));
 }
 
 
