@@ -35,6 +35,12 @@ void RandomExplorationHandler::onNextStateQuery(ExplorationJob *job,
 			index = 1 - index;
 
 		crtNode = crtNode->getChild(index);
+
+		if (!crtNode) {
+			CLOUD9_ERROR("Found empty state inside job; " <<
+					job->getFrontier().size() << " " <<
+					job->getSize() << " " << job->getDepth());
+		}
 		assert(crtNode);
 	}
 
