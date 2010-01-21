@@ -77,7 +77,7 @@ private:
 
 		jobsAvailabe.notify_all();
 
-		CLOUD9_DEBUG("Submitted " << count << " jobs to the local queue");
+		//CLOUD9_DEBUG("Submitted " << count << " jobs to the local queue");
 	}
 
 	void finalizeJob(ExplorationJob *job);

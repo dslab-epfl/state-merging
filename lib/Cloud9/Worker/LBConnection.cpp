@@ -90,8 +90,8 @@ void LBConnection::sendUpdates() {
 
 	jobManager->getStatisticsData(data, paths, true);
 
-	CLOUD9_DEBUG("Sending " << data.size() << " update values and " <<
-			paths.size() << " update nodes");
+	//CLOUD9_DEBUG("Sending " << data.size() << " update values and " <<
+	//		paths.size() << " update nodes");
 
 	for (std::vector<int>::iterator it = data.begin(); it != data.end(); it++) {
 		dataUpdate->add_data(*it);

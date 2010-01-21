@@ -132,7 +132,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
 	if (!error) {
-		CLOUD9_DEBUG("Sent reply to worker");
+		//CLOUD9_DEBUG("Sent reply to worker");
 	} else {
 		CLOUD9_ERROR("Could not send reply");
 	}

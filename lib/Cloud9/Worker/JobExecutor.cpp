@@ -422,7 +422,8 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState == NULL) {
-			CLOUD9_ERROR("Replay broken, found NULL state");
+			CLOUD9_ERROR("Replay broken, found NULL state at position " << i <<
+					" out of " << path.size() << " in the path.");
 			break;
 		}
 		exploreNode(crtNode);
