@@ -321,9 +321,6 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 			currentJob->addToFrontier(newNode);
 
 	}
-
-	// Even during replay, at least one of them must be valid
-	assert(oldNode != NULL || newNode != NULL);
 }
 
 void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
@@ -363,6 +360,7 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 
 void JobExecutor::executeJob(ExplorationJob *job) {
 	if (job->foreign) {
+		CLOUD9_DEBUG("Executing foreign job");
 		replayPath(job->jobRoot);
 		job->foreign = false;
 	}
@@ -371,7 +369,7 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	fireJobStarted(job);
 
 	if ((**(job->jobRoot)).symState == NULL) {
-		CLOUD9_INFO("Job cancelled before start");
+		CLOUD9_INFO("Job canceled before start");
 		job->frontier.clear();
 	} else {
 		while (!job->frontier.empty()) {
@@ -407,6 +405,7 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	if (crtNode == NULL) {
 		CLOUD9_ERROR("Cannot find the seed execution state, abandoning the job");
+		return;
 	}
 
 	/*if (!crtNode) {
