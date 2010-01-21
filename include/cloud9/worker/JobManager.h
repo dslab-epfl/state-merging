@@ -10,6 +10,7 @@
 
 #include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/worker/JobExecutor.h"
+#include "cloud9/Logger.h"
 
 #include <boost/thread.hpp>
 #include <list>
@@ -68,11 +69,15 @@ private:
 
 	template<typename JobIterator>
 	void submitJobs(JobIterator begin, JobIterator end) {
+		int count = 0;
 		for (JobIterator it = begin; it != end; it++) {
 			submitJob(*it);
+			count++;
 		}
 
 		jobsAvailabe.notify_all();
+
+		CLOUD9_DEBUG("Submitted " << count << " jobs to the local queue");
 	}
 
 	void finalizeJob(ExplorationJob *job);

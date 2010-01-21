@@ -25,12 +25,4 @@ Logger &Logger::getLogger() {
 	return Logger::logger;
 }
 
-Logger::Logger()  {
-
-}
-
-Logger::~Logger() {
-	// TODO Auto-generated destructor stub
-}
-
 }

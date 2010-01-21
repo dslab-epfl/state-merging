@@ -476,6 +476,8 @@ int main(int argc, char **argv, char **envp) {
 
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+	cloud9::Logger::getLogger().setLogPrefix("Worker<   >: ");
+
 	// JIT initialization
 	llvm::InitializeNativeTarget();
 

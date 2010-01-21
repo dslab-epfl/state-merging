@@ -37,6 +37,8 @@ private:
 
 	void processResponse(LBResponseMessage &response);
 
+	void updateLogPrefix();
+
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);
 	virtual ~LBConnection();

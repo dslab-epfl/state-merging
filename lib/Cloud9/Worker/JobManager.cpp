@@ -127,7 +127,7 @@ void JobManager::submitJob(ExplorationJob* job) {
 		crtNode = crtNode->getParent();
 	}
 
-	CLOUD9_DEBUG("Submitted job on level " << (job->jobRoot->getLevel()));
+	//CLOUD9_DEBUG("Submitted job on level " << (job->jobRoot->getLevel()));
 }
 
 ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {

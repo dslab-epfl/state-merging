@@ -39,6 +39,13 @@ LBConnection::~LBConnection() {
 	socket.close();
 }
 
+void LBConnection::updateLogPrefix() {
+	char prefix[] = "Worker<   >: ";
+	sprintf(prefix, "Worker<%03d>: ", id);
+
+	cloud9::Logger::getLogger().setLogPrefix(prefix);
+}
+
 void LBConnection::registerWorker() {
 	// Prepare the registration message
 	WorkerReportMessage message;
@@ -64,6 +71,8 @@ void LBConnection::registerWorker() {
 	assert(result);
 
 	id = response.id();
+
+	updateLogPrefix();
 
 	CLOUD9_INFO("Worker registered with the load balancer - ID: " << id);
 

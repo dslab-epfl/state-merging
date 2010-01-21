@@ -40,6 +40,8 @@ int main(int argc, char **argv, char **envp) {
 
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+	cloud9::Logger::getLogger().setLogPrefix("LBalancer  : ");
+
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
 
 	LoadBalancer *lb = new LoadBalancer(BalanceRate);

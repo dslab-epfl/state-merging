@@ -62,11 +62,17 @@ cl::opt<bool> WriteCov("write-cov", cl::desc(
 cl::opt<bool> WriteTestInfo("write-test-info", cl::desc(
 		"Write additional test case information"));
 
+cl::opt<bool>
+  WriteTestGenerationTime("write-test-generation-time",
+                cl::desc("Write .time files for each test case"));
+
 cl::opt<unsigned>
 StopAfterNTests("stop-after-n-tests",
 	     cl::desc("Stop execution after generating the given number of tests.  Extra tests corresponding to partially explored paths will also be dumped."),
 	     cl::init(0));
 }
+
+static double runStartTime = 0;
 
 namespace cloud9 {
 
@@ -141,6 +147,8 @@ KleeHandler::KleeHandler(int argc, char **argv) :
 	assert(klee_message_file);
 
 	m_infoFile = openOutputFile("info");
+
+	runStartTime = util::getWallTime();
 }
 
 KleeHandler::~KleeHandler() {
@@ -318,6 +326,19 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 			std::ostream *f = openTestFile("info", id);
 			*f << "Time to generate test case: " << elapsed_time << "s\n";
 			delete f;
+		}
+
+		if (WriteTestGenerationTime) {
+		  double elapsed_time = util::getWallTime() - runStartTime;
+		  std::ostream *f = openTestFile("time", id);
+
+		  if (!f)
+			  f = &std::cerr;
+
+		  *f << elapsed_time << "\n";
+
+		  if (f != &std::cerr)
+			  delete f;
 		}
 	}
 }
