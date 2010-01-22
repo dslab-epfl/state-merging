@@ -81,6 +81,9 @@ private:
 	SizingHandler *sizingHandler;
 	ExplorationHandler *expHandler;
 
+
+	std::set<WorkerTree::Node*> deletionSet;
+
 	/*
 	 * Returns the next node to be explored
 	 */

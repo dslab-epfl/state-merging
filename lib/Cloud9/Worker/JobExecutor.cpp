@@ -271,6 +271,9 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 		CLOUD9_INFO("Exploring empty state!");
 	}
 
+
+	deletionSet.clear();
+
 	while ((**node).symState != NULL) {
 		//CLOUD9_DEBUG("Stepping in state " << *node);
 		symbEngine->stepInState((**node).symState);
@@ -280,8 +283,14 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	}
 
 	// Delete the supporting branch of the state, if empty
-	if (currentJob)
-		tree->removeSupportingBranch(node, currentJob->jobRoot);
+	if (currentJob) {
+		for (std::set<WorkerTree::Node*>::iterator it = deletionSet.begin();
+				it != deletionSet.end(); it++) {
+
+			tree->removeSupportingBranch(*it, currentJob->jobRoot);
+		}
+	}
+
 }
 
 void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
@@ -329,8 +338,10 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	state->setCustomData(NULL);
 	(**pNode).symState = NULL;
 
-	if (currentJob)
+	if (currentJob) {
 		currentJob->removeFromFrontier(pNode);
+		deletionSet.insert(pNode);
+	}
 }
 
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
