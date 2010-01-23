@@ -14,6 +14,9 @@
 #include <vector>
 #include <map>
 #include <utility>
+#include <cassert>
+
+#include <boost/thread.hpp>
 
 
 namespace cloud9 {
@@ -24,43 +27,61 @@ namespace instrum {
 using namespace std;
 using namespace llvm;
 
+class InstrumentationWriter;
+
 class InstrumentationManager {
 public:
 	enum Statistics {
-		TotalInstructions,
-		TotalJobs
+		TotalInstructions = 1,
+		TotalJobs = 2
 	};
 
 	enum Events {
-		TestCase,
-		ErrorCase,
-		JobExecutionState
+		TestCase = 1,
+		ErrorCase = 2,
+		JobExecutionState = 3
 	};
-private:
+
 	typedef sys::TimeValue TimeStamp;
+	typedef map<Statistics, int> StatisticsData;
+	typedef map<Events, vector<pair<TimeStamp, string> > > EventsData;
+private:
+	typedef set<InstrumentationWriter*> WriterSet;
 
 	TimeStamp referenceTime;
 
 	TimeStamp now() {
-		sys::TimeValue now(0,0), user(0,0), sys(0,0);
-		sys::Process::GetTimeUsage(now, user, sys);
-
-		return now;
+		return TimeStamp::now();
 	}
 
-	map<Statistics, int> stats;
-	map<Events, vector<pair<TimeStamp, string> > > events;
+	StatisticsData stats;
+	EventsData events;
+
+	WriterSet writers;
+
+	boost::mutex eventsMutex;
+	boost::thread instrumThread;
+
+	void instrumThreadControl();
+
+	void writeStatistics();
+	void writeEvents();
 public:
-	InstrumentationManager() {
-		referenceTime = now();
+	InstrumentationManager();
+	virtual ~InstrumentationManager();
+
+	void registerWriter(InstrumentationWriter *writer) {
+		assert(writer != NULL);
+
+		writers.insert(writer);
 	}
 
-	virtual ~InstrumentationManager() {
-
-	}
+	void start();
 
 	void recordEvent(Events id, string value) {
-		events[id].push_back(make_pair(now(), value));
+		boost::lock_guard<boost::mutex> lock(eventsMutex);
+
+		events[id].push_back(make_pair(now() - referenceTime, value));
 	}
 
 	void setStatistic(Statistics id, int value) {
