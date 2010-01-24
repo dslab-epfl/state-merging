@@ -10,6 +10,9 @@
 #include "cloud9/worker/JobExecutorBehaviors.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/Logger.h"
+#include "cloud9/instrum/InstrumentationManager.h"
+#include "cloud9/instrum/InstrumentationWriter.h"
+#include "cloud9/instrum/LocalFileWriter.h"
 
 #include "klee/Interpreter.h"
 
@@ -23,6 +26,10 @@
 
 #include <map>
 #include <set>
+#include <fstream>
+
+#define CLOUD9_STATS_FILE_NAME		"c9-stats.txt"
+#define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
 
 using namespace llvm;
 
@@ -214,6 +221,7 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 	assert(tree->getDegree() == 2);
 
 	initHandlers();
+	initInstrumentation();
 }
 
 void JobExecutor::initHandlers() {
@@ -236,6 +244,20 @@ void JobExecutor::initHandlers() {
 	default:
 		assert(0);
 	}
+}
+
+void JobExecutor::initInstrumentation() {
+	std::string statsFileName = kleeHandler->getOutputFilename(CLOUD9_STATS_FILE_NAME);
+	std::string eventsFileName = kleeHandler->getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
+
+	std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
+	std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
+	cloud9::instrum::InstrumentationWriter *writer =
+			new cloud9::instrum::LocalFileWriter(*instrStatsStream,
+					*instrEventsStream);
+
+	cloud9::instrum::theInstrManager.registerWriter(writer);
+	cloud9::instrum::theInstrManager.start();
 }
 
 void JobExecutor::initRootState(llvm::Function *f, int argc,

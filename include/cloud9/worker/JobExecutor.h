@@ -14,6 +14,8 @@
 #include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/worker/SymbolicEngine.h"
 
+#include <iostream>
+
 
 namespace klee {
 class Interpreter;
@@ -72,6 +74,9 @@ private:
 	SymbolicEngine *symbEngine;
 
 	KleeHandler *kleeHandler;
+	std::ostream *instrStatsStream;
+	std::ostream *instrEventsStream;
+
 	const llvm::Module *finalModule;
 	WorkerTree *tree;
 
@@ -117,13 +122,15 @@ private:
 		sizingHandler->onNodeDeleted(node);
 	}
 
+	void initHandlers();
+	void initInstrumentation();
 public:
 	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
 	virtual ~JobExecutor();
 
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
-	void initHandlers();
+
 
 	const llvm::Module *getModule() const { return finalModule; }
 
