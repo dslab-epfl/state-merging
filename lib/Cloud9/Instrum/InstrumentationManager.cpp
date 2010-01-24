@@ -30,9 +30,11 @@ void InstrumentationManager::instrumThreadControl() {
 	boost::asio::io_service service;
 	CLOUD9_INFO("Instrumentation started");
 
+	boost::asio::deadline_timer t(service, boost::posix_time::seconds(InstrUpdateRate));
+
 	for (;;) {
-		boost::asio::deadline_timer t(service, boost::posix_time::seconds(InstrUpdateRate));
 		t.wait();
+		t.expires_at(t.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
 
 		writeStatistics();
 		writeEvents();

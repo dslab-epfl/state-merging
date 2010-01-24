@@ -45,9 +45,11 @@ void CommManager::LBCommThread::operator()() {
 	CLOUD9_INFO("Registering worker with the load balancer...");
 	lbConnection.registerWorker();
 
+	boost::asio::deadline_timer t(service, boost::posix_time::seconds(UpdateTime));
+
 	for (;;) {
-		boost::asio::deadline_timer t(service, boost::posix_time::seconds(UpdateTime));
 		t.wait();
+		t.expires_at(t.expires_at() + boost::posix_time::seconds(UpdateTime));
 
 		lbConnection.sendUpdates();
 	}
