@@ -44,7 +44,7 @@ public:
 
 	typedef sys::TimeValue TimeStamp;
 	typedef map<Statistics, int> StatisticsData;
-	typedef map<Events, vector<pair<TimeStamp, string> > > EventsData;
+	typedef vector<pair<TimeStamp, pair<Events, string> > > EventsData;
 private:
 	typedef set<InstrumentationWriter*> WriterSet;
 
@@ -80,8 +80,7 @@ public:
 
 	void recordEvent(Events id, string value) {
 		boost::lock_guard<boost::mutex> lock(eventsMutex);
-
-		events[id].push_back(make_pair(now() - referenceTime, value));
+		events.push_back(make_pair(now() - referenceTime, make_pair(id, value)));
 	}
 
 	void setStatistic(Statistics id, int value) {

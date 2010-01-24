@@ -10,13 +10,21 @@
 
 #include "cloud9/instrum/InstrumentationWriter.h"
 
+#include <iostream>
+#include <string>
+
 namespace cloud9 {
 
 namespace instrum {
 
 class LocalFileWriter: public InstrumentationWriter {
+private:
+	std::ostream &statsStream;
+	std::ostream &eventsStream;
+
+
 public:
-	LocalFileWriter();
+	LocalFileWriter(std::ostream &statsStream, std::ostream &eventsStream);
 	virtual ~LocalFileWriter();
 
 	void writeStatistics(InstrumentationManager::TimeStamp &time,
