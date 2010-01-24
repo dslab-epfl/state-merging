@@ -24,6 +24,8 @@ namespace cloud9 {
 
 namespace instrum {
 
+InstrumentationManager &theInstrManager = InstrumentationManager::getManager();
+
 void InstrumentationManager::instrumThreadControl() {
 	boost::asio::io_service service;
 	CLOUD9_INFO("Instrumentation started");

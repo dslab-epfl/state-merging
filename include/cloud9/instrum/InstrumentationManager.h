@@ -66,8 +66,10 @@ private:
 
 	void writeStatistics();
 	void writeEvents();
-public:
+
 	InstrumentationManager();
+
+public:
 	virtual ~InstrumentationManager();
 
 	void registerWriter(InstrumentationWriter *writer) {
@@ -99,7 +101,15 @@ public:
 	void decStatistic(Statistics id, int value = 1) {
 		stats[id] -= value;
 	}
+
+	static InstrumentationManager &getManager() {
+		static InstrumentationManager manager;
+
+		return manager;
+	}
 };
+
+extern InstrumentationManager &theInstrManager;
 
 }
 
