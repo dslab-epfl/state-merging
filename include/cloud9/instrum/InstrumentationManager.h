@@ -29,22 +29,23 @@ using namespace llvm;
 
 class InstrumentationWriter;
 
+enum Statistics {
+	TotalInstructions = 1,
+	TotalJobs = 2
+};
+
+enum Events {
+	TestCase = 1,
+	ErrorCase = 2,
+	JobExecutionState = 3
+};
+
 class InstrumentationManager {
 public:
-	enum Statistics {
-		TotalInstructions = 1,
-		TotalJobs = 2
-	};
-
-	enum Events {
-		TestCase = 1,
-		ErrorCase = 2,
-		JobExecutionState = 3
-	};
-
 	typedef sys::TimeValue TimeStamp;
 	typedef map<Statistics, int> StatisticsData;
 	typedef vector<pair<TimeStamp, pair<Events, string> > > EventsData;
+
 private:
 	typedef set<InstrumentationWriter*> WriterSet;
 
