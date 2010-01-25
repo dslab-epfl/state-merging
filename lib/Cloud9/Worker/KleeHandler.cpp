@@ -255,6 +255,9 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 			std::ostream *f = openTestFile(errorSuffix, id);
 			*f << errorMessage;
 			delete f;
+
+			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ErrorCase,
+					getTestFilename(errorSuffix, id));
 		}
 
 		if (m_pathWriter) {

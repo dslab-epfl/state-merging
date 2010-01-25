@@ -408,7 +408,9 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 void JobExecutor::executeJob(ExplorationJob *job) {
 	if (job->foreign) {
 		CLOUD9_DEBUG("Executing foreign job");
+		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
 		replayPath(job->jobRoot);
+		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
 		job->foreign = false;
 	}
 

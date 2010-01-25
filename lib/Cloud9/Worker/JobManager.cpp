@@ -179,10 +179,14 @@ ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
 	selHandler->onNextJobSelection(job);
 	while (job == NULL) {
 		CLOUD9_INFO("No jobs in the queue, waiting for...");
+		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "idle");
 		jobsAvailabe.wait(lock);
 		CLOUD9_INFO("More jobs available. Resuming exploration...");
 
 		selHandler->onNextJobSelection(job);
+
+		if (job != NULL)
+			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "working");
 	}
 
 	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
