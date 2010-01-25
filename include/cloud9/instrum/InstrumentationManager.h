@@ -33,19 +33,20 @@ enum Statistics {
 	TotalProcInstructions = 0,
 	TotalProcJobs = 1,
 	TotalStatesExplored = 2,
-	TotalPathsExplored = 3,
+	TotalPathsStarted = 3,
+	TotalPathsFinished = 4,
 
-	TotalNewInstructions = 4,
-	TotalNewStates = 5,
-	TotalNewPaths = 6,
+	TotalNewInstructions = 5,
+	TotalNewStates = 6,
+	TotalNewPaths = 7,
 
-	TotalExportedJobs = 7,
-	TotalImportedJobs = 8,
-	TotalDroppedJobs = 9,
+	TotalExportedJobs = 8,
+	TotalImportedJobs = 9,
+	TotalDroppedJobs = 10,
 
-	CurrentQueueSize = 10,
-	CurrentPathCount = 11,
-	CurrentImportedPathCount = 12
+	CurrentQueueSize = 11,
+	CurrentPathCount = 12,
+	CurrentImportedPathCount = 13
 
 };
 

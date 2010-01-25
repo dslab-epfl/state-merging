@@ -212,6 +212,8 @@ void JobManager::processJobs() {
 
 		delete job;
 
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
+
 		submitJobs(newJobs.begin(), newJobs.end());
 
 		if (refineStats) {
@@ -360,6 +362,9 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 	}
 
 	submitJobs(jobs.begin(), jobs.end());
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalImportedJobs,
+			jobs.size());
 }
 
 void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
@@ -401,6 +406,9 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 	}
 
 	selHandler->onJobsExported();
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
+			jobs.size());
 }
 
 }

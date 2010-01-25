@@ -301,9 +301,13 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 		symbEngine->stepInState((**node).symState);
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
 
-		if (currentJob)
+		if (currentJob) {
 			currentJob->operations++;
+			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewInstructions);
+		}
 	}
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalStatesExplored);
 
 	// Delete the supporting branch of the state, if empty
 	if (currentJob) {
@@ -312,6 +316,8 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 
 			tree->removeSupportingBranch(*it, currentJob->jobRoot);
 		}
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewStates);
 	}
 
 }
@@ -349,9 +355,12 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 		(**newNode).symState = state;
 
-		if (currentJob)
+		if (currentJob) {
 			currentJob->addToFrontier(newNode);
+			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);
+		}
 
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsStarted);
 	}
 }
 
@@ -365,6 +374,8 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 		currentJob->removeFromFrontier(pNode);
 		deletionSet.insert(pNode);
 	}
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsFinished);
 }
 
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
@@ -405,6 +416,7 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	if ((**(job->jobRoot)).symState == NULL) {
 		CLOUD9_INFO("Job canceled before start");
 		job->frontier.clear();
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
 	} else {
 		while (!job->frontier.empty()) {
 			// Select a new state to explore next
