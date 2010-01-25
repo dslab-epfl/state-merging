@@ -423,6 +423,8 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
 			jobs.size());
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize,
+			jobs.size());
 }
 
 }

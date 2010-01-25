@@ -38,16 +38,10 @@ void LocalFileWriter::writeStatistics(InstrumentationManager::TimeStamp &time,
 		InstrumentationManager::StatisticsData &stats) {
 	statsStream << time;
 
-	bool first = true;
-
 	for (InstrumentationManager::StatisticsData::iterator it = stats.begin();
 			it != stats.end(); it++) {
-		if (!first)
-			statsStream << ' ';
-		else
-			first = false;
 
-		statsStream << (*it).first << '=' << (*it).second;
+		statsStream << ' ' << (*it).first << '=' << (*it).second;
 	}
 
 	statsStream << endl;
