@@ -128,6 +128,8 @@ void JobManager::submitJob(ExplorationJob* job) {
 		crtNode = crtNode->getParent();
 	}
 
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentQueueSize);
+
 	//CLOUD9_DEBUG("Submitted job on level " << (job->jobRoot->getLevel()));
 }
 
@@ -183,6 +185,8 @@ ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
 		selHandler->onNextJobSelection(job);
 	}
 
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
+
 	return job;
 }
 
@@ -194,6 +198,7 @@ void JobManager::processJobs() {
 	// TODO: Put an abort condition here
 	for(;;) {
 		job = dequeueJob(lock);
+		bool foreign = job->foreign;
 
 		job->started = true;
 
@@ -213,6 +218,9 @@ void JobManager::processJobs() {
 		delete job;
 
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
+
+		if (foreign)
+			cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentImportedPathCount);
 
 		submitJobs(newJobs.begin(), newJobs.end());
 
@@ -364,6 +372,8 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 	submitJobs(jobs.begin(), jobs.end());
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalImportedJobs,
+			jobs.size());
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentImportedPathCount,
 			jobs.size());
 }
 

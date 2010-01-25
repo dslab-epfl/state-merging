@@ -361,6 +361,7 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 		}
 
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsStarted);
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentPathCount);
 	}
 }
 
@@ -376,6 +377,7 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	}
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsFinished);
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentPathCount);
 }
 
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
