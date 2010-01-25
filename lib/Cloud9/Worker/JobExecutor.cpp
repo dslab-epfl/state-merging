@@ -299,6 +299,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	while ((**node).symState != NULL) {
 		//CLOUD9_DEBUG("Stepping in state " << *node);
 		symbEngine->stepInState((**node).symState);
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
 
 		if (currentJob)
 			currentJob->operations++;

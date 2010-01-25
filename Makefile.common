@@ -21,7 +21,7 @@ endif
 include $(LLVM_SRC_ROOT)/Makefile.rules
 
 LD.Flags += -L$(PROJ_SRC_ROOT)/stp/lib
-CXX.Flags += -DLLVM_23 -fexceptions
+CXX.Flags += -DLLVM_23 -fexceptions -std=c++0x
 CXX.Flags += -I$(PROJ_SRC_ROOT)/stp/include
 CXX.Flags += -DKLEE_DIR=\"$(PROJ_SRC_ROOT)\"
 

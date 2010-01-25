@@ -11,6 +11,7 @@
 #include "cloud9/worker/JobManagerBehaviors.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
+#include "cloud9/instrum/InstrumentationManager.h"
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"
@@ -191,7 +192,7 @@ void JobManager::processJobs() {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	// TODO: Put an abort condition here
-	while (true) {
+	for(;;) {
 		job = dequeueJob(lock);
 
 		job->started = true;

@@ -74,8 +74,6 @@ private:
 	SymbolicEngine *symbEngine;
 
 	KleeHandler *kleeHandler;
-	std::ostream *instrStatsStream;
-	std::ostream *instrEventsStream;
 
 	const llvm::Module *finalModule;
 	WorkerTree *tree;

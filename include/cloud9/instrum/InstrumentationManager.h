@@ -12,7 +12,7 @@
 
 #include <set>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <utility>
 #include <cassert>
 
@@ -30,21 +30,36 @@ using namespace llvm;
 class InstrumentationWriter;
 
 enum Statistics {
-	TotalInstructions = 1,
-	TotalJobs = 2
+	TotalProcInstructions = 0,
+	TotalProcJobs = 1,
+	TotalStatesExplored = 2,
+	TotalPathsExplored = 3,
+
+	TotalNewInstructions = 4,
+	TotalNewStates = 5,
+	TotalNewPaths = 6,
+
+	TotalExportedJobs = 7,
+	TotalImportedJobs = 8,
+	TotalDroppedJobs = 9,
+
+	CurrentQueueSize = 10,
+	CurrentPathCount = 11,
+	CurrentImportedPathCount = 12
+
 };
 
 enum Events {
-	TestCase = 1,
-	ErrorCase = 2,
-	JobExecutionState = 3
+	TestCase = 0,
+	ErrorCase = 1,
+	JobExecutionState = 2
 };
 
 class InstrumentationManager {
 public:
 	typedef sys::TimeValue TimeStamp;
-	typedef map<Statistics, int> StatisticsData;
-	typedef vector<pair<TimeStamp, pair<Events, string> > > EventsData;
+	typedef unordered_map<int,int> StatisticsData;
+	typedef vector<pair<TimeStamp, pair<int, string> > > EventsData;
 
 private:
 	typedef set<InstrumentationWriter*> WriterSet;

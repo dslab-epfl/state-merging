@@ -3,8 +3,6 @@ include ../Makefile.common
 SRCS = AST.cpp ASTKind.cpp  ASTUtil.cpp BitBlast.cpp SimpBool.cpp  ToCNF.cpp ToSAT.cpp Transform.cpp
 OBJS = $(SRCS:.cpp=.o)
 
-CXXFLAGS += -std=c++0x
-
 #Make the ast library for use by other modules
 libast.a:	$(OBJS)
 	-rm -rf $@
