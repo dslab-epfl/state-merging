@@ -22,6 +22,7 @@
 
 namespace llvm {
   class Type;
+  class TargetData;
 }
 
 namespace klee {
@@ -213,7 +214,7 @@ public:
 
   static void printKind(std::ostream &os, Kind k);
   static void printWidth(std::ostream &os, Expr::Width w);
-  static Width getWidthForLLVMType(const llvm::Type *type);
+  static Width getWidthForLLVMType(const llvm::TargetData* td, const llvm::Type *type);
 
   /// returns the smallest number of bytes in which the given width fits
   static inline unsigned getMinBytesForWidth(Width w) {

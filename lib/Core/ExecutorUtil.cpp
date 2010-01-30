@@ -51,9 +51,9 @@ namespace klee {
       abort();
 
     case Instruction::Trunc: 
-      return op1->Extract(0, Expr::getWidthForLLVMType(type));
-    case Instruction::ZExt:  return op1->ZExt(Expr::getWidthForLLVMType(type));
-    case Instruction::SExt:  return op1->SExt(Expr::getWidthForLLVMType(type));
+      return op1->Extract(0, Expr::getWidthForLLVMType(kmodule->targetData, type));
+    case Instruction::ZExt:  return op1->ZExt(Expr::getWidthForLLVMType(kmodule->targetData, type));
+    case Instruction::SExt:  return op1->SExt(Expr::getWidthForLLVMType(kmodule->targetData, type));
     case Instruction::Add:   return op1->Add(op2);
     case Instruction::Sub:   return op1->Sub(op2);
     case Instruction::Mul:   return op1->Mul(op2);
@@ -70,10 +70,10 @@ namespace klee {
     case Instruction::BitCast:  return op1;
 
     case Instruction::IntToPtr:
-      return op1->ZExt(Expr::getWidthForLLVMType(type));
+      return op1->ZExt(Expr::getWidthForLLVMType(kmodule->targetData, type));
 
     case Instruction::PtrToInt:
-      return op1->ZExt(Expr::getWidthForLLVMType(type));
+      return op1->ZExt(Expr::getWidthForLLVMType(kmodule->targetData, type));
 
     case Instruction::GetElementPtr: {
       ref<ConstantExpr> base = op1->ZExt(Context::get().getPointerWidth());

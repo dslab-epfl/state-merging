@@ -13,6 +13,7 @@
 
 #include "llvm/Type.h"
 #include "llvm/DerivedTypes.h"
+#include "llvm/Target/TargetData.h"
 
 #include <cassert>
 
@@ -35,15 +36,18 @@ const Context &Context::get() {
 // FIXME: This is a total hack, just to avoid a layering issue until this stuff
 // moves out of Expr.
 
-Expr::Width Expr::getWidthForLLVMType(const llvm::Type *t) {
+Expr::Width Expr::getWidthForLLVMType(const llvm::TargetData* td,
+		const llvm::Type *t) {
+
   switch (t->getTypeID()) {
-  default:
-    assert(0 && "non-primitive type argument to Expr::getTypeForLLVMType()\n");
   case llvm::Type::IntegerTyID: return cast<llvm::IntegerType>(t)->getBitWidth();
   case llvm::Type::FloatTyID: return Expr::Int32;
   case llvm::Type::DoubleTyID: return Expr::Int64;
   case llvm::Type::X86_FP80TyID: return 80;
   case llvm::Type::PointerTyID: return Context::get().getPointerWidth();
+  default:
+	  assert(t->isSized());
+	  return td->getTypeSizeInBits(t);
   }
 }
 
