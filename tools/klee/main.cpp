@@ -25,6 +25,9 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
 
+#include "cloud9/instrum/InstrumentationManager.h"
+#include "cloud9/instrum/LocalFileWriter.h"
+
 // FIXME: Ugh, this is gross. But otherwise our config.h conflicts with LLVMs.
 #undef PACKAGE_BUGREPORT
 #undef PACKAGE_NAME
@@ -49,6 +52,9 @@
 
 using namespace llvm;
 using namespace klee;
+
+#define CLOUD9_STATS_FILE_NAME		"c9-stats.txt"
+#define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
 
 namespace {
   cl::opt<std::string>
@@ -204,6 +210,8 @@ private:
   int m_argc;
   char **m_argv;
 
+  void initCloud9Instrumentation();
+
 public:
   KleeHandler(int argc, char **argv);
   ~KleeHandler();
@@ -312,12 +320,29 @@ KleeHandler::KleeHandler(int argc, char **argv)
   assert(klee_message_file);
 
   m_infoFile = openOutputFile("info");
+
+  // Init Cloud9 instrumentation
+  initCloud9Instrumentation();
 }
 
 KleeHandler::~KleeHandler() {
   if (m_pathWriter) delete m_pathWriter;
   if (m_symPathWriter) delete m_symPathWriter;
   delete m_infoFile;
+}
+
+void KleeHandler::initCloud9Instrumentation() {
+	std::string statsFileName = getOutputFilename(CLOUD9_STATS_FILE_NAME);
+	std::string eventsFileName = getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
+
+	std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
+	std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
+	cloud9::instrum::InstrumentationWriter *writer =
+			new cloud9::instrum::LocalFileWriter(*instrStatsStream,
+					*instrEventsStream);
+
+	cloud9::instrum::theInstrManager.registerWriter(writer);
+	cloud9::instrum::theInstrManager.start();
 }
 
 void KleeHandler::setInterpreter(Interpreter *i) {
@@ -423,6 +448,9 @@ void KleeHandler::processTestCase(const ExecutionState &state,
       std::ostream *f = openTestFile(errorSuffix, id);
       *f << errorMessage;
       delete f;
+
+      cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ErrorCase,
+      					getTestFilename(errorSuffix, id));
     }
     
     if (m_pathWriter) {
@@ -492,6 +520,9 @@ void KleeHandler::processTestCase(const ExecutionState &state,
          << elapsed_time << "s\n";
       delete f;
     }
+
+    cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TestCase,
+    				getTestFilename("ktest", id));
   }
 }
 

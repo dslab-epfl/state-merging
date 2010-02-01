@@ -9,7 +9,7 @@
 
 LEVEL=../..
 TOOLNAME = klee
-USEDLIBS = kleeCore.a kleeModule.a kleaverSolver.a kleaverExpr.a kleeSupport.a kleeBasic.a cloud9worker.a
+USEDLIBS = kleeCore.a kleeModule.a kleaverSolver.a kleaverExpr.a kleeSupport.a kleeBasic.a cloud9worker.a  cloud9instrum.a cloud9common.a
 LINK_COMPONENTS = jit bitreader bitwriter ipo linker engine
 
 include $(LEVEL)/Makefile.common
@@ -18,5 +18,5 @@ ifeq ($(ENABLE_STPLOG), 1)
 	LIBS += -lstplog
 endif
 
-LIBS += -lstp 
+LIBS += -lstp -lboost_thread-mt -lboost_system-mt
 #-ltcmalloc
