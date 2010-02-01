@@ -37,13 +37,13 @@ namespace {
 static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"), cl::Positional,
 		cl::location(InputFile), cl::init("-"));
 
-static cl::opt<LibcType, true> LibcOpt("c9-libc", cl::desc(
+static cl::opt<LibcType, true> LibcOpt("libc", cl::desc(
 		"Choose libc version (none by default)."), cl::values(
 		clEnumValN(NoLibc, "none", "Don't link in a libc"),
 		  clEnumValN(UcLibc, "uclibc", "Link in uclibc (adapted for klee)"),
 		  clEnumValEnd) , cl::location(Libc), cl::init(NoLibc));
 
-static cl::opt<bool, true> WithPOSIXRuntimeOpt("c9-posix-runtime", cl::desc(
+static cl::opt<bool, true> WithPOSIXRuntimeOpt("posix-runtime", cl::desc(
 		"Link with POSIX runtime"), cl::location(WithPOSIXRuntime), cl::init(false));
 
 static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",

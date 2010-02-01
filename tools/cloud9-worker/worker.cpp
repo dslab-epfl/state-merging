@@ -51,16 +51,16 @@ using namespace cloud9::worker;
 
 namespace {
 
-cl::opt<double> MaxTime("c9-max-time", cl::desc(
+cl::opt<double> MaxTime("max-time", cl::desc(
 		"Halt execution after the specified number of seconds (0=off)"),
 		cl::init(0));
 
 cl::opt<bool>
-		InitEnv("c9-init-env",
+		InitEnv("init-env",
 				cl::desc("Create custom environment.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"));
 
 
-cl::opt<std::string> Environ("c9-environ", cl::desc(
+cl::opt<std::string> Environ("environ", cl::desc(
 		"Parse environ from given file (in \"env\" format)"));
 
 cl::list<std::string> InputArgv(cl::ConsumeAfter, cl::desc(
