@@ -2780,7 +2780,7 @@ void Executor::executeAlloc(ExecutionState &state,
         // malloc will fail for it, so lets fork and return 0.
         StatePair hugeSize = 
           fork(*fixedSize.second, 
-               UltExpr::create(ConstantExpr::alloc(1<<31, Expr::Int32),
+               UltExpr::create(ConstantExpr::alloc(1<<31, W),
                                size), 
                true);
         if (hugeSize.first) {
