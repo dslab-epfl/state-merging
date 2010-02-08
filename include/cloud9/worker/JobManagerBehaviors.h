@@ -31,6 +31,17 @@ public:
 	virtual void onNextJobSelection(ExplorationJob *&job);
 };
 
+class KleeSelectionHandler: public JobManager::SelectionHandler {
+public:
+	KleeSelectionHandler() {};
+	virtual ~KleeSelectionHandler() {};
+
+	virtual void onJobEnqueued(ExplorationJob *job);
+	virtual void onJobsExported();
+
+	virtual void onNextJobSelection(ExplorationJob *&job);
+};
+
 }
 
 }
