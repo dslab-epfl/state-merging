@@ -18,7 +18,6 @@
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "PTree.h"
-#include "Searcher.h"
 #include "SeedInfo.h"
 #include "SpecialFunctionHandler.h"
 #include "StatsTracker.h"
@@ -27,6 +26,7 @@
 #include "../Solver/SolverStats.h"
 
 #include "klee/ExecutionState.h"
+#include "klee/Searcher.h"
 #include "klee/Expr.h"
 #include "klee/Interpreter.h"
 #include "klee/TimerStatIncrementer.h"

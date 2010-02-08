@@ -9,7 +9,7 @@
 
 #include "Common.h"
 
-#include "Searcher.h"
+#include "klee/Searcher.h"
 
 #include "CoreStats.h"
 #include "Executor.h"
