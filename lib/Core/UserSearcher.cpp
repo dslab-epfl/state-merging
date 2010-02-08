@@ -102,17 +102,19 @@ bool klee::userSearcherRequiresBranchSequences() {
   return false;
 }
 
-Searcher *klee::constructUserSearcher(Executor &executor) {
-  Searcher *searcher = 0;
+Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
+  Searcher *searcher = original;
 
-  if (UseRandomPathSearch) {
-    searcher = new RandomPathSearcher(executor);
-  } else if (UseNonUniformRandomSearch) {
-    searcher = new WeightedRandomSearcher(executor, WeightType);
-  } else if (UseRandomSearch) {
-    searcher = new RandomSearcher();
-  } else {
-    searcher = new DFSSearcher();
+  if (!searcher) {
+	  if (UseRandomPathSearch) {
+		searcher = new RandomPathSearcher(executor);
+	  } else if (UseNonUniformRandomSearch) {
+		searcher = new WeightedRandomSearcher(executor, WeightType);
+	  } else if (UseRandomSearch) {
+		searcher = new RandomSearcher();
+	  } else {
+		searcher = new DFSSearcher();
+	  }
   }
 
   if (UseInterleavedNURS || UseInterleavedMD2UNURS || UseInterleavedRS ||

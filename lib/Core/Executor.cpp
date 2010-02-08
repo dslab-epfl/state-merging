@@ -2386,7 +2386,7 @@ void Executor::run(ExecutionState &initialState) {
       return;
   }
 
-  searcher = constructUserSearcher(*this);
+  searcher = constructUserSearcher(*this, NULL);
 
   searcher->update(0, states, std::set<ExecutionState*>());
 
