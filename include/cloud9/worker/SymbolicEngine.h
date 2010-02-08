@@ -12,6 +12,7 @@
 
 namespace klee {
 class ExecutionState;
+class Searcher;
 }
 
 namespace llvm {
@@ -54,6 +55,8 @@ public:
 	virtual void destroyState(klee::ExecutionState *state) = 0;
 
 	virtual void destroyStates() = 0;
+
+	virtual klee::Searcher *initSearcher(klee::Searcher *base) = 0;
 
 	void registerStateEventHandler(StateEventHandler *handler);
 	void deregisterStateEventHandler(StateEventHandler *handler);

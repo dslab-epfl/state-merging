@@ -2386,7 +2386,7 @@ void Executor::run(ExecutionState &initialState) {
       return;
   }
 
-  searcher = constructUserSearcher(*this, NULL);
+  searcher = initSearcher(NULL);
 
   searcher->update(0, states, std::set<ExecutionState*>());
 
@@ -3170,6 +3170,10 @@ ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
 	states.insert(state);
 
 	return state;
+}
+
+Searcher *Executor::initSearcher(Searcher *base) {
+	return constructUserSearcher(*this, base);
 }
 
 void Executor::destroyStates() {
