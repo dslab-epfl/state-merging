@@ -122,9 +122,6 @@ void JobManager::submitJob(ExplorationJob* job) {
 	while (crtNode != NULL) {
 		(**crtNode).jobCount++;
 
-		if ((**crtNode).stats)
-			break;
-
 		crtNode = crtNode->getParent();
 	}
 

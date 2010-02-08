@@ -11,10 +11,58 @@
 #include "cloud9/Logger.h"
 
 #include "klee/Internal/ADT/RNG.h"
+#include "klee/Searcher.h"
+
+using namespace klee;
 
 namespace cloud9 {
 
 namespace worker {
+
+class RandomPathSearcher: public Searcher {
+private:
+	WorkerTree *tree;
+public:
+	RandomPathSearcher(WorkerTree *t) :
+		tree(t) {
+
+	}
+
+	~RandomPathSearcher() {};
+
+	ExecutionState &selectState() {
+		WorkerTree::Node *crtNode = tree->getRoot();
+
+		while ((**crtNode).getJob() == NULL) {
+			int index = (int)theRNG.getBool();
+			WorkerTree::Node *child = crtNode->getChild(index);
+
+			if (child == NULL || (**child).getJobCount() == 0)
+				child = crtNode->getChild(1 - index);
+
+			assert(child && (**child).getJobCount() > 0);
+
+			crtNode = child;
+		}
+
+		return *(**crtNode).getSymbolicState();
+	}
+
+	void update(ExecutionState *current,
+			const std::set<ExecutionState*> &addedStates, const std::set<
+					ExecutionState*> &removedStates) {
+		// Do nothing
+	}
+
+	bool empty() {
+		WorkerTree::Node *root = tree->getRoot();
+
+		return (**root).getJobCount() == 0;
+	}
+	void printName(std::ostream &os) {
+		os << "RandomPathSearcher\n";
+	}
+};
 
 void RandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
 	jobs.push_back(job);

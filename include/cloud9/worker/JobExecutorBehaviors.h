@@ -67,14 +67,6 @@ public:
 	virtual void onNextStateQuery(ExplorationJob *job, WorkerTree::Node *&node);
 };
 
-class KleeExplorationHandler: public JobExecutor::ExplorationHandler {
-public:
-	KleeExplorationHandler() {};
-	virtual ~KleeExplorationHandler() {};
-
-	virtual void onNextStateQuery(ExplorationJob *job, WorkerTree::Node *&node);
-};
-
 }
 }
 
