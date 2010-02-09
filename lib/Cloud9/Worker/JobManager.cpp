@@ -44,13 +44,16 @@ namespace worker {
 JobManager::JobManager(llvm::Module *module) :
 		initialized(false), origModule(module) {
 
-	this->tree = new WorkerTree(2);
+	tree = new WorkerTree(2);
 
 	switch (JobSelection) {
 	case RandomSel:
 		selHandler = new RandomSelectionHandler();
 		CLOUD9_INFO("Using random job selection strategy");
 		break;
+	case RandomPathSel:
+		selHandler = new RandomPathSelectionHandler(tree);
+		CLOUD9_INFO("Using random path job selection strategy");
 	default:
 		assert(0);
 	}

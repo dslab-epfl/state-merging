@@ -49,6 +49,7 @@ static cl::opt<bool, true> WithPOSIXRuntimeOpt("posix-runtime", cl::desc(
 static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 		cl::desc("Job selection strategy"), cl::values(
 				clEnumValN(RandomSel, "random", "Random selection"),
+				clEnumValN(RandomPathSel, "random-path", "Random path selection"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(RandomSel));
 

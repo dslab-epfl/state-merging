@@ -26,7 +26,8 @@ enum LibcType {
 };
 
 enum JobSelectionType {
-	RandomSel
+	RandomSel,
+	RandomPathSel
 };
 
 enum JobSizingType {
