@@ -34,6 +34,7 @@ public:
 		virtual void onStateBranched(klee::ExecutionState *state,
 				klee::ExecutionState *parent, int index) = 0;
 		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
+		virtual void onStepComplete() = 0;
 
 	};
 private:
@@ -43,6 +44,7 @@ protected:
 	void fireStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	void fireStateDestroy(klee::ExecutionState *state, bool &allow);
+	void fireStepComplete();
 public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};

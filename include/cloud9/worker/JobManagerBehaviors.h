@@ -12,11 +12,16 @@
 
 #include <vector>
 
+namespace klee {
+class Searcher;
+}
+
 namespace cloud9 {
 
 namespace worker {
 
 class ExplorationJob;
+class SymbolicEngine;
 
 class RandomSelectionHandler: public JobManager::SelectionHandler {
 private:
@@ -31,10 +36,26 @@ public:
 	virtual void onNextJobSelection(ExplorationJob *&job);
 };
 
-class KleeSelectionHandler: public JobManager::SelectionHandler {
+class RandomPathSelectionHandler: public JobManager::SelectionHandler {
+private:
+	WorkerTree *tree;
 public:
-	KleeSelectionHandler() {};
-	virtual ~KleeSelectionHandler() {};
+	RandomPathSelectionHandler(WorkerTree *t) : tree(t) {};
+	virtual ~RandomPathSelectionHandler() {};
+
+	virtual void onJobEnqueued(ExplorationJob *job) {};
+	virtual void onJobsExported() {};
+
+	virtual void onNextJobSelection(ExplorationJob *&job);
+};
+
+class KleeSelectionHandler: public JobManager::SelectionHandler {
+private:
+	klee::Searcher *kleeSearcher;
+	std::vector<ExplorationJob*> jobs;
+public:
+	KleeSelectionHandler(SymbolicEngine *e);
+	virtual ~KleeSelectionHandler();
 
 	virtual void onJobEnqueued(ExplorationJob *job);
 	virtual void onJobsExported();

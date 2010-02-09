@@ -405,6 +405,10 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 	fireNodeDeleted(pNode);
 }
 
+void JobExecutor::onStepComplete() {
+	// XXX Nothing yet
+}
+
 void JobExecutor::executeJob(ExplorationJob *job) {
 	if (job->foreign) {
 		//CLOUD9_DEBUG("Executing foreign job");

@@ -2318,6 +2318,8 @@ void Executor::stepInState(ExecutionState *state) {
 		}
 	}
 
+	fireStepComplete();
+
 	updateStates(state);
 }
 

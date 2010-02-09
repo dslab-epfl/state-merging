@@ -8,6 +8,7 @@
 #include "cloud9/worker/JobManagerBehaviors.h"
 #include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/Logger.h"
 
 #include "klee/Internal/ADT/RNG.h"
@@ -18,6 +19,28 @@ using namespace klee;
 namespace cloud9 {
 
 namespace worker {
+
+static ExplorationJob *selectRandomPathJob(WorkerTree *tree) {
+	WorkerTree::Node *crtNode = tree->getRoot();
+
+	while ((**crtNode).getJob() == NULL) {
+		int index = (int)theRNG.getBool();
+		WorkerTree::Node *child = crtNode->getChild(index);
+
+		if (child == NULL || (**child).getJobCount() == 0)
+			child = crtNode->getChild(1 - index);
+
+		assert(child && (**child).getJobCount() > 0);
+
+		crtNode = child;
+	}
+
+	return (**crtNode).getJob();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// KLEE Selection Handler
+////////////////////////////////////////////////////////////////////////////////
 
 class RandomPathSearcher: public Searcher {
 private:
@@ -31,21 +54,9 @@ public:
 	~RandomPathSearcher() {};
 
 	ExecutionState &selectState() {
-		WorkerTree::Node *crtNode = tree->getRoot();
+		ExplorationJob *job = selectRandomPathJob(tree);
 
-		while ((**crtNode).getJob() == NULL) {
-			int index = (int)theRNG.getBool();
-			WorkerTree::Node *child = crtNode->getChild(index);
-
-			if (child == NULL || (**child).getJobCount() == 0)
-				child = crtNode->getChild(1 - index);
-
-			assert(child && (**child).getJobCount() > 0);
-
-			crtNode = child;
-		}
-
-		return *(**crtNode).getSymbolicState();
+		return *(**(job->getJobRoot())).getSymbolicState();
 	}
 
 	void update(ExecutionState *current,
@@ -64,13 +75,36 @@ public:
 	}
 };
 
+KleeSelectionHandler::KleeSelectionHandler(SymbolicEngine *e) {
+	// TODO
+}
+
+KleeSelectionHandler::~KleeSelectionHandler() {
+	// TODO
+}
+
+void KleeSelectionHandler::onJobEnqueued(ExplorationJob *job) {
+	// TODO
+}
+
+void KleeSelectionHandler::onJobsExported() {
+	// TODO
+}
+
+void KleeSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
+	// TODO
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Random Selection Handler
+////////////////////////////////////////////////////////////////////////////////
+
 void RandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
 	jobs.push_back(job);
 }
 
 void RandomSelectionHandler::onJobsExported() {
 	int i = 0;
-	int removed = 0;
 
 	while (i < jobs.size()) {
 		ExplorationJob *job = jobs[i];
@@ -78,14 +112,13 @@ void RandomSelectionHandler::onJobsExported() {
 		if (job->isFinished()) {
 			jobs[i] = jobs.back();
 			jobs.pop_back();
-			removed++;
 		} else {
 			i++;
 		}
 
 	}
 
-	CLOUD9_DEBUG("Removed " << removed << " jobs after export");
+	//CLOUD9_DEBUG("Removed " << removed << " jobs after export");
 }
 
 void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
@@ -100,6 +133,15 @@ void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 	jobs[index] = jobs.back();
 
 	jobs.pop_back();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Random Path Selection Handler
+////////////////////////////////////////////////////////////////////////////////
+
+
+void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
+	job = selectRandomPathJob(tree);
 }
 
 }

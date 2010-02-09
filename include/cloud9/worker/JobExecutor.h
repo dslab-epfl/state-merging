@@ -20,6 +20,7 @@
 namespace klee {
 class Interpreter;
 class ExecutionState;
+class Searcher;
 }
 
 namespace llvm {
@@ -141,6 +142,7 @@ public:
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
+	virtual void onStepComplete();
 
 };
 
