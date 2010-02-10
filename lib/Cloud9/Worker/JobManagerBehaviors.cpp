@@ -141,6 +141,13 @@ void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 
 
 void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
+	WorkerTree::Node *crtNode = tree->getRoot();
+
+	if ((**crtNode).getJobCount() == 0) {
+		job = NULL;
+		return;
+	}
+
 	job = selectRandomPathJob(tree);
 }
 

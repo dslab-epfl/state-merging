@@ -54,6 +54,7 @@ JobManager::JobManager(llvm::Module *module) :
 	case RandomPathSel:
 		selHandler = new RandomPathSelectionHandler(tree);
 		CLOUD9_INFO("Using random path job selection strategy");
+		break;
 	default:
 		assert(0);
 	}

@@ -51,7 +51,7 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(RandomSel, "random", "Random selection"),
 				clEnumValN(RandomPathSel, "random-path", "Random path selection"),
 				clEnumValEnd),
-		cl::location(JobSelection), cl::init(RandomSel));
+		cl::location(JobSelection), cl::init(RandomPathSel));
 
 static cl::opt<JobSizingType, true> JobSizingOpt("c9-jobsizing",
 		cl::desc("Job sizing strategy"), cl::values(
