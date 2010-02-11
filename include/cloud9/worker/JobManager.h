@@ -48,7 +48,7 @@ private:
 
 	boost::mutex jobsMutex;
 
-	std::set<WorkerTree::Node*> stats;
+	std::set<WorkerTree::NodePin> stats;
 	bool statChanged;
 	bool refineStats;
 

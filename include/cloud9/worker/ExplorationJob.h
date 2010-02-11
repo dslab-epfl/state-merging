@@ -31,7 +31,7 @@ public:
 		WorkerTree::NodeBreadthCompare nodeCompare;
 	public:
 		bool operator() (const ExplorationJob *a, const ExplorationJob *b) {
-			return nodeCompare(a->jobRoot, b->jobRoot);
+			return nodeCompare(a->jobRoot.get(), b->jobRoot.get());
 		}
 	};
 
@@ -47,11 +47,8 @@ private:
 
 	bool foreign;
 
-	WorkerTree::Node *jobRoot;
+	WorkerTree::NodePin jobRoot;
 	frontier_t frontier;
-
-	//ExplorationJob *parent;
-	//std::vector<ExplorationJob*> children;
 
 	void addToFrontier(WorkerTree::Node *node);
 	void removeFromFrontier(WorkerTree::Node *node);
@@ -66,7 +63,7 @@ public:
 	int getOperations() { return operations; }
 
 	frontier_t &getFrontier() { return frontier; }
-	WorkerTree::Node *getJobRoot() { return jobRoot; }
+	WorkerTree::Node *getJobRoot() { return jobRoot.get(); }
 
 	bool isStarted() const { return started; }
 	bool isFinished() const { return finished; }

@@ -10,7 +10,9 @@
 
 #include "cloud9/ExecutionTree.h"
 
-#include "klee/ExecutionState.h"
+namespace klee {
+class ExecutionState;
+}
 
 namespace cloud9 {
 

@@ -15,6 +15,7 @@
 #include "cloud9/instrum/LocalFileWriter.h"
 
 #include "klee/Interpreter.h"
+#include "klee/ExecutionState.h"
 
 #include "llvm/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -263,10 +264,10 @@ void JobExecutor::initInstrumentation() {
 void JobExecutor::initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp) {
 	klee::ExecutionState *state = symbEngine->initRootState(f, argc, argv, envp);
-	WorkerTree::Node *node = tree->getRoot();
+	WorkerTree::NodePin node = tree->getRoot()->pin();
 
 	(**node).symState = state;
-	state->setCustomData(node);
+	state->setWorkerNode(node);
 }
 
 JobExecutor::~JobExecutor() {
@@ -293,8 +294,8 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 		CLOUD9_INFO("Exploring empty state!");
 	}
 
-
-	deletionSet.clear();
+	// Keep the node alive until we finish with it
+	WorkerTree::NodePin nodePin = node->pin();
 
 	while ((**node).symState != NULL) {
 		//CLOUD9_DEBUG("Stepping in state " << *node);
@@ -309,14 +310,8 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalStatesExplored);
 
-	// Delete the supporting branch of the state, if empty
+
 	if (currentJob) {
-		for (std::set<WorkerTree::Node*>::iterator it = deletionSet.begin();
-				it != deletionSet.end(); it++) {
-
-			tree->removeSupportingBranch(*it, currentJob->jobRoot);
-		}
-
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewStates);
 	}
 
@@ -325,38 +320,34 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
 
-	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
+	WorkerTree::Node *pNode = parent->getWorkerNode().get();
 
-	WorkerTree::Node *newNode = NULL, *oldNode = NULL;
+	WorkerTree::NodePin newNodePin, oldNodePin;
 
 	// Obtain the new node pointers
-
-
-	oldNode = tree->getNode(pNode, 1 - index);
+	oldNodePin = tree->getNode(pNode, 1 - index)->pin();
 
 	// Update state -> node references
-	parent->setCustomData(oldNode);
+	parent->setWorkerNode(oldNodePin);
 
 	// Update node -> state references
 	(**pNode).symState = NULL;
-
-	(**oldNode).symState = parent;
+	(**oldNodePin).symState = parent;
 
 	// Update frontier
 	if (currentJob) {
 		currentJob->removeFromFrontier(pNode);
-		currentJob->addToFrontier(oldNode);
+		currentJob->addToFrontier(oldNodePin.get());
 	}
 
 	if (state) {
-		newNode = tree->getNode(pNode, index);
+		newNodePin = tree->getNode(pNode, index)->pin();
 
-		state->setCustomData(newNode);
-
-		(**newNode).symState = state;
+		state->setWorkerNode(newNodePin);
+		(**newNodePin).symState = state;
 
 		if (currentJob) {
-			currentJob->addToFrontier(newNode);
+			currentJob->addToFrontier(newNodePin.get());
 			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);
 		}
 
@@ -366,15 +357,16 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 }
 
 void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
-	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
+	WorkerTree::Node *pNode = state->getWorkerNode().get();
 
-	state->setCustomData(NULL);
 	(**pNode).symState = NULL;
 
 	if (currentJob) {
 		currentJob->removeFromFrontier(pNode);
-		deletionSet.insert(pNode);
 	}
+
+	// Unpin the node
+	state->getWorkerNode().reset();
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsFinished);
 	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentPathCount);
@@ -383,26 +375,26 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 void JobExecutor::onStateBranched(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
 
-	assert(parent && parent->getCustomData());
+	assert(parent);
 
-	WorkerTree::Node *pNode = (WorkerTree::Node*)parent->getCustomData();
+	WorkerTree::NodePin pNode = parent->getWorkerNode();
 
 	updateTreeOnBranch(state, parent, index);
 
-	fireNodeExplored(pNode);
+	fireNodeExplored(pNode.get());
 
 }
 
 void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 		bool &allow) {
 
-	assert(state && state->getCustomData());
+	assert(state);
 
-	WorkerTree::Node *pNode = (WorkerTree::Node*)state->getCustomData();
+	WorkerTree::NodePin nodePin = state->getWorkerNode();
 
 	updateTreeOnDestroy(state);
 
-	fireNodeDeleted(pNode);
+	fireNodeDeleted(nodePin.get());
 }
 
 void JobExecutor::onStepComplete() {
@@ -413,7 +405,7 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	if (job->foreign) {
 		//CLOUD9_DEBUG("Executing foreign job");
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
-		replayPath(job->jobRoot);
+		replayPath(job->jobRoot.get());
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
 		job->foreign = false;
 	}

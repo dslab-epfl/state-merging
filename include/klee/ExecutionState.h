@@ -14,6 +14,9 @@
 #include "klee/Expr.h"
 #include "klee/Internal/ADT/TreeStream.h"
 
+// XXX Intrusive, but I don't know how to do it another way
+#include "cloud9/worker/TreeNodeInfo.h"
+
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
@@ -21,6 +24,8 @@
 #include <map>
 #include <set>
 #include <vector>
+
+using cloud9::worker::WorkerTree;
 
 namespace klee {
   class Array;
@@ -97,7 +102,7 @@ private:
   ExecutionState &operator=(const ExecutionState&); 
   std::map< std::string, std::string > fnAliases;
 
-  void *customData;
+  WorkerTree::NodePin nodePtr;
 
 public:
   bool fakeState;
@@ -167,8 +172,10 @@ public:
 
   bool merge(const ExecutionState &b);
 
-  void *getCustomData() { return customData; }
-  void setCustomData(void *data) { this->customData = data; }
+
+
+  WorkerTree::NodePin &getWorkerNode() { return nodePtr; }
+  void setWorkerNode(WorkerTree::NodePin &ptr) { nodePtr = ptr; }
 };
 
 

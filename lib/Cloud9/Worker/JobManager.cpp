@@ -60,10 +60,10 @@ JobManager::JobManager(llvm::Module *module) :
 	}
 
 	// Configure the root as a statistics node
-	WorkerTree::Node *root = this->tree->getRoot();
-	(**root).stats = true;
+	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin();
+	(**rootPin).stats = true;
 
-	stats.insert(root);
+	stats.insert(rootPin);
 	statChanged = true;
 	refineStats = false;
 }
@@ -120,7 +120,7 @@ void JobManager::submitJob(ExplorationJob* job) {
 	selHandler->onJobEnqueued(job);
 
 	// Update job statistics
-	WorkerTree::Node *crtNode = job->jobRoot;
+	WorkerTree::Node *crtNode = job->jobRoot.get();
 	(**crtNode).job = job;
 
 	while (crtNode != NULL) {
@@ -140,7 +140,7 @@ ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
 
 void JobManager::finalizeJob(ExplorationJob *job) {
 	// Update job statistics
-	WorkerTree::Node *crtNode = job->jobRoot;
+	WorkerTree::Node *crtNode = job->jobRoot.get();
 	(**crtNode).job = NULL;
 
 	bool emptyJob = (job->frontier.size() == 0);
@@ -149,28 +149,20 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 		assert(job->jobRoot->getCount() == 0);
 	}
 
-	bool hitStats = false;
-
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
 
-		if (crtNode->getCount() == 0 && (**crtNode).symState == NULL) {
-			assert((**crtNode).jobCount == 0);
+		if ((**crtNode).stats && (**crtNode).jobCount == 0) {
+			WorkerTree::NodePin nodePin = crtNode->pin();
 
-			if ((**crtNode).stats && !hitStats) {
-				hitStats = true;
-				assert(stats.find(crtNode) != stats.end());
+			assert(stats.find(nodePin) != stats.end());
 
-				stats.erase(crtNode);
-				statChanged = true;
-			}
-
-			WorkerTree::Node *temp = crtNode;
-			crtNode = crtNode->getParent();
-			tree->removeNode(temp);
-		} else {
-			crtNode = crtNode->getParent();
+			stats.erase(nodePin);
+			(**nodePin).stats = false;
+			statChanged = true;
 		}
+
+		crtNode = crtNode->getParent();
 	}
 }
 
@@ -237,44 +229,44 @@ void JobManager::processJobs() {
 }
 
 void JobManager::refineStatistics() {
-	std::set<WorkerTree::Node*> newStats;
+	std::set<WorkerTree::NodePin> newStats;
 
-	for (std::set<WorkerTree::Node*>::iterator it = stats.begin();
+	for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
 			it != stats.end(); it++) {
-		WorkerTree::Node *node = *it;
+		const WorkerTree::NodePin &nodePin = *it;
 
-		assert((**node).stats);
+		assert((**nodePin).stats);
+		(**nodePin).stats = false;
 
-		if((**node).jobCount == 0) {
-			newStats.insert(node);
+		if((**nodePin).jobCount == 0) {
+			(**nodePin).stats = true;
+			newStats.insert(nodePin);
 			continue;
 		}
 
-		if ((**node).symState != NULL) {
-			newStats.insert(node);
-			continue;
-		}
-
-		WorkerTree::Node *left = node->getChild(0);
-		WorkerTree::Node *right = node->getChild(1);
+		WorkerTree::Node *left = nodePin->getChild(0);
+		WorkerTree::Node *right = nodePin->getChild(1);
 
 		if (left == NULL && right == NULL) {
-			newStats.insert(node);
+			(**nodePin).stats = true;
+			newStats.insert(nodePin);
 			continue;
 		}
 
-		if (left) {
+		if (left && (**left).jobCount > 0) {
 			assert(!(**left).stats);
-			(**left).stats = true;
+			WorkerTree::NodePin leftPin = left->pin();
 
-			newStats.insert(left);
+			(**left).stats = true;
+			newStats.insert(leftPin);
 		}
 
-		if (right) {
+		if (right && (**right).jobCount > 0) {
 			assert(!(**right).stats);
-			(**right).stats = true;
+			WorkerTree::NodePin rightPin = right->pin();
 
-			newStats.insert(right);
+			(**right).stats = true;
+			newStats.insert(rightPin);
 		}
 
 	}
@@ -287,19 +279,27 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 		std::vector<ExecutionPath*> &paths, bool onlyChanged) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
+
+
 	if (statChanged || !onlyChanged) {
-		tree->buildPathSet(stats.begin(), stats.end(), paths);
+		std::vector<WorkerTree::Node*> newStats;
+		for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
+					it != stats.end(); it++) {
+			newStats.push_back((*it).get());
+		}
+
+		tree->buildPathSet(newStats.begin(), newStats.end(), paths);
 		statChanged = false;
 
-		CLOUD9_DEBUG("Sent node set: " << getASCIINodeSet(stats.begin(), stats.end()));
+		CLOUD9_DEBUG("Sent node set: " << getASCIINodeSet(newStats.begin(), newStats.end()));
 	}
 
 	data.clear();
 
-	for (std::set<WorkerTree::Node*>::iterator it = stats.begin();
+	for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
 			it != stats.end(); it++) {
-		WorkerTree::Node *crtNode = *it;
-		data.push_back((**crtNode).jobCount);
+		const WorkerTree::NodePin &crtNodePin = *it;
+		data.push_back((**crtNodePin).jobCount);
 	}
 
 	CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
@@ -324,7 +324,7 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 				continue;
 			}
 
-			assert(node->getCount() == 0);
+			assert(node->getCount() == 0 && (**node).jobCount == 1);
 
 			jobSet.push_back(job);
 			maxCount--;
@@ -333,16 +333,14 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 			WorkerTree::Node *right = node->getChild(1);
 
 			if (left == NULL && right == NULL) {
-				if ((**node).symState == NULL) {
-					CLOUD9_ERROR("Invalid path found while selecting jobs for export");
-				}
+				assert((**node).symState != NULL && (**node).jobCount == 0);
 			}
 
-			if (left) {
+			if (left && (**left).jobCount > 0) {
 				nodes.push(left);
 			}
 
-			if (right) {
+			if (right && (**left).jobCount > 0) {
 				nodes.push(right);
 			}
 		}
@@ -369,6 +367,9 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 		if (crtNode->getCount() > 0) {
 			CLOUD9_INFO("Discarding job as being obsolete: " << *crtNode);
 		} else {
+			// The exploration job object gets a pin on the node, thus
+			// ensuring it will be released automatically after it's no
+			// longer needed
 			ExplorationJob *job = new ExplorationJob(*it, true);
 			jobs.push_back(job);
 		}
@@ -401,7 +402,7 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 	for (std::vector<ExplorationJob*>::iterator it = jobs.begin();
 			it != jobs.end(); it++) {
 		ExplorationJob *job = *it;
-		jobRoots.push_back(job->jobRoot);
+		jobRoots.push_back(job->jobRoot.get());
 	}
 
 	tree->buildPathSet(jobRoots.begin(), jobRoots.end(), paths);
@@ -418,6 +419,8 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 		job->finished = true;
 
 		finalizeJob(job);
+
+		delete job;
 	}
 
 	selHandler->onJobsExported();

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+#include <boost/intrusive_ptr.hpp>
 
 #include "cloud9/Protocols.h"
 #include "cloud9/Logger.h"
@@ -24,6 +25,12 @@ namespace cloud9 {
 class ExecutionPath {
 	template<class>
 	friend class ExecutionTree;
+
+	friend void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,
+			std::vector<ExecutionPath*> &result);
+
+	friend void serializeExecutionPathSet(const std::vector<ExecutionPath*> &set,
+			cloud9::data::ExecutionPathSet &result);
 private:
 	std::vector<int> path;
 
@@ -41,12 +48,6 @@ public:
 	ExecutionPath *getAbsolutePath();
 
 	typedef std::vector<int>::iterator iterator;
-
-	friend void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,
-			std::vector<ExecutionPath*> &result);
-
-	friend void serializeExecutionPathSet(const std::vector<ExecutionPath*> &set,
-			cloud9::data::ExecutionPathSet &result);
 };
 
 
@@ -54,6 +55,16 @@ template<class NodeInfo>
 class TreeNode {
 	template<class>
 	friend class ExecutionTree;
+
+	template<class NI>
+	friend void intrusive_ptr_add_ref(TreeNode<NI> * p);
+
+	template<class NI>
+	friend void intrusive_ptr_release(TreeNode<NI> * p);
+
+public:
+	typedef boost::intrusive_ptr<TreeNode<NodeInfo> > Pin;
+	typedef TreeNode<NodeInfo> *Ptr;
 private:
 	std::vector<TreeNode*> children;
 	TreeNode* parent;
@@ -64,6 +75,16 @@ private:
 
 	unsigned int _label;
 
+	/*
+	 * Basically, the difference between count and _refCount is that count keeps
+	 * track of the internal references (pointers from other nodes), while
+	 * _refCount keeps track of external, persistent references to the node.
+	 *
+	 * The reason of doing this is to control the destruction of nodes in cascade
+	 * and avoid performance issues when the tree grows very large.
+	 */
+	unsigned int _refCount;
+
 	NodeInfo _info;
 
 	/*
@@ -71,7 +92,7 @@ private:
 	 * node
 	 */
 	TreeNode(int deg, TreeNode* p, int index) :
-		children(deg), parent(p), count(0), _label(0) {
+		children(deg), parent(p), count(0), _label(0), _refCount(0) {
 
 		if (p != NULL) {
 			p->children[index] = this;
@@ -85,20 +106,21 @@ private:
 		}
 	}
 public:
-	TreeNode* getLeft() const {
+
+	Ptr getLeft() const {
 		return children.front();
 	}
 
-	TreeNode* getRight() const {
+	Ptr getRight() const {
 		return children.back();
 	}
 
-	TreeNode* getParent() const {
+	Ptr getParent() const {
 		return parent;
 	}
 
 
-	TreeNode* getChild(int index) const {
+	Ptr getChild(int index) const {
 		return children[index];
 	}
 
@@ -116,12 +138,20 @@ public:
 		return _info;
 	}
 
+	Pin pin() {
+		return Pin(this);
+	}
+
 };
 
 template<class NodeInfo>
 class ExecutionTree {
+	template<class NI>
+	friend void intrusive_ptr_release(TreeNode<NI> * p);
 public:
 	typedef TreeNode<NodeInfo> Node;
+	typedef typename TreeNode<NodeInfo>::Pin NodePin;
+	typedef typename TreeNode<NodeInfo>::Ptr NodePtr;
 
 	struct NodeBreadthCompare {
 		bool operator()(const Node *a, const Node *b) {
@@ -180,6 +210,32 @@ private:
 
 		return crtNode;
 	}
+
+	static void removeSupportingBranch(Node *node, Node *root) {
+		// Checking for node->parent ensures that we will never delete the
+		// root node
+		while (node->parent && node != root) {
+			if (node->count > 0 || node->_refCount > 0) // Stop when joining another branch, or hitting the job root
+				break;
+
+			Node *temp = node;
+			node = node->parent;
+			removeNode(temp);
+		}
+	}
+
+	static void removeNode(Node *node) {
+		assert(node->count == 0);
+		assert(node->_refCount == 0);
+
+		if (node->parent != NULL) {
+			node->parent->children[node->index] = NULL;
+			node->parent->count--;
+		}
+
+		delete node;
+	}
+
 public:
 	ExecutionTree(int deg): degree(deg){
 		root = new Node(deg, NULL, 0);
@@ -208,49 +264,6 @@ public:
 		result = new Node(degree, root, index);
 
 		return result;
-	}
-
-	void removeNode(Node *node) {
-		assert(node->count == 0);
-
-		if (node->parent != NULL) {
-			node->parent->children[node->index] = NULL;
-			node->parent->count--;
-		}
-
-		delete node;
-	}
-
-	void removeSubTree(Node *root) {
-		std::stack<Node*> nodes;
-
-		nodes.push(root);
-
-		while (!nodes.empty()) {
-			Node *node = nodes.top();
-
-			if (node->count == 0) {
-				nodes.pop();
-				removeNode(node);
-			} else {
-				for (int i = 0; i < degree; i++) {
-					if (node->children[i] != NULL)
-						nodes.push(node->children[i]);
-				}
-			}
-
-		}
-	}
-
-	void removeSupportingBranch(Node *node, Node *root) {
-		while (node->parent && node != root) {
-			if (node->count > 0) // Stop when joining another branch, or hitting the job root
-				break;
-
-			Node *temp = node;
-			node = node->parent;
-			removeNode(temp);
-		}
 	}
 
 	template<typename NodeIterator>
@@ -351,6 +364,24 @@ std::ostream& operator<<(std::ostream &os,
 	os << str;
 
 	return os;
+}
+
+template<class NI>
+void intrusive_ptr_add_ref(TreeNode<NI> * p) {
+	assert(p);
+
+	p->_refCount++;
+}
+
+template<class NI>
+void intrusive_ptr_release(TreeNode<NI> * p) {
+	assert(p);
+
+	p->_refCount--;
+
+	if (p->_refCount == 0) {
+		ExecutionTree<NI>::removeSupportingBranch(p, NULL);
+	}
 }
 
 #if 1 // XXX: debug
