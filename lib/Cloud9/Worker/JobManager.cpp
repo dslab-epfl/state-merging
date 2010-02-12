@@ -152,16 +152,6 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	while (crtNode != NULL) {
 		(**crtNode).jobCount--;
 
-		if ((**crtNode).stats && (**crtNode).jobCount == 0) {
-			WorkerTree::NodePin nodePin = crtNode->pin();
-
-			assert(stats.find(nodePin) != stats.end());
-
-			stats.erase(nodePin);
-			(**nodePin).stats = false;
-			statChanged = true;
-		}
-
 		crtNode = crtNode->getParent();
 	}
 }
@@ -238,20 +228,12 @@ void JobManager::refineStatistics() {
 		assert((**nodePin).stats);
 		(**nodePin).stats = false;
 
-		if((**nodePin).jobCount == 0) {
-			(**nodePin).stats = true;
-			newStats.insert(nodePin);
-			continue;
-		}
+		assert((**nodePin).jobCount > 0);
+
+		bool keep = true;
 
 		WorkerTree::Node *left = nodePin->getChild(0);
 		WorkerTree::Node *right = nodePin->getChild(1);
-
-		if (left == NULL && right == NULL) {
-			(**nodePin).stats = true;
-			newStats.insert(nodePin);
-			continue;
-		}
 
 		if (left && (**left).jobCount > 0) {
 			assert(!(**left).stats);
@@ -259,6 +241,7 @@ void JobManager::refineStatistics() {
 
 			(**left).stats = true;
 			newStats.insert(leftPin);
+			keep = false;
 		}
 
 		if (right && (**right).jobCount > 0) {
@@ -267,6 +250,13 @@ void JobManager::refineStatistics() {
 
 			(**right).stats = true;
 			newStats.insert(rightPin);
+			keep = false;
+		}
+
+		if (keep) {
+			(**nodePin).stats = true;
+			newStats.insert(nodePin);
+			continue;
 		}
 
 	}
@@ -275,11 +265,27 @@ void JobManager::refineStatistics() {
 	statChanged = true;
 }
 
+void JobManager::cleanupStatistics() {
+
+	for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
+				it != stats.end();) {
+		std::set<WorkerTree::NodePin>::iterator oldIt = it++;
+		WorkerTree::NodePin nodePin = *oldIt;
+
+		if ((**nodePin).jobCount == 0) {
+			(**nodePin).stats = false;
+			stats.erase(oldIt);
+			statChanged = true;
+		}
+
+	}
+}
+
 void JobManager::getStatisticsData(std::vector<int> &data,
 		std::vector<ExecutionPath*> &paths, bool onlyChanged) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
-
+	cleanupStatistics();
 
 	if (statChanged || !onlyChanged) {
 		std::vector<WorkerTree::Node*> newStats;
@@ -419,11 +425,14 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 		job->finished = true;
 
 		finalizeJob(job);
-
-		delete job;
 	}
 
 	selHandler->onJobsExported();
+
+	for (std::vector<ExplorationJob*>::iterator it = jobs.begin();
+				it != jobs.end(); it++) {
+		delete (*it);
+	}
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
 			jobs.size());

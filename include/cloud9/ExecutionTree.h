@@ -102,7 +102,7 @@ private:
 			this->index = index;
 		} else {
 			level = 0;
-			index = 0;
+			this->index = 0;
 		}
 	}
 public:
@@ -376,6 +376,7 @@ void intrusive_ptr_add_ref(TreeNode<NI> * p) {
 template<class NI>
 void intrusive_ptr_release(TreeNode<NI> * p) {
 	assert(p);
+	assert(p->_refCount > 0);
 
 	p->_refCount--;
 

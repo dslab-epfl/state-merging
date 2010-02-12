@@ -85,6 +85,7 @@ private:
 	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock);
 
 	void refineStatistics();
+	void cleanupStatistics();
 
 	void selectJobs(WorkerTree::Node *root,
 			std::vector<ExplorationJob*> &jobSet, int maxCount);
