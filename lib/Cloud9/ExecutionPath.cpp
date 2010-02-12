@@ -1,9 +1,11 @@
 /*
- * ExecutionTree.cpp
+ * ExecutionPath.cpp
  *
- *  Created on: Jan 6, 2010
+ *  Created on: Feb 12, 2010
  *      Author: stefan
  */
+
+#include "cloud9/ExecutionPath.h"
 
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/Protocols.h"
@@ -11,8 +13,6 @@
 #include <string>
 #include <vector>
 #include <map>
-
-using namespace cloud9::data;
 
 namespace cloud9 {
 
@@ -33,6 +33,26 @@ ExecutionPath *ExecutionPath::getAbsolutePath() {
 	}
 
 	return absPath;
+}
+
+ExecutionPath::Pin ExecutionPathSet::getPath(int index) {
+	assert(index >= 0 && index < paths.size());
+
+	ExecutionPath *path = paths[index]->getAbsolutePath();
+
+	return ExecutionPath::Pin(path);
+}
+
+ExecutionPathSet::ExecutionPathSet() {
+	// Do nothing
+}
+
+
+ExecutionPathSet::~ExecutionPathSet() {
+	// Delete the paths
+	for (iterator it = paths.begin(); it != paths.end(); it++) {
+		delete *it;
+	}
 }
 
 }

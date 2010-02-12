@@ -30,6 +30,7 @@ using namespace cloud9::data;
 namespace cloud9 {
 
 class ExecutionPath;
+class ExecutionPathSet;
 
 #if 0
 // XXX Debugging
@@ -173,11 +174,10 @@ public:
 };
 
 
-void parseExecutionPathSet(const ExecutionPathSet &ps,
-		std::vector<ExecutionPath*> &result);
+typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPathSet &ps);
 
-void serializeExecutionPathSet(const std::vector<ExecutionPath*> &set,
-		cloud9::data::ExecutionPathSet &result);
+void serializeExecutionPathSet(ExecutionPathSet::Pin &set,
+			cloud9::data::ExecutionPathSet &result);
 
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port, boost::system::error_code &error);

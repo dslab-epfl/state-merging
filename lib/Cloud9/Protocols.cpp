@@ -66,10 +66,9 @@ void recvMessage(tcp::socket &socket, std::string &message) {
 	//CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
 }
 
-void parseExecutionPathSet(const ExecutionPathSet &ps,
-		std::vector<ExecutionPath*> &result) {
+typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPathSet &ps) {
 
-	result.clear();
+	ExecutionPathSet *set = new ExecutionPathSet();
 
 	for (int i = 0; i < ps.path_size(); i++) {
 		const ExecutionPathSet_ExecutionPath &p = ps.path(i);
@@ -90,21 +89,23 @@ void parseExecutionPathSet(const ExecutionPathSet &ps,
 
 		}
 
-		result.push_back(path);
+		set->paths.push_back(path);
 	}
+
+	return ExecutionPathSet::Pin(set);
 }
 
-void serializeExecutionPathSet(const std::vector<ExecutionPath*> &set,
-		cloud9::data::ExecutionPathSet &result) {
+void serializeExecutionPathSet(ExecutionPathSet::Pin &set,
+			cloud9::data::ExecutionPathSet &result) {
 
 	std::map<ExecutionPath*, int> indices;
 
-	for (int i = 0; i < set.size(); i++) {
-		ExecutionPath *path = set[i];
+	for (int i = 0; i < set->paths.size(); i++) {
+		ExecutionPath *path = set->paths[i];
 
 		ExecutionPathSet_ExecutionPath *pDest = result.mutable_path()->Add();
 
-		if (set[i]->parent != NULL) {
+		if (set->paths[i]->parent != NULL) {
 			assert(indices.find(path->parent) != indices.end());
 
 			pDest->set_parent(indices[path->parent]);

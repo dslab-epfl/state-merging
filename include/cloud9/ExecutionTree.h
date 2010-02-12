@@ -19,37 +19,9 @@
 
 #include "cloud9/Protocols.h"
 #include "cloud9/Logger.h"
+#include "cloud9/ExecutionPath.h"
 
 namespace cloud9 {
-
-class ExecutionPath {
-	template<class>
-	friend class ExecutionTree;
-
-	friend void parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps,
-			std::vector<ExecutionPath*> &result);
-
-	friend void serializeExecutionPathSet(const std::vector<ExecutionPath*> &set,
-			cloud9::data::ExecutionPathSet &result);
-private:
-	std::vector<int> path;
-
-	ExecutionPath *parent;
-	int parentIndex;
-
-	ExecutionPath() : parent(NULL), parentIndex(0) { };
-public:
-	virtual ~ExecutionPath() { };
-
-	std::vector<int> getPath() const { return path; };
-	ExecutionPath *getParent() { return parent; }
-	int getParentIndex() { return parentIndex; }
-
-	ExecutionPath *getAbsolutePath();
-
-	typedef std::vector<int>::iterator iterator;
-};
-
 
 template<class NodeInfo>
 class TreeNode {
@@ -196,7 +168,7 @@ private:
 			crtNode = getNode(p->parent, root, p->parentIndex);
 		}
 
-		for (ExecutionPath::iterator it = p->path.begin();
+		for (ExecutionPath::path_iterator it = p->path.begin();
 				it != p->path.end(); it++) {
 
 			if (pos == 0)
@@ -247,11 +219,11 @@ public:
 
 	int getDegree() const { return degree; }
 
-	Node *getNode(ExecutionPath *p) {
+	Node *getNode(ExecutionPath::Pin p) {
 		return getNode(p, root, p->path.size());
 	}
 
-	Node *getNode(ExecutionPath *p, int pos) {
+	Node *getNode(ExecutionPath::Pin p, int pos) {
 		return getNode(p, root, pos);
 	}
 
@@ -267,10 +239,9 @@ public:
 	}
 
 	template<typename NodeIterator>
-	void buildPathSet(NodeIterator begin, NodeIterator end,
-			std::vector<ExecutionPath*> &paths) {
+	ExecutionPathSet::Pin buildPathSet(NodeIterator begin, NodeIterator end) {
+		ExecutionPathSet *set = new ExecutionPathSet();
 
-		paths.clear();
 		std::vector<Node*> processed; // XXX: Require a random access iterator
 
 		int i = 0;
@@ -285,7 +256,7 @@ public:
 			while (crtNode != root) {
 				if (crtNode->_label > 0) {
 					// We hit an already built path
-					p = paths[crtNode->_label - 1];
+					p = set->paths[crtNode->_label - 1];
 					pIndex = p->path.size() -
 							(processed[crtNode->_label - 1]->level - crtNode->level);
 					break;
@@ -301,7 +272,7 @@ public:
 			path->parent = p;
 			path->parentIndex = pIndex;
 
-			paths.push_back(path);
+			set->paths.push_back(path);
 			processed.push_back(*it);
 			i++;
 		}
@@ -319,20 +290,19 @@ public:
 				}
 			}
 		}
+
+		return ExecutionPathSet::Pin(set);
 	}
 
-	template<typename PathIterator>
-	void getNodes(PathIterator begin, PathIterator end,
-			std::vector<Node*> &nodes) {
-
+	template<typename NodeCollection>
+	void getNodes(ExecutionPathSet::Pin pathSet, NodeCollection &nodes) {
 		nodes.clear();
 
-		for (PathIterator it = begin; it != end; it++) {
+		for (ExecutionPathSet::iterator it = pathSet->paths.begin();
+				it != pathSet->paths.end(); it++) {
 			Node *crtNode = getNode(*it);
-
 			nodes.push_back(crtNode);
 		}
-
 	}
 
 };
