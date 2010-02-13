@@ -9,23 +9,31 @@
 #define EXECUTIONPATH_H_
 
 #include "cloud9/Logger.h"
-#include "cloud9/Protocols.h"
 
 #include <vector>
 #include <boost/shared_ptr.hpp>
 
 namespace cloud9 {
 
+namespace data {
+class ExecutionPathSet;
+}
+
+class ExecutionPath;
+class ExecutionPathSet;
+
+typedef boost::shared_ptr<ExecutionPath> ExecutionPathPin;
+typedef boost::shared_ptr<ExecutionPathSet> ExecutionPathSetPin;
+
 class ExecutionPath {
 	template<class>
 	friend class ExecutionTree;
+	friend class ExecutionPathSet;
 
-	friend typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPathSet &ps);
+	friend ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps);
 
-	friend void serializeExecutionPathSet(ExecutionPathSet::Pin &set,
+	friend void serializeExecutionPathSet(ExecutionPathSetPin &set,
 			cloud9::data::ExecutionPathSet &result);
-public:
-	typedef boost::shared_ptr<ExecutionPath> Pin;
 private:
 	std::vector<int> path;
 
@@ -46,16 +54,15 @@ public:
 	typedef std::vector<int>::iterator path_iterator;
 };
 
+
 class ExecutionPathSet {
 	template<class>
 	friend class ExecutionTree;
 
-	friend typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPathSet &ps);
+	friend ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps);
 
-	friend void serializeExecutionPathSet(ExecutionPathSet::Pin &set,
+	friend void serializeExecutionPathSet(ExecutionPathSetPin &set,
 			cloud9::data::ExecutionPathSet &result);
-public:
-	typedef boost::shared_ptr<ExecutionPathSet> Pin;
 private:
 	std::vector<ExecutionPath*> paths;
 
@@ -69,8 +76,9 @@ public:
 		return paths.size();
 	}
 
-	ExecutionPath::Pin getPath(int index);
+	ExecutionPathPin getPath(int index);
 };
+
 
 }
 

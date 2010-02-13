@@ -217,7 +217,7 @@ TransferRequest *LoadBalancer::computeTransfer(int fromID, int toID, int count) 
 	std::vector<LBTree::Node*> nodes;
 	nodes.push_back(tree->getRoot());
 
-	tree->buildPathSet(nodes.begin(), nodes.end(), req->paths);
+	req->paths = tree->buildPathSet(nodes.begin(), nodes.end());
 
 	CLOUD9_DEBUG("Created transfer request from " << fromID << " to " <<
 				toID << " for " << count << " states");

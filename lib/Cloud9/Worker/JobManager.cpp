@@ -282,7 +282,7 @@ void JobManager::cleanupStatistics() {
 }
 
 void JobManager::getStatisticsData(std::vector<int> &data,
-		std::vector<ExecutionPath*> &paths, bool onlyChanged) {
+		ExecutionPathSetPin &paths, bool onlyChanged) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	cleanupStatistics();
@@ -294,7 +294,7 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 			newStats.push_back((*it).get());
 		}
 
-		tree->buildPathSet(newStats.begin(), newStats.end(), paths);
+		paths = tree->buildPathSet(newStats.begin(), newStats.end());
 		statChanged = false;
 
 		CLOUD9_DEBUG("Sent node set: " << getASCIINodeSet(newStats.begin(), newStats.end()));
@@ -356,15 +356,15 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 
 }
 
-void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
+void JobManager::importJobs(ExecutionPathSetPin paths) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> nodes;
 	std::vector<ExplorationJob*> jobs;
 
-	tree->getNodes(paths.begin(), paths.end(), nodes);
+	tree->getNodes(paths, nodes);
 
-	CLOUD9_DEBUG("Importing " << paths.size() << " jobs");
+	CLOUD9_DEBUG("Importing " << paths->count() << " jobs");
 
 	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
 			it != nodes.end(); it++) {
@@ -389,19 +389,19 @@ void JobManager::importJobs(std::vector<ExecutionPath*> &paths) {
 			jobs.size());
 }
 
-void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
-		std::vector<int> &counts, std::vector<ExecutionPath*> &paths) {
+ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
+		std::vector<int> counts) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> roots;
 	std::vector<ExplorationJob*> jobs;
 	std::vector<WorkerTree::Node*> jobRoots;
 
-	tree->getNodes(seeds.begin(), seeds.end(), roots);
+	tree->getNodes(seeds, roots);
 
 	assert(roots.size() == counts.size());
 
-	for (int i = 0; i < seeds.size(); i++) {
+	for (int i = 0; i < seeds->count(); i++) {
 		selectJobs(roots[i], jobs, counts[i]);
 	}
 
@@ -411,7 +411,8 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 		jobRoots.push_back(job->jobRoot.get());
 	}
 
-	tree->buildPathSet(jobRoots.begin(), jobRoots.end(), paths);
+	// Do this before de-registering the jobs, in order to keep the nodes pinned
+	ExecutionPathSetPin paths = tree->buildPathSet(jobRoots.begin(), jobRoots.end());
 
 	// De-register the jobs with the worker
 	for (std::vector<ExplorationJob*>::iterator it = jobs.begin();
@@ -434,10 +435,13 @@ void JobManager::exportJobs(std::vector<ExecutionPath*> &seeds,
 		delete (*it);
 	}
 
+
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
 			jobs.size());
 	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize,
 			jobs.size());
+
+	return paths;
 }
 
 }

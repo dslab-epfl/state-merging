@@ -66,7 +66,7 @@ void recvMessage(tcp::socket &socket, std::string &message) {
 	//CLOUD9_DEBUG("Received message " << getASCIIMessage(message));
 }
 
-typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPathSet &ps) {
+ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps) {
 
 	ExecutionPathSet *set = new ExecutionPathSet();
 
@@ -76,7 +76,7 @@ typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPath
 		ExecutionPath *path = new ExecutionPath();
 
 		if (p.has_parent()) {
-			path->parent = result[p.parent()];
+			path->parent = set->paths[p.parent()];
 			path->parentIndex = p.parent_pos();
 		}
 
@@ -92,10 +92,10 @@ typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPath
 		set->paths.push_back(path);
 	}
 
-	return ExecutionPathSet::Pin(set);
+	return ExecutionPathSetPin(set);
 }
 
-void serializeExecutionPathSet(ExecutionPathSet::Pin &set,
+void serializeExecutionPathSet(ExecutionPathSetPin &set,
 			cloud9::data::ExecutionPathSet &result) {
 
 	std::map<ExecutionPath*, int> indices;

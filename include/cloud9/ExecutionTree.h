@@ -219,12 +219,8 @@ public:
 
 	int getDegree() const { return degree; }
 
-	Node *getNode(ExecutionPath::Pin p) {
-		return getNode(p, root, p->path.size());
-	}
-
-	Node *getNode(ExecutionPath::Pin p, int pos) {
-		return getNode(p, root, pos);
+	Node *getNode(ExecutionPathPin p) {
+		return getNode(p.get(), root, p->path.size());
 	}
 
 	Node *getNode(Node *root, int index) {
@@ -239,7 +235,7 @@ public:
 	}
 
 	template<typename NodeIterator>
-	ExecutionPathSet::Pin buildPathSet(NodeIterator begin, NodeIterator end) {
+	ExecutionPathSetPin buildPathSet(NodeIterator begin, NodeIterator end) {
 		ExecutionPathSet *set = new ExecutionPathSet();
 
 		std::vector<Node*> processed; // XXX: Require a random access iterator
@@ -291,16 +287,16 @@ public:
 			}
 		}
 
-		return ExecutionPathSet::Pin(set);
+		return ExecutionPathSetPin(set);
 	}
 
 	template<typename NodeCollection>
-	void getNodes(ExecutionPathSet::Pin pathSet, NodeCollection &nodes) {
+	void getNodes(ExecutionPathSetPin pathSet, NodeCollection &nodes) {
 		nodes.clear();
 
 		for (ExecutionPathSet::iterator it = pathSet->paths.begin();
 				it != pathSet->paths.end(); it++) {
-			Node *crtNode = getNode(*it);
+			Node *crtNode = getNode(*it, root, (*it)->path.size());
 			nodes.push_back(crtNode);
 		}
 	}

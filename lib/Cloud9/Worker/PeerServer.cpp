@@ -43,10 +43,9 @@ void PeerConnection::handleMessageReceived(std::string &msgString,
 		PeerTransferMessage message;
 		message.ParseFromString(msgString);
 
-		const ExecutionPathSet &pathSet = message.path_set();
+		const cloud9::data::ExecutionPathSet &pathSet = message.path_set();
 
-		std::vector<ExecutionPath*> paths;
-		parseExecutionPathSet(pathSet, paths);
+		ExecutionPathSetPin paths = parseExecutionPathSet(pathSet);
 
 		jobManager->importJobs(paths);
 	} else {

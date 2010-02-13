@@ -35,12 +35,12 @@ ExecutionPath *ExecutionPath::getAbsolutePath() {
 	return absPath;
 }
 
-ExecutionPath::Pin ExecutionPathSet::getPath(int index) {
+ExecutionPathPin ExecutionPathSet::getPath(int index) {
 	assert(index >= 0 && index < paths.size());
 
 	ExecutionPath *path = paths[index]->getAbsolutePath();
 
-	return ExecutionPath::Pin(path);
+	return ExecutionPathPin(path);
 }
 
 ExecutionPathSet::ExecutionPathSet() {

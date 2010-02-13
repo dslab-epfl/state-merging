@@ -86,7 +86,7 @@ void LBConnection::sendUpdates() {
 
 	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
 	std::vector<int> data;
-	std::vector<ExecutionPath*> paths;
+	ExecutionPathSetPin paths;
 
 	jobManager->getStatisticsData(data, paths, true);
 
@@ -97,11 +97,11 @@ void LBConnection::sendUpdates() {
 		dataUpdate->add_data(*it);
 	}
 
-	if (paths.size() > 0 || data.size() == 0) {
-		assert(paths.size() == data.size());
+	if (paths || data.size() == 0) {
+		assert(paths->count() == data.size());
 
 		WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();
-		ExecutionPathSet *pathSet = setUpdate->mutable_pathset();
+		cloud9::data::ExecutionPathSet *pathSet = setUpdate->mutable_pathset();
 
 		serializeExecutionPathSet(paths, *pathSet);
 	}
@@ -138,10 +138,10 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		std::string destAddress = transDetails.dest_address();
 		int destPort = transDetails.dest_port();
 
-		std::vector<ExecutionPath*> paths;
+		ExecutionPathSetPin paths;
 		std::vector<int> counts;
 
-		parseExecutionPathSet(transDetails.path_set(), paths);
+		paths = parseExecutionPathSet(transDetails.path_set());
 
 		counts.insert(counts.begin(), transDetails.count().begin(),
 				transDetails.count().end());
@@ -153,24 +153,22 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		const LBResponseMessage_JobSeed &seedDetails =
 				response.jobseed();
 
-		const ExecutionPathSet &pathSet = seedDetails.path_set();
-		std::vector<ExecutionPath*> paths;
+		const cloud9::data::ExecutionPathSet &pathSet = seedDetails.path_set();
+		ExecutionPathSetPin paths;
 
-		parseExecutionPathSet(pathSet, paths);
+		paths = parseExecutionPathSet(pathSet);
 
-		CLOUD9_DEBUG("Job seed request: " << paths.size() << " paths");
+		CLOUD9_DEBUG("Job seed request: " << paths->count() << " paths");
 
 		jobManager->importJobs(paths);
 	}
 }
 
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
-		std::vector<ExecutionPath*> paths,
+		ExecutionPathSetPin paths,
 		std::vector<int> counts) {
 
-	std::vector<ExecutionPath*> jobPaths;
-
-	jobManager->exportJobs(paths, counts, jobPaths);
+	ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts);
 
 	tcp::socket peerSocket(service);
 	boost::system::error_code error;
@@ -183,7 +181,7 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
 	}
 
 	PeerTransferMessage message;
-	ExecutionPathSet *pSet = message.mutable_path_set();
+	cloud9::data::ExecutionPathSet *pSet = message.mutable_path_set();
 
 	serializeExecutionPathSet(jobPaths, *pSet);
 

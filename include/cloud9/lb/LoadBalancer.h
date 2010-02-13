@@ -26,7 +26,7 @@ public:
 	int fromID;
 	int toID;
 
-	std::vector<ExecutionPath*> paths;
+	ExecutionPathSetPin paths;
 	std::vector<int> counts;
 public:
 	TransferRequest(int from, int to) : fromID(from), toID(to) { }

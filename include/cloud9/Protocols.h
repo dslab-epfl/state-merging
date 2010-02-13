@@ -12,6 +12,7 @@
 #include "../../lib/Cloud9/Cloud9Data.pb.h"
 
 #include "cloud9/Logger.h"
+#include "cloud9/ExecutionPath.h"
 
 #include <string>
 #include <cassert>
@@ -174,9 +175,9 @@ public:
 };
 
 
-typename ExecutionPathSet::Pin parseExecutionPathSet(cloud9::data::ExecutionPathSet &ps);
+ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps);
 
-void serializeExecutionPathSet(ExecutionPathSet::Pin &set,
+void serializeExecutionPathSet(ExecutionPathSetPin &set,
 			cloud9::data::ExecutionPathSet &result);
 
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,

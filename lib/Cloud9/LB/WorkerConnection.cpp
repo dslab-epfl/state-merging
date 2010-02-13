@@ -64,14 +64,13 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			if (lb->getWorkerCount() == 1) {
 				// Send the seed information
 				LBResponseMessage_JobSeed *jobSeed = response.mutable_jobseed();
-				ExecutionPathSet *pathSet = jobSeed->mutable_path_set();
+				cloud9::data::ExecutionPathSet *pathSet = jobSeed->mutable_path_set();
 
 				std::vector<LBTree::Node*> nodes;
 				nodes.push_back(lb->getTree()->getRoot());
 
-				std::vector<ExecutionPath*> paths;
-
-				lb->getTree()->buildPathSet(nodes.begin(), nodes.end(), paths);
+				ExecutionPathSetPin paths =
+						lb->getTree()->buildPathSet(nodes.begin(), nodes.end());
 
 				serializeExecutionPathSet(paths, *pathSet);
 			}
@@ -106,7 +105,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				transMsg->set_dest_address(destination->getAddress());
 				transMsg->set_dest_port(destination->getPort());
 
-				ExecutionPathSet *pathSet = transMsg->mutable_path_set();
+				cloud9::data::ExecutionPathSet *pathSet = transMsg->mutable_path_set();
 				serializeExecutionPathSet(transfer->paths, *pathSet);
 
 				for (std::vector<int>::iterator it = transfer->counts.begin();
@@ -146,11 +145,9 @@ void WorkerConnection::processNodeSetUpdate(int id,
 				const WorkerReportMessage_NodeSetUpdate &message) {
 
 	std::vector<LBTree::Node*> nodes;
-	std::vector<ExecutionPath*> paths;
+	ExecutionPathSetPin paths = parseExecutionPathSet(message.pathset());
 
-	parseExecutionPathSet(message.pathset(), paths);
-
-	lb->getTree()->getNodes(paths.begin(), paths.end(), nodes);
+	lb->getTree()->getNodes(paths, nodes);
 
 	CLOUD9_DEBUG("Received node set: " << getASCIINodeSet(nodes.begin(),
 			nodes.end()));

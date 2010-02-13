@@ -112,16 +112,16 @@ public:
 	 */
 
 	void getStatisticsData(std::vector<int> &data,
-			std::vector<ExecutionPath*> &paths, bool onlyChanged);
+			ExecutionPathSetPin &paths, bool onlyChanged);
 
 	void setRefineStatistics() { refineStats = true; }
 
 	/*
 	 * Job import/export methods
 	 */
-	void importJobs(std::vector<ExecutionPath*> &paths);
-	void exportJobs(std::vector<ExecutionPath*> &seeds,
-			std::vector<int> &counts, std::vector<ExecutionPath*> &paths);
+	void importJobs(ExecutionPathSetPin paths);
+	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
+			std::vector<int> counts);
 
 
 
