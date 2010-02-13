@@ -86,7 +86,7 @@ void LBConnection::sendUpdates() {
 
 	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
 	std::vector<int> data;
-	ExecutionPathSetPin paths;
+	ExecutionPathSetPin paths = ExecutionPathSet::getEmptySet();
 
 	jobManager->getStatisticsData(data, paths, true);
 
@@ -97,7 +97,7 @@ void LBConnection::sendUpdates() {
 		dataUpdate->add_data(*it);
 	}
 
-	if (paths || data.size() == 0) {
+	if (paths->count() > 0 || data.size() == 0) {
 		assert(paths->count() == data.size());
 
 		WorkerReportMessage_NodeSetUpdate *setUpdate = message.mutable_nodesetupdate();

@@ -272,12 +272,19 @@ void JobManager::cleanupStatistics() {
 		std::set<WorkerTree::NodePin>::iterator oldIt = it++;
 		WorkerTree::NodePin nodePin = *oldIt;
 
-		if ((**nodePin).jobCount == 0) {
+		if ((**nodePin).jobCount == 0 && nodePin->getParent() != NULL) {
 			(**nodePin).stats = false;
 			stats.erase(oldIt);
 			statChanged = true;
 		}
+	}
 
+	if (stats.empty()) {
+		// Add back the root state in the statistics
+		WorkerTree::NodePin rootPin = tree->getRoot()->pin();
+		(**rootPin).stats = true;
+		stats.insert(rootPin);
+		statChanged = true;
 	}
 }
 
@@ -346,7 +353,7 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 				nodes.push(left);
 			}
 
-			if (right && (**left).jobCount > 0) {
+			if (right && (**right).jobCount > 0) {
 				nodes.push(right);
 			}
 		}

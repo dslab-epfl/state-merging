@@ -77,6 +77,10 @@ public:
 	}
 
 	ExecutionPathPin getPath(int index);
+
+	static ExecutionPathSetPin getEmptySet() {
+		return ExecutionPathSetPin(new ExecutionPathSet());
+	}
 };
 
 
