@@ -75,6 +75,7 @@ namespace klee {
   /// removedStates, and haltExecution, among others.
 
 class Executor : public Interpreter, public ::cloud9::worker::SymbolicEngine {
+  friend class LazyMergingSearcher;
   friend class BumpMergingSearcher;
   friend class MergingSearcher;
   friend class RandomPathSearcher;
@@ -82,6 +83,7 @@ class Executor : public Interpreter, public ::cloud9::worker::SymbolicEngine {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
+
   friend class ObjectState;
 
 public:
