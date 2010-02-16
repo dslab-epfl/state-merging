@@ -18,6 +18,9 @@
 // FIXME: Move out of header, use llvm streams.
 #include <ostream>
 
+// FIXME: We do not want to be exposing these? :(
+#include "klee/Internal/Module/KInstIterator.h"
+
 namespace llvm {
   class BasicBlock;
   class Function;
@@ -198,6 +201,34 @@ namespace klee {
     bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
     void printName(std::ostream &os) {
       os << "BumpMergingSearcher\n";
+    }
+  };
+
+  class LazyMergingSearcher : public Searcher {
+    Executor &executor;
+    Searcher *baseSearcher;
+
+    typedef std::set<ExecutionState*> StatesSet;
+    typedef std::map<KInstIterator, StatesSet> StatesTrace;
+
+    StatesTrace statesTrace;
+    StatesSet statesToForward;
+    ExecutionState* currentState;
+
+    bool canFastForwardState(const ExecutionState* state) const;
+    void doRemoveState(const ExecutionState* state);
+
+  public:
+    LazyMergingSearcher(Executor &executor, Searcher *baseSearcher);
+    ~LazyMergingSearcher();
+
+    ExecutionState &selectState();
+    void update(ExecutionState *current,
+                const std::set<ExecutionState*> &addedStates,
+                const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty(); }
+    void printName(std::ostream &os) {
+      os << "LazyMergingSearcher\n";
     }
   };
 

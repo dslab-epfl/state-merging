@@ -67,6 +67,10 @@ namespace {
   cl::opt<bool>
   UseBumpMerge("use-bump-merge", 
            cl::desc("Enable support for klee_merge() (extra experimental)"));
+
+  cl::opt<bool>
+  UseLazyMerge("use-lazy-merge", 
+           cl::desc("Enable support for lazy merging (research)"));
  
   cl::opt<bool>
   UseIterativeDeepeningTimeSearch("use-iterative-deepening-time-search", 
@@ -155,10 +159,14 @@ Searcher *klee::constructUserSearcher(Executor &executor) {
   }
 
   if (UseMerge) {
-    assert(!UseBumpMerge);
+    assert(!UseBumpMerge && !UseLazyMerge);
     searcher = new MergingSearcher(executor, searcher);
-  } else if (UseBumpMerge) {    
+  } else if (UseBumpMerge) {
+    assert(!UseMerge && !UseLazyMerge);
     searcher = new BumpMergingSearcher(executor, searcher);
+  } else if(UseLazyMerge) {
+    assert(!UseMerge && !UseBumpMerge);
+    searcher = new LazyMergingSearcher(executor, searcher);
   }
   
   if (UseIterativeDeepeningTimeSearch) {

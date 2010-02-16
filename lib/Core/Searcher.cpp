@@ -454,6 +454,127 @@ void MergingSearcher::update(ExecutionState *current,
 
 ///
 
+LazyMergingSearcher::LazyMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  : executor(_executor),
+    baseSearcher(_baseSearcher) {
+}
+
+LazyMergingSearcher::~LazyMergingSearcher() {
+  delete baseSearcher;
+}
+
+///
+
+/*
+void LazyMergingSearcher::stepInstruction(ExecutionState& state)
+{
+    if(statesToForward.empty()) {
+        // We are in normal execution
+        StateSet& statesAtPc = stateTrace[state.pc];
+        if(!statesAtPc.empty()) {
+            std::cerr << "Found possible lazy-merge point" << std::endl;
+            // XXX: next step:
+            // here we should stop base searcher and execute only one current state
+            // until it will be either merged or we'll prove that merge is impossible
+        }
+        statesAtPc.insert(&state);
+    }
+}
+*/
+
+bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const
+{
+    StatesTrace::const_iterator it = statesTrace.find(state->prevPC);
+    if(it == statesTrace.end())
+        return false;
+
+    const StatesSet& statesAtPc = it->second;
+    if(statesAtPc.empty())
+        return false;
+    if(statesAtPc.size() == 1 &&
+            statesAtPc.count(const_cast<ExecutionState*>(state)) > 0)
+        return false;
+    return true;
+}
+
+void LazyMergingSearcher::doRemoveState(const ExecutionState* state)
+{
+    statesToForward.erase(currentState);
+    for(StatesTrace::iterator it = statesTrace.begin(),
+                ie = statesTrace.end(); it != ie; ++it) {
+        it->second.erase(currentState);
+    }
+}
+
+ExecutionState &LazyMergingSearcher::selectState() {
+    while(!statesToForward.empty()) {
+        // TODO: do not fast-forward currentState if there are other
+        // states that could be merged with currentState first
+        currentState = *statesToForward.begin();
+
+        if(!canFastForwardState(currentState)) {
+            // State can no longer be fast-forwarded
+            statesToForward.erase(currentState);
+            continue;
+        }
+
+        StatesSet& statesAtPc = statesTrace[currentState->prevPC];
+        for(StatesSet::iterator it = statesAtPc.begin(),
+                    ie = statesAtPc.end(); it != ie; ++it) {
+            if((*it)->pc == currentState->pc && (*it)->merge(*currentState)) {
+                // We've merged !
+                executor.terminateState(*currentState);
+                // Do forget about removed state now
+                // to avoid trying to merge anything with it
+                doRemoveState(currentState);
+                currentState = NULL;
+                break;
+            }
+        }
+
+        if(!currentState)
+            continue;
+
+        // currentState should be fast-forwarded
+        statesAtPc.insert(currentState);
+        return *currentState;
+    }
+
+    // Nothing to fast-forward
+    // Get state from base searcher
+    currentState = &baseSearcher->selectState();
+
+    if(canFastForwardState(currentState)) {
+        statesToForward.insert(currentState);
+        return selectState(); // recursive
+    }
+
+    /* XXX: use checksums of PC and callstack as indexes */
+    statesTrace[currentState->pc].insert(currentState);
+    return *currentState;
+}
+
+void LazyMergingSearcher::update(ExecutionState *current,
+                             const std::set<ExecutionState*> &addedStates,
+                             const std::set<ExecutionState*> &removedStates) {
+    if(!statesToForward.empty()) {
+        // States created during fast-forward are also candidates for fast-forward
+        // We would like to check it as soon as possible
+        for(StatesSet::const_iterator it = addedStates.begin(),
+                    ie = addedStates.end(); it != ie; ++it) {
+            if(canFastForwardState(*it))
+                statesToForward.insert(*it);
+        }
+    }
+    for(StatesSet::const_iterator it = removedStates.begin(),
+                ie = removedStates.end(); it != ie; ++it) {
+        doRemoveState(*it);
+    }
+    baseSearcher->update(current, addedStates, removedStates);
+}
+
+///
+
 BatchingSearcher::BatchingSearcher(Searcher *_baseSearcher,
                                    double _timeBudget,
                                    unsigned _instructionBudget) 
