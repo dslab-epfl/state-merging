@@ -521,14 +521,15 @@ ExecutionState &LazyMergingSearcher::selectState() {
         StatesSet& statesAtPc = statesTrace[currentState->prevPC];
         for(StatesSet::iterator it = statesAtPc.begin(),
                     ie = statesAtPc.end(); it != ie; ++it) {
-            if((*it)->pc == currentState->pc && (*it)->merge(*currentState)) {
-                // We've merged !
-                executor.terminateState(*currentState);
-                // Do forget about removed state now
-                // to avoid trying to merge anything with it
-                doRemoveState(currentState);
-                currentState = NULL;
-                break;
+            if(*it != currentState && (*it)->pc == currentState->pc) {
+                if(executor.merge(**it, *currentState)) {
+                    // We've merged !
+                    // Do forget about removed state now
+                    // to avoid trying to merge anything with it
+                    doRemoveState(currentState);
+                    currentState = NULL;
+                    break;
+               }
             }
         }
 

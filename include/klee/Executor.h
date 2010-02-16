@@ -295,6 +295,10 @@ private:
   StatePair fork(ExecutionState &current, int reason);
   ForkTag getForkTag(ExecutionState &current, int reason);
 
+  // Merge current state with the other state. In case of success,
+  // function returns true and terminates the other state
+  bool merge(ExecutionState &current, ExecutionState &other);
+
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function
   /// which also manages manages propogation of implied values,
@@ -434,6 +438,7 @@ private:
 
   void executeFork(ExecutionState &state, KInstruction *ki, int reason);
 
+  void dumpProcessTree();
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

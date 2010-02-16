@@ -34,7 +34,8 @@ namespace klee {
                                  const data_type &leftData,
                                  const data_type &rightData,
                                  ForkTag forkTag);
-    void remove(Node *n);
+    void merge(Node *target, Node *other);
+    void terminate(Node *n);
 
     void dump(std::ostream &os);
   };
@@ -44,6 +45,8 @@ namespace klee {
   public:
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
+    ref<Expr> condition;
+    enum { RUNNING, SPLITTED, MERGED, TERMINATED } state;
 
     ForkTag forkTag;
   private:

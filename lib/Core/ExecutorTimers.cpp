@@ -136,14 +136,7 @@ void Executor::processTimers(ExecutionState *current,
 
   if (ticks || dumpPTree || dumpStates) {
     if (dumpPTree) {
-      char name[32];
-      sprintf(name, "ptree%08d.dot", (int) stats::instructions);
-      std::ostream *os = interpreterHandler->openOutputFile(name);
-      if (os) {
-        processTree->dump(*os);
-        delete os;
-      }
-      
+      dumpProcessTree();
       dumpPTree = 0;
     }
 
