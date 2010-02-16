@@ -277,6 +277,10 @@ private:
   // current state, and one of the states may be null.
   StatePair fork(ExecutionState &current, ref<Expr> condition, bool isInternal);
 
+  // Merge current state with the other state. In case of success,
+  // function returns true and terminates the other state
+  bool merge(ExecutionState &current, ExecutionState &other);
+
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function
   /// which also manages manages propogation of implied values,
@@ -380,6 +384,8 @@ private:
   void initTimers();
   void processTimers(ExecutionState *current,
                      double maxInstTime);
+
+  void dumpProcessTree();
                 
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);

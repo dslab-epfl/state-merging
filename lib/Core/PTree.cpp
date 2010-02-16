@@ -29,12 +29,26 @@ PTree::split(Node *n,
              const data_type &leftData, 
              const data_type &rightData) {
   assert(n && !n->left && !n->right);
+  assert(n->state == PTreeNode::RUNNING);
+  n->state = PTreeNode::SPLITTED;
   n->left = new Node(n, leftData);
   n->right = new Node(n, rightData);
   return std::make_pair(n->left, n->right);
 }
 
-void PTree::remove(Node *n) {
+void PTree::merge(Node *target, Node *other) {
+  assert(target);
+  assert(other && !other->left && !other->right);
+  assert(other->state == PTreeNode::RUNNING);
+
+  other->left = target;
+  other->state = PTreeNode::MERGED;
+}
+
+void PTree::terminate(Node *n) {
+  if(n->state != PTreeNode::MERGED)
+    n->state = PTreeNode::TERMINATED;
+#if 0
   assert(!n->left && !n->right);
   do {
     Node *p = n->parent;
@@ -49,6 +63,7 @@ void PTree::remove(Node *n) {
     }
     n = p;
   } while (n && !n->left && !n->right);
+#endif
 }
 
 void PTree::dump(std::ostream &os) {
@@ -73,16 +88,20 @@ void PTree::dump(std::ostream &os) {
       pp->print(n->condition);
       os << "\",shape=diamond";
     }
-    if (n->data)
+    if (n->state == PTreeNode::RUNNING)
       os << ",fillcolor=green";
+    else if(n->state == PTreeNode::TERMINATED)
+      os << ",fillcolor=red";
     os << "];\n";
     if (n->left) {
       os << "\tn" << n << " -> n" << n->left << ";\n";
-      stack.push_back(n->left);
+      if(n->state != PTreeNode::MERGED)
+        stack.push_back(n->left);
     }
     if (n->right) {
       os << "\tn" << n << " -> n" << n->right << ";\n";
-      stack.push_back(n->right);
+      if(n->state != PTreeNode::MERGED)
+        stack.push_back(n->right);
     }
   }
   os << "}\n";
@@ -95,7 +114,8 @@ PTreeNode::PTreeNode(PTreeNode *_parent,
     left(0),
     right(0),
     data(_data),
-    condition(0) {
+    condition(0),
+    state(RUNNING) {
 }
 
 PTreeNode::~PTreeNode() {

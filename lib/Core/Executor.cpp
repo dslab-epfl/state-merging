@@ -250,6 +250,10 @@ namespace {
   STPOptimizeDivides("stp-optimize-divides", 
                  cl::desc("Optimize constant divides into add/shift/multiplies before passing to STP"),
                  cl::init(true));
+
+  cl::opt<bool>
+  DumpPTreeOnChange("dump-ptree-on-change",
+          cl::desc("Dump PTree each time it changes"));
 }
 
 
@@ -616,6 +620,9 @@ void Executor::branch(ExecutionState &state,
     es->ptreeNode = res.second;
   }
 
+  if(DumpPTreeOnChange)
+    dumpProcessTree();
+
   // If necessary redistribute seeds to match conditions, killing
   // states if necessary due to OnlyReplaySeeds (inefficient but
   // simple).
@@ -867,6 +874,9 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
 
+    if(DumpPTreeOnChange)
+      dumpProcessTree();
+
     if (!isInternal) {
       if (pathWriter) {
         falseState->pathOS = pathWriter->open(current.pathOS);
@@ -892,6 +902,18 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     return StatePair(trueState, falseState);
   }
+}
+
+bool Executor::merge(ExecutionState &current, ExecutionState &other) {
+    if(current.merge(other)) {
+        other.ptreeNode->data = NULL;
+        processTree->merge(current.ptreeNode, other.ptreeNode);
+        if(DumpPTreeOnChange)
+          dumpProcessTree();
+        terminateState(other);
+        return true;
+    }
+    return false;
 }
 
 void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
@@ -2256,6 +2278,7 @@ void Executor::updateStates(ExecutionState *current) {
   states.insert(addedStates.begin(), addedStates.end());
   addedStates.clear();
   
+  bool processTreeChanged = false;
   for (std::set<ExecutionState*>::iterator
          it = removedStates.begin(), ie = removedStates.end();
        it != ie; ++it) {
@@ -2267,9 +2290,15 @@ void Executor::updateStates(ExecutionState *current) {
       seedMap.find(es);
     if (it3 != seedMap.end())
       seedMap.erase(it3);
-    processTree->remove(es->ptreeNode);
+    if(es->ptreeNode->state != PTreeNode::MERGED) {
+      es->ptreeNode->data = NULL;
+      processTree->terminate(es->ptreeNode);
+      processTreeChanged = true;
+    }
     delete es;
   }
+  if(processTreeChanged && DumpPTreeOnChange)
+    dumpProcessTree();
   removedStates.clear();
 }
 
@@ -2546,7 +2575,12 @@ void Executor::terminateState(ExecutionState &state) {
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     addedStates.erase(it);
-    processTree->remove(state.ptreeNode);
+    if(state.ptreeNode->state != PTreeNode::MERGED) {
+      state.ptreeNode->data = NULL;
+      processTree->terminate(state.ptreeNode);
+      if(DumpPTreeOnChange)
+        dumpProcessTree();
+    }
     delete &state;
   }
 }
@@ -3332,6 +3366,17 @@ void Executor::doImpliedValueConcretization(ExecutionState &state,
 
 Expr::Width Executor::getWidthForLLVMType(const llvm::Type *type) const {
   return kmodule->targetData->getTypeSizeInBits(type);
+}
+
+void Executor::dumpProcessTree()
+{
+  char name[32];
+  sprintf(name, "ptree%08d.dot", (int) stats::instructions);
+  std::ostream *os = interpreterHandler->openOutputFile(name);
+  if (os) {
+    processTree->dump(*os);
+    delete os;
+  }
 }
 
 ///

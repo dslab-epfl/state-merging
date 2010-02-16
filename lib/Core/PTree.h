@@ -32,7 +32,8 @@ namespace klee {
     std::pair<Node*,Node*> split(Node *n,
                                  const data_type &leftData,
                                  const data_type &rightData);
-    void remove(Node *n);
+    void merge(Node *target, Node *other);
+    void terminate(Node *n);
 
     void dump(std::ostream &os);
   };
@@ -43,6 +44,7 @@ namespace klee {
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
     ref<Expr> condition;
+    enum { RUNNING, SPLITTED, MERGED, TERMINATED } state;
 
   private:
     PTreeNode(PTreeNode *_parent, ExecutionState *_data);
