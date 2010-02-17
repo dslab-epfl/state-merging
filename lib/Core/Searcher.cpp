@@ -456,7 +456,9 @@ void MergingSearcher::update(ExecutionState *current,
 
 LazyMergingSearcher::LazyMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
   : executor(_executor),
-    baseSearcher(_baseSearcher) {
+    baseSearcher(_baseSearcher),
+    mergeAttempts(0),
+    mergeSucceed(0) {
 }
 
 LazyMergingSearcher::~LazyMergingSearcher() {
@@ -499,60 +501,67 @@ bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const
 
 void LazyMergingSearcher::doRemoveState(const ExecutionState* state)
 {
-    statesToForward.erase(currentState);
+    statesToForward.erase(const_cast<ExecutionState*>(state));
     for(StatesTrace::iterator it = statesTrace.begin(),
                 ie = statesTrace.end(); it != ie; ++it) {
-        it->second.erase(currentState);
+        it->second.erase(const_cast<ExecutionState*>(state));
     }
 }
 
 ExecutionState &LazyMergingSearcher::selectState() {
+    ExecutionState *state;
     while(!statesToForward.empty()) {
-        // TODO: do not fast-forward currentState if there are other
-        // states that could be merged with currentState first
-        currentState = *statesToForward.begin();
+        // TODO: do not fast-forward state if there are other
+        // states that could be merged with state first
+        state = *statesToForward.begin();
 
-        if(!canFastForwardState(currentState)) {
+        if(!canFastForwardState(state)) {
             // State can no longer be fast-forwarded
-            statesToForward.erase(currentState);
+            statesToForward.erase(state);
             continue;
         }
 
-        StatesSet& statesAtPc = statesTrace[currentState->prevPC];
+        StatesSet& statesAtPc = statesTrace[state->prevPC];
         for(StatesSet::iterator it = statesAtPc.begin(),
                     ie = statesAtPc.end(); it != ie; ++it) {
-            if(*it != currentState && (*it)->pc == currentState->pc) {
-                if(executor.merge(**it, *currentState)) {
+            if(*it != state && (*it)->pc == state->pc) {
+                ++mergeAttempts;
+                if(executor.merge(**it, *state)) {
                     // We've merged !
                     // Do forget about removed state now
                     // to avoid trying to merge anything with it
-                    doRemoveState(currentState);
-                    currentState = NULL;
+                    ++mergeSucceed;
+                    doRemoveState(state);
+                    state = NULL;
+                    std::cerr << "merged two states\n";
+                    std::cerr << "\t" << mergeSucceed
+                              << " of " << mergeAttempts
+                              << " merge attempts was successful\n";
                     break;
                }
             }
         }
 
-        if(!currentState)
+        if(!state)
             continue;
 
-        // currentState should be fast-forwarded
-        statesAtPc.insert(currentState);
-        return *currentState;
+        // state should be fast-forwarded
+        statesAtPc.insert(state);
+        return *state;
     }
 
     // Nothing to fast-forward
     // Get state from base searcher
-    currentState = &baseSearcher->selectState();
+    state = &baseSearcher->selectState();
 
-    if(canFastForwardState(currentState)) {
-        statesToForward.insert(currentState);
+    if(canFastForwardState(state)) {
+        statesToForward.insert(state);
         return selectState(); // recursive
     }
 
     /* XXX: use checksums of PC and callstack as indexes */
-    statesTrace[currentState->pc].insert(currentState);
-    return *currentState;
+    statesTrace[state->pc].insert(state);
+    return *state;
 }
 
 void LazyMergingSearcher::update(ExecutionState *current,

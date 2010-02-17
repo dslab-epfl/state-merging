@@ -911,6 +911,7 @@ bool Executor::merge(ExecutionState &current, ExecutionState &other) {
         if(DumpPTreeOnChange)
           dumpProcessTree();
         terminateState(other);
+        updateStates(0);
         return true;
     }
     return false;
