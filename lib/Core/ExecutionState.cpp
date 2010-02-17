@@ -161,14 +161,29 @@ bool ExecutionState::merge(const ExecutionState &b) {
   {
     std::vector<StackFrame>::const_iterator itA = stack.begin();
     std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-    while (itA!=stack.end() && itB!=b.stack.end()) {
+    std::vector<StackFrame>::const_iterator itAE = stack.end();
+    std::vector<StackFrame>::const_iterator itBE = b.stack.end();
+    while (itA!=itAE && itB!=itBE) {
       // XXX vaargs?
       if (itA->caller!=itB->caller || itA->kf!=itB->kf)
         return false;
+
+      // XXX: for now we refuse to merge states that has different concrete
+      // values on the stack. This is wrong, but otherwise we are ending up
+      // merging different iterations of the same loop
+  
+      for (unsigned i=0; i<itA->kf->numRegisters; i++) {
+        const ref<Expr> &av = itA->locals[i].value;
+        const ref<Expr> &bv = itB->locals[i].value;
+        if(!av.isNull() && !bv.isNull() && av != bv)
+          if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
+            return false;
+      }
+
       ++itA;
       ++itB;
     }
-    if (itA!=stack.end() || itB!=b.stack.end())
+    if (itA!=itAE || itB!=itBE)
       return false;
   }
 
@@ -245,7 +260,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
       std::cerr << "\t\tmappings differ\n";
     return false;
   }
-  
+
   // merge stack
 
   ref<Expr> inA = ConstantExpr::alloc(1, Expr::Bool);
@@ -262,9 +277,10 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // they must contradict each other and so inA => !inB
 
   std::vector<StackFrame>::iterator itA = stack.begin();
+  std::vector<StackFrame>::iterator itAE = stack.end();
   std::vector<StackFrame>::const_iterator itB = b.stack.begin();
   int stackDifference = 0, stackObjects = 0;
-  for (; itA!=stack.end(); ++itA, ++itB) {
+  for (; itA!=itAE; ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
     stackObjects += af.kf->numRegisters;
