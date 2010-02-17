@@ -263,9 +263,11 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
   std::vector<StackFrame>::iterator itA = stack.begin();
   std::vector<StackFrame>::const_iterator itB = b.stack.begin();
+  int stackDifference = 0, stackObjects = 0;
   for (; itA!=stack.end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
+    stackObjects += af.kf->numRegisters;
     for (unsigned i=0; i<af.kf->numRegisters; i++) {
       ref<Expr> &av = af.locals[i].value;
       const ref<Expr> &bv = bf.locals[i].value;
@@ -273,9 +275,17 @@ bool ExecutionState::merge(const ExecutionState &b) {
         // if one is null then by implication (we are at same pc)
         // we cannot reuse this local, so just ignore
       } else {
-        av = SelectExpr::create(inA, av, bv);
+        if(av != bv) {
+            av = SelectExpr::create(inA, av, bv);
+            ++stackDifference;
+        }
       }
     }
+  }
+  if(DebugLogStateMerge) {
+      std::cerr << "\t\tfound " << stackDifference
+                << " (of " << stackObjects
+                << ") different values on stack\n";
   }
 
   for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
