@@ -537,6 +537,8 @@ ExecutionState &LazyMergingSearcher::selectState() {
                     std::cerr << "\t" << mergeSucceed
                               << " of " << mergeAttempts
                               << " merge attempts was successful\n";
+                    std::cerr << "\t" << executor.states.size()
+                              << " active states exists at this point\n";
                     break;
                }
             }
