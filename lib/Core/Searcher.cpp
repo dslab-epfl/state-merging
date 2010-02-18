@@ -456,9 +456,7 @@ void MergingSearcher::update(ExecutionState *current,
 
 LazyMergingSearcher::LazyMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
   : executor(_executor),
-    baseSearcher(_baseSearcher),
-    mergeAttempts(0),
-    mergeSucceed(0) {
+    baseSearcher(_baseSearcher) {
 }
 
 LazyMergingSearcher::~LazyMergingSearcher() {
@@ -525,20 +523,12 @@ ExecutionState &LazyMergingSearcher::selectState() {
         for(StatesSet::iterator it = statesAtPc.begin(),
                     ie = statesAtPc.end(); it != ie; ++it) {
             if(*it != state && (*it)->pc == state->pc) {
-                ++mergeAttempts;
                 if(executor.merge(**it, *state)) {
                     // We've merged !
                     // Do forget about removed state now
                     // to avoid trying to merge anything with it
-                    ++mergeSucceed;
                     doRemoveState(state);
                     state = NULL;
-                    std::cerr << "merged two states\n";
-                    std::cerr << "\t" << mergeSucceed
-                              << " of " << mergeAttempts
-                              << " merge attempts was successful\n";
-                    std::cerr << "\t" << executor.states.size()
-                              << " active states exists at this point\n";
                     break;
                }
             }

@@ -344,6 +344,16 @@ bool ExecutionState::merge(const ExecutionState &b) {
     constraints.addConstraint(*it);
   constraints.addConstraint(OrExpr::create(inA, inB));
 
+  queryCost += b.queryCost;
+  weight += b.weight;
+  coveredNew |= b.coveredNew;
+  if(instsSinceCovNew > b.instsSinceCovNew)
+      instsSinceCovNew = b.instsSinceCovNew;
+  for(std::map<const std::string*, std::set<unsigned> >::const_iterator
+          it = b.coveredLines.begin(), ie = b.coveredLines.end(); it != ie; ++it) {
+      coveredLines[it->first].insert(it->second.begin(), it->second.end());
+  }
+
   return true;
 }
 

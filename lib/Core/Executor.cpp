@@ -905,6 +905,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 }
 
 bool Executor::merge(ExecutionState &current, ExecutionState &other) {
+    WallTimer timer;
+
     if(current.merge(other)) {
         other.ptreeNode->data = NULL;
         processTree->merge(current.ptreeNode, other.ptreeNode);
@@ -912,8 +914,14 @@ bool Executor::merge(ExecutionState &current, ExecutionState &other) {
           dumpProcessTree();
         terminateState(other);
         updateStates(0);
+
+        stats::mergesSuccess += 1;
+        stats::mergeSuccessTime += timer.check();
         return true;
     }
+
+    stats::mergesFail += 1;
+    stats::mergeFailTime += timer.check();
     return false;
 }
 

@@ -214,9 +214,6 @@ namespace klee {
     StatesTrace statesTrace;
     StatesSet statesToForward;
 
-    int mergeAttempts;
-    int mergeSucceed;
-
     bool canFastForwardState(const ExecutionState* state) const;
     void doRemoveState(const ExecutionState* state);
 

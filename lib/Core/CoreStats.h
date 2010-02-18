@@ -25,10 +25,18 @@ namespace stats {
   extern Statistic trueBranches;
   extern Statistic falseBranches;
   extern Statistic forkTime;
+  extern Statistic mergeSuccessTime;
+  extern Statistic mergeFailTime;
   extern Statistic solverTime;
 
   /// The number of process forks.
   extern Statistic forks;
+
+  /// The number of successful merges.
+  extern Statistic mergesSuccess;
+
+  /// The number of failed merge attempts.
+  extern Statistic mergesFail;
 
   /// Number of states, this is a "fake" statistic used by istats, it
   /// isn't normally up-to-date.
