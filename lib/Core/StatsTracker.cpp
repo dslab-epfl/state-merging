@@ -391,6 +391,10 @@ void StatsTracker::writeStatsHeader() {
              << "'CexCacheTime',"
              << "'ForkTime',"
              << "'ResolveTime',"
+             << "'MergeSuccessTime',"
+             << "'MergeFailTime',"
+             << "'MergesSuccess',"
+             << "'MergesFail',"
              << ")\n";
   statsFile->flush();
 }
@@ -418,6 +422,10 @@ void StatsTracker::writeStatsLine() {
              << "," << stats::cexCacheTime / 1000000.
              << "," << stats::forkTime / 1000000.
              << "," << stats::resolveTime / 1000000.
+             << "," << stats::mergeSuccessTime / 1000000.
+             << "," << stats::mergeFailTime / 1000000.
+             << "," << stats::mergesSuccess
+             << "," << stats::mergesFail
              << ")\n";
   statsFile->flush();
 }

@@ -17,6 +17,10 @@ Statistic stats::globallyCoveredInstructions("GloballyCoveredInstructions", "GIc
 Statistic stats::falseBranches("FalseBranches", "Bf");
 Statistic stats::forkTime("ForkTime", "Ftime");
 Statistic stats::forks("Forks", "Forks");
+Statistic stats::mergeSuccessTime("MergeSuccessTime", "MStime");
+Statistic stats::mergeFailTime("MergeFailTime", "MFtime");
+Statistic stats::mergesSuccess("MergesSuccess", "MergesS");
+Statistic stats::mergesFail("MergesFail", "MergesF");
 Statistic stats::instructionRealTime("InstructionRealTimes", "Ireal");
 Statistic stats::instructionTime("InstructionTimes", "Itime");
 Statistic stats::instructions("Instructions", "I");
