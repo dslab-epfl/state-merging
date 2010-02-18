@@ -171,6 +171,8 @@ bool ExecutionState::merge(const ExecutionState &b) {
       // XXX: for now we refuse to merge states that has different concrete
       // values on the stack. This is wrong, but otherwise we are ending up
       // merging different iterations of the same loop
+      //
+      // XXX: try the same for memory objects
   
       for (unsigned i=0; i<itA->kf->numRegisters; i++) {
         const ref<Expr> &av = itA->locals[i].value;
@@ -253,6 +255,19 @@ bool ExecutionState::merge(const ExecutionState &b) {
       if (DebugLogStateMerge)
         std::cerr << "\t\tmutated: " << ai->first->id << "\n";
       mutated.insert(ai->first);
+      // XXX: for now we refuse to merge states that has different concrete
+      // values in the memory. This is wrong, but otherwise we are ending up
+      // merging different iterations of the same loop
+      const MemoryObject* mi = ai->first;
+      const ObjectState* as = ai->second;
+      const ObjectState* bs = bi->second;
+      for(unsigned i=0; i<mi->size; ++i) {
+        ref<Expr> av = as->read8(i);
+        ref<Expr> bv = bs->read8(i);
+        if(!av.isNull() && !bv.isNull() && av != bv)
+          if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
+            return false;
+      }
     }
   }
   if (ai!=ae || bi!=be) {
@@ -317,7 +332,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
       ref<Expr> bv = otherOS->read8(i);
-      wos->write(i, SelectExpr::create(inA, av, bv));
+      if(av != bv) {
+          wos->write(i, SelectExpr::create(inA, av, bv));
+      }
     }
   }
 
