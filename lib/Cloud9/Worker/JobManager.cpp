@@ -228,7 +228,7 @@ void JobManager::refineStatistics() {
 		assert((**nodePin).stats);
 		(**nodePin).stats = false;
 
-		assert((**nodePin).jobCount > 0);
+		assert(nodePin->getParent() == NULL || (**nodePin).jobCount > 0);
 
 		bool keep = true;
 
