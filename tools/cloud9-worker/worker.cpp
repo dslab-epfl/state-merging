@@ -302,7 +302,7 @@ static Module* prepareModule(Module *module) {
 		break;
 	}
 
-	llvm::sys::Path libraryDir(KLEE_LIBRARY_PATH);
+	llvm::sys::Path libraryDir(getKleeLibraryPath());
 
 	if (WithPOSIXRuntime) {
 		sys::Path path(libraryDir);

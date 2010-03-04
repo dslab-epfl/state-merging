@@ -8,9 +8,14 @@
 #include "cloud9/worker/WorkerCommon.h"
 
 #include "llvm/Support/CommandLine.h"
+#include "llvm/System/Path.h"
+
+#include <cstdlib>
+#include <string>
 
 
 using namespace llvm;
+using llvm::sys::Path;
 
 std::string InputFile;
 LibcType Libc;
@@ -104,6 +109,38 @@ static cl::opt<int, true> UpdateTimeOpt("c9-lb-update",
 		cl::desc("The time in seconds between load balancing updates"),
 		cl::location(UpdateTime), cl::init(5));
 
+}
+
+std::string getKleePath() {
+	// First look for $KLEE_ROOT, then KLEE_DIR
+	char *kleePathName = std::getenv(KLEE_ROOT_VAR);
+	Path kleePath;
+
+	if (kleePathName != NULL) {
+		// Check whether the path exists
+		kleePath = Path(kleePathName);
+
+		if (kleePath.isValid()) {
+			// The path exists, so we return it
+			kleePath.makeAbsolute();
+			return kleePath.toString();
+		}
+	}
+
+	kleePath = Path(KLEE_DIR);
+	kleePath.makeAbsolute();
+
+	return kleePath.toString();
+}
+
+std::string getKleeLibraryPath() {
+	std::string kleePathName = getKleePath();
+
+	Path libraryPath(kleePathName);
+	libraryPath.appendComponent(RUNTIME_CONFIGURATION);
+	libraryPath.appendComponent("lib");
+
+	return libraryPath.toString();
 }
 
 

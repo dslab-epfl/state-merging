@@ -19,7 +19,8 @@
 
 #include "cloud9/Common.h"
 
-#define KLEE_LIBRARY_PATH 	KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib"
+//#define KLEE_LIBRARY_PATH 	KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib"
+#define KLEE_ROOT_VAR	"KLEE_ROOT"
 
 enum LibcType {
 	NoLibc, UcLibc
@@ -64,6 +65,9 @@ namespace klee {
 	class RNG;
 	extern RNG theRNG;
 }
+
+std::string getKleePath();
+std::string getKleeLibraryPath();
 
 
 #endif /* COMMON_H_ */

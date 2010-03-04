@@ -202,7 +202,7 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
 
 
-	llvm::sys::Path libraryPath(KLEE_LIBRARY_PATH);
+	llvm::sys::Path libraryPath(getKleeLibraryPath());
 
 	Interpreter::ModuleOptions mOpts(libraryPath.c_str(),
 	/*Optimize=*/OptimizeModule,
