@@ -148,4 +148,21 @@ std::string getKleeLibraryPath() {
 	return libraryPath.toString();
 }
 
+std::string getUclibcPath() {
+	char *uclibcPathName = std::getenv(KLEE_UCLIBC_ROOT_VAR);
+	Path uclibcPath;
 
+	if (uclibcPathName != NULL) {
+		uclibcPath = Path(uclibcPathName);
+
+		if (uclibcPath.isValid()) {
+			uclibcPath.makeAbsolute();
+			return uclibcPath.toString();
+		}
+	}
+
+	uclibcPath = Path(KLEE_UCLIBC);
+	uclibcPath.makeAbsolute();
+
+	return uclibcPath.toString();
+}

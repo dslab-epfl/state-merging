@@ -208,7 +208,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 		}
 	}
 
-	mainModule = klee::linkWithLibrary(mainModule, KLEE_UCLIBC "/lib/libc.a");
+	mainModule = klee::linkWithLibrary(mainModule, getUclibcPath().append("/lib/libc.a"));
 	assert(mainModule && "unable to link with uclibc");
 
 	// more sighs, this is horrible but just a temp hack

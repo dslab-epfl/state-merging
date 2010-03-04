@@ -21,6 +21,7 @@
 
 //#define KLEE_LIBRARY_PATH 	KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib"
 #define KLEE_ROOT_VAR	"KLEE_ROOT"
+#define KLEE_UCLIBC_ROOT_VAR "KLEE_UCLIBC_ROOT"
 
 enum LibcType {
 	NoLibc, UcLibc
@@ -68,6 +69,7 @@ namespace klee {
 
 std::string getKleePath();
 std::string getKleeLibraryPath();
+std::string getUclibcPath();
 
 
 #endif /* COMMON_H_ */
