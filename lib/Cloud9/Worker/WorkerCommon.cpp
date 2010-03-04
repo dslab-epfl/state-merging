@@ -6,6 +6,7 @@
  */
 
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/Logger.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/System/Path.h"
@@ -119,17 +120,21 @@ std::string getKleePath() {
 	if (kleePathName != NULL) {
 		// Check whether the path exists
 		kleePath = Path(kleePathName);
+		CLOUD9_DEBUG("Found KLEE_ROOT variable " << kleePath.toString());
 
 		if (kleePath.isValid()) {
 			// The path exists, so we return it
 			kleePath.makeAbsolute();
+			CLOUD9_DEBUG("Using Klee path " << kleePath.toString());
 			return kleePath.toString();
+		} else {
+			CLOUD9_DEBUG("Cannot use KLEE_ROOT variable. Path is not valid.");
 		}
 	}
 
 	kleePath = Path(KLEE_DIR);
 	kleePath.makeAbsolute();
-
+	CLOUD9_DEBUG("Using Klee path " << kleePath.toString());
 	return kleePath.toString();
 }
 
