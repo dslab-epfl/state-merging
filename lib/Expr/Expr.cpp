@@ -299,7 +299,7 @@ void Expr::dump() const {
 
 ref<Expr> ConstantExpr::fromMemory(void *address, Width width) {
   switch (width) {
-  default: assert(0 && "invalid type");
+  default: { std::cerr << "width  = " << width << "\n" ; assert(0 && "invalid type"); }
   case  Expr::Bool: return ConstantExpr::create(*(( uint8_t*) address), width);
   case  Expr::Int8: return ConstantExpr::create(*(( uint8_t*) address), width);
   case Expr::Int16: return ConstantExpr::create(*((uint16_t*) address), width);
