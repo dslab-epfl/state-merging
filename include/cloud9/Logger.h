@@ -28,6 +28,8 @@
 
 #define CLOUD9_EXIT(msg) do { CLOUD9_ERROR(msg); exit(1); } while(0)
 
+#define CLOUD9_STACKTRACE cloud9::Logger::getStackTrace()
+
 
 
 namespace cloud9 {
@@ -70,6 +72,8 @@ public:
 	std::ostream &getDebugStream() {
 		return getDebugStreamRaw() << logPrefix << debugPrefix;
 	}
+
+	static std::string getStackTrace();
 
 	virtual std::ostream &getInfoStreamRaw() { return std::cerr; };
 	virtual std::ostream &getErrorStreamRaw() { return std::cerr; };
