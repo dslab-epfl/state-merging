@@ -38,7 +38,10 @@ namespace klee {
   class InstructionInfo;
   class ExecutionTraceEvent;
 
+  class ExecutionState;
+
 std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
+std::ostream &operator<<(std::ostream &os, const ExecutionState &state);
 
 struct StackFrame {
   KInstIterator caller;

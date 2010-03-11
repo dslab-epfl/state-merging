@@ -145,6 +145,23 @@ std::ostream &klee::operator<<(std::ostream &os, const MemoryMap &mm) {
   return os;
 }
 
+std::ostream &klee::operator<<(std::ostream &os, const ExecutionState &state) {
+	for (ExecutionState::stack_ty::const_iterator it = state.stack.begin();
+			it != state.stack.end(); it++) {
+		if (it != state.stack.begin()) {
+			os << '(' << it->caller->info->assemblyLine << ',' << it->caller->info->file << ':' << it->caller->info->line << ')';
+			os << "]/[";
+		} else {
+			os << "[";
+		}
+		os << it->kf->function->getName().str();
+	}
+	os << '(' << state.pc->info->assemblyLine << ',' << state.pc->info->file << ':' << state.pc->info->line << ')';
+	os << "]";
+
+	return os;
+}
+
 bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     std::cerr << "-- attempting merge of A:" 
