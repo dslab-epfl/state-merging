@@ -34,6 +34,8 @@
 
 using namespace llvm;
 
+extern bool c9hack_EnableDetails;
+
 namespace {
 cl::opt<unsigned> MakeConcreteSymbolic("make-concrete-symbolic", cl::desc(
 		"Rate at which to make concrete reads symbolic (0=off)"), cl::init(0));
@@ -405,7 +407,11 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 	if (job->foreign) {
 		//CLOUD9_DEBUG("Executing foreign job");
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
+
+		c9hack_EnableDetails = true;
 		replayPath(job->jobRoot.get());
+		c9hack_EnableDetails = false;
+
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
 		job->foreign = false;
 	}

@@ -525,6 +525,7 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   ref<Expr> address = arguments[0];
   ref<Expr> size = arguments[1];
 
+  C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
   Executor::StatePair zeroSize = executor.fork(state, 
                                                Expr::createIsZero(size), 
                                                true);
@@ -533,6 +534,7 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
     executor.executeFree(*zeroSize.first, address, target);   
   }
   if (zeroSize.second) { // size != 0
+	  C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     Executor::StatePair zeroPointer = executor.fork(*zeroSize.second, 
                                                     Expr::createIsZero(address), 
                                                     true);

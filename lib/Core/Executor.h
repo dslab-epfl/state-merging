@@ -22,12 +22,21 @@
 #include "klee/Internal/Module/KModule.h"
 #include "llvm/Support/CallSite.h"
 #include "cloud9/worker/SymbolicEngine.h"
+#include "cloud9/Logger.h"
 #include <vector>
 #include <string>
 #include <map>
 #include <set>
 
 struct KTest;
+
+extern bool c9hack_EnableDetails;
+
+#define C9HACK_DEBUG(msg, state)	\
+	do { \
+		if (c9hack_EnableDetails) \
+			CLOUD9_DEBUG("Line " << __FILE__ << ":" << __LINE__ << " " << msg << " Trace: " << state); \
+	} while (0)
 
 namespace llvm {
   class BasicBlock;
