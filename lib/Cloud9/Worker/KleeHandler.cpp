@@ -200,6 +200,7 @@ std::string KleeHandler::getTestFilename(const std::string &suffix, unsigned id)
 }
 
 std::ostream *KleeHandler::openTestFile(const std::string &suffix, unsigned id) {
+         //this can overflow with a large suffix size
 	char filename[1024];
 	sprintf(filename, "test%06d.%s", id, suffix.c_str());
 	return openOutputFile(filename);
@@ -253,11 +254,16 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 
 		if (errorMessage) {
 			std::ostream *f = openTestFile(errorSuffix, id);
-			*f << errorMessage;
-			delete f;
+			if(f) {
+			  *f << errorMessage;
+			  delete f;
 
-			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ErrorCase,
-					getTestFilename(errorSuffix, id));
+			  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ErrorCase,
+								       getTestFilename(errorSuffix, id));
+			} else {
+			  klee_warning("unable to write output test case");
+			}
+		     
 		}
 
 		if (m_pathWriter) {
@@ -265,25 +271,37 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 			m_pathWriter->readStream(m_interpreter->getPathStreamID(state),
 					concreteBranches);
 			std::ostream *f = openTestFile("path", id);
-			std::copy(concreteBranches.begin(), concreteBranches.end(),
-					std::ostream_iterator<unsigned char>(*f, "\n"));
-			delete f;
+			if(f) {
+			  std::copy(concreteBranches.begin(), concreteBranches.end(),
+				    std::ostream_iterator<unsigned char>(*f, "\n"));
+			  delete f;
+			} else {
+			  klee_warning("unable to write output test case");
+			}
 		}
 
 		if (errorMessage || WritePCs) {
 			std::string constraints;
 			m_interpreter->getConstraintLog(state, constraints);
 			std::ostream *f = openTestFile("pc", id);
-			*f << constraints;
-			delete f;
+			if(f) {
+			  *f << constraints;
+			  delete f;
+			} else {
+			  klee_warning("unable to write output test case");
+			}
 		}
 
 		if (WriteCVCs) {
 			std::string constraints;
 			m_interpreter->getConstraintLog(state, constraints, true);
 			std::ostream *f = openTestFile("cvc", id);
-			*f << constraints;
-			delete f;
+			if(f) {
+			  *f << constraints;
+			  delete f;
+			} else {
+			  klee_warning("unable to write output test case");
+			}
 		}
 
 		if (m_symPathWriter) {
@@ -291,28 +309,42 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 			m_symPathWriter->readStream(m_interpreter->getSymbolicPathStreamID(
 					state), symbolicBranches);
 			std::ostream *f = openTestFile("sym.path", id);
-			std::copy(symbolicBranches.begin(), symbolicBranches.end(),
-					std::ostream_iterator<unsigned char>(*f, "\n"));
-			delete f;
+			if(f) {
+			  std::copy(symbolicBranches.begin(), symbolicBranches.end(),
+				    std::ostream_iterator<unsigned char>(*f, "\n"));
+			  delete f;
+			}
+			else {
+			  klee_warning("unable to write output test case");
+			}
+
 		}
 
 		if (WriteCov) {
 			std::map<const std::string*, std::set<unsigned> > cov;
 			m_interpreter->getCoveredLines(state, cov);
 			std::ostream *f = openTestFile("cov", id);
-			for (std::map<const std::string*, std::set<unsigned> >::iterator
-					it = cov.begin(), ie = cov.end(); it != ie; ++it) {
-				for (std::set<unsigned>::iterator it2 = it->second.begin(), ie =
-						it->second.end(); it2 != ie; ++it2)
-					*f << *it->first << ":" << *it2 << "\n";
+			if(f) {
+			  for (std::map<const std::string*, std::set<unsigned> >::iterator
+				 it = cov.begin(), ie = cov.end(); it != ie; ++it) {
+			    for (std::set<unsigned>::iterator it2 = it->second.begin(), ie =
+				   it->second.end(); it2 != ie; ++it2)
+			      *f << *it->first << ":" << *it2 << "\n";
+			  }
+			  delete f;
+			} else {
+			  klee_warning("unable to write output test case");
 			}
-			delete f;
 		}
 
 		if (WriteTraces) {
 			std::ostream *f = openTestFile("trace", id);
-			state.exeTraceMgr.printAllEvents(*f);
-			delete f;
+			if(f) {
+			  state.exeTraceMgr.printAllEvents(*f);
+			  delete f;
+			} else {
+			  klee_warning("unable to write output test case");
+			}
 		}
 
 		if (m_testIndex == StopAfterNTests)
@@ -321,8 +353,12 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 		if (WriteTestInfo) {
 			double elapsed_time = util::getWallTime() - start_time;
 			std::ostream *f = openTestFile("info", id);
-			*f << "Time to generate test case: " << elapsed_time << "s\n";
-			delete f;
+			if(f) {
+			  *f << "Time to generate test case: " << elapsed_time << "s\n";
+			  delete f;
+			} else {
+			  klee_warning("unable to write output test case");
+			}
 		}
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TestCase,
