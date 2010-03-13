@@ -16,6 +16,8 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "cloud9/Logger.h"
+
 #include <set>
 #include <vector>
 #include <iosfwd> // FIXME: Remove this!!!
@@ -380,10 +382,14 @@ public:
   /* Utility Functions */
 
   /// isZero - Is this a constant zero.
-  bool isZero() const { return getZExtValue() == 0; }
+  bool isZero() const {
+	  return value == 0;
+  }
 
   /// isOne - Is this a constant one.
-  bool isOne() const { return getZExtValue() == 1; }
+  bool isOne() const {
+	  return value == 1;
+  }
   
   /// isTrue - Is this the true expression.
   bool isTrue() const { 
@@ -397,7 +403,7 @@ public:
 
   /// isAllOnes - Is this constant all ones.
   bool isAllOnes() const {
-    return getZExtValue(getWidth()) == bits64::maxValueOfNBits(getWidth());
+	  return value.isAllOnesValue();
   }
 
   /* Constant Operations */
