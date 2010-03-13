@@ -41,7 +41,7 @@ namespace klee {
   class ExecutionState;
 
 std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
-std::ostream &operator<<(std::ostream &os, const ExecutionState &state);
+std::ostream &operator<<(std::ostream &os, const ExecutionState &state); // XXX Cloud9 hack
 
 struct StackFrame {
   KInstIterator caller;

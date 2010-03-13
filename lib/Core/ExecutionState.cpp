@@ -145,6 +145,8 @@ std::ostream &klee::operator<<(std::ostream &os, const MemoryMap &mm) {
   return os;
 }
 
+
+// XXX Cloud9 hack
 std::ostream &klee::operator<<(std::ostream &os, const ExecutionState &state) {
 	for (ExecutionState::stack_ty::const_iterator it = state.stack.begin();
 			it != state.stack.end(); it++) {
