@@ -296,6 +296,8 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 		CLOUD9_INFO("Exploring empty state!");
 	}
 
+	//CLOUD9_DEBUG("Exploring new node!");
+
 	// Keep the node alive until we finish with it
 	WorkerTree::NodePin nodePin = node->pin();
 
@@ -363,6 +365,8 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 
 	(**pNode).symState = NULL;
 
+	//CLOUD9_DEBUG("State destroyed!");
+
 	if (currentJob) {
 		currentJob->removeFromFrontier(pNode);
 	}
@@ -378,6 +382,10 @@ void JobExecutor::onStateBranched(klee::ExecutionState *state,
 		klee::ExecutionState *parent, int index) {
 
 	assert(parent);
+
+	//CLOUD9_DEBUG("State branched: [A] -> " << ((index == 0) ?
+	//		((state == NULL) ? "([], [A])" : "([B], [A])") :
+	//		((state == NULL) ? "([A], [])" : "([A], [B])")));
 
 	WorkerTree::NodePin pNode = parent->getWorkerNode();
 
@@ -473,15 +481,21 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
-		if ((**crtNode).symState == NULL) {
-			CLOUD9_ERROR("Replay broken, found NULL state at position " << i <<
-					" out of " << path.size() << " in the path.");
-			break;
+		if ((**crtNode).symState != NULL) {
+			exploreNode(crtNode);
 		}
-		exploreNode(crtNode);
 
 		crtNode = crtNode->getChild(path[i]);
-		assert(crtNode);
+
+		if (crtNode == NULL) {
+			CLOUD9_ERROR("Replay broken, found NULL node at position " << i <<
+								" out of " << path.size() << " in the path.");
+						break;
+		}
+	}
+
+	if ((**crtNode).symState == NULL) {
+		CLOUD9_ERROR("Replay broken, NULL state at the end of the path. Maybe the state went past the job root?");
 	}
 }
 
