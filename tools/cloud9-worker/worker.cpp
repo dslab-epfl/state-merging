@@ -492,7 +492,10 @@ int main(int argc, char **argv, char **envp) {
 		if (pid < 0) {
 			CLOUD9_EXIT("Unable to fork watchdog");
 		} else if (pid) {
-			return watchdog(pid);
+			int returnCode = watchdog(pid);
+			CLOUD9_INFO("Watchdog child exited with ret = " <<  returnCode);
+			return returnCode;
+			//return watchdog(pid);
 		}
 	}
 #endif
