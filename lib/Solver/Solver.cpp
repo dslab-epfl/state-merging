@@ -587,7 +587,14 @@ static bool runAndGetCexForked(::VC vc,
   fflush(stderr);
   int pid = fork();
   if (pid==-1) {
-    fprintf(stderr, "error: fork failed (for STP)");
+    if(errno == EAGAIN) 
+      fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)");
+    else 
+      if(errno == ENOMEM)
+	fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM)");
+      else
+	fprintf(stderr, "error: fork failed (for STP) - unknown errno");
+    
     return false;
   }
 
