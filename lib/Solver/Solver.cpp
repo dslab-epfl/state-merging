@@ -21,6 +21,9 @@
 #include "klee/util/ExprUtil.h"
 #include "klee/Internal/Support/Timer.h"
 
+#include "llvm/System/Process.h"
+
+
 #define vc_bvBoolExtract IAMTHESPAWNOFSATAN
 
 #include <cassert>
@@ -35,6 +38,7 @@
 #include <sys/shm.h>
 
 using namespace klee;
+using namespace llvm;
 
 /***/
 
@@ -587,14 +591,16 @@ static bool runAndGetCexForked(::VC vc,
   fflush(stderr);
   int pid = fork();
   if (pid==-1) {
+    unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
     if(errno == EAGAIN) 
       fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)");
     else 
       if(errno == ENOMEM)
-	fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM)");
+	fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u", mbs);
       else
 	fprintf(stderr, "error: fork failed (for STP) - unknown errno");
     
+
     return false;
   }
 
