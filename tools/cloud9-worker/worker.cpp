@@ -45,6 +45,7 @@
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/CommManager.h"
+#include "cloud9/Utils.h"
 
 using namespace llvm;
 using namespace cloud9::worker;
@@ -479,6 +480,8 @@ int main(int argc, char **argv, char **envp) {
 	llvm::InitializeNativeTarget();
 
 	sys::PrintStackTraceOnErrorSignal();
+
+	cloud9::initBreakSignal();
 
 	// Fill up every global cl::opt object declared in the program
 	parseArguments(argc, argv);
