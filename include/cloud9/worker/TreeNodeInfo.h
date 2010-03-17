@@ -28,15 +28,20 @@ private:
 
 	int jobCount;
 	bool stats;
+	bool breakpoint;
 	ExplorationJob *job;
 public:
-	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false), job(NULL) {};
+	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false),
+		breakpoint(false), job(NULL) {};
+
 	virtual ~TreeNodeInfo() {};
 
 	klee::ExecutionState* getSymbolicState() const { return symState; }
 	int getJobCount() const { return jobCount; }
 
 	bool isStats() const { return stats; }
+
+	bool isBreakpoint() const { return breakpoint; }
 
 	ExplorationJob *getJob() { return job; }
 };

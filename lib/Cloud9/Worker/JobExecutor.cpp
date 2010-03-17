@@ -10,12 +10,16 @@
 #include "cloud9/worker/JobExecutorBehaviors.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/Logger.h"
+#include "cloud9/Utils.h"
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/instrum/InstrumentationWriter.h"
 #include "cloud9/instrum/LocalFileWriter.h"
 
 #include "klee/Interpreter.h"
 #include "klee/ExecutionState.h"
+#include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
+#include "klee/util/ExprPPrinter.h"
 
 #include "llvm/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -28,6 +32,7 @@
 #include <map>
 #include <set>
 #include <fstream>
+#include <iostream>
 
 #define CLOUD9_STATS_FILE_NAME		"c9-stats.txt"
 #define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
@@ -47,6 +52,9 @@ cl::opt<bool> CheckDivZero("check-div-zero", cl::desc(
 
 cl::opt<bool> WarnAllExternals("warn-all-externals", cl::desc(
 		"Give initial warning for all externals."));
+
+cl::list<unsigned int> CodeBreakpoints("c9-code-bp",
+		cl::desc("Breakpoints in the LLVM assembly file"));
 
 }
 
@@ -225,6 +233,7 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 
 	initHandlers();
 	initInstrumentation();
+	initBreakpoints();
 }
 
 void JobExecutor::initHandlers() {
@@ -261,6 +270,13 @@ void JobExecutor::initInstrumentation() {
 
 	cloud9::instrum::theInstrManager.registerWriter(writer);
 	cloud9::instrum::theInstrManager.start();
+}
+
+void JobExecutor::initBreakpoints() {
+	// Register code breakpoints
+	for (int i = 0; i < CodeBreakpoints.size(); i++) {
+		setCodeBreakpoint(CodeBreakpoints[i]);
+	}
 }
 
 void JobExecutor::initRootState(llvm::Function *f, int argc,
@@ -301,9 +317,24 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	// Keep the node alive until we finish with it
 	WorkerTree::NodePin nodePin = node->pin();
 
+	if (!currentJob) {
+		//CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
+	}
+
 	while ((**node).symState != NULL) {
-		//CLOUD9_DEBUG("Stepping in state " << *node);
-		symbEngine->stepInState((**node).symState);
+
+		ExecutionState *state = (**node).symState;
+
+		CLOUD9_DEBUG("Stepping in instruction " << state->pc->info->assemblyLine);
+		if (!codeBreaks.empty()) {
+			if (codeBreaks.find(state->pc->info->assemblyLine) !=
+					codeBreaks.end()) {
+				// We hit a breakpoint
+				fireBreakpointHit(node);
+			}
+		}
+
+		symbEngine->stepInState(state);
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
 
 		if (currentJob) {
@@ -319,6 +350,21 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewStates);
 	}
 
+}
+
+void JobExecutor::fireBreakpointHit(WorkerTree::Node *node) {
+	klee::ExecutionState *state = (**node).symState;
+
+	CLOUD9_DEBUG("Breakpoint hit!");
+	CLOUD9_DEBUG("State at position: " << *node);
+
+	if (state) {
+		CLOUD9_DEBUG("State stack trace: " << *state);
+		klee::ExprPPrinter::printConstraints(std::cerr, state->constraints);
+	}
+
+	// Also signal a breakpoint, for stopping GDB
+	cloud9::breakSignal();
 }
 
 void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
@@ -365,7 +411,7 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 
 	(**pNode).symState = NULL;
 
-	//CLOUD9_DEBUG("State destroyed!");
+
 
 	if (currentJob) {
 		currentJob->removeFromFrontier(pNode);
@@ -399,6 +445,8 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 		bool &allow) {
 
 	assert(state);
+
+	//CLOUD9_DEBUG("State destroyed! " << *state);
 
 	WorkerTree::NodePin nodePin = state->getWorkerNode();
 
@@ -479,24 +527,40 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	// not be explored
 	currentJob = NULL;
 
+	CLOUD9_DEBUG("Started path replay!");
+
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
 			exploreNode(crtNode);
+		} else {
+			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
+					" out of " << path.size() << " in the path.");
+
+			WorkerTree::Node *siblingNode = crtNode->getSibling();
+
+			if (siblingNode != NULL && (**siblingNode).symState != NULL) {
+				CLOUD9_DEBUG("Found alternative path: " << *((**siblingNode).symState));
+			}
 		}
 
 		crtNode = crtNode->getChild(path[i]);
-
-		if (crtNode == NULL) {
-			CLOUD9_ERROR("Replay broken, found NULL node at position " << i <<
-								" out of " << path.size() << " in the path.");
-						break;
-		}
+		assert(crtNode != NULL);
 	}
 
 	if ((**crtNode).symState == NULL) {
 		CLOUD9_ERROR("Replay broken, NULL state at the end of the path. Maybe the state went past the job root?");
 	}
+}
+
+void JobExecutor::setPathBreakpoint(ExecutionPathPin path) {
+	assert(0 && "Not yet implemented"); // TODO: Implement this as soon as the
+	// tree data structures are refactored
+}
+
+void JobExecutor::setCodeBreakpoint(int assemblyLine) {
+	CLOUD9_DEBUG("Code breakpoint at assembly line " << assemblyLine);
+	codeBreaks.insert(assemblyLine);
 }
 
 }
