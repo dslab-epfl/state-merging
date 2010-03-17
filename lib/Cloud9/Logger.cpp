@@ -77,7 +77,7 @@ Logger &Logger::getLogger() {
 }
 
 std::string Logger::getStackTrace() {
-	return cloud9::GetStackTrace(2, 4);
+	return cloud9::GetStackTrace(2, 8);
 }
 
 
