@@ -91,6 +91,13 @@ public:
 		return parent;
 	}
 
+	Ptr getSibling() const {
+		if (parent == NULL)
+			return NULL;
+
+		return parent->getChild(1 - index);
+	}
+
 
 	Ptr getChild(int index) const {
 		return children[index];
