@@ -682,6 +682,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     seedMap.find(&current);
   bool isSeeding = it != seedMap.end();
 
+  //C9HACK_DEBUG("Fork requested: " << (isInternal ? "internal" : "external"), current);
+
   if (!isSeeding && !isa<ConstantExpr>(condition) && 
       (MaxStaticForkPct!=1. || MaxStaticSolvePct != 1. ||
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
@@ -1422,7 +1424,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       assert(bi->getCondition() == bi->getOperand(0) &&
              "Wrong operand index!");
       ref<Expr> cond = eval(ki, 0, state).value;
-      C9HACK_DEBUG("Fork requested: " << (false ? "internal" : "external"), state);
+      //C9HACK_DEBUG("Fork requested: " << (false ? "internal" : "external"), state);
       Executor::StatePair branches = fork(state, cond, false);
 
       if (WriteTraces) {
@@ -1483,6 +1485,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           std::map<BasicBlock*, ref<Expr> >::iterator it =
             targets.insert(std::make_pair(si->getSuccessor(i),
                                           ConstantExpr::alloc(0, Expr::Bool))).first;
+          //CLOUD9_DEBUG("Instruction Switch (OrExpr::Create): " << state);
           it->second = OrExpr::create(match, it->second);
         }
       }
@@ -1608,7 +1611,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         bool success = solver->getValue(*free, v, value);
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
-        C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
+        //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
         StatePair res = fork(*free, EqExpr::create(v, value), true);
         if (res.first) {
           uint64_t addr = value->getZExtValue();
@@ -1725,6 +1728,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::Or: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
+    //CLOUD9_DEBUG("Instruction Or: " << state);
     ref<Expr> result = OrExpr::create(left, right);
     bindLocal(ki, state, result);
     break;
@@ -2276,6 +2280,8 @@ void Executor::bindModuleConstants() {
 }
 
 void Executor::stepInState(ExecutionState *state) {
+	fireControlFlowEvent(state, cloud9::worker::STEP);
+
 	KInstruction *ki = state->pc;
 	stepInstruction(*state);
 
@@ -2321,8 +2327,6 @@ void Executor::stepInState(ExecutionState *state) {
 			}
 		}
 	}
-
-	fireStepComplete();
 
 	updateStates(state);
 }
@@ -2764,7 +2768,7 @@ void Executor::executeAlloc(ExecutionState &state,
       example = tmp;
     }
 
-    C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
+    //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     StatePair fixedSize = fork(state, EqExpr::create(example, size), true);
     
     if (fixedSize.second) { 
@@ -2785,7 +2789,7 @@ void Executor::executeAlloc(ExecutionState &state,
       } else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
-    	C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
+    	//C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
         StatePair hugeSize = 
           fork(*fixedSize.second, 
                UltExpr::create(ConstantExpr::alloc(1<<31, W),
@@ -2819,7 +2823,7 @@ void Executor::executeAlloc(ExecutionState &state,
 void Executor::executeFree(ExecutionState &state,
                            ref<Expr> address,
                            KInstruction *target) {
-	C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
+	//C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
   StatePair zeroPointer = fork(state, Expr::createIsZero(address), true);
   if (zeroPointer.first) {
     if (target)
@@ -2864,7 +2868,7 @@ void Executor::resolveExact(ExecutionState &state,
        it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
     
-    C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
+    //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     StatePair branches = fork(*unbound, inBounds, true);
     
     if (branches.first)
@@ -2971,7 +2975,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     
-    C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
+    //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     StatePair branches = fork(*unbound, inBounds, true);
     ExecutionState *bound = branches.first;
 

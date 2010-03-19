@@ -56,6 +56,9 @@ cl::opt<bool> WarnAllExternals("warn-all-externals", cl::desc(
 cl::list<unsigned int> CodeBreakpoints("c9-code-bp",
 		cl::desc("Breakpoints in the LLVM assembly file"));
 
+cl::opt<bool> DumpStateTraces("c9-dump-traces",
+		cl::desc("Dump state traces when a breakpoint or any other relevant event happens during execution"));
+
 }
 
 namespace cloud9 {
@@ -206,7 +209,7 @@ void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 
 JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 		int argc, char **argv)
-		: tree(t), currentJob(NULL) {
+		: tree(t), currentJob(NULL), traceCounter(0) {
 
 	klee::Interpreter::InterpreterOptions iOpts;
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
@@ -318,7 +321,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	WorkerTree::NodePin nodePin = node->pin();
 
 	if (!currentJob) {
-		//CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
+		CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
 	}
 
 	while ((**node).symState != NULL) {
@@ -334,6 +337,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 			}
 		}
 
+		// Execute the instruction
 		symbEngine->stepInState(state);
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
 
@@ -361,6 +365,7 @@ void JobExecutor::fireBreakpointHit(WorkerTree::Node *node) {
 	if (state) {
 		CLOUD9_DEBUG("State stack trace: " << *state);
 		klee::ExprPPrinter::printConstraints(std::cerr, state->constraints);
+		dumpStateTrace(node);
 	}
 
 	// Also signal a breakpoint, for stopping GDB
@@ -455,8 +460,19 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 	fireNodeDeleted(nodePin.get());
 }
 
-void JobExecutor::onStepComplete() {
-	// XXX Nothing yet
+void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
+				ControlFlowEvent event) {
+	WorkerTree::Node *node = state->getWorkerNode().get();
+
+	// Add the instruction to the node trace
+	if (DumpStateTraces) {
+		switch (event) {
+		case STEP:
+			(**node).trace.appendEntry(new InstructionTraceEntry(state->pc));
+			break;
+		}
+
+	}
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
@@ -561,6 +577,32 @@ void JobExecutor::setPathBreakpoint(ExecutionPathPin path) {
 void JobExecutor::setCodeBreakpoint(int assemblyLine) {
 	CLOUD9_DEBUG("Code breakpoint at assembly line " << assemblyLine);
 	codeBreaks.insert(assemblyLine);
+}
+
+void JobExecutor::dumpStateTrace(WorkerTree::Node *node) {
+	if (!DumpStateTraces) {
+		// Do nothing
+		return;
+	}
+
+	// Get a file to dump the path into
+	char fileName[256];
+	snprintf(fileName, 256, "pathDump%05d.txt", traceCounter);
+	traceCounter++;
+
+	CLOUD9_INFO("Dumping state trace in file '" << fileName << "'");
+
+	std::ostream *os = kleeHandler->openOutputFile(fileName);
+	assert(os != NULL);
+
+	(*os) << (*node) << std::endl;
+
+	ExecutionState *state = (**node).symState;
+	assert(state != NULL);
+
+	serializeExecutionTrace(*os, state);
+
+	delete os;
 }
 
 }

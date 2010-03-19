@@ -23,6 +23,13 @@ namespace cloud9 {
 
 namespace worker {
 
+enum ControlFlowEvent {
+	STEP,
+	BRANCH,
+	CALL,
+	RETURN
+};
+
 class SymbolicEngine {
 public:
 	class StateEventHandler {
@@ -34,7 +41,8 @@ public:
 		virtual void onStateBranched(klee::ExecutionState *state,
 				klee::ExecutionState *parent, int index) = 0;
 		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
-		virtual void onStepComplete() = 0;
+		virtual void onControlFlowEvent(klee::ExecutionState *state,
+				ControlFlowEvent event) = 0;
 
 	};
 private:
@@ -44,7 +52,8 @@ protected:
 	void fireStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	void fireStateDestroy(klee::ExecutionState *state, bool &allow);
-	void fireStepComplete();
+	void fireControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event);
 public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};

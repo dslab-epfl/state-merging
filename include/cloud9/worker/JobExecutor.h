@@ -93,6 +93,14 @@ private:
 	std::set<unsigned int> codeBreaks;
 
 	/*
+	 * Debugging and instrumentation
+	 */
+	int traceCounter;
+
+	void dumpStateTrace(WorkerTree::Node *node);
+
+
+	/*
 	 * Returns the next node to be explored
 	 */
 	WorkerTree::Node *getNextNode();
@@ -149,7 +157,8 @@ public:
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
-	virtual void onStepComplete();
+	virtual void onControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event);
 
 	/*
 	 * Breakpoint management

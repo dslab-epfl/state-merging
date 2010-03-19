@@ -42,11 +42,12 @@ void SymbolicEngine::fireStateDestroy(klee::ExecutionState *state, bool &allow) 
 	}
 }
 
-void SymbolicEngine::fireStepComplete() {
+void SymbolicEngine::fireControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event) {
 	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
 		StateEventHandler *h = *it;
 
-		h->onStepComplete();
+		h->onControlFlowEvent(state, event);
 	}
 }
 

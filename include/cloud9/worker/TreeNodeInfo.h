@@ -9,6 +9,9 @@
 #define TREENODEINFO_H_
 
 #include "cloud9/ExecutionTree.h"
+#include "cloud9/worker/ExecutionTrace.h"
+
+#include <vector>
 
 namespace klee {
 class ExecutionState;
@@ -19,12 +22,14 @@ namespace cloud9 {
 namespace worker {
 
 class ExplorationJob;
+class ExecutionTrace;
 
 class TreeNodeInfo {
 	friend class JobExecutor;
 	friend class JobManager;
 private:
 	klee::ExecutionState *symState;
+	ExecutionTrace trace;
 
 	int jobCount;
 	bool stats;
@@ -43,7 +48,9 @@ public:
 
 	bool isBreakpoint() const { return breakpoint; }
 
-	ExplorationJob *getJob() { return job; }
+	ExplorationJob *getJob() const { return job; }
+
+	const ExecutionTrace &getTrace() const { return trace; }
 };
 
 typedef ExecutionTree<TreeNodeInfo> WorkerTree;
