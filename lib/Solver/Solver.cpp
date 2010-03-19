@@ -37,6 +37,9 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
+#include <iostream>
+#include <fstream>
+
 using namespace klee;
 using namespace llvm;
 
@@ -592,11 +595,30 @@ static bool runAndGetCexForked(::VC vc,
   int pid = fork();
   if (pid==-1) {
     unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
+    
+    std::string line;
+    std::ifstream *f;
+    f = new std::ifstream("/proc/meminfo");
+    if (!f) {
+      fprintf(stderr, "out of memory");
+    } else if (!f->good()) {
+      fprintf(stderr, "error opening /proc/meminfo");
+      delete f;
+      f = NULL;
+    }
+    
+    std::getline(*f, line);
+    fprintf(stderr,  "%s", line.c_str());
+    std::getline(*f, line);
+    fprintf(stderr, "%s", line.c_str());
+    
+    f->close();
+
     if(errno == EAGAIN) 
       fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)");
     else 
       if(errno == ENOMEM)
-	fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u", mbs);
+	fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u\n", mbs);
       else
 	fprintf(stderr, "error: fork failed (for STP) - unknown errno");
     
