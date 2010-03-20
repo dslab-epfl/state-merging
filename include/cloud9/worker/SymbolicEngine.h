@@ -25,7 +25,8 @@ namespace worker {
 
 enum ControlFlowEvent {
 	STEP,
-	BRANCH,
+	BRANCH_FALSE,
+	BRANCH_TRUE,
 	CALL,
 	RETURN
 };

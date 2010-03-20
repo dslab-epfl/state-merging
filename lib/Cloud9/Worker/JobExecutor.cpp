@@ -328,7 +328,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 
 		ExecutionState *state = (**node).symState;
 
-		CLOUD9_DEBUG("Stepping in instruction " << state->pc->info->assemblyLine);
+		//CLOUD9_DEBUG("Stepping in instruction " << state->pc->info->assemblyLine);
 		if (!codeBreaks.empty()) {
 			if (codeBreaks.find(state->pc->info->assemblyLine) !=
 					codeBreaks.end()) {
@@ -469,6 +469,15 @@ void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
 		switch (event) {
 		case STEP:
 			(**node).trace.appendEntry(new InstructionTraceEntry(state->pc));
+			break;
+		case BRANCH_FALSE:
+		case BRANCH_TRUE:
+			(**node).trace.appendEntry(new ConstraintLogEntry(state));
+			(**node).trace.appendEntry(new ControlFlowEntry(true, false, false));
+			break;
+		case CALL:
+			break;
+		case RETURN:
 			break;
 		}
 

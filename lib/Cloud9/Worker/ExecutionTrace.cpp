@@ -46,6 +46,8 @@ ConstraintLogEntry::ConstraintLogEntry(klee::ExecutionState *state) {
 
 	klee::ExprPPrinter::printConstraints(oss, state->constraints);
 
+	oss.flush();
+
 	constraints = oss.str();
 }
 
@@ -103,6 +105,8 @@ void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
 				saver.restore();
 				ki->inst->print(raw_os, NULL);
 				os << std::endl;
+			} else if (ConstraintLogEntry *logEntry = dynamic_cast<ConstraintLogEntry*>(*it)) {
+				os << logEntry->getConstraints() << std::endl;
 			}
 		}
 

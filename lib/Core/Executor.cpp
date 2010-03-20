@@ -1117,6 +1117,8 @@ void Executor::executeCall(ExecutionState &state,
     state.exeTraceMgr.addEvent(new FunctionCallTraceEvent(state, ki,
                                                           f->getName()));
 
+  fireControlFlowEvent(&state, cloud9::worker::CALL);
+
   Instruction *i = ki->inst;
   if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
@@ -1341,6 +1343,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (WriteTraces) {
       state.exeTraceMgr.addEvent(new FunctionReturnTraceEvent(state, ki));
     }
+    fireControlFlowEvent(&state, cloud9::worker::RETURN);
     
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
@@ -1433,12 +1436,22 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         if (branches.first) {
           branches.first->exeTraceMgr.addEvent(
             new BranchTraceEvent(state, ki, true, isTwoWay));
+
         }
 
         if (branches.second) {
           branches.second->exeTraceMgr.addEvent(
             new BranchTraceEvent(state, ki, false, isTwoWay));
+
         }
+      }
+
+      if (branches.first) {
+    	  fireControlFlowEvent(branches.first, cloud9::worker::BRANCH_TRUE);
+      }
+
+      if (branches.second) {
+    	  fireControlFlowEvent(branches.second, cloud9::worker::BRANCH_FALSE);
       }
 
       // NOTE: There is a hidden dependency here, markBranchVisited
