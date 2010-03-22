@@ -1117,7 +1117,7 @@ void Executor::executeCall(ExecutionState &state,
     state.exeTraceMgr.addEvent(new FunctionCallTraceEvent(state, ki,
                                                           f->getName()));
 
-  fireControlFlowEvent(&state, cloud9::worker::CALL);
+  fireControlFlowEvent(&state, ::cloud9::worker::CALL);
 
   Instruction *i = ki->inst;
   if (f && f->isDeclaration()) {
@@ -1343,7 +1343,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (WriteTraces) {
       state.exeTraceMgr.addEvent(new FunctionReturnTraceEvent(state, ki));
     }
-    fireControlFlowEvent(&state, cloud9::worker::RETURN);
+    fireControlFlowEvent(&state, ::cloud9::worker::RETURN);
     
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
@@ -1447,11 +1447,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       }
 
       if (branches.first) {
-    	  fireControlFlowEvent(branches.first, cloud9::worker::BRANCH_TRUE);
+    	  fireControlFlowEvent(branches.first, ::cloud9::worker::BRANCH_TRUE);
       }
 
       if (branches.second) {
-    	  fireControlFlowEvent(branches.second, cloud9::worker::BRANCH_FALSE);
+    	  fireControlFlowEvent(branches.second, ::cloud9::worker::BRANCH_FALSE);
       }
 
       // NOTE: There is a hidden dependency here, markBranchVisited
@@ -2293,7 +2293,7 @@ void Executor::bindModuleConstants() {
 }
 
 void Executor::stepInState(ExecutionState *state) {
-	fireControlFlowEvent(state, cloud9::worker::STEP);
+	fireControlFlowEvent(state, ::cloud9::worker::STEP);
 
 	KInstruction *ki = state->pc;
 	stepInstruction(*state);
@@ -3144,7 +3144,7 @@ ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
 		}
 	}
 
-	ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+	ExecutionState *state = new ExecutionState(this, kmodule->functionMap[f]);
 
 	if (pathWriter)
 		state->pathOS = pathWriter->open();

@@ -59,15 +59,26 @@ public:
 	bool isReturn() const { return fnReturn; }
 };
 
-class ConstraintLogEntry: public ExecutionTraceEntry {
-private:
-	std::string constraints;
+class DebugLogEntry: public ExecutionTraceEntry {
+protected:
+	std::string message;
+
+	DebugLogEntry() { }
+public:
+	DebugLogEntry(std::string &msg) : message(msg) {
+
+	}
+
+	virtual ~DebugLogEntry() { }
+
+	const std::string &getMessage() { return message; }
+};
+
+class ConstraintLogEntry: public DebugLogEntry {
 public:
 	ConstraintLogEntry(klee::ExecutionState *state);
 
 	virtual ~ConstraintLogEntry() { }
-
-	const std::string &getConstraints() { return constraints; }
 };
 
 class ExecutionTrace {

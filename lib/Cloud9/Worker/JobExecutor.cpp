@@ -38,6 +38,8 @@
 #define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
 
 using namespace llvm;
+using namespace klee;
+using namespace klee::c9;
 
 extern bool c9hack_EnableDetails;
 
@@ -482,6 +484,11 @@ void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
 		}
 
 	}
+}
+
+void JobExecutor::onDebugInfo(klee::ExecutionState *state,
+			const std::string &message) {
+	// TODO
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {

@@ -13,7 +13,6 @@
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
-#include "klee/util/ExprPPrinter.h"
 
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
@@ -44,11 +43,13 @@ ExecutionTrace::~ExecutionTrace() {
 ConstraintLogEntry::ConstraintLogEntry(klee::ExecutionState *state) {
 	ostringstream oss(ostringstream::out);
 
-	klee::ExprPPrinter::printConstraints(oss, state->constraints);
+	klee::c9::printStateMemorySummary(oss, *state) << std::endl;
+	klee::c9::printStateConstraints(oss, *state) << std::endl;
+
 
 	oss.flush();
 
-	constraints = oss.str();
+	message = oss.str();
 }
 
 void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
@@ -105,8 +106,8 @@ void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
 				saver.restore();
 				ki->inst->print(raw_os, NULL);
 				os << std::endl;
-			} else if (ConstraintLogEntry *logEntry = dynamic_cast<ConstraintLogEntry*>(*it)) {
-				os << logEntry->getConstraints() << std::endl;
+			} else if (DebugLogEntry *logEntry = dynamic_cast<DebugLogEntry*>(*it)) {
+				os << logEntry->getMessage() << std::endl;
 			}
 		}
 

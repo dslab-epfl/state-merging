@@ -9,6 +9,7 @@
 #define SYMBOLICENGINE_H_
 
 #include <set>
+#include <string>
 
 namespace klee {
 class ExecutionState;
@@ -44,6 +45,8 @@ public:
 		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
 		virtual void onControlFlowEvent(klee::ExecutionState *state,
 				ControlFlowEvent event) = 0;
+		virtual void onDebugInfo(klee::ExecutionState *state,
+				const std::string &message) = 0;
 
 	};
 private:
@@ -55,6 +58,8 @@ protected:
 	void fireStateDestroy(klee::ExecutionState *state, bool &allow);
 	void fireControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);
+	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);
+
 public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};

@@ -159,6 +159,8 @@ public:
 	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
 	virtual void onControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);
+	virtual void onDebugInfo(klee::ExecutionState *state,
+			const std::string &message);
 
 	/*
 	 * Breakpoint management

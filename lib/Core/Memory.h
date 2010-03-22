@@ -12,6 +12,7 @@
 
 #include "Context.h"
 #include "klee/Expr.h"
+#include "AddressSpace.h"
 
 #include "llvm/ADT/StringExtras.h"
 
@@ -139,6 +140,7 @@ class ObjectState {
 private:
   friend class AddressSpace;
   unsigned copyOnWriteOwner; // exclusively for AddressSpace
+  AddressSpace *owner;
 
   friend class ObjectHolder;
   unsigned refCount;
@@ -156,6 +158,8 @@ private:
 
   // mutable because we may need flush during read of const
   mutable UpdateList updates;
+
+  void fireDebugMessage(std::string &message);
 
 public:
   unsigned size;

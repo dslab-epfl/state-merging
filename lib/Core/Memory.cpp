@@ -11,6 +11,7 @@
 
 #include "Memory.h"
 
+#include "Executor.h"
 #include "Context.h"
 #include "klee/Expr.h"
 #include "klee/Solver.h"
@@ -152,6 +153,13 @@ ObjectState::~ObjectState() {
   delete[] concreteStore;
 }
 
+void ObjectState::fireDebugMessage(std::string &message) {
+	ExecutionState *state = owner->state;
+	Executor *executor = state->executor;
+
+	executor->fireDebugInfo(state, message);
+}
+
 /***/
 
 const UpdateList &ObjectState::getUpdates() const {
@@ -197,6 +205,11 @@ const UpdateList &ObjectState::getUpdates() const {
     // Start a new update list.
     // FIXME: Leaked.
     static unsigned id = 0;
+
+    std::string c9AllocInfo;
+    object->getAllocInfo(c9AllocInfo);
+
+    CLOUD9_DEBUG("Creating constant array for memory object " << c9AllocInfo);
     const Array *array = new Array("const_arr" + llvm::utostr(++id), size,
                                    &Contents[0],
                                    &Contents[0] + Contents.size());

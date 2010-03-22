@@ -37,11 +37,19 @@ namespace klee {
   class PTreeNode;
   class InstructionInfo;
   class ExecutionTraceEvent;
+  class Executor;
 
   class ExecutionState;
 
-std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
+namespace c9 {
+std::ostream &printStateStack(std::ostream &os, const ExecutionState &state);
+std::ostream &printStateConstraints(std::ostream &os, const ExecutionState &state);
+std::ostream &printStateMemorySummary(std::ostream &os, const ExecutionState &state);
+}
+
 std::ostream &operator<<(std::ostream &os, const ExecutionState &state); // XXX Cloud9 hack
+std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
+
 
 struct StackFrame {
   KInstIterator caller;
@@ -97,6 +105,7 @@ private:
 
 
 class ExecutionState {
+	friend class ObjectState;
 public:
   typedef std::vector<StackFrame> stack_ty;
 
@@ -108,6 +117,8 @@ private:
   WorkerTree::NodePin nodePtr;
 
 public:
+  Executor *executor;
+
   bool fakeState;
   // Are we currently underconstrained?  Hack: value is size to make fake
   // objects.
@@ -150,14 +161,14 @@ public:
   void removeFnAlias(std::string fn);
   
 private:
-  ExecutionState() : fakeState(false), underConstrained(0), ptreeNode(0) {};
+  ExecutionState(Executor *_executor) : executor(_executor), fakeState(false), underConstrained(0), addressSpace(this), ptreeNode(0) {};
 
 public:
-  ExecutionState(KFunction *kf);
+  ExecutionState(Executor *_executor, KFunction *kf);
 
   // XXX total hack, just used to make a state so solver can
   // use on structure
-  ExecutionState(const std::vector<ref<Expr> > &assumptions);
+  ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions);
 
   ~ExecutionState();
   

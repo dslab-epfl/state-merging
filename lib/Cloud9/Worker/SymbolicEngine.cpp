@@ -51,6 +51,15 @@ void SymbolicEngine::fireControlFlowEvent(klee::ExecutionState *state,
 	}
 }
 
+void SymbolicEngine::fireDebugInfo(klee::ExecutionState *state,
+		const std::string &message) {
+	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
+		StateEventHandler *h = *it;
+
+		h->onDebugInfo(state, message);
+	}
+}
+
 }
 
 }
