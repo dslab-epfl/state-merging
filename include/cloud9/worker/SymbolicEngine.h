@@ -64,7 +64,8 @@ public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};
 
-	virtual klee::ExecutionState *initRootState(llvm::Function *f, int argc,
+	virtual klee::ExecutionState *createRootState(llvm::Function *f) = 0;
+	virtual void initRootState(klee::ExecutionState *state, int argc,
 			char **argv, char **envp) = 0;
 
 	virtual void stepInState(klee::ExecutionState *state) = 0;

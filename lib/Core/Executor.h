@@ -463,8 +463,8 @@ public:
 
   /*** Cloud9 symbolic execution engine methods ***/
 
-  virtual ExecutionState *initRootState(llvm::Function *f, int argc,
-  			char **argv, char **envp);
+  virtual ExecutionState *createRootState(llvm::Function *f);
+  virtual void initRootState(ExecutionState *state, int argc, char **argv, char **envp);
 
   virtual void stepInState(ExecutionState *state);
 

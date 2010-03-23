@@ -43,7 +43,6 @@ ExecutionTrace::~ExecutionTrace() {
 ConstraintLogEntry::ConstraintLogEntry(klee::ExecutionState *state) {
 	ostringstream oss(ostringstream::out);
 
-	klee::c9::printStateMemorySummary(oss, *state) << std::endl;
 	klee::c9::printStateConstraints(oss, *state) << std::endl;
 
 

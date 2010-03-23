@@ -15,9 +15,13 @@
 #include "AddressSpace.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Instruction.h"
+#include "llvm/Function.h"
 
 #include <vector>
 #include <string>
+
+using namespace llvm;
 
 namespace llvm {
   class Value;
@@ -95,6 +99,25 @@ public:
   ~MemoryObject();
 
   /// Get an identifying string for this allocation.
+	template<class OStream>
+	void getAllocInfo(OStream &info) const {
+		info << "MO" << id << "[" << size << "]";
+
+		if (allocSite) {
+			info << " allocated at ";
+			if (const Instruction *i = dyn_cast<Instruction>(allocSite)) {
+				info << i->getParent()->getParent()->getNameStr() << "():";
+				info << *i;
+			} else if (const GlobalValue *gv = dyn_cast<GlobalValue>(allocSite)) {
+				info << "global:" << gv->getNameStr();
+			} else {
+				info << "value:" << *allocSite;
+			}
+		} else {
+			info << " (no allocation info)";
+		}
+	}
+
   void getAllocInfo(std::string &result) const;
 
   void setName(std::string name) {
@@ -135,6 +158,8 @@ public:
     }
   }
 };
+
+std::ostream &operator<<(std::ostream &os, const MemoryObject &obj);
 
 class ObjectState {
 private:

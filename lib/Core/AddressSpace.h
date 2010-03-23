@@ -35,6 +35,7 @@ namespace klee {
   
   class AddressSpace {
 	  friend class ObjectState;
+	  friend class ExecutionState;
   private:
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;

@@ -286,11 +286,13 @@ void JobExecutor::initBreakpoints() {
 
 void JobExecutor::initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp) {
-	klee::ExecutionState *state = symbEngine->initRootState(f, argc, argv, envp);
+	klee::ExecutionState *state = symbEngine->createRootState(f);
 	WorkerTree::NodePin node = tree->getRoot()->pin();
 
 	(**node).symState = state;
 	state->setWorkerNode(node);
+
+	symbEngine->initRootState(state, argc, argv, envp);
 }
 
 JobExecutor::~JobExecutor() {
@@ -474,7 +476,7 @@ void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
 			break;
 		case BRANCH_FALSE:
 		case BRANCH_TRUE:
-			(**node).trace.appendEntry(new ConstraintLogEntry(state));
+			//(**node).trace.appendEntry(new ConstraintLogEntry(state));
 			(**node).trace.appendEntry(new ControlFlowEntry(true, false, false));
 			break;
 		case CALL:
@@ -488,7 +490,11 @@ void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
 
 void JobExecutor::onDebugInfo(klee::ExecutionState *state,
 			const std::string &message) {
-	// TODO
+	WorkerTree::Node *node = state->getWorkerNode().get();
+
+	if (DumpStateTraces) {
+		(**node).trace.appendEntry(new DebugLogEntry(message));
+	}
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {

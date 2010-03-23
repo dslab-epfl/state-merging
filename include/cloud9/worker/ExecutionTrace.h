@@ -65,13 +65,13 @@ protected:
 
 	DebugLogEntry() { }
 public:
-	DebugLogEntry(std::string &msg) : message(msg) {
+	DebugLogEntry(const std::string &msg) : message(msg) {
 
 	}
 
 	virtual ~DebugLogEntry() { }
 
-	const std::string &getMessage() { return message; }
+	const std::string &getMessage() const { return message; }
 };
 
 class ConstraintLogEntry: public DebugLogEntry {

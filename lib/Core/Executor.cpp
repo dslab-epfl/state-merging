@@ -3101,8 +3101,16 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
 
 /***/
 
-ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
-		char **argv, char **envp) {
+ExecutionState *Executor::createRootState(llvm::Function *f) {
+	ExecutionState *state = new ExecutionState(this, kmodule->functionMap[f]);
+
+	return state;
+}
+
+void Executor::initRootState(ExecutionState *state,
+		int argc, char **argv, char **envp) {
+	llvm::Function *f = state->stack.back().kf->function;
+
 	std::vector<ref<Expr> > arguments;
 
 	// force deterministic initialization of memory objects
@@ -3143,8 +3151,6 @@ ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
 			}
 		}
 	}
-
-	ExecutionState *state = new ExecutionState(this, kmodule->functionMap[f]);
 
 	if (pathWriter)
 		state->pathOS = pathWriter->open();
@@ -3196,8 +3202,6 @@ ExecutionState *Executor::initRootState(llvm::Function *f, int argc,
 	initTimers();
 
 	states.insert(state);
-
-	return state;
 }
 
 Searcher *Executor::initSearcher(Searcher *base) {
@@ -3242,7 +3246,8 @@ void Executor::destroyState(ExecutionState *state) {
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
 		char **envp) {
 
-	ExecutionState *state = initRootState(f, argc, argv, envp);
+	ExecutionState *state = createRootState(f);
+	initRootState(state, argc, argv, envp);
 
 	run(*state);
 
