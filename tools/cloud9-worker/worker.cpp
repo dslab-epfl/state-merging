@@ -40,6 +40,7 @@
 
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
+#include "cloud9/ExecutionPath.h"
 #include "cloud9/Protocols.h"
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/JobManager.h"
@@ -62,6 +63,9 @@ cl::opt<std::string> Environ("environ", cl::desc(
 
 cl::list<std::string> InputArgv(cl::ConsumeAfter, cl::desc(
 		"<program arguments>..."));
+
+cl::opt<std::string> ReplayPath("c9-replay-path", cl::desc(
+		"Instead of executing jobs, just do a replay of a path. No load balancer involved."));
 
 }
 
@@ -516,22 +520,29 @@ int main(int argc, char **argv, char **envp) {
 
 	// Create the job manager
 	JobManager jobManager(mainModule);
-	CommManager commManager(&jobManager);
-
-
 	jobManager.setupStartingPoint("main", pArgc, pArgv, envp);
 
-	// Start exploring the root node
-	//ExplorationJob *rootJob = jobManager->createJob(jobManager->getTree()->getRoot(), false);
 
-	//jobManager->submitJob(rootJob);
+	if (ReplayPath.size() > 0) {
+		CLOUD9_INFO("Running in replay mode. No load balancer involved.");
 
+		std::ifstream is(ReplayPath);
 
-	commManager.setup();
+		if (is.fail()) {
+			CLOUD9_EXIT("Could not open the replay file " << ReplayPath);
+		}
 
-	jobManager.processJobs();
+		cloud9::ExecutionPathSetPin pathSet = cloud9::ExecutionPathSet::parse(is);
 
-	commManager.finalize();
+		jobManager.processJobs(pathSet);
+	} else {
+		CommManager commManager(&jobManager); // Handle outside communication
+		commManager.setup();
+
+		jobManager.processJobs(); // Blocking when no jobs are on the queue
+
+		commManager.finalize();
+	}
 
 	return 0;
 }

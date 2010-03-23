@@ -55,4 +55,30 @@ ExecutionPathSet::~ExecutionPathSet() {
 	}
 }
 
+ExecutionPathSetPin ExecutionPathSet::parse(std::istream &is) {
+	ExecutionPathSet *set = new ExecutionPathSet();
+
+	char crtChar = '\0';
+
+	for (;;) {
+		// Move to the first valid path character
+		while (!is.eof() && crtChar != '0' && crtChar != '1') {
+			is.get(crtChar);
+		}
+		if (is.eof())
+			break;
+
+		// Start building the path
+		ExecutionPath *path = new ExecutionPath();
+		do {
+			path->path.push_back(crtChar - '0');
+			is.get(crtChar);
+		} while (!is.eof() && (crtChar == '0' || crtChar == '1'));
+
+		set->paths.push_back(path);
+	}
+
+	return ExecutionPathSetPin(set);
+}
+
 }
