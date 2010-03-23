@@ -200,6 +200,13 @@ void JobManager::processLoop(bool allowGrowth, bool blocking) {
 		else
 			job = dequeueJob();
 
+		if (blocking) {
+			assert(job != NULL);
+		} else {
+			if (job == NULL)
+				break;
+		}
+
 		bool foreign = job->foreign;
 
 		job->started = true;

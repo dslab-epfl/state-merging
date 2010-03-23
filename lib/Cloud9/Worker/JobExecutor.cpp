@@ -543,6 +543,8 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	WorkerTree::Node *crtNode = pathEnd;
 
+	CLOUD9_DEBUG("Replaying path: " << *crtNode);
+
 	while (crtNode != NULL && (**crtNode).symState == NULL) {
 		path.push_back(crtNode->getIndex());
 
@@ -565,7 +567,7 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	// not be explored
 	currentJob = NULL;
 
-	CLOUD9_DEBUG("Started path replay!");
+	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
