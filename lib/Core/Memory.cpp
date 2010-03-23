@@ -33,6 +33,7 @@
 using namespace llvm;
 using namespace klee;
 
+#if 0
 #define OSTATE_DEBUG(msg)	\
 	do { \
 		std::ostringstream oss(std::ostringstream::out); \
@@ -41,6 +42,9 @@ using namespace klee;
 		std::string message = oss.str(); \
 		fireDebugMessage(message); \
 	} while (0)
+#else
+#define OSTATE_DEBUG(msg)
+#endif
 
 namespace {
   cl::opt<bool>
