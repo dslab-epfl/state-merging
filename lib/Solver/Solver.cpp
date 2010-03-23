@@ -594,8 +594,18 @@ static bool runAndGetCexForked(::VC vc,
   fflush(stderr);
   int pid = fork();
   if (pid==-1) {
-    unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
     
+
+    if(errno == EAGAIN)
+      fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)\n");
+    else
+      if(errno == ENOMEM) {
+    	  unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
+    	  fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u\n", mbs);
+      }
+      else
+    	  fprintf(stderr, "error: fork failed (for STP) - unknown errno = %d\n", errno);
+
     std::string line;
     std::ifstream *f;
     f = new std::ifstream("/proc/meminfo");
@@ -608,20 +618,11 @@ static bool runAndGetCexForked(::VC vc,
     }
     
     std::getline(*f, line);
-    fprintf(stderr,  "%s", line.c_str());
+    fprintf(stderr,  "%s\n", line.c_str());
     std::getline(*f, line);
-    fprintf(stderr, "%s", line.c_str());
+    fprintf(stderr, "%s\n", line.c_str());
     
     f->close();
-
-    if(errno == EAGAIN) 
-      fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)");
-    else 
-      if(errno == ENOMEM)
-	fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u\n", mbs);
-      else
-	fprintf(stderr, "error: fork failed (for STP) - unknown errno");
-    
 
     return false;
   }
