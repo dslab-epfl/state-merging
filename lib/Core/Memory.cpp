@@ -211,7 +211,7 @@ const UpdateList &ObjectState::getUpdates() const {
     std::string c9AllocInfo;
     object->getAllocInfo(c9AllocInfo);
 
-    CLOUD9_DEBUG("Creating constant array for memory object " << c9AllocInfo);
+    //CLOUD9_DEBUG("Creating constant array for memory object " << c9AllocInfo);
     const Array *array = new Array("const_arr" + llvm::utostr(++id), size,
                                    &Contents[0],
                                    &Contents[0] + Contents.size());

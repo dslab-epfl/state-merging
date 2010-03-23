@@ -329,7 +329,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	WorkerTree::NodePin nodePin = node->pin();
 
 	if (!currentJob) {
-		CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
+		//CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
 	}
 
 	while ((**node).symState != NULL) {
@@ -367,7 +367,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 void JobExecutor::fireBreakpointHit(WorkerTree::Node *node) {
 	klee::ExecutionState *state = (**node).symState;
 
-	CLOUD9_DEBUG("Breakpoint hit!");
+	CLOUD9_INFO("Breakpoint hit!");
 	CLOUD9_DEBUG("State at position: " << *node);
 
 	if (state) {
@@ -547,7 +547,7 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	WorkerTree::Node *crtNode = pathEnd;
 
-	CLOUD9_DEBUG("Replaying path: " << *crtNode);
+	//CLOUD9_DEBUG("Replaying path: " << *crtNode);
 
 	while (crtNode != NULL && (**crtNode).symState == NULL) {
 		path.push_back(crtNode->getIndex());
@@ -571,20 +571,20 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	// not be explored
 	currentJob = NULL;
 
-	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
+	//CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
 			exploreNode(crtNode);
 		} else {
-			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
-					" out of " << path.size() << " in the path.");
+			//CLOUD9_DEBUG("Potential fast-forward at position " << i <<
+			//		" out of " << path.size() << " in the path.");
 
 			WorkerTree::Node *siblingNode = crtNode->getSibling();
 
 			if (siblingNode != NULL && (**siblingNode).symState != NULL) {
-				CLOUD9_DEBUG("Found alternative path: " << *((**siblingNode).symState));
+				//CLOUD9_DEBUG("Found alternative path: " << *((**siblingNode).symState));
 			}
 		}
 
@@ -603,7 +603,7 @@ void JobExecutor::setPathBreakpoint(ExecutionPathPin path) {
 }
 
 void JobExecutor::setCodeBreakpoint(int assemblyLine) {
-	CLOUD9_DEBUG("Code breakpoint at assembly line " << assemblyLine);
+	CLOUD9_INFO("Code breakpoint at assembly line " << assemblyLine);
 	codeBreaks.insert(assemblyLine);
 }
 

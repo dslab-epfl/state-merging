@@ -597,8 +597,8 @@ public:
       stpInitialArray(0) {
     assert((isSymbolicArray() || constantValues.size() == size) &&
            "Invalid size for constant array!");
-    CLOUD9_DEBUG("Array " << _name << " created! Stack trace: " << CLOUD9_STACKTRACE);
-    cloud9::breakSignal();
+    //CLOUD9_DEBUG("Array " << _name << " created! Stack trace: " << CLOUD9_STACKTRACE);
+    //cloud9::breakSignal();
 
 #ifdef NDEBUG
     for (const ref<ConstantExpr> *it = constantValuesBegin;

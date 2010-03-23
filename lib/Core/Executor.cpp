@@ -1051,9 +1051,9 @@ Executor::toConstant(ExecutionState &state,
 void Executor::executeGetValue(ExecutionState &state,
                                ref<Expr> e,
                                KInstruction *target) {
-  CLOUD9_DEBUG("Getting a concrete value for expression " << e);
+  //CLOUD9_DEBUG("Getting a concrete value for expression " << e);
   e = state.constraints.simplifyExpr(e);
-  CLOUD9_DEBUG("After simplification: " << e);
+  //CLOUD9_DEBUG("After simplification: " << e);
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
     seedMap.find(&state);
   if (it==seedMap.end() || isa<ConstantExpr>(e)) {
@@ -1061,7 +1061,7 @@ void Executor::executeGetValue(ExecutionState &state,
     bool success = solver->getValue(state, e, value);
     assert(success && "FIXME: Unhandled solver failure");
     (void) success;
-    CLOUD9_DEBUG("Concrete value: " << value);
+    //CLOUD9_DEBUG("Concrete value: " << value);
     bindLocal(target, state, value);
   } else {
     std::set< ref<Expr> > values;

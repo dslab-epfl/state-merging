@@ -359,7 +359,7 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
   
   ref<Expr> e = arguments[0];
   
-  CLOUD9_DEBUG("Checking expression for assumption: " << e << " of width: " << e->getWidth());
+  //CLOUD9_DEBUG("Checking expression for assumption: " << e << " of width: " << e->getWidth());
 
   if (e->getWidth() != Expr::Bool)
     e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
