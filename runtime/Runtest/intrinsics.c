@@ -31,7 +31,7 @@ static unsigned char rand_byte(void) {
   return x & 0xFF;
 }
 
-void klee_make_symbolic(void *array, unsigned nbytes, const char *name) {
+void klee_make_symbolic(void *array, uint_klee nbytes, const char *name) {
   static int rand_init = -1;
 
   if (rand_init == -1) {
@@ -98,22 +98,22 @@ void klee_silent_exit(int x) {
   exit(x);
 }
 
-unsigned klee_choose(unsigned n) {
-  unsigned x;
+uint_klee klee_choose(uint_klee n) {
+  uint_klee x;
   klee_make_symbolic(&x, sizeof x, "klee_choose");
   if(x >= n)
-    fprintf(stderr, "ERROR: max = %d, got = %d\n", n, x);
+    fprintf(stderr, "ERROR: max = %ld, got = %ld\n", n, x);
   assert(x < n);
   return x;
 }
 
-void klee_assume(unsigned x) {
+void klee_assume(uint_klee x) {
   if (!x) {
     fprintf(stderr, "ERROR: invalid klee_assume\n");
   }
 }
 
-unsigned klee_get_value(unsigned x) {
+uint_klee klee_get_value(uint_klee x) {
   return x;
 }
 
