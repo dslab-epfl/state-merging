@@ -300,7 +300,11 @@ JobExecutor::~JobExecutor() {
 		symbEngine->deregisterStateEventHandler(this);
 
 		symbEngine->destroyStates();
+
+		delete symbEngine;
 	}
+
+	cloud9::instrum::theInstrManager.stop();
 }
 
 WorkerTree::Node *JobExecutor::getNextNode() {

@@ -69,7 +69,9 @@ JobManager::JobManager(llvm::Module *module) :
 }
 
 JobManager::~JobManager() {
-	// TODO Auto-generated destructor stub
+	if (executor != NULL) {
+		delete executor;
+	}
 }
 
 void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs) {
