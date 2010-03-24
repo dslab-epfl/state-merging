@@ -10,8 +10,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "cloud9/Logger.h"
 
-#include <boost/asio.hpp>
-
 using namespace llvm;
 
 namespace {
@@ -27,14 +25,19 @@ namespace instrum {
 InstrumentationManager &theInstrManager = InstrumentationManager::getManager();
 
 void InstrumentationManager::instrumThreadControl() {
-	boost::asio::io_service service;
+
 	CLOUD9_INFO("Instrumentation started");
 
-	boost::asio::deadline_timer t(service, boost::posix_time::seconds(InstrUpdateRate));
-
 	for (;;) {
-		t.wait();
-		t.expires_at(t.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
+		boost::system::error_code code;
+		timer.wait(code);
+
+		if (terminated) {
+			CLOUD9_INFO("Instrumentation interrupted. Stopping.");
+			break;
+		}
+
+		timer.expires_at(timer.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
 
 		writeStatistics();
 		writeEvents();
@@ -43,16 +46,31 @@ void InstrumentationManager::instrumThreadControl() {
 
 
 InstrumentationManager::InstrumentationManager() :
-		referenceTime(now()) {
+		referenceTime(now()), terminated(false), timer(service, boost::posix_time::seconds(InstrUpdateRate)) {
 
 }
 
 InstrumentationManager::~InstrumentationManager() {
-	instrumThread.join();
+	stop();
+
+	for (WriterSet::iterator it = writers.begin(); it != writers.end(); it++) {
+		InstrumentationWriter *writer = *it;
+
+		delete writer;
+	}
 }
 
 void InstrumentationManager::start() {
 	instrumThread = boost::thread(&InstrumentationManager::instrumThreadControl, this);
+}
+
+void InstrumentationManager::stop() {
+	if (instrumThread.joinable()) {
+		terminated = true;
+		timer.cancel();
+
+		instrumThread.join();
+	}
 }
 
 void InstrumentationManager::writeStatistics() {

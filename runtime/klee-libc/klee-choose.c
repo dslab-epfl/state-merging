@@ -9,8 +9,8 @@
 
 #include "klee/klee.h"
 
-unsigned klee_choose(unsigned n) {
-  unsigned x;
+uint_klee klee_choose(uint_klee n) {
+  unsigned long x;
   klee_make_symbolic(&x, sizeof x, "klee_choose");
 
   // NB: this will *not* work if they don't compare to n values.

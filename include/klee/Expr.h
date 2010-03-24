@@ -17,6 +17,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "cloud9/Logger.h"
+#include "cloud9/Utils.h"
 
 #include <set>
 #include <vector>
@@ -596,6 +597,9 @@ public:
       stpInitialArray(0) {
     assert((isSymbolicArray() || constantValues.size() == size) &&
            "Invalid size for constant array!");
+    //CLOUD9_DEBUG("Array " << _name << " created! Stack trace: " << CLOUD9_STACKTRACE);
+    //cloud9::breakSignal();
+
 #ifdef NDEBUG
     for (const ref<ConstantExpr> *it = constantValuesBegin;
          it != constantValuesEnd; ++it)

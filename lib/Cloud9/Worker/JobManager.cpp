@@ -69,7 +69,9 @@ JobManager::JobManager(llvm::Module *module) :
 }
 
 JobManager::~JobManager() {
-	// TODO Auto-generated destructor stub
+	if (executor != NULL) {
+		delete executor;
+	}
 }
 
 void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs) {
@@ -177,14 +179,36 @@ ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
 	return job;
 }
 
-void JobManager::processJobs() {
+ExplorationJob* JobManager::dequeueJob() {
+	ExplorationJob *job;
+	selHandler->onNextJobSelection(job);
+
+	if (job != NULL) {
+		cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
+	}
+
+	return job;
+}
+
+void JobManager::processLoop(bool allowGrowth, bool blocking) {
 	ExplorationJob *job = NULL;
 
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	// TODO: Put an abort condition here
-	for(;;) {
-		job = dequeueJob(lock);
+	for (;;) {
+		if (blocking)
+			job = dequeueJob(lock);
+		else
+			job = dequeueJob();
+
+		if (blocking) {
+			assert(job != NULL);
+		} else {
+			if (job == NULL)
+				break;
+		}
+
 		bool foreign = job->foreign;
 
 		job->started = true;
@@ -200,7 +224,9 @@ void JobManager::processJobs() {
 		finalizeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
-		explodeJob(job, newJobs);
+
+		if (allowGrowth)
+			explodeJob(job, newJobs);
 
 		delete job;
 
@@ -209,13 +235,27 @@ void JobManager::processJobs() {
 		if (foreign)
 			cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentImportedPathCount);
 
-		submitJobs(newJobs.begin(), newJobs.end());
+		if (allowGrowth)
+			submitJobs(newJobs.begin(), newJobs.end());
 
 		if (refineStats) {
 			refineStatistics();
 			refineStats = false;
 		}
 	}
+}
+
+void JobManager::processJobs() {
+	processLoop(true, true);
+}
+
+void JobManager::processJobs(ExecutionPathSetPin paths) {
+	// First, we need to import the jobs in the manager
+	importJobs(paths);
+
+	// Then we execute them, but only them (non blocking, don't allow growth),
+	// until the queue is exhausted
+	processLoop(false, false);
 }
 
 void JobManager::refineStatistics() {

@@ -10,6 +10,9 @@
 #ifndef __KLEE_H__
 #define __KLEE_H__
 
+// XXX This does not work on Windows x64, where long is still 32bit
+typedef unsigned long uint_klee;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -19,7 +22,7 @@ extern "C" {
      objects do not overlap. These memory objects will also
      (obviously) not correctly interact with external function
      calls. */
-  void klee_define_fixed_object(void *addr, unsigned nbytes);
+  void klee_define_fixed_object(void *addr, uint_klee nbytes);
 
   /// klee_make_symbolic - Make the contents of the object pointer to by \arg
   /// addr symbolic. 
@@ -29,7 +32,7 @@ extern "C" {
   /// be the entire contents of the object.
   /// \arg name - An optional name, used for identifying the object in messages,
   /// output files, etc.
-  void klee_make_symbolic(void *addr, unsigned nbytes, const char *name);
+  void klee_make_symbolic(void *addr, uint_klee nbytes, const char *name);
 
   /// klee_range - Construct a symbolic value in the signed interval
   /// [begin,end).
@@ -67,7 +70,7 @@ extern "C" {
 			 const char *suffix);
   
   /* called by checking code to get size of memory. */
-  unsigned klee_get_obj_size(void *ptr);
+  unsigned long klee_get_obj_size(void *ptr);
   
   /* print the tree associated w/ a given expression. */
   void klee_print_expr(const char *msg, ...);
@@ -75,7 +78,7 @@ extern "C" {
   /* NB: this *does not* fork n times and return [0,n) in children.
    * It makes n be symbolic and returns: caller must compare N times.
    */
-  unsigned klee_choose(unsigned n);
+  uint_klee klee_choose(uint_klee n);
   
   /* special klee assert macro. this assert should be used when path consistency
    * across platforms is desired (e.g., in tests).
@@ -91,21 +94,21 @@ extern "C" {
    * and writing tests but can also be used to enable prints in replay
    * mode.
    */
-  unsigned klee_is_symbolic(unsigned n);
+  unsigned klee_is_symbolic(uint_klee n);
 
 
   /* The following intrinsics are primarily intended for internal use
      and may have peculiar semantics. */
 
-  void klee_assume(unsigned condition);
+  void klee_assume(uint_klee condition);
   void klee_warning(const char *message);
   void klee_warning_once(const char *message);
-  void klee_prefer_cex(void *object, unsigned condition);
+  void klee_prefer_cex(void *object, uint_klee condition);
   void klee_mark_global(void *object);
 
   /* Return a possible constant value for the input expression. This
      allows programs to forcibly concretize values on their own. */
-  unsigned klee_get_value(unsigned expr);
+  uint_klee klee_get_value(uint_klee expr);
 
   /* Ensure that memory in the range [address, address+size) is
      accessible to the program. If some byte in the range is not
@@ -114,7 +117,7 @@ extern "C" {
   
      The current implementation requires both address and size to be
      constants and that the range lie within a single object. */
-  void klee_check_memory_access(const void *address, unsigned size);
+  void klee_check_memory_access(const void *address, uint_klee size);
 
   /* Enable/disable forking. */
   void klee_set_forking(unsigned enable);

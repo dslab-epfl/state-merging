@@ -11,6 +11,7 @@
 #include "cloud9/Logger.h"
 
 #include <vector>
+#include <iostream>
 #include <boost/shared_ptr.hpp>
 
 namespace cloud9 {
@@ -81,6 +82,8 @@ public:
 	static ExecutionPathSetPin getEmptySet() {
 		return ExecutionPathSetPin(new ExecutionPathSet());
 	}
+
+	static ExecutionPathSetPin parse(std::istream &is);
 };
 
 

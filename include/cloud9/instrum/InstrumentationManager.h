@@ -17,6 +17,7 @@
 #include <cassert>
 
 #include <boost/thread.hpp>
+#include <boost/asio.hpp>
 
 
 namespace cloud9 {
@@ -79,6 +80,11 @@ private:
 	boost::mutex eventsMutex;
 	boost::thread instrumThread;
 
+	boost::asio::io_service service;
+	boost::asio::deadline_timer timer;
+
+	bool terminated;
+
 	void instrumThreadControl();
 
 	void writeStatistics();
@@ -96,6 +102,7 @@ public:
 	}
 
 	void start();
+	void stop();
 
 	void recordEvent(Events id, string value) {
 		boost::lock_guard<boost::mutex> lock(eventsMutex);

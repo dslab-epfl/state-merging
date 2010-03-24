@@ -9,6 +9,7 @@
 #define SYMBOLICENGINE_H_
 
 #include <set>
+#include <string>
 
 namespace klee {
 class ExecutionState;
@@ -23,6 +24,14 @@ namespace cloud9 {
 
 namespace worker {
 
+enum ControlFlowEvent {
+	STEP,
+	BRANCH_FALSE,
+	BRANCH_TRUE,
+	CALL,
+	RETURN
+};
+
 class SymbolicEngine {
 public:
 	class StateEventHandler {
@@ -34,7 +43,10 @@ public:
 		virtual void onStateBranched(klee::ExecutionState *state,
 				klee::ExecutionState *parent, int index) = 0;
 		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
-		virtual void onStepComplete() = 0;
+		virtual void onControlFlowEvent(klee::ExecutionState *state,
+				ControlFlowEvent event) = 0;
+		virtual void onDebugInfo(klee::ExecutionState *state,
+				const std::string &message) = 0;
 
 	};
 private:
@@ -44,12 +56,16 @@ protected:
 	void fireStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	void fireStateDestroy(klee::ExecutionState *state, bool &allow);
-	void fireStepComplete();
+	void fireControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event);
+	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);
+
 public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};
 
-	virtual klee::ExecutionState *initRootState(llvm::Function *f, int argc,
+	virtual klee::ExecutionState *createRootState(llvm::Function *f) = 0;
+	virtual void initRootState(klee::ExecutionState *state, int argc,
 			char **argv, char **envp) = 0;
 
 	virtual void stepInState(klee::ExecutionState *state) = 0;

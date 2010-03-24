@@ -82,7 +82,11 @@ private:
 
 	void finalizeJob(ExplorationJob *job);
 
+
 	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock);
+	ExplorationJob* dequeueJob();
+
+	void processLoop(bool allowGrowth, bool blocking);
 
 	void refineStatistics();
 	void cleanupStatistics();
@@ -105,7 +109,11 @@ public:
 
 	WorkerTree *getTree() { return tree; }
 
+	/*
+	 * Main methods
+	 */
 	void processJobs();
+	void processJobs(ExecutionPathSetPin paths);
 
 	/*
 	 * Statistics methods

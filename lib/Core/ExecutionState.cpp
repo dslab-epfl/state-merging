@@ -13,6 +13,7 @@
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/util/ExprPPrinter.h"
 
 #include "klee/Expr.h"
 
@@ -61,14 +62,16 @@ StackFrame::~StackFrame() {
 
 /***/
 
-ExecutionState::ExecutionState(KFunction *kf) 
-  : fakeState(false),
+ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
+  : executor(_executor),
+    fakeState(false),
     underConstrained(false),
     depth(0),
     pc(kf->instructions),
     prevPC(pc),
     queryCost(0.), 
     weight(1),
+    addressSpace(this),
     instsSinceCovNew(0),
     coveredNew(false),
     forkDisabled(false),
@@ -76,11 +79,13 @@ ExecutionState::ExecutionState(KFunction *kf)
   pushFrame(0, kf);
 }
 
-ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions) 
-  : fakeState(true),
+ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
+  : executor(_executor),
+    fakeState(true),
     underConstrained(false),
     constraints(assumptions),
     queryCost(0.),
+    addressSpace(this),
     ptreeNode(0) {
 }
 
@@ -94,6 +99,7 @@ ExecutionState *ExecutionState::branch() {
   ExecutionState *falseState = new ExecutionState(*this);
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
+  falseState->addressSpace.state = falseState;
 
   weight *= .5;
   falseState->weight -= weight;
@@ -131,23 +137,10 @@ void ExecutionState::removeFnAlias(std::string fn) {
 }
 
 /**/
+namespace klee {
+namespace c9 {
 
-std::ostream &klee::operator<<(std::ostream &os, const MemoryMap &mm) {
-  os << "{";
-  MemoryMap::iterator it = mm.begin();
-  MemoryMap::iterator ie = mm.end();
-  if (it!=ie) {
-    os << "MO" << it->first->id << ":" << it->second;
-    for (++it; it!=ie; ++it)
-      os << ", MO" << it->first->id << ":" << it->second;
-  }
-  os << "}";
-  return os;
-}
-
-
-// XXX Cloud9 hack
-std::ostream &klee::operator<<(std::ostream &os, const ExecutionState &state) {
+std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
 	for (ExecutionState::stack_ty::const_iterator it = state.stack.begin();
 			it != state.stack.end(); it++) {
 		if (it != state.stack.begin()) {
@@ -163,6 +156,52 @@ std::ostream &klee::operator<<(std::ostream &os, const ExecutionState &state) {
 
 	return os;
 }
+
+
+std::ostream &printStateConstraints(std::ostream &os, const ExecutionState &state) {
+	klee::ExprPPrinter::printConstraints(os, state.constraints);
+
+	return os;
+}
+
+std::ostream &printStateMemorySummary(std::ostream &os,
+		const ExecutionState &state) {
+	const MemoryMap &mm = state.addressSpace.objects;
+
+	os << "{";
+	MemoryMap::iterator it = mm.begin();
+	MemoryMap::iterator ie = mm.end();
+	if (it != ie) {
+		os << "MO" << it->first->id << ":" << it->second;
+		for (++it; it != ie; ++it)
+			os << ", MO" << it->first->id << ":" << it->second;
+	}
+	os << "}";
+	return os;
+}
+
+}
+}
+
+std::ostream &klee::operator<<(std::ostream &os, const MemoryMap &mm) {
+	os << "{";
+	MemoryMap::iterator it = mm.begin();
+	MemoryMap::iterator ie = mm.end();
+	if (it != ie) {
+		os << "MO" << it->first->id << ":" << it->second;
+		for (++it; it != ie; ++it)
+			os << ", MO" << it->first->id << ":" << it->second;
+	}
+	os << "}";
+	return os;
+}
+
+std::ostream &klee::operator<<(std::ostream &os, const ExecutionState &state) {
+	return klee::c9::printStateStack(os, state);
+}
+
+
+
 
 bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)

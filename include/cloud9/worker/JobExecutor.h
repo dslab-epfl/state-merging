@@ -86,6 +86,21 @@ private:
 	ExplorationHandler *expHandler;
 
 	/*
+	 * Breakpoint management data structures
+	 *
+	 */
+	std::set<WorkerTree::NodePin> pathBreaks;
+	std::set<unsigned int> codeBreaks;
+
+	/*
+	 * Debugging and instrumentation
+	 */
+	int traceCounter;
+
+	void dumpStateTrace(WorkerTree::Node *node);
+
+
+	/*
 	 * Returns the next node to be explored
 	 */
 	WorkerTree::Node *getNextNode();
@@ -118,8 +133,11 @@ private:
 		sizingHandler->onNodeDeleted(node);
 	}
 
+	void fireBreakpointHit(WorkerTree::Node *node);
+
 	void initHandlers();
 	void initInstrumentation();
+	void initBreakpoints();
 public:
 	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
 	virtual ~JobExecutor();
@@ -139,7 +157,17 @@ public:
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
 	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
-	virtual void onStepComplete();
+	virtual void onControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event);
+	virtual void onDebugInfo(klee::ExecutionState *state,
+			const std::string &message);
+
+	/*
+	 * Breakpoint management
+	 */
+
+	void setCodeBreakpoint(int assemblyLine);
+	void setPathBreakpoint(ExecutionPathPin path);
 
 };
 

@@ -80,7 +80,7 @@ namespace klee {
   /// during an instruction step. Should contain addedStates,
   /// removedStates, and haltExecution, among others.
 
-class Executor : public Interpreter, public cloud9::worker::SymbolicEngine {
+class Executor : public Interpreter, public ::cloud9::worker::SymbolicEngine {
   friend class BumpMergingSearcher;
   friend class MergingSearcher;
   friend class RandomPathSearcher;
@@ -88,6 +88,7 @@ class Executor : public Interpreter, public cloud9::worker::SymbolicEngine {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
+  friend class ObjectState;
 
 public:
   class Timer {
@@ -462,8 +463,8 @@ public:
 
   /*** Cloud9 symbolic execution engine methods ***/
 
-  virtual ExecutionState *initRootState(llvm::Function *f, int argc,
-  			char **argv, char **envp);
+  virtual ExecutionState *createRootState(llvm::Function *f);
+  virtual void initRootState(ExecutionState *state, int argc, char **argv, char **envp);
 
   virtual void stepInState(ExecutionState *state);
 

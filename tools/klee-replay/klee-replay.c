@@ -22,6 +22,8 @@
 #include <sys/signal.h>
 #include <sys/wait.h>
 
+typedef unsigned long uint_klee;
+
 static void __emit_error(const char *msg);
 
 static KTest* input;
@@ -327,22 +329,22 @@ void klee_warning_once(char *name) {
   fprintf(stderr, "WARNING: %s\n", name);
 }
 
-int klee_assume(int x) {
+unsigned klee_assume(uint_klee x) {
   if (!x) {
     fprintf(stderr, "WARNING: klee_assume(0)!\n");
   }
   return 0;
 }
 
-int klee_is_symbolic(int x) {
+unsigned klee_is_symbolic(uint_klee x) {
   return 0;
 }
 
-void klee_prefer_cex(void *buffer, unsigned condition) {
+void klee_prefer_cex(void *buffer, uint_klee condition) {
   ;
 }
 
-void klee_make_symbolic(void *addr, unsigned nbytes, const char *name) {
+void klee_make_symbolic(void *addr, uint_klee nbytes, const char *name) {
   /* XXX remove model version code once new tests gen'd */
   if (obj_index >= input->numObjects) {
     if (strcmp("model_version", name) == 0) {
@@ -361,7 +363,7 @@ void klee_make_symbolic(void *addr, unsigned nbytes, const char *name) {
     } else {
       if (boo->numBytes != nbytes) {
 	fprintf(stderr, "make_symbolic mismatch, different sizes: "
-		"%d in input file, %d in code\n", boo->numBytes, nbytes);
+		"%d in input file, %ld in code\n", boo->numBytes, nbytes);
 	exit(1);
       } else {
         memcpy(addr, boo->bytes, nbytes);
