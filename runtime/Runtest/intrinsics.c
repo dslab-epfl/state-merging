@@ -52,7 +52,7 @@ void klee_make_symbolic(void *array, uint_klee nbytes, const char *name) {
       *v = rand() % 69;
     } else {
       char *c = array;
-      unsigned i;
+      uint_klee i;
       for (i=0; i<nbytes; i++)
         c[i] = rand_byte();
     }

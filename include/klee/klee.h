@@ -70,7 +70,7 @@ extern "C" {
 			 const char *suffix);
   
   /* called by checking code to get size of memory. */
-  unsigned long klee_get_obj_size(void *ptr);
+  uint_klee klee_get_obj_size(void *ptr);
   
   /* print the tree associated w/ a given expression. */
   void klee_print_expr(const char *msg, ...);
