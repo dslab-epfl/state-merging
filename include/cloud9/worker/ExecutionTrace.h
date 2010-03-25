@@ -99,8 +99,6 @@ public:
 	}
 };
 
-void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state);
-
 }
 
 }

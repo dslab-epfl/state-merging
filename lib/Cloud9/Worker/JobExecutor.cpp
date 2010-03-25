@@ -33,6 +33,8 @@
 #include <set>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
+#include <boost/io/ios_state.hpp>
 
 #define CLOUD9_STATS_FILE_NAME		"c9-stats.txt"
 #define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
@@ -57,6 +59,9 @@ cl::opt<bool> WarnAllExternals("warn-all-externals", cl::desc(
 
 cl::list<unsigned int> CodeBreakpoints("c9-code-bp",
 		cl::desc("Breakpoints in the LLVM assembly file"));
+
+cl::opt<bool> BreakOnReplayBroken("c9-bp-on-replaybr",
+		cl::desc("Break on last valid position if a broken replay occurrs."));
 
 cl::opt<bool> DumpStateTraces("c9-dump-traces",
 		cl::desc("Dump state traces when a breakpoint or any other relevant event happens during execution"));
@@ -134,6 +139,74 @@ static const char *unsafeExternals[] = { "fork", // oh lord
 		};
 
 #define NELEMS(array) (sizeof(array)/sizeof(array[0]))
+
+static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) {
+	std::vector<int> path;
+	const WorkerTree::Node *crtNode = node;
+
+	while (crtNode->getParent() != NULL) {
+		path.push_back(crtNode->getIndex());
+		crtNode = crtNode->getParent();
+	}
+
+	std::reverse(path.begin(), path.end());
+
+
+	const llvm::BasicBlock *crtBasicBlock = NULL;
+	const llvm::Function *crtFunction = NULL;
+
+	llvm::raw_os_ostream raw_os(os);
+
+
+	for (int i = 0; i <= path.size(); i++) {
+		const ExecutionTrace &trace = (**crtNode).getTrace();
+		// Output each instruction in the node
+		for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
+				it != trace.getEntries().end(); it++) {
+			if (InstructionTraceEntry *instEntry = dynamic_cast<InstructionTraceEntry*>(*it)) {
+				klee::KInstruction *ki = instEntry->getInstruction();
+				bool newBB = false;
+				bool newFn = false;
+
+				if (ki->inst->getParent() != crtBasicBlock) {
+					crtBasicBlock = ki->inst->getParent();
+					newBB = true;
+				}
+
+				if (crtBasicBlock != NULL && crtBasicBlock->getParent() != crtFunction) {
+					crtFunction = crtBasicBlock->getParent();
+					newFn = true;
+				}
+
+				if (newFn) {
+					os << std::endl;
+					os << "   Function '" << ((crtFunction != NULL) ? crtFunction->getNameStr() : "") << "':" << std::endl;
+				}
+
+				if (newBB) {
+					os << "----------- " << ((crtBasicBlock != NULL) ? crtBasicBlock->getNameStr() : "") << " ----" << std::endl;
+				}
+
+				boost::io::ios_all_saver saver(os);
+				os << std::setw(9) << ki->info->assemblyLine << ": ";
+				saver.restore();
+				ki->inst->print(raw_os, NULL);
+				os << std::endl;
+			} else if (DebugLogEntry *logEntry = dynamic_cast<DebugLogEntry*>(*it)) {
+				os << logEntry->getMessage() << std::endl;
+			}
+		}
+
+		if (i < path.size()) {
+			crtNode = crtNode->getChild(path[i]);
+		}
+	}
+}
+
+static void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
+	const WorkerTree::Node *node = state->getWorkerNode().get();
+	serializeExecutionTrace(os, node);
+}
 
 void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 	std::map<std::string, bool> externals;
@@ -583,10 +656,12 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	currentJob = NULL;
 
 	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
+	WorkerTree::Node *lastValidState;
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
+			lastValidState = crtNode;
 			exploreNode(crtNode);
 		} else {
 			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
@@ -605,6 +680,9 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	if ((**crtNode).symState == NULL) {
 		CLOUD9_ERROR("Replay broken, NULL state at the end of the path. Maybe the state went past the job root?");
+		if (BreakOnReplayBroken) {
+			fireBreakpointHit(lastValidState);
+		}
 	}
 }
 
