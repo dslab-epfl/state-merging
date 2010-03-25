@@ -11,6 +11,8 @@ namespace cloud9 {
 
 namespace worker {
 
+// TODO: Use boost functions to remove redundancy in the code
+
 void SymbolicEngine::registerStateEventHandler(StateEventHandler *handler) {
 	seHandlers.insert(handler);
 }
@@ -59,6 +61,15 @@ void SymbolicEngine::fireDebugInfo(klee::ExecutionState *state,
 		h->onDebugInfo(state, message);
 	}
 }
+
+void SymbolicEngine::fireOutOfResources(klee::ExecutionState *destroyedState) {
+	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
+		StateEventHandler *h = *it;
+
+		h->onOutOfResources(destroyedState);
+	}
+}
+
 
 }
 

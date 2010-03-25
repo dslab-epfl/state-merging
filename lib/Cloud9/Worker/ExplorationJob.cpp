@@ -40,7 +40,11 @@ void ExplorationJob::addToFrontier(WorkerTree::Node *node) {
 }
 
 void ExplorationJob::removeFromFrontier(WorkerTree::Node *node) {
-	assert(frontier.find(node) != frontier.end());
+	if (frontier.find(node) == frontier.end()) {
+		// A state was removed from outside the current job.
+		CLOUD9_DEBUG("State removed from outside current job. Broken replays may happen in the future.");
+		return;
+	}
 
 	frontier.erase(node);
 }

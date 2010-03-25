@@ -468,6 +468,11 @@ void JobExecutor::onStateDestroy(klee::ExecutionState *state,
 	fireNodeDeleted(nodePin.get());
 }
 
+void JobExecutor::onOutOfResources(klee::ExecutionState *destroyedState) {
+	// TODO: Implement a job migration mechanism
+	CLOUD9_INFO("Executor ran out of resources. Dropping state.");
+}
+
 void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
 				ControlFlowEvent event) {
 	WorkerTree::Node *node = state->getWorkerNode().get();

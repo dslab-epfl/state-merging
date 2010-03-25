@@ -47,6 +47,7 @@ public:
 				ControlFlowEvent event) = 0;
 		virtual void onDebugInfo(klee::ExecutionState *state,
 				const std::string &message) = 0;
+		virtual void onOutOfResources(klee::ExecutionState *destroyedState) = 0;
 
 	};
 private:
@@ -59,6 +60,7 @@ protected:
 	void fireControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);
 	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);
+	void fireOutOfResources(klee::ExecutionState *destroyedState);
 
 public:
 	SymbolicEngine() {};
