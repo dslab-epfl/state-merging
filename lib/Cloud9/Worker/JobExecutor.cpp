@@ -502,8 +502,11 @@ void JobExecutor::onDebugInfo(klee::ExecutionState *state,
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
-	if (job->foreign) {
-		//CLOUD9_DEBUG("Executing foreign job");
+	if ((**(job->jobRoot)).symState == NULL) {
+		if (!job->foreign) {
+			CLOUD9_INFO("Replaying path for non-foreign job. Most probably this job will be lost.");
+		}
+
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
 
 		c9hack_EnableDetails = true;
@@ -511,7 +514,10 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 		c9hack_EnableDetails = false;
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
-		job->foreign = false;
+	} else {
+		if (job->foreign) {
+			CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
+		}
 	}
 
 	currentJob = job;
