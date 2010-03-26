@@ -456,7 +456,7 @@ void MergingSearcher::update(ExecutionState *current,
 
 BatchingSearcher::BatchingSearcher(Searcher *_baseSearcher,
                                    double _timeBudget,
-                                   unsigned _instructionBudget) 
+                                   unsigned _instructionBudget)
   : baseSearcher(_baseSearcher),
     timeBudget(_timeBudget),
     instructionBudget(_instructionBudget),

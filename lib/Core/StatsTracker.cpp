@@ -190,7 +190,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
         unsigned id = ki->info->id;
         theStatisticManager->setIndex(id);
         if (kf->trackCoverage && instructionIsCoverable(ki->inst))
-          ++stats::uncoveredInstructions;
+          ++stats::locallyUncoveredInstructions;
       }
       
       if (kf->trackCoverage) {
@@ -236,48 +236,54 @@ void StatsTracker::done() {
 }
 
 void StatsTracker::stepInstruction(ExecutionState &es) {
-  if (OutputIStats) {
-    if (TrackInstructionTime) {
-      static sys::TimeValue lastNowTime(0,0),lastUserTime(0,0);
-    
-      if (lastUserTime.seconds()==0 && lastUserTime.nanoseconds()==0) {
-        sys::TimeValue sys(0,0);
-        sys::Process::GetTimeUsage(lastNowTime,lastUserTime,sys);
-      } else {
-        sys::TimeValue now(0,0),user(0,0),sys(0,0);
-        sys::Process::GetTimeUsage(now,user,sys);
-        sys::TimeValue delta = user - lastUserTime;
-        sys::TimeValue deltaNow = now - lastNowTime;
-        stats::instructionTime += delta.usec();
-        stats::instructionRealTime += deltaNow.usec();
-        lastUserTime = user;
-        lastNowTime = now;
-      }
-    }
+	if (OutputIStats) {
+		if (TrackInstructionTime) {
+			static sys::TimeValue lastNowTime(0, 0), lastUserTime(0, 0);
 
-    Instruction *inst = es.pc->inst;
-    const InstructionInfo &ii = *es.pc->info;
-    StackFrame &sf = es.stack.back();
-    theStatisticManager->setIndex(ii.id);
-    if (UseCallPaths)
-      theStatisticManager->setContext(&sf.callPathNode->statistics);
+			if (lastUserTime.seconds() == 0 && lastUserTime.nanoseconds() == 0) {
+				sys::TimeValue sys(0, 0);
+				sys::Process::GetTimeUsage(lastNowTime, lastUserTime, sys);
+			} else {
+				sys::TimeValue now(0, 0), user(0, 0), sys(0, 0);
+				sys::Process::GetTimeUsage(now, user, sys);
+				sys::TimeValue delta = user - lastUserTime;
+				sys::TimeValue deltaNow = now - lastNowTime;
+				stats::instructionTime += delta.usec();
+				stats::instructionRealTime += deltaNow.usec();
+				lastUserTime = user;
+				lastNowTime = now;
+			}
+		}
 
-    if (es.instsSinceCovNew)
-      ++es.instsSinceCovNew;
+		Instruction *inst = es.pc->inst;
+		const InstructionInfo &ii = *es.pc->info;
+		StackFrame &sf = es.stack.back();
+		theStatisticManager->setIndex(ii.id);
+		if (UseCallPaths)
+			theStatisticManager->setContext(&sf.callPathNode->statistics);
 
-    if (sf.kf->trackCoverage && instructionIsCoverable(inst)) {
-      if (!theStatisticManager->getIndexedValue(stats::coveredInstructions, ii.id)) {
-        // Checking for actual stoppoints avoids inconsistencies due
-        // to line number propogation.
-        if (isa<DbgStopPointInst>(inst))
-          es.coveredLines[&ii.file].insert(ii.line);
-	es.coveredNew = true;
-        es.instsSinceCovNew = 1;
-	++stats::coveredInstructions;
-	stats::uncoveredInstructions += (uint64_t)-1;
-      }
-    }
-  }
+		if (es.instsSinceCovNew)
+			++es.instsSinceCovNew;
+
+		if (sf.kf->trackCoverage && instructionIsCoverable(inst)) {
+			if (!theStatisticManager->getIndexedValue(
+					stats::locallyCoveredInstructions, ii.id)) {
+				// Checking for actual stoppoints avoids inconsistencies due
+				// to line number propogation.
+				if (isa<DbgStopPointInst> (inst))
+					es.coveredLines[&ii.file].insert(ii.line);
+				es.coveredNew = true;
+				es.instsSinceCovNew = 1;
+				++stats::locallyCoveredInstructions;
+				stats::locallyUncoveredInstructions += (uint64_t) -1;
+
+				if (!theStatisticManager->getIndexedValue(stats::globallyCoveredInstructions, ii.id)) {
+					++stats::globallyCoveredInstructions;
+					stats::globallyUncoveredInstructions += (uint64_t) -1;
+				}
+			}
+		}
+	}
 }
 
 ///
@@ -376,8 +382,8 @@ void StatsTracker::writeStatsLine() {
              << "," << stats::queryConstructs
              << "," << 0 // was numObjects
              << "," << elapsed()
-             << "," << stats::coveredInstructions
-             << "," << stats::uncoveredInstructions
+             << "," << stats::locallyCoveredInstructions
+             << "," << stats::locallyUncoveredInstructions
              << "," << stats::queryTime / 1000000.
              << "," << stats::solverTime / 1000000.
              << "," << stats::cexCacheTime / 1000000.
@@ -511,7 +517,7 @@ void StatsTracker::writeIStats() {
 
                     // Hack, ignore things that don't make sense on
                     // call paths.
-                    if (&s == &stats::uncoveredInstructions) {
+                    if (&s == &stats::locallyUncoveredInstructions) {
                       value = 0;
                     } else {
                       value = csi.statistics.getValue(s);
@@ -566,10 +572,10 @@ uint64_t klee::computeMinDistToUncovered(const KInstruction *ki,
                                          uint64_t minDistAtRA) {
   StatisticManager &sm = *theStatisticManager;
   if (minDistAtRA==0) { // unreachable on return, best is local
-    return sm.getIndexedValue(stats::minDistToUncovered,
+    return sm.getIndexedValue(stats::minDistToGloballyUncovered,
                               ki->info->id);
   } else {
-    uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToUncovered,
+    uint64_t minDistLocal = sm.getIndexedValue(stats::minDistToGloballyUncovered,
                                                ki->info->id);
     uint64_t distToReturn = sm.getIndexedValue(stats::minDistToReturn,
                                                ki->info->id);
@@ -722,9 +728,9 @@ void StatsTracker::computeReachableUncovered() {
            it != it; ++it) {
         unsigned id = infos.getInfo(it).id;
         instructions.push_back(&*it);
-        sm.setIndexedValue(stats::minDistToUncovered, 
+        sm.setIndexedValue(stats::minDistToGloballyUncovered, 
                            id, 
-                           sm.getIndexedValue(stats::uncoveredInstructions, id));
+                           sm.getIndexedValue(stats::globallyUncoveredInstructions, id));
       }
     }
   }
@@ -738,7 +744,7 @@ void StatsTracker::computeReachableUncovered() {
     for (std::vector<Instruction*>::iterator it = instructions.begin(),
            ie = instructions.end(); it != ie; ++it) {
       Instruction *inst = *it;
-      uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToUncovered, 
+      uint64_t best, cur = best = sm.getIndexedValue(stats::minDistToGloballyUncovered, 
                                                      infos.getInfo(inst).id);
       unsigned bestThrough = 0;
       
@@ -754,7 +760,7 @@ void StatsTracker::computeReachableUncovered() {
           }
 
           if (!(*fnIt)->isDeclaration()) {
-            uint64_t calleeDist = sm.getIndexedValue(stats::minDistToUncovered,
+            uint64_t calleeDist = sm.getIndexedValue(stats::minDistToGloballyUncovered,
                                                      infos.getFunctionInfo(*fnIt).id);
             if (calleeDist) {
               calleeDist = 1+calleeDist; // count instruction itself
@@ -771,7 +777,7 @@ void StatsTracker::computeReachableUncovered() {
         std::vector<Instruction*> succs = getSuccs(inst);
         for (std::vector<Instruction*>::iterator it2 = succs.begin(),
                ie = succs.end(); it2 != ie; ++it2) {
-          uint64_t dist = sm.getIndexedValue(stats::minDistToUncovered,
+          uint64_t dist = sm.getIndexedValue(stats::minDistToGloballyUncovered,
                                              infos.getInfo(*it2).id);
           if (dist) {
             uint64_t val = bestThrough + dist;
@@ -782,7 +788,7 @@ void StatsTracker::computeReachableUncovered() {
       }
 
       if (best != cur) {
-        sm.setIndexedValue(stats::minDistToUncovered, 
+        sm.setIndexedValue(stats::minDistToGloballyUncovered, 
                            infos.getInfo(inst).id, 
                            best);
         changed = true;
