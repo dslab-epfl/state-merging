@@ -14,6 +14,7 @@
 
 #include <vector>
 #include <string>
+#include <cassert>
 #include <string.h>
 
 namespace klee {
@@ -42,9 +43,19 @@ namespace klee {
     bool enabled;
     std::vector<Statistic*> stats;
     uint64_t *globalStats;
+
+    unsigned totalIndices;
     uint64_t *indexedStats;
+    std::vector<std::pair<bool, std::vector<char> > > changedIdxStats;
+
     StatisticRecord *contextStats;
     unsigned index;
+
+    inline void recordChange(unsigned id, unsigned index) {
+    	if (changedIdxStats[id].first) {
+    		changedIdxStats[id].second[index] = 1;
+    	}
+    }
 
   public:
     StatisticManager();
@@ -64,11 +75,15 @@ namespace klee {
     void incrementStatistic(Statistic &s, uint64_t addend);
     uint64_t getValue(const Statistic &s) const;
     void incrementIndexedValue(const Statistic &s, unsigned index, 
-                               uint64_t addend) const;
+                               uint64_t addend);
     uint64_t getIndexedValue(const Statistic &s, unsigned index) const;
     void setIndexedValue(const Statistic &s, unsigned index, uint64_t value);
     int getStatisticID(const std::string &name) const;
     Statistic *getStatisticByName(const std::string &name) const;
+
+    void trackChanges(const Statistic &s);
+    void resetChanges(const Statistic &s);
+    void collectChanges(const Statistic &s, std::vector<std::pair<uint32_t, uint64_t> > &changes);
   };
 
   extern StatisticManager *theStatisticManager;
@@ -79,6 +94,8 @@ namespace klee {
       globalStats[s.id] += addend;
       if (indexedStats) {
         indexedStats[index*stats.size() + s.id] += addend;
+        recordChange(s.id, index);
+
         if (contextStats)
           contextStats->data[s.id] += addend;
       }
@@ -135,8 +152,9 @@ namespace klee {
 
   inline void StatisticManager::incrementIndexedValue(const Statistic &s, 
                                                       unsigned index,
-                                                      uint64_t addend) const {
+                                                      uint64_t addend) {
     indexedStats[index*stats.size() + s.id] += addend;
+    recordChange(s.id, index);
   }
 
   inline uint64_t StatisticManager::getIndexedValue(const Statistic &s, 
@@ -148,6 +166,30 @@ namespace klee {
                                                 unsigned index,
                                                 uint64_t value) {
     indexedStats[index*stats.size() + s.id] = value;
+    recordChange(s.id, index);
+  }
+
+  inline void StatisticManager::trackChanges(const Statistic &s) {
+	  changedIdxStats[s.id].first = true;
+
+	  resetChanges(s);
+  }
+
+  inline void StatisticManager::resetChanges(const Statistic &s) {
+	  assert(changedIdxStats[s.id].first);
+
+	  changedIdxStats[s.id].second.clear();
+	  changedIdxStats[s.id].second.resize(totalIndices, 0);
+  }
+
+  inline void StatisticManager::collectChanges(const Statistic &s, std::vector<std::pair<uint32_t, uint64_t> > &changes) {
+	  assert(changedIdxStats[s.id].first);
+
+	  for (unsigned int i = 0; i < totalIndices; i++) {
+		  if (changedIdxStats[s.id].second[i]) {
+			  changes.push_back(std::make_pair(i, indexedStats[i*stats.size() + s.id]));
+		  }
+	  }
   }
 }
 
