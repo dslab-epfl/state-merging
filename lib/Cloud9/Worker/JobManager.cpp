@@ -268,8 +268,6 @@ void JobManager::refineStatistics() {
 		assert((**nodePin).stats);
 		(**nodePin).stats = false;
 
-		assert(nodePin->getParent() == NULL || (**nodePin).jobCount > 0);
-
 		bool keep = true;
 
 		WorkerTree::Node *left = nodePin->getChild(0);

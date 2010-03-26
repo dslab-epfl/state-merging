@@ -117,6 +117,10 @@ public:
 		return _info;
 	}
 
+	const NodeInfo& operator*() const {
+		return _info;
+	}
+
 	Pin pin() {
 		return Pin(this);
 	}

@@ -2334,6 +2334,8 @@ void Executor::stepInState(ExecutionState *state) {
 							idx = rand() % N;
 
 						std::swap(arr[idx], arr[N - 1]);
+
+						fireOutOfResources(arr[N-1]);
 						terminateStateEarly(*arr[N - 1], "memory limit");
 					}
 				}

@@ -370,7 +370,9 @@ static void readProgramArguments(int &pArgc, char **&pArgv, char **&pEnvp, char 
 		std::vector<std::string> items;
 		std::ifstream f(Environ.c_str());
 		if (!f.good())
-			CLOUD9_EXIT("unable to open --environ file: " << Environ.c_str());
+			CLOUD9_EXIT("unable to open --environ file: " << Environ);
+		else
+			CLOUD9_INFO("Using custom environment variables from " << Environ);
 		while (!f.eof()) {
 			std::string line;
 			std::getline(f, line);

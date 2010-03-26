@@ -161,6 +161,7 @@ public:
 			ControlFlowEvent event);
 	virtual void onDebugInfo(klee::ExecutionState *state,
 			const std::string &message);
+	virtual void onOutOfResources(klee::ExecutionState *destroyedState);
 
 	/*
 	 * Breakpoint management
