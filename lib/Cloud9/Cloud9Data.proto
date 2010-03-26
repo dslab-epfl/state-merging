@@ -15,6 +15,16 @@ message ExecutionPathSet {
 	repeated ExecutionPath path = 1;
 }
 
+message StatisticData {
+	required uint32 id = 1;
+	required uint64 value = 2;
+}
+
+message StatisticUpdate {
+	required string name = 1;
+	repeated StatisticData data = 2;
+}
+
 message WorkerReportMessage {
 	message Registration {
 		required string address = 1;
@@ -34,6 +44,8 @@ message WorkerReportMessage {
 	optional NodeSetUpdate nodeSetUpdate = 2;
 	optional NodeDataUpdate nodeDataUpdate = 3;
 	optional Registration registration = 4;
+	
+	repeated StatisticUpdate localUpdates = 5;
 }
 
 message LBResponseMessage {
@@ -55,6 +67,8 @@ message LBResponseMessage {
 	optional JobSeed jobSeed = 3;
 	
 	required bool more_details = 4;
+	
+	repeated StatisticUpdate globalUpdates = 5;
 }
 
 message PeerTransferMessage {
