@@ -16,6 +16,7 @@
 #include "cloud9/instrum/LocalFileWriter.h"
 
 #include "klee/Interpreter.h"
+#include "klee/Statistics.h"
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
@@ -43,7 +44,14 @@ using namespace llvm;
 using namespace klee;
 using namespace klee::c9;
 
-extern bool c9hack_EnableDetails;
+namespace klee {
+namespace stats {
+extern Statistic locallyCoveredInstructions;
+extern Statistic globallyCoveredInstructions;
+extern Statistic locallyUncoveredInstructions;
+extern Statistic globallyUncoveredInstructions;
+}
+}
 
 namespace {
 cl::opt<unsigned> MakeConcreteSymbolic("make-concrete-symbolic", cl::desc(
@@ -309,6 +317,7 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 
 	assert(tree->getDegree() == 2);
 
+	theStatisticManager->trackChanges(stats::locallyCoveredInstructions);
 	initHandlers();
 	initInstrumentation();
 	initBreakpoints();
@@ -587,9 +596,7 @@ void JobExecutor::executeJob(ExplorationJob *job) {
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
 
-		c9hack_EnableDetails = true;
 		replayPath(job->jobRoot.get());
-		c9hack_EnableDetails = false;
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
 	} else {
@@ -656,7 +663,7 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	currentJob = NULL;
 
 	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
-	WorkerTree::Node *lastValidState;
+	WorkerTree::Node *lastValidState = NULL;
 
 	// Perform the replay work
 	for (int i = 0; i < path.size(); i++) {
@@ -681,6 +688,7 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 	if ((**crtNode).symState == NULL) {
 		CLOUD9_ERROR("Replay broken, NULL state at the end of the path. Maybe the state went past the job root?");
 		if (BreakOnReplayBroken) {
+			assert(lastValidState != NULL);
 			fireBreakpointHit(lastValidState);
 		}
 	}
@@ -720,6 +728,26 @@ void JobExecutor::dumpStateTrace(WorkerTree::Node *node) {
 	serializeExecutionTrace(*os, state);
 
 	delete os;
+}
+
+void JobExecutor::getUpdatedLocalCoverage(cov_update_t &data) {
+	theStatisticManager->collectChanges(stats::locallyCoveredInstructions, data);
+	theStatisticManager->resetChanges(stats::locallyCoveredInstructions);
+}
+
+void JobExecutor::setUpdatedGlobalCoverage(cov_update_t &data) {
+	for (cov_update_t::iterator it = data.begin(); it != data.end(); it++) {
+		assert(it->second != 0 && "code uncovered after update");
+
+		uint32_t index = it->first;
+
+		if (!theStatisticManager->getIndexedValue(stats::globallyCoveredInstructions, index)) {
+			theStatisticManager->incrementIndexedValue(stats::globallyCoveredInstructions, index, 1);
+			theStatisticManager->incrementIndexedValue(stats::globallyUncoveredInstructions, index, (uint64_t) -1);
+
+			assert(!theStatisticManager->getIndexedValue(stats::globallyUncoveredInstructions, index));
+		}
+	}
 }
 
 }

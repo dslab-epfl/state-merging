@@ -30,14 +30,6 @@
 
 struct KTest;
 
-extern bool c9hack_EnableDetails;
-
-#define C9HACK_DEBUG(msg, state)	\
-	do { \
-		if (c9hack_EnableDetails) \
-			CLOUD9_DEBUG("Line " << __FILE__ << ":" << __LINE__ << " " << msg << " Trace: " << state); \
-	} while (0)
-
 namespace llvm {
   class BasicBlock;
   class BranchInst;

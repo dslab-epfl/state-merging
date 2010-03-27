@@ -78,8 +78,6 @@ using namespace klee;
 // omg really hard to share cl opts across files ...
 bool WriteTraces = false;
 
-bool c9hack_EnableDetails = false;
-
 namespace {
   cl::opt<bool>
   DumpStatesOnHalt("dump-states-on-halt",
