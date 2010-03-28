@@ -20,6 +20,7 @@
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
+#include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
 
 #include "llvm/Module.h"
@@ -309,9 +310,11 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 	kleeHandler->setInterpreter(interpreter);
 
 	symbEngine = dynamic_cast<SymbolicEngine*>(interpreter);
+	interpreter->setModule(module, mOpts);
 
-	finalModule = interpreter->setModule(module, mOpts);
-	externalsAndGlobalsCheck(finalModule);
+	finalModule = symbEngine->getModule();
+
+	externalsAndGlobalsCheck(finalModule->module);
 
 	symbEngine->registerStateEventHandler(this);
 
@@ -321,6 +324,10 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 	initHandlers();
 	initInstrumentation();
 	initBreakpoints();
+}
+
+const llvm::Module *JobExecutor::getModule() const {
+	return finalModule->module;
 }
 
 void JobExecutor::initHandlers() {
@@ -748,6 +755,10 @@ void JobExecutor::setUpdatedGlobalCoverage(const cov_update_t &data) {
 			assert(!theStatisticManager->getIndexedValue(stats::globallyUncoveredInstructions, index));
 		}
 	}
+}
+
+uint32_t JobExecutor::getCoverageIDCount() const {
+	return symbEngine->getModule()->infos->getMaxID();
 }
 
 }

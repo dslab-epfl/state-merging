@@ -14,6 +14,7 @@
 namespace klee {
 class ExecutionState;
 class Searcher;
+class KModule;
 }
 
 namespace llvm {
@@ -77,6 +78,8 @@ public:
 	virtual void destroyStates() = 0;
 
 	virtual klee::Searcher *initSearcher(klee::Searcher *base) = 0;
+
+	virtual klee::KModule *getModule() = 0;
 
 	void registerStateEventHandler(StateEventHandler *handler);
 	void deregisterStateEventHandler(StateEventHandler *handler);

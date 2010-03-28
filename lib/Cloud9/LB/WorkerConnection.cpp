@@ -56,6 +56,14 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			const WorkerReportMessage_Registration &regInfo =
 					message.registration();
 
+			if (lb->getWorkerCount() == 0) {
+				// The first worker sets the program parameters
+				lb->registerProgramParams(regInfo.prog_name(), regInfo.stat_id_count());
+			} else {
+				// Validate that the worker executes the same thing as the others
+				lb->checkProgramParams(regInfo.prog_name(), regInfo.stat_id_count());
+			}
+
 			id = lb->registerWorker(regInfo.address(), regInfo.port());
 
 			response.set_id(id);
@@ -75,46 +83,17 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				serializeExecutionPathSet(paths, *pathSet);
 			}
 		} else {
-
-			if (message.has_nodesetupdate()) {
-				const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
-						message.nodesetupdate();
-
-				processNodeSetUpdate(id, nodeSetUpdateMsg);
-			}
-
-			if (message.has_nodedataupdate()) {
-				const WorkerReportMessage_NodeDataUpdate &nodeDataUpdateMsg =
-						message.nodedataupdate();
-
-				processNodeDataUpdate(id, nodeDataUpdateMsg);
-			}
+			processNodeSetUpdate(message);
+			processNodeDataUpdate(message);
+			processStatisticsUpdates(message);
 
 			lb->analyzeBalance();
 
 			response.set_id(id);
 			response.set_more_details(lb->requestAndResetDetails(id));
 
-			TransferRequest *transfer = lb->requestAndResetTransfer(id);
-			if (transfer) {
-				const Worker *destination = lb->getWorker(transfer->toID);
-
-				LBResponseMessage_JobTransfer *transMsg =
-						response.mutable_jobtransfer();
-
-				transMsg->set_dest_address(destination->getAddress());
-				transMsg->set_dest_port(destination->getPort());
-
-				cloud9::data::ExecutionPathSet *pathSet = transMsg->mutable_path_set();
-				serializeExecutionPathSet(transfer->paths, *pathSet);
-
-				for (std::vector<int>::iterator it = transfer->counts.begin();
-						it != transfer->counts.end(); it++) {
-					transMsg->add_count(*it);
-				}
-
-				delete transfer;
-			}
+			sendJobTransfers(response);
+			sendStatisticsUpdates(response);
 		}
 
 		std::string respString;
@@ -129,6 +108,44 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 	}
 }
 
+void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
+	unsigned id = response.id();
+	TransferRequest *transfer = lb->requestAndResetTransfer(id);
+
+	if (transfer) {
+		const Worker *destination = lb->getWorker(transfer->toID);
+
+		LBResponseMessage_JobTransfer *transMsg =
+				response.mutable_jobtransfer();
+
+		transMsg->set_dest_address(destination->getAddress());
+		transMsg->set_dest_port(destination->getPort());
+
+		cloud9::data::ExecutionPathSet *pathSet = transMsg->mutable_path_set();
+		serializeExecutionPathSet(transfer->paths, *pathSet);
+
+		for (std::vector<int>::iterator it = transfer->counts.begin();
+				it != transfer->counts.end(); it++) {
+			transMsg->add_count(*it);
+		}
+
+		delete transfer;
+	}
+}
+
+void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
+	unsigned id = response.id();
+	cov_update_t data;
+
+	lb->getAndResetCoverageUpdates(id, data);
+
+	if (data.size() > 0) {
+		StatisticUpdate *update = response.add_globalupdates();
+		serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data, *update);
+	}
+
+}
+
 void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
 	if (!error) {
 		//CLOUD9_DEBUG("Sent reply to worker");
@@ -140,12 +157,33 @@ void WorkerConnection::handleMessageSent(const boost::system::error_code &error)
 	msgReader.recvMessage();
 }
 
+void WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
+	unsigned id = message.id();
 
-void WorkerConnection::processNodeSetUpdate(int id,
-				const WorkerReportMessage_NodeSetUpdate &message) {
+	for (int i = 0; i < message.localupdates_size(); i++) {
+		const StatisticUpdate &update = message.localupdates(i);
+
+		if (update.name() == CLOUD9_STAT_NAME_LOCAL_COVERAGE) {
+			cov_update_t data;
+			parseStatisticUpdate(update, data);
+
+			if (data.size() > 0)
+				lb->updateCoverageData(id, data);
+		}
+	}
+}
+
+
+void WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) {
+	if (!message.has_nodesetupdate())
+		return;
+
+	unsigned id = message.id();
+	const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
+			message.nodesetupdate();
 
 	std::vector<LBTree::Node*> nodes;
-	ExecutionPathSetPin paths = parseExecutionPathSet(message.pathset());
+	ExecutionPathSetPin paths = parseExecutionPathSet(nodeSetUpdateMsg.pathset());
 
 	lb->getTree()->getNodes(paths, nodes);
 
@@ -156,11 +194,18 @@ void WorkerConnection::processNodeSetUpdate(int id,
 
 }
 
-void WorkerConnection::processNodeDataUpdate(int id,
-		const WorkerReportMessage_NodeDataUpdate &message) {
+void WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message) {
+	if (!message.has_nodedataupdate())
+		return;
+
+	unsigned id = message.id();
+	const WorkerReportMessage_NodeDataUpdate &nodeDataUpdateMsg =
+			message.nodedataupdate();
+
 	std::vector<int> data;
 
-	data.insert(data.begin(), message.data().begin(), message.data().end());
+	data.insert(data.begin(), nodeDataUpdateMsg.data().begin(),
+			nodeDataUpdateMsg.data().end());
 
 	CLOUD9_DEBUG("Received data set: " << getASCIIDataSet(data.begin(), data.end()));
 

@@ -38,17 +38,23 @@ class LoadBalancer {
 private:
 	LBTree *tree;
 
-	int nextID;
+	std::string programName;
+	unsigned statIDCount;
 
-	int balanceRate;
-	int rounds;
+	unsigned nextID;
+
+	unsigned balanceRate;
+	unsigned rounds;
 
 
-	std::map<int, Worker*> workers;
-	std::set<int> reqDetails;
-	std::map<int, TransferRequest*> reqTransfer;
+	std::map<unsigned, Worker*> workers;
+	std::set<unsigned> reqDetails;
+	std::map<unsigned, TransferRequest*> reqTransfer;
 
-	std::set<int> reports;
+	std::set<unsigned> reports;
+
+	std::vector<uint64_t> coverageData;
+	std::vector<char> coverageUpdates;
 
 	TransferRequest *computeTransfer(int fromID, int toID, int count);
 
@@ -56,18 +62,23 @@ public:
 	LoadBalancer(int balanceRate);
 	virtual ~LoadBalancer();
 
-	int registerWorker(const std::string &address, int port);
+	unsigned registerWorker(const std::string &address, int port);
 	void deregisterWorker(int id);
+
+	void registerProgramParams(const std::string &programName, unsigned statIDCount);
+	void checkProgramParams(const std::string &programName, unsigned statIDCount);
 
 	void analyzeBalance();
 
 	LBTree *getTree() const { return tree; }
 
-	void updateWorkerStatNodes(int id, std::vector<LBTree::Node*> &newNodes);
-	void updateWorkerStats(int id, std::vector<int> &stats);
+	void updateWorkerStatNodes(unsigned id, std::vector<LBTree::Node*> &newNodes);
+	void updateWorkerStats(unsigned id, std::vector<int> &stats);
 
-	Worker* getWorker(int id) {
-		std::map<int, Worker*>::iterator it = workers.find(id);
+	void updateCoverageData(unsigned id, const cov_update_t &data);
+
+	Worker* getWorker(unsigned id) {
+		std::map<unsigned, Worker*>::iterator it = workers.find(id);
 		if (it == workers.end())
 			return NULL;
 		else
@@ -83,6 +94,8 @@ public:
 
 		return result;
 	}
+
+	void getAndResetCoverageUpdates(int id, cov_update_t &data);
 
 	TransferRequest *requestAndResetTransfer(int id) {
 		if (reqTransfer.count(id) > 0) {

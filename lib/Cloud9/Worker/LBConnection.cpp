@@ -12,6 +12,7 @@
 #include "cloud9/Protocols.h"
 
 #include "llvm/Support/CommandLine.h"
+#include "llvm/System/Path.h"
 
 #include <string>
 
@@ -54,6 +55,11 @@ void LBConnection::registerWorker() {
 	WorkerReportMessage_Registration *reg = message.mutable_registration();
 	reg->set_address(LocalAddress);
 	reg->set_port(LocalPort);
+
+	llvm::sys::Path progPath(InputFile);
+
+	reg->set_prog_name(progPath.getBasename());
+	reg->set_stat_id_count(jobManager->getJobExecutor()->getCoverageIDCount());
 
 	// Send the message
 	std::string msgString;
@@ -105,7 +111,7 @@ void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
 
 void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 	cov_update_t data;
-	jobManager->getUpdatedLocalCoverage(data);
+	jobManager->getJobExecutor()->getUpdatedLocalCoverage(data);
 
 	if (data.size() > 0) {
 		StatisticUpdate *update = message.add_localupdates();
@@ -188,7 +194,7 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 			parseStatisticUpdate(update, data);
 
 			if (data.size() > 0)
-				jobManager->setUpdatedGlobalCoverage(data);
+				jobManager->getJobExecutor()->setUpdatedGlobalCoverage(data);
 		}
 	}
 }

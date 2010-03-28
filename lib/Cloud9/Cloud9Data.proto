@@ -29,6 +29,9 @@ message WorkerReportMessage {
 	message Registration {
 		required string address = 1;
 		required uint32 port = 2;
+		
+		required string prog_name = 3;
+		required uint32 stat_id_count = 4;
 	}
 	
 	message NodeSetUpdate {

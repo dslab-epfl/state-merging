@@ -11,6 +11,7 @@
 #include "cloud9/lb/TreeNodeInfo.h"
 
 #include <vector>
+#include <map>
 
 namespace cloud9 {
 
@@ -32,24 +33,24 @@ public:
 		}
 	};
 private:
-	int id;
+	unsigned id;
 	std::string address;
 	int port;
 
 	std::vector<LBTree::Node*> nodes;
-	int nodesRevision;
+	unsigned nodesRevision;
 
-	int totalJobs;
+	std::vector<char> coverageUpdates;
 
-
+	unsigned totalJobs;
 
 	Worker() : nodesRevision(1), totalJobs(0) { };
 public:
 	virtual ~Worker() { };
 
-	int getID() const { return id; }
+	unsigned getID() const { return id; }
 
-	int getTotalJobs() const { return totalJobs; }
+	unsigned getTotalJobs() const { return totalJobs; }
 
 	const std::string &getAddress() const { return address; }
 	int getPort() const { return port; }

@@ -76,7 +76,7 @@ private:
 
 	KleeHandler *kleeHandler;
 
-	const llvm::Module *finalModule;
+	const klee::KModule *finalModule;
 	WorkerTree *tree;
 
 	ExplorationJob *currentJob;
@@ -145,8 +145,7 @@ public:
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
 
-
-	const llvm::Module *getModule() const { return finalModule; }
+	const llvm::Module *getModule() const;
 
 	ExplorationJob *getCurrentJob() const { return currentJob; }
 
@@ -176,7 +175,7 @@ public:
 
 	void getUpdatedLocalCoverage(cov_update_t &data);
 	void setUpdatedGlobalCoverage(const cov_update_t &data);
-
+	uint32_t getCoverageIDCount() const;
 };
 
 }

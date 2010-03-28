@@ -465,6 +465,10 @@ public:
   virtual void destroyState(klee::ExecutionState *state);
 
   virtual klee::Searcher *initSearcher(klee::Searcher *base);
+
+  virtual klee::KModule *getModule() {
+	  return kmodule;
+  }
 };
   
 } // End klee namespace

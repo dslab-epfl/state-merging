@@ -109,6 +109,8 @@ public:
 
 	WorkerTree *getTree() { return tree; }
 
+	JobExecutor *getJobExecutor() { return executor; }
+
 	/*
 	 * Main methods
 	 */
@@ -130,12 +132,6 @@ public:
 	void importJobs(ExecutionPathSetPin paths);
 	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
 			std::vector<int> counts);
-
-	/*
-	 * Coverage management code
-	 */
-	void getUpdatedLocalCoverage(cov_update_t &data);
-	void setUpdatedGlobalCoverage(const cov_update_t &data);
 
 };
 
