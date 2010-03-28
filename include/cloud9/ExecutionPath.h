@@ -73,7 +73,7 @@ private:
 public:
 	virtual ~ExecutionPathSet();
 
-	int count() const {
+	unsigned count() const {
 		return paths.size();
 	}
 

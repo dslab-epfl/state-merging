@@ -39,6 +39,9 @@ private:
 
 	void updateLogPrefix();
 
+	void sendJobStatistics(WorkerReportMessage &message);
+	void sendCoverageUpdates(WorkerReportMessage &message);
+
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);
 	virtual ~LBConnection();

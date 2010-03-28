@@ -79,11 +79,7 @@ void LBConnection::registerWorker() {
 	processResponse(response);
 }
 
-void LBConnection::sendUpdates() {
-	// Prepare the updates message
-	WorkerReportMessage message;
-	message.set_id(id);
-
+void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
 	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
 	std::vector<int> data;
 	ExecutionPathSetPin paths = ExecutionPathSet::getEmptySet();
@@ -105,7 +101,26 @@ void LBConnection::sendUpdates() {
 
 		serializeExecutionPathSet(paths, *pathSet);
 	}
+}
 
+void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
+	cov_update_t data;
+	jobManager->getUpdatedLocalCoverage(data);
+
+	if (data.size() > 0) {
+		StatisticUpdate *update = message.add_localupdates();
+		serializeStatisticUpdate(CLOUD9_STAT_NAME_LOCAL_COVERAGE, data, *update);
+	}
+}
+
+void LBConnection::sendUpdates() {
+	// Prepare the updates message
+	WorkerReportMessage message;
+	message.set_id(id);
+
+	sendJobStatistics(message);
+
+	sendCoverageUpdates(message);
 
 	std::string msgString;
 	bool result = message.SerializeToString(&msgString);
@@ -172,7 +187,8 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
 			parseStatisticUpdate(update, data);
 
-			jobManager->setUpdatedGlobalCoverage(data);
+			if (data.size() > 0)
+				jobManager->setUpdatedGlobalCoverage(data);
 		}
 	}
 }
