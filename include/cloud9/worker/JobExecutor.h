@@ -70,8 +70,6 @@ public:
 		virtual void onNextStateQuery(ExplorationJob *job, WorkerTree::Node *&node) = 0;
 	};
 
-	typedef std::vector<std::pair<uint32_t, uint64_t> > cov_update_t;
-
 private:
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
@@ -177,7 +175,7 @@ public:
 	 */
 
 	void getUpdatedLocalCoverage(cov_update_t &data);
-	void setUpdatedGlobalCoverage(cov_update_t &data);
+	void setUpdatedGlobalCoverage(const cov_update_t &data);
 
 };
 

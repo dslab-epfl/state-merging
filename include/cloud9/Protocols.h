@@ -23,7 +23,8 @@
 #include <cstring>
 
 
-
+#define CLOUD9_STAT_NAME_LOCAL_COVERAGE "LIcov"
+#define CLOUD9_STAT_NAME_GLOBAL_COVERAGE "GIcov"
 
 using namespace boost::asio::ip;
 using namespace cloud9::data;
@@ -32,6 +33,8 @@ namespace cloud9 {
 
 class ExecutionPath;
 class ExecutionPathSet;
+
+typedef std::vector<std::pair<uint32_t, uint64_t> > cov_update_t;
 
 #if 0
 // XXX Debugging
@@ -180,8 +183,16 @@ ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &
 void serializeExecutionPathSet(ExecutionPathSetPin &set,
 			cloud9::data::ExecutionPathSet &result);
 
+void parseStatisticUpdate(const cloud9::data::StatisticUpdate &update,
+		cov_update_t &data);
+
+void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
+		cloud9::data::StatisticUpdate &update);
+
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port, boost::system::error_code &error);
+
+
 
 }
 

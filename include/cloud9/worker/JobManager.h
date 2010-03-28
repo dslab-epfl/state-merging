@@ -131,7 +131,11 @@ public:
 	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
 			std::vector<int> counts);
 
-
+	/*
+	 * Coverage management code
+	 */
+	void getUpdatedLocalCoverage(cov_update_t &data);
+	void setUpdatedGlobalCoverage(const cov_update_t &data);
 
 };
 

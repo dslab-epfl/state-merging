@@ -489,5 +489,15 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 	return paths;
 }
 
+void JobManager::getUpdatedLocalCoverage(cov_update_t &data) {
+	// TODO Implement a locking mechanism here
+	executor->getUpdatedLocalCoverage(data);
+}
+
+void JobManager::setUpdatedGlobalCoverage(const cov_update_t &data) {
+	// TODO Implement a locking mechanism here
+	executor->setUpdatedGlobalCoverage(data);
+}
+
 }
 }

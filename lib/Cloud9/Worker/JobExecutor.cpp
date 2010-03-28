@@ -735,8 +735,8 @@ void JobExecutor::getUpdatedLocalCoverage(cov_update_t &data) {
 	theStatisticManager->resetChanges(stats::locallyCoveredInstructions);
 }
 
-void JobExecutor::setUpdatedGlobalCoverage(cov_update_t &data) {
-	for (cov_update_t::iterator it = data.begin(); it != data.end(); it++) {
+void JobExecutor::setUpdatedGlobalCoverage(const cov_update_t &data) {
+	for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {
 		assert(it->second != 0 && "code uncovered after update");
 
 		uint32_t index = it->first;

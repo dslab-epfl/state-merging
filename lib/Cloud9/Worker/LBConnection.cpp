@@ -162,6 +162,19 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
 		jobManager->importJobs(paths);
 	}
+
+	for (unsigned i = 0; i < response.globalupdates_size(); i++) {
+		const StatisticUpdate &update = response.globalupdates(i);
+
+		if (update.name() == CLOUD9_STAT_NAME_GLOBAL_COVERAGE) {
+			CLOUD9_INFO("Updating global coverage information");
+			cov_update_t data;
+
+			parseStatisticUpdate(update, data);
+
+			jobManager->setUpdatedGlobalCoverage(data);
+		}
+	}
 }
 
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
