@@ -56,8 +56,9 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 		cl::desc("Job selection strategy"), cl::values(
 				clEnumValN(RandomSel, "random", "Random selection"),
 				clEnumValN(RandomPathSel, "random-path", "Random path selection"),
+				clEnumValN(CoverageOptimizedSel, "coverage-optimized", "Coverage optimized job selection"),
 				clEnumValEnd),
-		cl::location(JobSelection), cl::init(RandomPathSel));
+		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 
 static cl::opt<JobSizingType, true> JobSizingOpt("c9-jobsizing",
 		cl::desc("Job sizing strategy"), cl::values(
@@ -68,9 +69,9 @@ static cl::opt<JobSizingType, true> JobSizingOpt("c9-jobsizing",
 
 static cl::opt<JobExplorationType, true> JobExplorationOpt("c9-jobexpl",
 		cl::desc("Job exploration strategy"), cl::values(
-				clEnumValN(RandomExpl, "random", "Random exploration"),
+				clEnumValN(RandomPathExpl, "random", "Random exploration"),
 				clEnumValEnd),
-		cl::location(JobExploration), cl::init(RandomExpl));
+		cl::location(JobExploration), cl::init(RandomPathExpl));
 
 static cl::opt<int, true> MaxJobSizeOpt("c9-job-max-size",
 		cl::desc("Maximum size for a job in a fixed size strategy"),

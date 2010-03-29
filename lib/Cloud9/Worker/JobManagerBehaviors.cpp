@@ -13,6 +13,14 @@
 
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Searcher.h"
+#include "klee/Statistics.h"
+#include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
+///XXX: ugly, remove this dependency
+#include "../../lib/Core/CallPathManager.h"
+#include "../../lib/Core/StatsTracker.h"
+#include "../../Core/CoreStats.h"
+
 
 using namespace klee;
 
@@ -21,21 +29,21 @@ namespace cloud9 {
 namespace worker {
 
 static ExplorationJob *selectRandomPathJob(WorkerTree *tree) {
-	WorkerTree::Node *crtNode = tree->getRoot();
-
-	while ((**crtNode).getJob() == NULL) {
-		int index = (int)theRNG.getBool();
-		WorkerTree::Node *child = crtNode->getChild(index);
-
-		if (child == NULL || (**child).getJobCount() == 0)
-			child = crtNode->getChild(1 - index);
-
-		assert(child && (**child).getJobCount() > 0);
-
-		crtNode = child;
-	}
-
-	return (**crtNode).getJob();
+  WorkerTree::Node *crtNode = tree->getRoot();
+  
+  while ((**crtNode).getJob() == NULL) {
+    int index = (int)theRNG.getBool();
+    WorkerTree::Node *child = crtNode->getChild(index);
+    
+    if (child == NULL || (**child).getJobCount() == 0)
+      child = crtNode->getChild(1 - index);
+    
+    assert(child && (**child).getJobCount() > 0);
+    
+    crtNode = child;
+  }
+  
+  return (**crtNode).getJob();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -141,15 +149,164 @@ void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 
 
 void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
-	WorkerTree::Node *crtNode = tree->getRoot();
-
-	if ((**crtNode).getJobCount() == 0) {
-		job = NULL;
-		return;
-	}
-
-	job = selectRandomPathJob(tree);
+  WorkerTree::Node *crtNode = tree->getRoot();
+  
+  if ((**crtNode).getJobCount() == 0) {
+    job = NULL;
+    return;
+  }
+  
+  job = selectRandomPathJob(tree);
 }
+
+void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
+  ExecutionState *current = (**(job->getJobRoot())).getSymbolicState();
+  
+  if(current == NULL) {
+    toReplayJobs.push_back(job);
+  }
+  
+  assert(current != NULL && "job has no symbolic state");
+  if (current && updateWeights)
+    states->update(current, getWeight(current));
+  
+  ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
+  states->insert(es, getWeight(es));
+  //we also add the job to the job queue
+  jobs.push_back(job);
+}
+
+
+void WeightedRandomSelectionHandler::onJobsExported() {
+  int i = 0;
+  
+  while (i < toReplayJobs.size()) {
+    ExplorationJob *job = toReplayJobs[i];
+    if (job->isFinished()) {
+      toReplayJobs[i] = toReplayJobs.back();
+      toReplayJobs.pop_back();
+    } else {
+      i++;
+    }
+  }
+  
+  i = 0;
+  while (i < jobs.size()) {
+    ExplorationJob *job = jobs[i];
+    if (job->isFinished()) {
+      onJobRemoved(job);
+      jobs[i] = jobs.back();
+      jobs.pop_back();
+    } else {
+      i++;
+    }
+  }
+}
+
+//should be called when states are removed as a result of jobs being exported
+void WeightedRandomSelectionHandler::onJobRemoved(ExplorationJob *job) {
+  ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
+  assert(es != NULL && "job has no symbolic state");
+  states->remove(es);
+}
+
+  
+WeightedRandomSelectionHandler::WeightedRandomSelectionHandler(WeightType _type, WorkerTree* _tree) 
+  : states(new klee::DiscretePDF<ExecutionState*>()),
+    type(_type), 
+    tree(_tree) {
+  switch(type) {
+  case Depth: 
+    updateWeights = false;
+    break;
+  case InstCount:
+  case CPInstCount:
+  case QueryCost:
+  case MinDistToUncovered:
+  case CoveringNew:
+    updateWeights = true;
+    break;
+  default:
+    assert(0 && "invalid weight type");
+  }
+}
+
+
+WeightedRandomSelectionHandler::~WeightedRandomSelectionHandler() {
+  delete states;
+}
+
+bool WeightedRandomSelectionHandler::empty() {
+  //should we check the toReplayJobs too? - check out callsites for empty()
+  return states->empty();
+}
+
+double WeightedRandomSelectionHandler::getWeight(ExecutionState *es) {
+  switch(type) {
+  default:
+  case Depth: 
+    return es->weight;
+  case InstCount: {
+    uint64_t count = theStatisticManager->getIndexedValue(stats::instructions,
+                                                          es->pc->info->id);
+    double inv = 1. / std::max((uint64_t) 1, count);
+    return inv * inv;
+  }
+  case CPInstCount: {
+    StackFrame &sf = es->stack.back();
+    uint64_t count = sf.callPathNode->statistics.getValue(stats::instructions);
+    double inv = 1. / std::max((uint64_t) 1, count);
+    return inv;
+  }
+  case QueryCost:
+    return (es->queryCost < .1) ? 1. : 1./es->queryCost;
+  case CoveringNew:
+  case MinDistToUncovered: {
+    uint64_t md2u = computeMinDistToUncovered(es->pc,
+                                              es->stack.back().minDistToUncoveredOnReturn);
+    
+    double invMD2U = 1. / (md2u ? md2u : 10000);
+    if (type==CoveringNew) {
+      double invCovNew = 0.;
+      if (es->instsSinceCovNew)
+        invCovNew = 1. / std::max(1, (int) es->instsSinceCovNew - 1000);
+      return (invCovNew * invCovNew + invMD2U * invMD2U);
+    } else {
+      return invMD2U * invMD2U;
+    }
+  }
+  }
+}
+
+ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerTree *tree) {
+
+  //we choose between returning 
+  if(klee::theRNG.getDouble() > CLOUD9_CHOOSE_NEW_JOBS) {
+    int index = klee::theRNG.getInt32() % toReplayJobs.size();
+    ExplorationJob *job = toReplayJobs[index];
+    toReplayJobs[index] = toReplayJobs.back();
+    toReplayJobs.pop_back();
+    return job;
+  } else {
+    ExecutionState es = *states->choose(theRNG.getDoubleL());
+    const WorkerTree::Node *node = es.getWorkerNode().get();
+    return (**node).getJob();
+  }
+}
+
+void WeightedRandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
+  
+  WorkerTree::Node *crtNode = tree->getRoot();
+  if((**crtNode).getJobCount() == 0) {
+    //if the root of the tree has no more jobs, we just return NULL
+    //the worker will loop-wait until job != NULL
+    job = NULL;
+    return;
+  }
+  
+  job = selectWeightedRandomJob(tree);
+}
+
 
 }
 

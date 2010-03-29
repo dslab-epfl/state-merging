@@ -18,7 +18,7 @@ namespace cloud9 {
 
 namespace worker {
 
-void RandomExplorationHandler::onNextStateQuery(ExplorationJob *job,
+void RandomPathExplorationHandler::onNextStateQuery(ExplorationJob *job,
 		WorkerTree::Node *&node) {
 	// TODO: Find an algorithm in O(1), instead of O(log n)
 	if (job->getFrontier().empty()) {
@@ -44,11 +44,11 @@ void RandomExplorationHandler::onNextStateQuery(ExplorationJob *job,
 		assert(crtNode);
 	}
 
-	assert(job->getFrontier().find(crtNode) != job->getFrontier().end());
+	assert(job->getFrontier().find(crtNode) != job->getFrontier().end() && 
+	       "crtNode is not on the frontier ... ");
 
 	node = crtNode;
 }
-
 }
 
 }
