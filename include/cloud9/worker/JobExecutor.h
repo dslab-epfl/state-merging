@@ -15,6 +15,7 @@
 #include "cloud9/worker/SymbolicEngine.h"
 
 #include <iostream>
+#include <boost/thread.hpp>
 
 
 namespace klee {
@@ -98,6 +99,8 @@ private:
 	int traceCounter;
 
 	void dumpStateTrace(WorkerTree::Node *node);
+
+	boost::mutex executorMutex;
 
 
 	/*

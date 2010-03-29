@@ -167,7 +167,7 @@ void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
     return;
   }
     
-  CLOUD9_DEBUG("\ninserting " << es);
+  //CLOUD9_DEBUG("\ninserting " << es);
   states->insert(es, getWeight(es));
   //we also add the job to the job queue
   jobs.push_back(job);
@@ -282,7 +282,7 @@ ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerT
   if(klee::theRNG.getDouble() > CLOUD9_CHOOSE_NEW_JOBS && 
      toReplayJobs.size() > 0) {
     int index = klee::theRNG.getInt32() % toReplayJobs.size();
-    CLOUD9_DEBUG("index = " << index);
+    //CLOUD9_DEBUG("index = " << index);
     ExplorationJob *job = toReplayJobs[index];
     toReplayJobs[index] = toReplayJobs.back();
     toReplayJobs.pop_back();

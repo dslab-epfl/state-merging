@@ -599,6 +599,8 @@ void JobExecutor::onDebugInfo(klee::ExecutionState *state,
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
+	boost::unique_lock<boost::mutex> lock(executorMutex);
+
 	if ((**(job->jobRoot)).symState == NULL) {
 		if (!job->foreign) {
 			CLOUD9_INFO("Replaying path for non-foreign job. Most probably this job will be lost.");
@@ -741,11 +743,15 @@ void JobExecutor::dumpStateTrace(WorkerTree::Node *node) {
 }
 
 void JobExecutor::getUpdatedLocalCoverage(cov_update_t &data) {
+	boost::unique_lock<boost::mutex> lock(executorMutex);
+
 	theStatisticManager->collectChanges(stats::locallyCoveredInstructions, data);
 	theStatisticManager->resetChanges(stats::locallyCoveredInstructions);
 }
 
 void JobExecutor::setUpdatedGlobalCoverage(const cov_update_t &data) {
+	boost::unique_lock<boost::mutex> lock(executorMutex);
+
 	for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {
 		assert(it->second != 0 && "code uncovered after update");
 

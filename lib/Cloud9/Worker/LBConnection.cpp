@@ -114,6 +114,8 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 	jobManager->getJobExecutor()->getUpdatedLocalCoverage(data);
 
 	if (data.size() > 0) {
+		CLOUD9_DEBUG("Sending " << data.size() << " local coverage updates.");
+
 		StatisticUpdate *update = message.add_localupdates();
 		serializeStatisticUpdate(CLOUD9_STAT_NAME_LOCAL_COVERAGE, data, *update);
 	}
@@ -188,13 +190,14 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		const StatisticUpdate &update = response.globalupdates(i);
 
 		if (update.name() == CLOUD9_STAT_NAME_GLOBAL_COVERAGE) {
-			CLOUD9_INFO("Updating global coverage information");
 			cov_update_t data;
 
 			parseStatisticUpdate(update, data);
 
-			if (data.size() > 0)
+			if (data.size() > 0) {
+				CLOUD9_INFO("Receiving " << data.size() << " global coverage updates.");
 				jobManager->getJobExecutor()->setUpdatedGlobalCoverage(data);
+			}
 		}
 	}
 }
