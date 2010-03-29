@@ -34,6 +34,7 @@ namespace cloud9 {
 namespace worker {
 
 class KleeHandler;
+class JobManager;
 
 /*
  * Encapsulates a sequential symbolic execution engine.
@@ -72,6 +73,8 @@ public:
 	};
 
 private:
+	JobManager *manager;
+
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
 
@@ -142,7 +145,7 @@ private:
 	void initInstrumentation();
 	void initBreakpoints();
 public:
-	JobExecutor(llvm::Module *module, WorkerTree *tree, int argc, char **argv);
+	JobExecutor(JobManager *manager, llvm::Module *module, int argc, char **argv);
 	virtual ~JobExecutor();
 
 	void initRootState(llvm::Function *f, int argc,

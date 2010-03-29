@@ -143,6 +143,10 @@ void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
   job = selectRandomPathJob(tree);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Weighted Random Selection Handler
+////////////////////////////////////////////////////////////////////////////////
+
 void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
   ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
   

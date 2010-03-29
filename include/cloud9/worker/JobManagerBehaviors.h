@@ -49,9 +49,6 @@ public:
 	RandomPathSelectionHandler(WorkerTree *t) : tree(t) {};
 	virtual ~RandomPathSelectionHandler() {};
 
-	virtual void onJobEnqueued(ExplorationJob *job) {};
-	virtual void onJobsExported() {};
-
 	virtual void onNextJobSelection(ExplorationJob *&job);
 };
 
@@ -72,27 +69,30 @@ private:
   WeightType type;
   WorkerTree *tree;
   bool updateWeights;
+
+  void onJobRemoved(ExplorationJob *job);
+
+  ExplorationJob * selectWeightedRandomJob(WorkerTree *tree);
+	bool empty();
+	double getWeight(klee::ExecutionState *state);
+	void printName(std::ostream &os) {
+	  os << "WeightedRandomSelectionHandler::";
+	  switch(type) {
+	  case Depth              : os << "Depth\n"; return;
+	  case QueryCost          : os << "QueryCost\n"; return;
+	  case InstCount          : os << "InstCount\n"; return;
+	  case CPInstCount        : os << "CPInstCount\n"; return;
+	  case MinDistToUncovered : os << "MinDistToUncovered\n"; return;
+	  case CoveringNew        : os << "CoveringNew\n"; return;
+	  default                 : os << "<unknown type>\n"; return;
+	  }};
 public:
   WeightedRandomSelectionHandler(WeightType _type, WorkerTree *_tree);
   virtual ~WeightedRandomSelectionHandler();
+
   virtual void onJobEnqueued(ExplorationJob *job);
-  void onJobRemoved(ExplorationJob *job);
   virtual void onJobsExported() ;
   virtual void onNextJobSelection(ExplorationJob *&job);
-  ExplorationJob * selectWeightedRandomJob(WorkerTree *tree);
-  bool empty();
-  double getWeight(klee::ExecutionState *state);
-  void printName(std::ostream &os) {
-    os << "WeightedRandomSelectionHandler::";
-    switch(type) {
-    case Depth              : os << "Depth\n"; return;
-    case QueryCost          : os << "QueryCost\n"; return;
-    case InstCount          : os << "InstCount\n"; return;
-    case CPInstCount        : os << "CPInstCount\n"; return;
-    case MinDistToUncovered : os << "MinDistToUncovered\n"; return;
-    case CoveringNew        : os << "CoveringNew\n"; return;
-    default                 : os << "<unknown type>\n"; return;
-    }};
 };
   
 class KleeSelectionHandler: public JobManager::SelectionHandler {

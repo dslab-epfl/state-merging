@@ -294,9 +294,8 @@ void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
 	}
 }
 
-JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
-		int argc, char **argv)
-		: tree(t), currentJob(NULL), traceCounter(0) {
+JobExecutor::JobExecutor(JobManager *_manager, llvm::Module *module, int argc, char **argv)
+		: manager(_manager), tree(manager->getTree()), currentJob(NULL), traceCounter(0) {
 
 	klee::Interpreter::InterpreterOptions iOpts;
 	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;

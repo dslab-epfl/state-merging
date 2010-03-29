@@ -22,6 +22,10 @@ class Module;
 class Function;
 }
 
+namespace klee {
+class ExecutionState;
+}
+
 namespace cloud9 {
 
 namespace worker {
@@ -35,8 +39,11 @@ public:
 		virtual ~SelectionHandler() {};
 
 	public:
-		virtual void onJobEnqueued(ExplorationJob *job) = 0;
-		virtual void onJobsExported() = 0;
+		virtual void onJobEnqueued(ExplorationJob *job) { };
+		virtual void onJobsExported() { };
+
+		virtual void onStateActivated(klee::ExecutionState *state) { };
+		virtual void onStateDeactivated(klee::ExecutionState *state) { };
 
 		virtual void onNextJobSelection(ExplorationJob *&job) = 0;
 	};
@@ -98,6 +105,9 @@ private:
 	unsigned int countJobs(WorkerTree::Node *root);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
+	void terminateJobs(WorkerTree::Node *root);
+
+	JobManager(WorkerTree *tree, llvm::Module *module);
 public:
 	JobManager(llvm::Module *module);
 	virtual ~JobManager();
@@ -136,7 +146,7 @@ public:
 	void importJobs(ExecutionPathSetPin paths);
 	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
 			std::vector<int> counts);
-
+	void terminateJobs(WorkerTree::Node *root);
 };
 
 }

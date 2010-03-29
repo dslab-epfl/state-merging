@@ -223,22 +223,23 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 		bool foreign = job->foreign;
 
 		job->started = true;
-
 		lock.unlock();
 		//CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
 
 		executor->executeJob(job);
 
 		lock.lock();
-
 		job->finished = true;
-		finalizeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
 
 		if (allowGrowth)
 			explodeJob(job, newJobs);
 
+		if (allowGrowth)
+			submitJobs(newJobs.begin(), newJobs.end());
+
+		finalizeJob(job);
 		delete job;
 
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
