@@ -48,15 +48,21 @@ JobManager::JobManager(llvm::Module *module) :
 
 	switch (JobSelection) {
 	case RandomSel:
-		selHandler = new RandomSelectionHandler();
-		CLOUD9_INFO("Using random job selection strategy");
-		break;
+	  selHandler = new RandomSelectionHandler();
+	  CLOUD9_INFO("Using random job selection strategy");
+	  break;
 	case RandomPathSel:
-		selHandler = new RandomPathSelectionHandler(tree);
-		CLOUD9_INFO("Using random path job selection strategy");
-		break;
+	  selHandler = new RandomPathSelectionHandler(tree);
+	  CLOUD9_INFO("Using random path job selection strategy");
+	  break;
+	case CoverageOptimizedSel:
+	  selHandler = 
+	    new WeightedRandomSelectionHandler(WeightedRandomSelectionHandler::CoveringNew,
+							  tree);
+	  CLOUD9_INFO("Using weighted random job selection strategy");
+	  break;
 	default:
-		assert(0);
+	  assert(0 && "undefined job selection strategy");
 	}
 
 	// Configure the root as a statistics node

@@ -29,7 +29,8 @@ enum LibcType {
 
 enum JobSelectionType {
 	RandomSel,
-	RandomPathSel
+	RandomPathSel,
+	CoverageOptimizedSel
 };
 
 enum JobSizingType {
@@ -38,7 +39,7 @@ enum JobSizingType {
 };
 
 enum JobExplorationType {
-	RandomExpl
+	RandomPathExpl
 };
 
 extern std::string InputFile;

@@ -333,22 +333,25 @@ const llvm::Module *JobExecutor::getModule() const {
 void JobExecutor::initHandlers() {
 	switch (JobSizing) {
 	case UnlimitedSize:
-		sizingHandler = new UnlimitedSizingHandler();
-		break;
+	  sizingHandler = new UnlimitedSizingHandler();
+	  break;
 	case FixedSize:
-		sizingHandler = new FixedSizingHandler(MaxJobSize, MaxJobDepth,
-				MaxJobOperations);
-		break;
+	  sizingHandler = new FixedSizingHandler(MaxJobSize, MaxJobDepth,
+						 MaxJobOperations);
+	  break;
 	default:
-		assert(0);
+	  assert(0 && "unknown JobSizing");
 	}
-
+	
+	///XXX: exploring states within the same job
+	///might become obsolete after implementing the interleaved searcher
 	switch (JobExploration) {
-	case RandomExpl:
-		expHandler = new RandomExplorationHandler();
-		break;
+	case RandomPathExpl:
+	  //this will choose states at random path exploration
+	  expHandler = new RandomPathExplorationHandler();
+	  break;
 	default:
-		assert(0);
+	  assert(0 && "undefined job exploration strategy");
 	}
 }
 

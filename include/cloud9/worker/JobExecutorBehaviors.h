@@ -59,10 +59,10 @@ public:
 	}
 };
 
-class RandomExplorationHandler: public JobExecutor::ExplorationHandler {
+class RandomPathExplorationHandler: public JobExecutor::ExplorationHandler {
 public:
-	RandomExplorationHandler() {};
-	virtual ~RandomExplorationHandler() {};
+	RandomPathExplorationHandler() {};
+	virtual ~RandomPathExplorationHandler() {};
 
 	virtual void onNextStateQuery(ExplorationJob *job, WorkerTree::Node *&node);
 };
