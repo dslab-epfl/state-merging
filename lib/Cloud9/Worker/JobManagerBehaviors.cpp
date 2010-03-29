@@ -112,7 +112,7 @@ void RandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
 }
 
 void RandomSelectionHandler::onJobsExported() {
-	int i = 0;
+	unsigned i = 0;
 
 	while (i < jobs.size()) {
 		ExplorationJob *job = jobs[i];
@@ -160,17 +160,14 @@ void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 }
 
 void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
-  ExecutionState *current = (**(job->getJobRoot())).getSymbolicState();
-  
-  if(current == NULL) {
-    toReplayJobs.push_back(job);
-  }
-  
-  assert(current != NULL && "job has no symbolic state");
-  if (current && updateWeights)
-    states->update(current, getWeight(current));
-  
   ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
+  
+  if(es == NULL) {
+    toReplayJobs.push_back(job);
+    return;
+  }
+    
+  CLOUD9_DEBUG("\ninserting " << es);
   states->insert(es, getWeight(es));
   //we also add the job to the job queue
   jobs.push_back(job);
@@ -178,7 +175,7 @@ void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
 
 
 void WeightedRandomSelectionHandler::onJobsExported() {
-  int i = 0;
+  unsigned i = 0;
   
   while (i < toReplayJobs.size()) {
     ExplorationJob *job = toReplayJobs[i];
@@ -280,16 +277,26 @@ double WeightedRandomSelectionHandler::getWeight(ExecutionState *es) {
 
 ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerTree *tree) {
 
-  //we choose between returning 
-  if(klee::theRNG.getDouble() > CLOUD9_CHOOSE_NEW_JOBS) {
+  //choose between jobs to be replayed and already expanded jobs, with
+  //a CLOUD9_CHOOSE_NEW_JOBS probability for expanded jobs
+  if(klee::theRNG.getDouble() > CLOUD9_CHOOSE_NEW_JOBS && 
+     toReplayJobs.size() > 0) {
     int index = klee::theRNG.getInt32() % toReplayJobs.size();
+    CLOUD9_DEBUG("index = " << index);
     ExplorationJob *job = toReplayJobs[index];
     toReplayJobs[index] = toReplayJobs.back();
     toReplayJobs.pop_back();
     return job;
   } else {
-    ExecutionState es = *states->choose(theRNG.getDoubleL());
-    const WorkerTree::Node *node = es.getWorkerNode().get();
+    ExecutionState *es = states->choose(theRNG.getDoubleL());
+    assert(es != NULL && "job has no symbolic state");
+    //do we need to call update anymore? normally we should update after each executed instruction
+    //to use the coverage optimized searcher efficiently
+    //CLOUD9_DEBUG("\n updating " << es );
+    //if (es && updateWeights)
+    //states->update(es, getWeight(es));
+    states->remove(es);
+    const WorkerTree::Node *node = es->getWorkerNode().get();
     return (**node).getJob();
   }
 }
