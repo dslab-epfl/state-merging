@@ -160,7 +160,6 @@ void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 }
 
 void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
-  CLOUD9_DEBUG("\nenqu .. job " << job);
   ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
   
   if(es == NULL) {
@@ -290,10 +289,13 @@ ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerT
     return job;
   } else {
     ExecutionState *es = states->choose(theRNG.getDoubleL());
-    CLOUD9_DEBUG("\n updating " << es );
     assert(es != NULL && "job has no symbolic state");
-    if (es && updateWeights)
-      states->update(es, getWeight(es));
+    //do we need to call update anymore? normally we should update after each executed instruction
+    //to use the coverage optimized searcher efficiently
+    //CLOUD9_DEBUG("\n updating " << es );
+    //if (es && updateWeights)
+    //states->update(es, getWeight(es));
+    states->remove(es);
     const WorkerTree::Node *node = es->getWorkerNode().get();
     return (**node).getJob();
   }
