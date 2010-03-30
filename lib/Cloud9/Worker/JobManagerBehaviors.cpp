@@ -163,12 +163,12 @@ void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
   ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
   
   if(es == NULL) {
-	  CLOUD9_DEBUG("Inserting null job");
+	  //CLOUD9_DEBUG("Inserting null job");
     toReplayJobs.push_back(job);
     return;
   }
     
-  CLOUD9_DEBUG("Inserting " << es);
+  //CLOUD9_DEBUG("Inserting " << es);
   states->insert(es, getWeight(es));
   //we also add the job to the job queue
   jobs.push_back(job);
