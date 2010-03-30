@@ -77,7 +77,7 @@ public:
 		return paths.size();
 	}
 
-	ExecutionPathPin getPath(int index);
+	ExecutionPathPin getPath(unsigned int index);
 
 	static ExecutionPathSetPin getEmptySet() {
 		return ExecutionPathSetPin(new ExecutionPathSet());

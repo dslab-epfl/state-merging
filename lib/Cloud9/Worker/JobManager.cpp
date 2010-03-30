@@ -452,7 +452,7 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
 	assert(roots.size() == counts.size());
 
-	for (int i = 0; i < seeds->count(); i++) {
+	for (unsigned int i = 0; i < seeds->count(); i++) {
 		selectJobs(roots[i], jobs, counts[i]);
 	}
 

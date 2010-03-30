@@ -35,8 +35,8 @@ ExecutionPath *ExecutionPath::getAbsolutePath() {
 	return absPath;
 }
 
-ExecutionPathPin ExecutionPathSet::getPath(int index) {
-	assert(index >= 0 && index < paths.size());
+ExecutionPathPin ExecutionPathSet::getPath(unsigned int index) {
+	assert(index < paths.size());
 
 	ExecutionPath *path = paths[index]->getAbsolutePath();
 

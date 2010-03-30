@@ -50,7 +50,7 @@ static std::string GetStackTrace(int startingFrom = 0, int maxDepth = 4) {
 			result.append(" ");
 		Dl_info dlinfo;
 		dladdr(StackTrace[i], &dlinfo);
-		const char* name = strrchr(dlinfo.dli_fname, '/');
+		//const char* name = strrchr(dlinfo.dli_fname, '/');
 
 		snprintf(lineBuffer, 256, "%-3d", i);
 
@@ -60,7 +60,7 @@ static std::string GetStackTrace(int startingFrom = 0, int maxDepth = 4) {
 			int res;
 			char* d = abi::__cxa_demangle(dlinfo.dli_sname, NULL, NULL, &res);
 
-			snprintf(lineBuffer, 256, " %s + %u",
+			snprintf(lineBuffer, 256, " %s + %ld",
 					(d == NULL) ? dlinfo.dli_sname : d, (char*) StackTrace[i]
 							- (char*) dlinfo.dli_saddr);
 			result.append(lineBuffer);

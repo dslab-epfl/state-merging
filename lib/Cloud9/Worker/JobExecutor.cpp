@@ -167,7 +167,7 @@ static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *no
 	llvm::raw_os_ostream raw_os(os);
 
 
-	for (int i = 0; i <= path.size(); i++) {
+	for (unsigned int i = 0; i <= path.size(); i++) {
 		const ExecutionTrace &trace = (**crtNode).getTrace();
 		// Output each instruction in the node
 		for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
@@ -371,7 +371,7 @@ void JobExecutor::initInstrumentation() {
 
 void JobExecutor::initBreakpoints() {
 	// Register code breakpoints
-	for (int i = 0; i < CodeBreakpoints.size(); i++) {
+	for (unsigned int i = 0; i < CodeBreakpoints.size(); i++) {
 		setCodeBreakpoint(CodeBreakpoints[i]);
 	}
 }
@@ -676,9 +676,9 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 
 	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
 	WorkerTree::Node *lastValidState = NULL;
-
+	
 	// Perform the replay work
-	for (int i = 0; i < path.size(); i++) {
+	for (unsigned int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
 			lastValidState = crtNode;
 			exploreNode(crtNode);
