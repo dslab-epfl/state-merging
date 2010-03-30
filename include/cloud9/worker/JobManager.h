@@ -8,7 +8,6 @@
 #ifndef JOBMANAGER_H_
 #define JOBMANAGER_H_
 
-#include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/worker/JobExecutor.h"
 #include "cloud9/Logger.h"
 
@@ -30,23 +29,23 @@ namespace cloud9 {
 
 namespace worker {
 
+class JobSelectionHandler {
+public:
+	JobSelectionHandler() {};
+	virtual ~JobSelectionHandler() {};
+
+public:
+	virtual void onJobEnqueued(ExplorationJob *job) { };
+	virtual void onJobsExported() { };
+
+	virtual void onStateActivated(klee::ExecutionState *state) { };
+	virtual void onStateDeactivated(klee::ExecutionState *state) { };
+
+	virtual void onNextJobSelection(ExplorationJob *&job) = 0;
+};
+
 
 class JobManager {
-public:
-	class SelectionHandler {
-	public:
-		SelectionHandler() {};
-		virtual ~SelectionHandler() {};
-
-	public:
-		virtual void onJobEnqueued(ExplorationJob *job) { };
-		virtual void onJobsExported() { };
-
-		virtual void onStateActivated(klee::ExecutionState *state) { };
-		virtual void onStateDeactivated(klee::ExecutionState *state) { };
-
-		virtual void onNextJobSelection(ExplorationJob *&job) = 0;
-	};
 private:
 	WorkerTree* tree;
 	JobExecutor *executor;

@@ -11,7 +11,6 @@
 #include "llvm/System/Path.h"
 
 #include "cloud9/ExecutionTree.h"
-#include "cloud9/worker/ExplorationJob.h"
 #include "cloud9/worker/SymbolicEngine.h"
 
 #include <iostream>
@@ -40,41 +39,7 @@ class JobManager;
  * Encapsulates a sequential symbolic execution engine.
  */
 class JobExecutor: public SymbolicEngine::StateEventHandler {
-public:
-	class BehaviorHandler {
-	public:
-		BehaviorHandler() {};
-		virtual ~BehaviorHandler() {};
-
-	public:
-		virtual void onJobStarted(ExplorationJob *job) {};
-		virtual void onJobTerminated(ExplorationJob *job) {};
-
-		virtual void onNodeExplored(WorkerTree::Node *node) {};
-		virtual void onNodeDeleted(WorkerTree::Node *node) {};
-	};
-
-	class SizingHandler: public BehaviorHandler {
-	public:
-		SizingHandler() {};
-		virtual ~SizingHandler() {};
-
-	public:
-		virtual void onTerminationQuery(ExplorationJob *job, bool &term) = 0;
-	};
-
-	class ExplorationHandler: public BehaviorHandler {
-	public:
-		ExplorationHandler() {};
-		virtual ~ExplorationHandler() {};
-
-	public:
-		virtual void onNextStateQuery(ExplorationJob *job, WorkerTree::Node *&node) = 0;
-	};
-
 private:
-	JobManager *manager;
-
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
 
@@ -82,12 +47,6 @@ private:
 
 	const klee::KModule *finalModule;
 	WorkerTree *tree;
-
-	ExplorationJob *currentJob;
-
-	// Behavior Handlers
-	SizingHandler *sizingHandler;
-	ExplorationHandler *expHandler;
 
 	/*
 	 * Breakpoint management data structures
@@ -118,26 +77,6 @@ private:
 	void updateTreeOnDestroy(klee::ExecutionState *state);
 
 	void externalsAndGlobalsCheck(const llvm::Module *m);
-
-	void fireJobStarted(ExplorationJob *job) {
-		expHandler->onJobStarted(job);
-		sizingHandler->onJobStarted(job);
-	}
-
-	void fireJobTerminated(ExplorationJob *job) {
-		expHandler->onJobTerminated(job);
-		sizingHandler->onJobTerminated(job);
-	}
-
-	void fireNodeExplored(WorkerTree::Node *node) {
-		expHandler->onNodeExplored(node);
-		sizingHandler->onNodeExplored(node);
-	}
-
-	void fireNodeDeleted(WorkerTree::Node *node) {
-		expHandler->onNodeDeleted(node);
-		sizingHandler->onNodeDeleted(node);
-	}
 
 	void fireBreakpointHit(WorkerTree::Node *node);
 
