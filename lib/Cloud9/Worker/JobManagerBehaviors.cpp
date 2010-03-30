@@ -163,11 +163,12 @@ void WeightedRandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
   ExecutionState *es = (**(job->getJobRoot())).getSymbolicState();
   
   if(es == NULL) {
+	  CLOUD9_DEBUG("Inserting null job");
     toReplayJobs.push_back(job);
     return;
   }
     
-  //CLOUD9_DEBUG("\ninserting " << es);
+  CLOUD9_DEBUG("Inserting " << es);
   states->insert(es, getWeight(es));
   //we also add the job to the job queue
   jobs.push_back(job);
@@ -279,8 +280,8 @@ ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerT
 
   //choose between jobs to be replayed and already expanded jobs, with
   //a CLOUD9_CHOOSE_NEW_JOBS probability for expanded jobs
-  if(klee::theRNG.getDouble() > CLOUD9_CHOOSE_NEW_JOBS && 
-     toReplayJobs.size() > 0) {
+  if(states->empty() || (klee::theRNG.getDouble() > CLOUD9_CHOOSE_NEW_JOBS &&
+     toReplayJobs.size() > 0)) {
     int index = klee::theRNG.getInt32() % toReplayJobs.size();
     //CLOUD9_DEBUG("index = " << index);
     ExplorationJob *job = toReplayJobs[index];
@@ -295,9 +296,25 @@ ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerT
     //CLOUD9_DEBUG("\n updating " << es );
     //if (es && updateWeights)
     //states->update(es, getWeight(es));
+
     states->remove(es);
     const WorkerTree::Node *node = es->getWorkerNode().get();
-    return (**node).getJob();
+    ExplorationJob *job = (**node).getJob();
+
+    bool found = false;
+
+	for (std::vector<ExplorationJob*>::iterator it = jobs.begin(); it
+			!= jobs.end(); it++) {
+		if (job == *it) {
+			jobs.erase(it);
+			found = true;
+			break;
+		}
+	}
+
+	assert(found);
+
+    return job;
   }
 }
 
