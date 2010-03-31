@@ -18,7 +18,15 @@ namespace cloud9 {
 
 namespace worker {
 
-void CommManager::LBCommThread::operator()() {
+void CommManager::peerCommunicationControl() {
+	boost::asio::io_service service;
+
+	PeerServer peerServer(service, jobManager);
+
+	service.run();
+}
+
+void CommManager::lbCommunicationControl() {
 	boost::asio::io_service service;
 	boost::system::error_code error;
 
@@ -55,27 +63,17 @@ void CommManager::LBCommThread::operator()() {
 	}
 }
 
-void CommManager::PeerCommThread::operator()() {
-	boost::asio::io_service service;
-
-	PeerServer peerServer(service, jobManager);
-
-	service.run();
-}
-
-CommManager::CommManager(JobManager *jm) :
-		peerCommControl(jm), lbCommControl(jm) {
-	// TODO Auto-generated constructor stub
+CommManager::CommManager(JobManager *jm) : jobManager(jm) {
 
 }
 
 CommManager::~CommManager() {
-	// TODO Auto-generated destructor stub
+
 }
 
 void CommManager::setup() {
-	peerCommThread = boost::thread(peerCommControl);
-	lbCommThread = boost::thread(lbCommControl);
+	peerCommThread = boost::thread(&CommManager::peerCommunicationControl, this);
+	lbCommThread = boost::thread(&CommManager::lbCommunicationControl, this);
 }
 
 void CommManager::finalize() {

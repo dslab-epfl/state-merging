@@ -18,27 +18,13 @@ class JobManager;
 
 class CommManager {
 private:
-	class LBCommThread {
-	private:
-		JobManager *jobManager;
-	public:
-		LBCommThread(JobManager *jm) : jobManager(jm) { }
-		void operator()();
-	};
-
-	class PeerCommThread {
-	private:
-		JobManager *jobManager;
-	public:
-		PeerCommThread(JobManager *jm) : jobManager(jm) { }
-		void operator()();
-	};
-
-	PeerCommThread peerCommControl;
-	LBCommThread lbCommControl;
+	JobManager *jobManager;
 
 	boost::thread peerCommThread;
 	boost::thread lbCommThread;
+
+	void peerCommunicationControl();
+	void lbCommunicationControl();
 
 public:
 	CommManager(JobManager *jobManager);
