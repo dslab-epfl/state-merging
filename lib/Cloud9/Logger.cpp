@@ -72,6 +72,15 @@ static std::string GetStackTrace(int startingFrom = 0, int maxDepth = 4) {
 	return result;
 }
 
+void Logger::updateTimeStamp() {
+	llvm::sys::TimeValue elapsed = llvm::sys::TimeValue::now() - startTime;
+	char buff[16];
+
+	snprintf(buff, 16, "[%05d.%03d] ", elapsed.seconds(), elapsed.milliseconds());
+
+	timeStamp.assign(buff);
+}
+
 Logger &Logger::getLogger() {
 	return Logger::logger;
 }
