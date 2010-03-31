@@ -387,12 +387,13 @@ void JobExecutor::initRootState(llvm::Function *f, int argc,
 	symbEngine->initRootState(state, argc, argv, envp);
 }
 
+void JobExecutor::finalizeExecution() {
+	symbEngine->deregisterStateEventHandler(this);
+	symbEngine->destroyStates();
+}
+
 JobExecutor::~JobExecutor() {
 	if (symbEngine != NULL) {
-		symbEngine->deregisterStateEventHandler(this);
-
-		symbEngine->destroyStates();
-
 		delete symbEngine;
 	}
 

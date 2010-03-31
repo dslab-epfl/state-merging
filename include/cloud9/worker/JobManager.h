@@ -53,6 +53,7 @@ private:
 	bool refineStats;
 
 	bool initialized;
+	bool terminationRequest;
 
 	llvm::Module *origModule;
 	const llvm::Module *finalModule;
@@ -83,10 +84,10 @@ private:
 	void finalizeJob(ExplorationJob *job);
 
 
-	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock);
+	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
 	ExplorationJob* dequeueJob();
 
-	void processLoop(bool allowGrowth, bool blocking);
+	void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
 	void refineStatistics();
 	void cleanupStatistics();
@@ -97,7 +98,6 @@ private:
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
-	JobManager(WorkerTree *tree, llvm::Module *module);
 public:
 	JobManager(llvm::Module *module);
 	virtual ~JobManager();
@@ -114,8 +114,8 @@ public:
 	/*
 	 * Main methods
 	 */
-	void processJobs();
-	void processJobs(ExecutionPathSetPin paths);
+	void processJobs(unsigned int timeOut = 0);
+	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
 
 	/*
 	 * Statistics methods
@@ -125,6 +125,8 @@ public:
 			ExecutionPathSetPin &paths, bool onlyChanged);
 
 	void setRefineStatistics() { refineStats = true; }
+
+	void requestTermination() { terminationRequest = true; }
 
 	/*
 	 * Job import/export methods

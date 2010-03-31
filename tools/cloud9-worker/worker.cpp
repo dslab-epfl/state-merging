@@ -72,6 +72,8 @@ cl::opt<std::string> ReplayPath("c9-replay-path", cl::desc(
 static bool Interrupted = false;
 extern cl::opt<double> MaxTime;
 
+JobManager *theJobManager = NULL;
+
 /*
  *
  */
@@ -343,7 +345,7 @@ static void haltViaGDB(int pid) {
  */
 // Pulled out so it can be easily called from a debugger.
 extern "C" void haltExecution() {
-	//theInterpreter->setHaltExecution(true);
+	theJobManager->requestTermination();
 }
 
 static std::string strip(std::string &in) {
@@ -408,7 +410,7 @@ static void readProgramArguments(int &pArgc, char **&pArgv, char **&pEnvp, char 
  *
  */
 static void interrupt_handle() {
-	if (!Interrupted && 0/*TODO theInterpreter*/) {
+	if (!Interrupted && theJobManager) {
 		CLOUD9_INFO("Ctrl-C detected, requesting interpreter to halt.");
 		haltExecution();
 		sys::SetInterruptFunction(interrupt_handle);
@@ -524,8 +526,8 @@ int main(int argc, char **argv, char **envp) {
 	readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
 	// Create the job manager
-	JobManager jobManager(mainModule);
-	jobManager.setupStartingPoint("main", pArgc, pArgv, envp);
+	theJobManager = new JobManager(mainModule);
+	theJobManager->setupStartingPoint("main", pArgc, pArgv, envp);
 
 
 	if (ReplayPath.size() > 0) {
@@ -539,15 +541,18 @@ int main(int argc, char **argv, char **envp) {
 
 		cloud9::ExecutionPathSetPin pathSet = cloud9::ExecutionPathSet::parse(is);
 
-		jobManager.processJobs(pathSet);
+		theJobManager->processJobs(pathSet);
 	} else {
-		CommManager commManager(&jobManager); // Handle outside communication
+		CommManager commManager(theJobManager); // Handle outside communication
 		commManager.setup();
 
-		jobManager.processJobs(); // Blocking when no jobs are on the queue
+		theJobManager->processJobs((int)MaxTime.getValue()); // Blocking when no jobs are on the queue
 
 		commManager.finalize();
 	}
+
+	delete theJobManager;
+	theJobManager = NULL;
 
 	return 0;
 }
