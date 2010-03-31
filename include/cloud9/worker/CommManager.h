@@ -9,6 +9,7 @@
 #define COMMMANAGER_H_
 
 #include <boost/thread.hpp>
+#include <boost/asio.hpp>
 
 namespace cloud9 {
 
@@ -22,6 +23,11 @@ private:
 
 	boost::thread peerCommThread;
 	boost::thread lbCommThread;
+
+	boost::asio::io_service peerCommService;
+	boost::asio::io_service lbCommService;
+
+	bool terminated;
 
 	void peerCommunicationControl();
 	void lbCommunicationControl();

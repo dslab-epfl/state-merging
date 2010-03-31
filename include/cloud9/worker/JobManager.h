@@ -117,6 +117,8 @@ public:
 	void processJobs(unsigned int timeOut = 0);
 	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
 
+	void finalize();
+
 	/*
 	 * Statistics methods
 	 */

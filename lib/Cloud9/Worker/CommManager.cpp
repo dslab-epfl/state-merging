@@ -19,28 +19,25 @@ namespace cloud9 {
 namespace worker {
 
 void CommManager::peerCommunicationControl() {
-	boost::asio::io_service service;
+	PeerServer peerServer(peerCommService, jobManager);
 
-	PeerServer peerServer(service, jobManager);
-
-	service.run();
+	peerCommService.run();
 }
 
 void CommManager::lbCommunicationControl() {
-	boost::asio::io_service service;
 	boost::system::error_code error;
 
 	CLOUD9_INFO("Connecting to the load balancer...");
-	LBConnection lbConnection(service, jobManager);
+	LBConnection lbConnection(lbCommService, jobManager);
 
-	for (;;) {
+	while (!terminated) {
 		lbConnection.connect(error);
 
 		if (error) {
 			CLOUD9_ERROR("Could not connect to the load balancer: " <<
 					error.message() << " Retrying in " << RetryConnectTime << " seconds");
 
-			boost::asio::deadline_timer t(service, boost::posix_time::seconds(RetryConnectTime));
+			boost::asio::deadline_timer t(lbCommService, boost::posix_time::seconds(RetryConnectTime));
 			t.wait();
 			continue;
 		}
@@ -48,22 +45,30 @@ void CommManager::lbCommunicationControl() {
 		break;
 	}
 
+	if (terminated)
+		return;
+
 	CLOUD9_INFO("Connected to the load balancer");
 
-	CLOUD9_INFO("Registering worker with the load balancer...");
-	lbConnection.registerWorker();
+	try {
+		CLOUD9_INFO("Registering worker with the load balancer...");
+		lbConnection.registerWorker();
 
-	boost::asio::deadline_timer t(service, boost::posix_time::seconds(UpdateTime));
+		boost::asio::deadline_timer t(lbCommService, boost::posix_time::seconds(UpdateTime));
 
-	for (;;) {
-		t.wait();
-		t.expires_at(t.expires_at() + boost::posix_time::seconds(UpdateTime));
+		while (!terminated) {
+			t.wait();
+			t.expires_at(t.expires_at() + boost::posix_time::seconds(UpdateTime));
 
-		lbConnection.sendUpdates();
+			lbConnection.sendUpdates();
+		}
+
+	} catch (boost::system::system_error &) {
+		// Silently ignore
 	}
 }
 
-CommManager::CommManager(JobManager *jm) : jobManager(jm) {
+CommManager::CommManager(JobManager *jm) : jobManager(jm), terminated(false) {
 
 }
 
@@ -77,8 +82,17 @@ void CommManager::setup() {
 }
 
 void CommManager::finalize() {
-	peerCommThread.join();
-	lbCommThread.join();
+	terminated = true;
+
+	if (peerCommThread.joinable()) {
+		peerCommService.stop();
+		peerCommThread.join();
+	}
+
+	if (lbCommThread.joinable()) {
+		lbCommService.stop();
+		lbCommThread.join();
+	}
 }
 
 }

@@ -280,7 +280,9 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 
 	if (terminationRequest)
 		CLOUD9_INFO("Termination was requested.");
+}
 
+void JobManager::finalize() {
 	executor->finalizeExecution();
 
 	CLOUD9_INFO("Finalized job execution.");

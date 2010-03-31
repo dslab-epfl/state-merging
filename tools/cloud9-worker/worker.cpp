@@ -548,7 +548,9 @@ int main(int argc, char **argv, char **envp) {
 
 		theJobManager->processJobs((int)MaxTime.getValue()); // Blocking when no jobs are on the queue
 
+		// The order here matters, in order to avoid memory corruption
 		commManager.finalize();
+		theJobManager->finalize();
 	}
 
 	delete theJobManager;
