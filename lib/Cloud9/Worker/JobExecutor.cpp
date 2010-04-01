@@ -409,6 +409,7 @@ WorkerTree::Node *JobExecutor::getNextNode() {
 }
 
 void JobExecutor::exploreNode(WorkerTree::Node *node) {
+	boost::unique_lock<boost::mutex> lock(executorMutex);
 	// Execute instructions until the state is destroyed or branching occurs.
 	// When a branching occurs, the node will become empty (as the state and its
 	// fork move in its children)
@@ -600,7 +601,6 @@ void JobExecutor::onDebugInfo(klee::ExecutionState *state,
 }
 
 void JobExecutor::executeJob(ExplorationJob *job) {
-	boost::unique_lock<boost::mutex> lock(executorMutex);
 
 	if ((**(job->jobRoot)).symState == NULL) {
 		if (!job->foreign) {
