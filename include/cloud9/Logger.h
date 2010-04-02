@@ -12,6 +12,8 @@
 #include <ostream>
 #include <iostream>
 
+#include "llvm/System/TimeValue.h"
+
 #define CLOUD9_DEFAULT_LOG_PREFIX			"Cloud9:\t"
 #define CLOUD9_DEFAULT_ERROR_PREFIX			"ERROR:\t"
 #define CLOUD9_DEFAULT_INFO_PREFIX		"Info:\t"
@@ -42,18 +44,25 @@ private:
 	std::string errorPrefix;
 	std::string infoPrefix;
 	std::string debugPrefix;
+
+	std::string timeStamp;
+
+	llvm::sys::TimeValue startTime;
 protected:
 	Logger() :
 		logPrefix(CLOUD9_DEFAULT_LOG_PREFIX),
 		errorPrefix(CLOUD9_DEFAULT_ERROR_PREFIX),
 		infoPrefix(CLOUD9_DEFAULT_INFO_PREFIX),
-		debugPrefix(CLOUD9_DEFAULT_DEBUG_PREFIX) {
+		debugPrefix(CLOUD9_DEFAULT_DEBUG_PREFIX),
+		startTime(llvm::sys::TimeValue::now()){
 
 	}
 
 	virtual ~Logger() {
 
 	}
+
+	void updateTimeStamp();
 
 public:
 	static Logger &getLogger();
@@ -62,15 +71,18 @@ public:
 	void setLogPrefix(std::string prefix) { logPrefix = prefix; }
 
 	std::ostream &getInfoStream() {
-		return getInfoStreamRaw() << logPrefix << infoPrefix;
+		updateTimeStamp();
+		return getInfoStreamRaw() << timeStamp << logPrefix << infoPrefix;
 	}
 
 	std::ostream &getErrorStream() {
-		return getErrorStreamRaw() << logPrefix << errorPrefix;
+		updateTimeStamp();
+		return getErrorStreamRaw() << timeStamp << logPrefix << errorPrefix;
 	}
 
 	std::ostream &getDebugStream() {
-		return getDebugStreamRaw() << logPrefix << debugPrefix;
+		updateTimeStamp();
+		return getDebugStreamRaw() << timeStamp << logPrefix << debugPrefix;
 	}
 
 	static std::string getStackTrace();

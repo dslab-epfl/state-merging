@@ -21,7 +21,7 @@ namespace cloud9 {
 namespace lb {
 
 WorkerConnection::WorkerConnection(boost::asio::io_service &service, LoadBalancer *_lb)
-		: socket(service), lb(_lb),
+		: socket(service), lb(_lb), worker(NULL),
 		  msgReader(socket), msgWriter(socket) {
 
 }
@@ -65,6 +65,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			}
 
 			id = lb->registerWorker(regInfo.address(), regInfo.port());
+			worker = lb->getWorker(id);
 
 			response.set_id(id);
 			response.set_more_details(false);
@@ -104,7 +105,15 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 
 	} else {
-		CLOUD9_ERROR("Error receiving message from worker");
+		CLOUD9_ERROR("Error receiving message from worker: " << error.message());
+
+		if (worker) {
+			lb->deregisterWorker(worker->getID());
+			if (lb->getActiveCount() == 0) {
+				// We should exit the load balancer
+				socket.get_io_service().stop();
+			}
+		}
 	}
 }
 

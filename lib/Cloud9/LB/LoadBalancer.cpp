@@ -50,6 +50,7 @@ unsigned LoadBalancer::registerWorker(const std::string &address, int port) {
 	workers[nextID] = worker;
 
 	nextID++;
+	activeCount++;
 
 	return worker->id;
 }
@@ -58,6 +59,7 @@ void LoadBalancer::deregisterWorker(int id) {
 	Worker *worker = workers[id];
 	assert(worker);
 
+	activeCount--;
 	// TODO
 }
 

@@ -15,6 +15,7 @@
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"
+#include "llvm/System/TimeValue.h"
 
 #include "klee/Interpreter.h"
 
@@ -36,13 +37,14 @@
  * - Statistics cannot grow past the frontier of symbolic states
  */
 
+using llvm::sys::TimeValue;
 
 namespace cloud9 {
 
 namespace worker {
 
 JobManager::JobManager(llvm::Module *module) :
-		initialized(false), origModule(module) {
+		initialized(false), terminationRequest(false), origModule(module) {
 
 	tree = new WorkerTree(2);
 
@@ -164,15 +166,25 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	}
 }
 
-ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock) {
+ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock,  unsigned int timeOut) {
 	ExplorationJob *job;
 
 	selHandler->onNextJobSelection(job);
 	while (job == NULL) {
 		CLOUD9_INFO("No jobs in the queue, waiting for...");
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "idle");
-		jobsAvailabe.wait(lock);
-		CLOUD9_INFO("More jobs available. Resuming exploration...");
+
+		bool result = true;
+		if (timeOut > 0)
+			result = jobsAvailabe.timed_wait(lock, boost::posix_time::seconds(timeOut));
+		else
+			jobsAvailabe.wait(lock);
+
+		if (!result) {
+			CLOUD9_INFO("Timeout while waiting for new jobs. Aborting.");
+			return NULL;
+		} else
+			CLOUD9_INFO("More jobs available. Resuming exploration...");
 
 		selHandler->onNextJobSelection(job);
 
@@ -196,19 +208,35 @@ ExplorationJob* JobManager::dequeueJob() {
 	return job;
 }
 
-void JobManager::processLoop(bool allowGrowth, bool blocking) {
+void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeOut) {
 	ExplorationJob *job = NULL;
 
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
+	TimeValue deadline = TimeValue::now() + TimeValue(timeOut, 0);
+
 	// TODO: Put an abort condition here
-	for (;;) {
-		if (blocking)
-			job = dequeueJob(lock);
-		else
-			job = dequeueJob();
+	while (!terminationRequest) {
+		TimeValue now = TimeValue::now();
+
+		if (timeOut > 0 && now > deadline) {
+			CLOUD9_INFO("Timeout reached. Suspending execution.");
+			break;
+		}
 
 		if (blocking) {
+			if (timeOut > 0) {
+				TimeValue remaining = deadline - now;
+
+				job = dequeueJob(lock, remaining.seconds());
+			} else {
+				job = dequeueJob(lock, 0);
+			}
+		} else {
+			job = dequeueJob();
+		}
+
+		if (blocking && timeOut == 0) {
 			assert(job != NULL);
 		} else {
 			if (job == NULL)
@@ -249,19 +277,31 @@ void JobManager::processLoop(bool allowGrowth, bool blocking) {
 			refineStats = false;
 		}
 	}
+
+	if (terminationRequest)
+		CLOUD9_INFO("Termination was requested.");
 }
 
-void JobManager::processJobs() {
-	processLoop(true, true);
+void JobManager::finalize() {
+	executor->finalizeExecution();
+
+	CLOUD9_INFO("Finalized job execution.");
 }
 
-void JobManager::processJobs(ExecutionPathSetPin paths) {
+void JobManager::processJobs(unsigned int timeOut) {
+	if (timeOut > 0) {
+		CLOUD9_INFO("Processing jobs with a timeout of " << timeOut << " seconds.");
+	}
+	processLoop(true, true, timeOut);
+}
+
+void JobManager::processJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
 	// First, we need to import the jobs in the manager
 	importJobs(paths);
 
 	// Then we execute them, but only them (non blocking, don't allow growth),
 	// until the queue is exhausted
-	processLoop(false, false);
+	processLoop(false, false, timeOut);
 }
 
 void JobManager::refineStatistics() {

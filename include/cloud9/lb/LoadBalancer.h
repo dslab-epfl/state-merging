@@ -46,6 +46,7 @@ private:
 	unsigned balanceRate;
 	unsigned rounds;
 
+	unsigned activeCount;
 
 	std::map<unsigned, Worker*> workers;
 	std::set<unsigned> reqDetails;
@@ -71,6 +72,8 @@ public:
 	void analyzeBalance();
 
 	LBTree *getTree() const { return tree; }
+
+	unsigned getActiveCount() const { return activeCount; }
 
 	void updateWorkerStatNodes(unsigned id, std::vector<LBTree::Node*> &newNodes);
 	void updateWorkerStats(unsigned id, std::vector<int> &stats);

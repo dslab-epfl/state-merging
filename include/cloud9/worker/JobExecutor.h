@@ -148,6 +148,8 @@ public:
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
 
+	void finalizeExecution();
+
 	const llvm::Module *getModule() const;
 
 	ExplorationJob *getCurrentJob() const { return currentJob; }
