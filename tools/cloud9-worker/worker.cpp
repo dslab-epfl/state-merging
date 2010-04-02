@@ -421,56 +421,66 @@ static void interrupt_handle() {
 
 #ifdef CLOUD9_HAVE_WATCHDOG
 static int watchdog(int pid) {
-	CLOUD9_INFO("Watchdog: Watching " << pid);
+  CLOUD9_INFO("Watchdog: Watching " << pid);
+  
+  double nextStep = klee::util::getWallTime() + MaxTime * 1.1;
+  int level = 0;
+  
+  // Simple stupid code...
+  CLOUD9_DEBUG("watchdog loop: tarting @ " << klee::util::getWallTime());
+  while (1) {
+    sleep(1);
+    
+    CLOUD9_DEBUG("watchdog loop: level = " << level << "  @ " << klee::util::getWallTime());
+    
+    int status, res = waitpid(pid, &status, WNOHANG);
 
-	double nextStep = klee::util::getWallTime() + MaxTime * 1.1;
-	int level = 0;
+    if (res < 0) {
+      if (errno == ECHILD) { // No child, no need to watch but
+	// return error since we didn't catch
+	// the exit.
+	perror("waitpid:");
+	CLOUD9_INFO("Watchdog exiting (no child) @ " << klee::util::getWallTime());
+	return 1;
+      } else if (errno != EINTR) {
+	perror("Watchdog waitpid");
+	exit(1);
+      }
+    } else if (res == pid && WIFEXITED(status)) {
+      return WEXITSTATUS(status);
+    } else if (res == pid && WIFSIGNALED(status)) {
+      CLOUD9_INFO("killed by signal " <<  WTERMSIG(status));
+    } else if (res == pid && WIFSTOPPED(status)) {
+      CLOUD9_INFO("stopped by signal " <<  WSTOPSIG(status));
+    } else if ( res == pid && WIFCONTINUED(status)) {
+      CLOUD9_INFO("continued\n");
+    } else {
+      double time = klee::util::getWallTime();
 
-	// Simple stupid code...
-	while (1) {
-		sleep(1);
+      if (time > nextStep) {
+	++level;
 
-		int status, res = waitpid(pid, &status, WNOHANG);
-
-		if (res < 0) {
-			if (errno == ECHILD) { // No child, no need to watch but
-				// return error since we didn't catch
-				// the exit.
-				CLOUD9_INFO("Watchdog exiting (no child)");
-				return 1;
-			} else if (errno != EINTR) {
-				perror("Watchdog waitpid");
-				exit(1);
-			}
-		} else if (res == pid && WIFEXITED(status)) {
-			return WEXITSTATUS(status);
-		} else {
-			double time = klee::util::getWallTime();
-
-			if (time > nextStep) {
-				++level;
-
-				if (level == 1) {
-					CLOUD9_INFO("Watchdog: time expired, attempting halt via INT");
-					kill(pid, SIGINT);
-				} else if (level == 2) {
-					CLOUD9_INFO("Watchdog: time expired, attempting halt via gdb");
-					haltViaGDB(pid);
-				} else {
-					CLOUD9_INFO("Watchdog: kill(9)ing child (I tried to be nice)");
-					kill(pid, SIGKILL);
-					return 1; // what more can we do
-				}
-
-				// Ideally this triggers a dump, which may take a while,
-				// so try and give the process extra time to clean up.
-				nextStep = klee::util::getWallTime() + std::max(15., MaxTime
-						* .1);
-			}
-		}
+	if (level == 1) {
+	  CLOUD9_INFO("Watchdog: time expired, attempting halt via INT");
+	  kill(pid, SIGINT);
+	} else if (level == 2) {
+	  CLOUD9_INFO("Watchdog: time expired, attempting halt via gdb");
+	  haltViaGDB(pid);
+	} else {
+	  CLOUD9_INFO("Watchdog: kill(9)ing child (I tried to be nice)");
+	  kill(pid, SIGKILL);
+	  return 1; // what more can we do
 	}
 
-	return 0;
+	// Ideally this triggers a dump, which may take a while,
+	// so try and give the process extra time to clean up.
+	nextStep = klee::util::getWallTime() + std::max(15., MaxTime
+							* .1);
+      }
+    }
+  }
+
+  return 0;
 }
 #endif
 
