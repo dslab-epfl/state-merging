@@ -329,6 +329,7 @@ KleeHandler::~KleeHandler() {
   if (m_pathWriter) delete m_pathWriter;
   if (m_symPathWriter) delete m_symPathWriter;
   delete m_infoFile;
+  cloud9::instrum::theInstrManager.stop();
 }
 
 void KleeHandler::initCloud9Instrumentation() {
