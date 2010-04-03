@@ -45,9 +45,9 @@ private:
 
 	void handleMessageSent(const boost::system::error_code &error);
 
-	void processNodeSetUpdate(const WorkerReportMessage &message);
-	void processNodeDataUpdate(const WorkerReportMessage &message);
-	void processStatisticsUpdates(const WorkerReportMessage &message);
+	bool processNodeSetUpdate(const WorkerReportMessage &message);
+	bool processNodeDataUpdate(const WorkerReportMessage &message);
+	bool processStatisticsUpdates(const WorkerReportMessage &message);
 
 	void sendJobTransfers(LBResponseMessage &response);
 	void sendStatisticsUpdates(LBResponseMessage &response);

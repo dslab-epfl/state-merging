@@ -26,6 +26,8 @@ JobSelectionType JobSelection;
 JobSizingType JobSizing;
 JobExplorationType JobExploration;
 
+bool UseGlobalCoverage;
+
 int MaxJobSize;
 int MaxJobDepth;
 int MaxJobOperations;
@@ -85,6 +87,9 @@ static cl::opt<int, true> MaxJobOperationsOpt("c9-job-max-ops",
 		cl::desc("Maximum count of operations for a job in a fixed size strategy"),
 		cl::location(MaxJobOperations), cl::init(0));
 
+static cl::opt<bool, true> UseGlobalCoverageOpt("c9-use-global-cov",
+		cl::desc("Use global coverage information in the searcher"),
+		cl::location(UseGlobalCoverage), cl::init(false));
 
 static cl::opt<std::string, true> LBAddressOpt("c9-lb-host",
 		cl::desc("Host name of the load balancer"),

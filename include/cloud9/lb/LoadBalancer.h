@@ -63,7 +63,7 @@ public:
 	LoadBalancer(int balanceRate);
 	virtual ~LoadBalancer();
 
-	unsigned registerWorker(const std::string &address, int port);
+	unsigned registerWorker(const std::string &address, int port, bool wantsUpdates);
 	void deregisterWorker(int id);
 
 	void registerProgramParams(const std::string &programName, unsigned statIDCount);

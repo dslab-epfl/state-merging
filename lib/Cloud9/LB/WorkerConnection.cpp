@@ -64,7 +64,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				lb->checkProgramParams(regInfo.prog_name(), regInfo.stat_id_count());
 			}
 
-			id = lb->registerWorker(regInfo.address(), regInfo.port());
+			id = lb->registerWorker(regInfo.address(), regInfo.port(), regInfo.wants_updates());
 			worker = lb->getWorker(id);
 
 			response.set_id(id);
@@ -94,7 +94,9 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			response.set_more_details(lb->requestAndResetDetails(id));
 
 			sendJobTransfers(response);
-			sendStatisticsUpdates(response);
+
+			if (worker->wantsUpdates())
+				sendStatisticsUpdates(response);
 		}
 
 		std::string respString;
@@ -166,7 +168,10 @@ void WorkerConnection::handleMessageSent(const boost::system::error_code &error)
 	msgReader.recvMessage();
 }
 
-void WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
+bool WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
+	if (message.localupdates_size() == 0)
+		return false;
+
 	unsigned id = message.id();
 
 	for (int i = 0; i < message.localupdates_size(); i++) {
@@ -180,12 +185,14 @@ void WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &messa
 				lb->updateCoverageData(id, data);
 		}
 	}
+
+	return true;
 }
 
 
-void WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) {
+bool WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) {
 	if (!message.has_nodesetupdate())
-		return;
+		return false;
 
 	unsigned id = message.id();
 	const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
@@ -201,11 +208,12 @@ void WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) 
 
 	lb->updateWorkerStatNodes(id, nodes);
 
+	return true;
 }
 
-void WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message) {
+bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message) {
 	if (!message.has_nodedataupdate())
-		return;
+		return false;
 
 	unsigned id = message.id();
 	const WorkerReportMessage_NodeDataUpdate &nodeDataUpdateMsg =
@@ -219,6 +227,8 @@ void WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
 	CLOUD9_DEBUG("Received data set: " << getASCIIDataSet(data.begin(), data.end()));
 
 	lb->updateWorkerStats(id, data);
+
+	return true;
 }
 
 }

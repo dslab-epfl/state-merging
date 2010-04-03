@@ -30,6 +30,8 @@ message WorkerReportMessage {
 		required string address = 1;
 		required uint32 port = 2;
 		
+		required bool wants_updates = 5;
+		
 		required string prog_name = 3;
 		required uint32 stat_id_count = 4;
 	}

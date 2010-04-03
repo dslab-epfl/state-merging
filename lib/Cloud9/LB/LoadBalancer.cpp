@@ -38,14 +38,18 @@ void LoadBalancer::checkProgramParams(const std::string &programName,
 	assert(this->statIDCount == statIDCount);
 }
 
-unsigned LoadBalancer::registerWorker(const std::string &address, int port) {
+unsigned LoadBalancer::registerWorker(const std::string &address, int port, bool wantsUpdates) {
 	assert(workers[nextID] == NULL);
 
 	Worker *worker = new Worker();
 	worker->id = nextID;
 	worker->address = address;
 	worker->port = port;
-	worker->coverageUpdates = coverageUpdates;
+	worker->_wantsUpdates = wantsUpdates;
+
+	if (wantsUpdates)
+		worker->coverageUpdates = coverageUpdates;
+
 
 	workers[nextID] = worker;
 
@@ -158,7 +162,7 @@ void LoadBalancer::updateCoverageData(unsigned id, const cov_update_t &data) {
 
 	for (std::map<unsigned, Worker*>::iterator wIt = workers.begin();
 				wIt != workers.end(); wIt++) {
-		if (wIt->first == id)
+		if (wIt->first == id || !wIt->second->_wantsUpdates)
 			continue;
 
 		for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {

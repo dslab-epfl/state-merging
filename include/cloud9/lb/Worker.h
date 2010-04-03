@@ -37,6 +37,8 @@ private:
 	std::string address;
 	int port;
 
+	bool _wantsUpdates;
+
 	std::vector<LBTree::Node*> nodes;
 	unsigned nodesRevision;
 
@@ -57,6 +59,10 @@ public:
 
 	bool operator< (const Worker& w) {
 		return id < w.id;
+	}
+
+	bool wantsUpdates() const {
+		return _wantsUpdates;
 	}
 };
 

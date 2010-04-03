@@ -55,6 +55,7 @@ void LBConnection::registerWorker() {
 	WorkerReportMessage_Registration *reg = message.mutable_registration();
 	reg->set_address(LocalAddress);
 	reg->set_port(LocalPort);
+	reg->set_wants_updates(UseGlobalCoverage);
 
 	llvm::sys::Path progPath(InputFile);
 
@@ -186,17 +187,19 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 		jobManager->importJobs(paths);
 	}
 
-	for (unsigned i = 0; i < response.globalupdates_size(); i++) {
-		const StatisticUpdate &update = response.globalupdates(i);
+	if (UseGlobalCoverage) {
+		for (unsigned i = 0; i < response.globalupdates_size(); i++) {
+			const StatisticUpdate &update = response.globalupdates(i);
 
-		if (update.name() == CLOUD9_STAT_NAME_GLOBAL_COVERAGE) {
-			cov_update_t data;
+			if (update.name() == CLOUD9_STAT_NAME_GLOBAL_COVERAGE) {
+				cov_update_t data;
 
-			parseStatisticUpdate(update, data);
+				parseStatisticUpdate(update, data);
 
-			if (data.size() > 0) {
-				CLOUD9_INFO("Receiving " << data.size() << " global coverage updates.");
-				jobManager->getJobExecutor()->setUpdatedGlobalCoverage(data);
+				if (data.size() > 0) {
+					CLOUD9_INFO("Receiving " << data.size() << " global coverage updates.");
+					jobManager->getJobExecutor()->setUpdatedGlobalCoverage(data);
+				}
 			}
 		}
 	}

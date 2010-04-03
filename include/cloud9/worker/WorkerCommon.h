@@ -50,6 +50,8 @@ extern JobSelectionType JobSelection;
 extern JobSizingType JobSizing;
 extern JobExplorationType JobExploration;
 
+extern bool UseGlobalCoverage;
+
 extern int MaxJobSize;
 extern int MaxJobDepth;
 extern int MaxJobOperations;
