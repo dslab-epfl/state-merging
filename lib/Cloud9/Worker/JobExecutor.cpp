@@ -37,6 +37,7 @@
 #include <iostream>
 #include <iomanip>
 #include <boost/io/ios_state.hpp>
+#include <boost/crc.hpp>
 
 #define CLOUD9_STATS_FILE_NAME		"c9-stats.txt"
 #define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
@@ -328,6 +329,19 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 
 const llvm::Module *JobExecutor::getModule() const {
 	return finalModule->module;
+}
+
+unsigned JobExecutor::getModuleCRC() const {
+	std::string moduleContents;
+	llvm::raw_string_ostream os(moduleContents);
+
+	finalModule->module->print(os, NULL);
+	os.flush();
+
+	boost::crc_ccitt_type crc;
+	crc.process_bytes(moduleContents.c_str(), moduleContents.size());
+
+	return crc.checksum();
 }
 
 void JobExecutor::initHandlers() {

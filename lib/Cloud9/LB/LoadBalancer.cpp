@@ -24,16 +24,19 @@ LoadBalancer::~LoadBalancer() {
 }
 
 void LoadBalancer::registerProgramParams(const std::string &programName,
-		unsigned statIDCount) {
+		unsigned crc, unsigned statIDCount) {
 	this->programName = programName;
 	this->statIDCount = statIDCount;
+	this->programCRC = crc;
 
 	coverageData.resize(statIDCount);
 	coverageUpdates.resize(statIDCount, false);
 }
 
 void LoadBalancer::checkProgramParams(const std::string &programName,
-		unsigned statIDCount) {
+		unsigned crc, unsigned statIDCount) {
+	assert(this->programCRC == crc);
+
 	assert(this->programName == programName);
 	assert(this->statIDCount == statIDCount);
 }

@@ -152,6 +152,8 @@ public:
 
 	const llvm::Module *getModule() const;
 
+	unsigned getModuleCRC() const;
+
 	ExplorationJob *getCurrentJob() const { return currentJob; }
 
 	void executeJob(ExplorationJob *job);

@@ -61,6 +61,7 @@ void LBConnection::registerWorker() {
 
 	reg->set_prog_name(progPath.getBasename());
 	reg->set_stat_id_count(jobManager->getJobExecutor()->getCoverageIDCount());
+	reg->set_prog_crc(jobManager->getJobExecutor()->getModuleCRC());
 
 	// Send the message
 	std::string msgString;

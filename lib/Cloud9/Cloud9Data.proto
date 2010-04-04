@@ -33,6 +33,7 @@ message WorkerReportMessage {
 		required bool wants_updates = 5;
 		
 		required string prog_name = 3;
+		required uint32 prog_crc = 6;
 		required uint32 stat_id_count = 4;
 	}
 	

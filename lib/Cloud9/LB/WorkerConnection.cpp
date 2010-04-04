@@ -58,10 +58,10 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 			if (lb->getWorkerCount() == 0) {
 				// The first worker sets the program parameters
-				lb->registerProgramParams(regInfo.prog_name(), regInfo.stat_id_count());
+				lb->registerProgramParams(regInfo.prog_name(), regInfo.prog_crc(), regInfo.stat_id_count());
 			} else {
 				// Validate that the worker executes the same thing as the others
-				lb->checkProgramParams(regInfo.prog_name(), regInfo.stat_id_count());
+				lb->checkProgramParams(regInfo.prog_name(), regInfo.prog_crc(), regInfo.stat_id_count());
 			}
 
 			id = lb->registerWorker(regInfo.address(), regInfo.port(), regInfo.wants_updates());

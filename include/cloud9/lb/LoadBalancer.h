@@ -40,6 +40,7 @@ private:
 
 	std::string programName;
 	unsigned statIDCount;
+	unsigned programCRC;
 
 	unsigned nextID;
 
@@ -66,8 +67,8 @@ public:
 	unsigned registerWorker(const std::string &address, int port, bool wantsUpdates);
 	void deregisterWorker(int id);
 
-	void registerProgramParams(const std::string &programName, unsigned statIDCount);
-	void checkProgramParams(const std::string &programName, unsigned statIDCount);
+	void registerProgramParams(const std::string &programName, unsigned crc, unsigned statIDCount);
+	void checkProgramParams(const std::string &programName, unsigned crc, unsigned statIDCount);
 
 	void analyzeBalance();
 
