@@ -45,6 +45,7 @@
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CommManager.h"
 #include "cloud9/Utils.h"
 

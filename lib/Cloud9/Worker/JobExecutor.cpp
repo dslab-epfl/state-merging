@@ -9,6 +9,7 @@
 #include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/worker/JobExecutorBehaviors.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/KleeCommon.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Utils.h"
 #include "cloud9/instrum/InstrumentationManager.h"

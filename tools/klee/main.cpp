@@ -27,6 +27,7 @@
 
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/instrum/LocalFileWriter.h"
+#include "cloud9/worker/KleeCommon.h"
 
 // FIXME: Ugh, this is gross. But otherwise our config.h conflicts with LLVMs.
 #undef PACKAGE_BUGREPORT
@@ -1019,8 +1020,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
     }
   }
   
-  mainModule = klee::linkWithLibrary(mainModule, 
-                                     KLEE_UCLIBC "/lib/libc.a");
+  mainModule = klee::linkWithLibrary(mainModule, getUclibcPath().append("/lib/libc.a"));
   assert(mainModule && "unable to link with uclibc");
 
   // more sighs, this is horrible but just a temp hack
@@ -1201,7 +1201,7 @@ int main(int argc, char **argv, char **envp) {
       return r;
   }
 
-  llvm::sys::Path LibraryDir(KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib");
+  llvm::sys::Path LibraryDir(getKleeLibraryPath());
   Interpreter::ModuleOptions Opts(LibraryDir.c_str(),
                                   /*Optimize=*/OptimizeModule, 
                                   /*CheckDivZero=*/CheckDivZero);

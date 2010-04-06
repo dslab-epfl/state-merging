@@ -14,14 +14,11 @@
 #undef PACKAGE_TARNAME
 #undef PACKAGE_VERSION
 
-#include "klee/Config/config.h"
 #include <string>
 
 #include "cloud9/Common.h"
 
 //#define KLEE_LIBRARY_PATH 	KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib"
-#define KLEE_ROOT_VAR	"KLEE_ROOT"
-#define KLEE_UCLIBC_ROOT_VAR "KLEE_UCLIBC_ROOT"
 
 enum LibcType {
 	NoLibc, UcLibc
@@ -69,10 +66,6 @@ namespace klee {
 	class RNG;
 	extern RNG theRNG;
 }
-
-std::string getKleePath();
-std::string getKleeLibraryPath();
-std::string getUclibcPath();
 
 
 #endif /* COMMON_H_ */
