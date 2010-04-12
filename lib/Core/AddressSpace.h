@@ -94,6 +94,8 @@ namespace klee {
                  unsigned maxResolutions=0,
                  double timeout=0.);
 
+    void _testAddressSpace();
+
     /***/
 
     /// Add a binding to the address space.

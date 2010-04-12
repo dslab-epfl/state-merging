@@ -329,6 +329,18 @@ bool AddressSpace::copyInConcretes() {
   return true;
 }
 
+void AddressSpace::_testAddressSpace() {
+	uint64_t prevAddr = 0;
+
+	for (MemoryMap::iterator it = objects.begin(); it != objects.end(); ++it) {
+		uint64_t crtAddr = it->first->address;
+
+		assert(crtAddr >= prevAddr);
+
+		prevAddr = crtAddr;
+	}
+}
+
 /***/
 
 bool MemoryObjectLT::operator()(const MemoryObject *a, const MemoryObject *b) const {

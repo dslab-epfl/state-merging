@@ -2628,6 +2628,7 @@ void Executor::callExternalFunction(ExecutionState &state,
       (void) success;
       static_cast<ConstantExpr*>(ce.get())->toMemory((void*) &args[i]);
     } else {
+    	//CLOUD9_DEBUG("Trying to concretize expression " << *ai);
       ref<Expr> arg = toUnique(state, *ai);
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(arg)) {
         // XXX kick toMemory functions from here
@@ -2959,6 +2960,14 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 "readonly.err");
         } else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+          if (isa<ConstantExpr>(offset)) {
+        	  uint64_t _off = cast<ConstantExpr>(offset)->getZExtValue();
+        	  if (_off < 32) {
+        		  //CLOUD9_DEBUG("Writing in memory object " << mo->address <<
+        			//	  " at GC offset " << _off << " the value " << value <<
+        			//	  " from instruction " << state.prevPC->info->assemblyLine << " in " << state.prevPC->info->file << ":" << state.prevPC->info->line);
+        	  }
+          }
           wos->write(offset, value);
         }          
       } else {
@@ -3022,6 +3031,8 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     if (incomplete) {
       terminateStateEarly(*unbound, "query timed out (resolve)");
     } else {
+    	//unbound->addressSpace._testAddressSpace();
+    	CLOUD9_DEBUG("Instruction: " << unbound->pc->info->assemblyLine);
       terminateStateOnError(*unbound,
                             "memory error: out of bound pointer",
                             "ptr.err",
