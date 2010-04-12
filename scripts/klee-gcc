@@ -7,6 +7,8 @@ def isLinkCommand():
     for arg in sys.argv:
         if arg.startswith('-Wl,'):
             return True
+        if arg.startswith('-l'):
+        	return True
 
 def main():
     if not isLinkCommand():
@@ -19,13 +21,18 @@ def main():
     args = sys.argv[1:]
     linkArgs = []
     for a in args:
-        if a in ('-g', '-W', '-O', '-D', '-f',
-                 '-fnested-functions', '-pthread', '-std'):
-            continue
-        elif a.startswith('-Wl,'):
-            continue
-
+    	skip = False
+        for prefix in ('-g', '-W', '-O', '-D', '-f',
+                 '-fnested-functions', '-pthread', '-std', '-Wl,'):
+            if a.startswith(prefix):
+            	skip = True
+            	break
+    	
+    	if skip:
+    		continue
+    	
         linkArgs.append(a)
+    print "Linking with arguments: " + " ".join(linkArgs)
     
     os.execvp("llvm-ld", ["llvm-ld", "--disable-opt"] + linkArgs)
     return 1
