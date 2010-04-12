@@ -430,11 +430,8 @@ static int watchdog(int pid) {
   int level = 0;
   
   // Simple stupid code...
-  CLOUD9_DEBUG("watchdog loop: tarting @ " << klee::util::getWallTime());
   while (1) {
     sleep(1);
-    
-    CLOUD9_DEBUG("watchdog loop: level = " << level << "  @ " << klee::util::getWallTime());
     
     int status, res = waitpid(pid, &status, WNOHANG);
 
