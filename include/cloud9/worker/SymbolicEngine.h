@@ -33,24 +33,24 @@ enum ControlFlowEvent {
 	RETURN
 };
 
-class SymbolicEngine {
+class StateEventHandler {
 public:
-	class StateEventHandler {
-	public:
-		StateEventHandler() {};
-		virtual ~StateEventHandler() {};
+	StateEventHandler() {};
+	virtual ~StateEventHandler() {};
 
-	public:
-		virtual void onStateBranched(klee::ExecutionState *state,
-				klee::ExecutionState *parent, int index) = 0;
-		virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
-		virtual void onControlFlowEvent(klee::ExecutionState *state,
-				ControlFlowEvent event) = 0;
-		virtual void onDebugInfo(klee::ExecutionState *state,
-				const std::string &message) = 0;
-		virtual void onOutOfResources(klee::ExecutionState *destroyedState) = 0;
+public:
+	virtual void onStateBranched(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index) = 0;
+	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
+	virtual void onControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event) = 0;
+	virtual void onDebugInfo(klee::ExecutionState *state,
+			const std::string &message) = 0;
+	virtual void onOutOfResources(klee::ExecutionState *destroyedState) = 0;
 
-	};
+};
+
+class SymbolicEngine {
 private:
 	typedef std::set<StateEventHandler*> handlers_t;
 	handlers_t seHandlers;

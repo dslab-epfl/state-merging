@@ -22,7 +22,9 @@ class Function;
 }
 
 namespace klee {
+class Interpreter;
 class ExecutionState;
+class Searcher;
 }
 
 namespace cloud9 {
@@ -47,8 +49,16 @@ public:
 
 class JobManager {
 private:
+	/* Klee integration */
+	klee::Interpreter *interpreter;
+	SymbolicEngine *symbEngine;
+
+	KleeHandler *kleeHandler;
+
+	const klee::KModule *finalModule;
+
+
 	WorkerTree* tree;
-	JobExecutor *executor;
 
 	boost::condition_variable jobsAvailabe;
 
@@ -68,11 +78,31 @@ private:
 	SelectionHandler *selHandler;
 
 	/*
+	 * Breakpoint management data structures
+	 *
+	 */
+	std::set<WorkerTree::NodePin> pathBreaks;
+	std::set<unsigned int> codeBreaks;
+
+	/*
+	 * Debugging and instrumentation
+	 */
+	int traceCounter;
+
+	void dumpStateTrace(WorkerTree::Node *node);
+
+	boost::mutex executorMutex;
+
+	/*
 	 *
 	 */
 	void explodeJob(ExplorationJob *job, std::set<ExplorationJob*> &newJobs);
 
 	void submitJob(ExplorationJob* job);
+
+	void externalsAndGlobalsCheck(const llvm::Module *m);
+
+	const llvm::Module *getModule() const;
 
 	template<typename JobIterator>
 	void submitJobs(JobIterator begin, JobIterator end) {
@@ -102,11 +132,31 @@ private:
 			std::vector<ExplorationJob*> &jobSet, int maxCount);
 
 	unsigned int countJobs(WorkerTree::Node *root);
+	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 	void terminateJobs(WorkerTree::Node *root);
 
+	void initHandlers();
+	void initInstrumentation();
+	void initBreakpoints();
+
 	JobManager(WorkerTree *tree, llvm::Module *module);
+
+	/*
+	 * Coverage related functionality
+	 */
+
+	void getUpdatedLocalCoverage(cov_update_t &data);
+	void setUpdatedGlobalCoverage(const cov_update_t &data);
+	uint32_t getCoverageIDCount() const;
+
+	/*
+	 * Breakpoint management
+	 */
+
+	void setCodeBreakpoint(int assemblyLine);
+	void setPathBreakpoint(ExecutionPathPin path);
 public:
 	JobManager(llvm::Module *module);
 	virtual ~JobManager();
@@ -118,8 +168,6 @@ public:
 
 	WorkerTree *getTree() { return tree; }
 
-	JobExecutor *getJobExecutor() { return executor; }
-
 	/*
 	 * Main methods
 	 */
@@ -127,6 +175,15 @@ public:
 	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
 
 	void finalize();
+
+	virtual void onStateBranched(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index);
+	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
+	virtual void onControlFlowEvent(klee::ExecutionState *state,
+			ControlFlowEvent event);
+	virtual void onDebugInfo(klee::ExecutionState *state,
+			const std::string &message);
+	virtual void onOutOfResources(klee::ExecutionState *destroyedState);
 
 	/*
 	 * Statistics methods

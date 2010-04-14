@@ -16,13 +16,6 @@
 #include <iostream>
 #include <boost/thread.hpp>
 
-
-namespace klee {
-class Interpreter;
-class ExecutionState;
-class Searcher;
-}
-
 namespace llvm {
 class Module;
 class Function;
@@ -38,31 +31,9 @@ class JobManager;
 /*
  * Encapsulates a sequential symbolic execution engine.
  */
-class JobExecutor: public SymbolicEngine::StateEventHandler {
+class JobExecutor: public StateEventHandler {
 private:
-	klee::Interpreter *interpreter;
-	SymbolicEngine *symbEngine;
-
-	KleeHandler *kleeHandler;
-
-	const klee::KModule *finalModule;
 	WorkerTree *tree;
-
-	/*
-	 * Breakpoint management data structures
-	 *
-	 */
-	std::set<WorkerTree::NodePin> pathBreaks;
-	std::set<unsigned int> codeBreaks;
-
-	/*
-	 * Debugging and instrumentation
-	 */
-	int traceCounter;
-
-	void dumpStateTrace(WorkerTree::Node *node);
-
-	boost::mutex executorMutex;
 
 
 	/*
@@ -76,23 +47,15 @@ private:
 			klee::ExecutionState *parent, int index);
 	void updateTreeOnDestroy(klee::ExecutionState *state);
 
-	void externalsAndGlobalsCheck(const llvm::Module *m);
-
 	void fireBreakpointHit(WorkerTree::Node *node);
 
-	void initHandlers();
-	void initInstrumentation();
-	void initBreakpoints();
+
 public:
-	JobExecutor(JobManager *manager, llvm::Module *module, int argc, char **argv);
-	virtual ~JobExecutor();
 
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
 
 	void finalizeExecution();
-
-	const llvm::Module *getModule() const;
 
 	unsigned getModuleCRC() const;
 
@@ -102,29 +65,7 @@ public:
 
 	void replayPath(WorkerTree::Node *pathEnd);
 
-	virtual void onStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index);
-	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
-	virtual void onControlFlowEvent(klee::ExecutionState *state,
-			ControlFlowEvent event);
-	virtual void onDebugInfo(klee::ExecutionState *state,
-			const std::string &message);
-	virtual void onOutOfResources(klee::ExecutionState *destroyedState);
 
-	/*
-	 * Breakpoint management
-	 */
-
-	void setCodeBreakpoint(int assemblyLine);
-	void setPathBreakpoint(ExecutionPathPin path);
-
-	/*
-	 * Coverage related functionality
-	 */
-
-	void getUpdatedLocalCoverage(cov_update_t &data);
-	void setUpdatedGlobalCoverage(const cov_update_t &data);
-	uint32_t getCoverageIDCount() const;
 };
 
 }

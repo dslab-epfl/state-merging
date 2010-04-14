@@ -7,7 +7,6 @@
 
 #include "cloud9/worker/JobExecutor.h"
 #include "cloud9/worker/SymbolicEngine.h"
-#include "cloud9/worker/JobExecutorBehaviors.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/KleeCommon.h"
 #include "cloud9/Logger.h"
@@ -16,319 +15,18 @@
 #include "cloud9/instrum/InstrumentationWriter.h"
 #include "cloud9/instrum/LocalFileWriter.h"
 
-#include "klee/Interpreter.h"
-#include "klee/Statistics.h"
-#include "klee/ExecutionState.h"
-#include "klee/Internal/Module/KInstruction.h"
-#include "klee/Internal/Module/InstructionInfoTable.h"
-#include "klee/Internal/Module/KModule.h"
-#include "klee/util/ExprPPrinter.h"
-
 #include "llvm/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Instructions.h"
-
-#include "KleeHandler.h"
-
-#include "../../Core/Common.h"
-
-#include <map>
-#include <set>
-#include <fstream>
-#include <iostream>
-#include <iomanip>
-#include <boost/io/ios_state.hpp>
-#include <boost/crc.hpp>
-
-#define CLOUD9_STATS_FILE_NAME		"c9-stats.txt"
-#define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
 
 using namespace llvm;
 using namespace klee;
 using namespace klee::c9;
 
-namespace klee {
-namespace stats {
-extern Statistic locallyCoveredInstructions;
-extern Statistic globallyCoveredInstructions;
-extern Statistic locallyUncoveredInstructions;
-extern Statistic globallyUncoveredInstructions;
-}
-}
-
-namespace {
-cl::opt<unsigned> MakeConcreteSymbolic("make-concrete-symbolic", cl::desc(
-		"Rate at which to make concrete reads symbolic (0=off)"), cl::init(0));
-
-cl::opt<bool> OptimizeModule("optimize", cl::desc("Optimize before execution"));
-
-cl::opt<bool> CheckDivZero("check-div-zero", cl::desc(
-		"Inject checks for division-by-zero"), cl::init(true));
-
-cl::opt<bool> WarnAllExternals("warn-all-externals", cl::desc(
-		"Give initial warning for all externals."));
-
-cl::list<unsigned int> CodeBreakpoints("c9-code-bp",
-		cl::desc("Breakpoints in the LLVM assembly file"));
-
-cl::opt<bool> BreakOnReplayBroken("c9-bp-on-replaybr",
-		cl::desc("Break on last valid position if a broken replay occurrs."));
-
-cl::opt<bool> DumpStateTraces("c9-dump-traces",
-		cl::desc("Dump state traces when a breakpoint or any other relevant event happens during execution"));
-
-}
-
 namespace cloud9 {
 
 namespace worker {
 
-// This is a terrible hack until we get some real modelling of the
-// system. All we do is check the undefined symbols and m and warn about
-// any "unrecognized" externals and about any obviously unsafe ones.
-
-// Symbols we explicitly support
-static const char *modelledExternals[] = {
-		"_ZTVN10__cxxabiv117__class_type_infoE",
-		"_ZTVN10__cxxabiv120__si_class_type_infoE",
-		"_ZTVN10__cxxabiv121__vmi_class_type_infoE",
-
-		// special functions
-		"_assert", "__assert_fail", "__assert_rtn", "calloc", "_exit", "exit",
-		"free", "abort", "klee_abort", "klee_assume",
-		"klee_check_memory_access", "klee_define_fixed_object",
-		"klee_get_errno", "klee_get_value", "klee_get_obj_size",
-		"klee_is_symbolic", "klee_make_symbolic", "klee_mark_global",
-		"klee_merge", "klee_prefer_cex", "klee_print_expr", "klee_print_range",
-		"klee_report_error", "klee_set_forking", "klee_silent_exit",
-		"klee_warning", "klee_warning_once", "klee_alias_function",
-		"llvm.dbg.stoppoint", "llvm.va_start", "llvm.va_end", "malloc",
-		"realloc", "_ZdaPv", "_ZdlPv", "_Znaj", "_Znwj", "_Znam", "_Znwm", };
-// Symbols we aren't going to warn about
-static const char *dontCareExternals[] = {
-#if 0
-		// stdio
-		"fprintf",
-		"fflush",
-		"fopen",
-		"fclose",
-		"fputs_unlocked",
-		"putchar_unlocked",
-		"vfprintf",
-		"fwrite",
-		"puts",
-		"printf",
-		"stdin",
-		"stdout",
-		"stderr",
-		"_stdio_term",
-		"__errno_location",
-		"fstat",
-#endif
-
-		// static information, pretty ok to return
-		"getegid", "geteuid", "getgid", "getuid", "getpid", "gethostname",
-		"getpgrp", "getppid", "getpagesize", "getpriority", "getgroups",
-		"getdtablesize", "getrlimit", "getrlimit64", "getcwd", "getwd",
-		"gettimeofday", "uname",
-
-		// fp stuff we just don't worry about yet
-		"frexp", "ldexp", "__isnan", "__signbit", };
-
-// Extra symbols we aren't going to warn about with uclibc
-static const char *dontCareUclibc[] = { "__dso_handle",
-
-// Don't warn about these since we explicitly commented them out of
-		// uclibc.
-		"printf", "vprintf" };
-// Symbols we consider unsafe
-static const char *unsafeExternals[] = { "fork", // oh lord
-		"exec", // heaven help us
-		"error", // calls _exit
-		"raise", // yeah
-		"kill", // mmmhmmm
-		};
-
-#define NELEMS(array) (sizeof(array)/sizeof(array[0]))
-
-static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) {
-	assert(node->layerExists(WORKER_LAYER_STATES));
-	std::vector<int> path;
-	const WorkerTree::Node *crtNode = node;
-
-	while (crtNode->getParent() != NULL) {
-		path.push_back(crtNode->getIndex());
-		crtNode = crtNode->getParent();
-	}
-
-	std::reverse(path.begin(), path.end());
-
-
-	const llvm::BasicBlock *crtBasicBlock = NULL;
-	const llvm::Function *crtFunction = NULL;
-
-	llvm::raw_os_ostream raw_os(os);
-
-
-	for (unsigned int i = 0; i <= path.size(); i++) {
-		const ExecutionTrace &trace = (**crtNode).getTrace();
-		// Output each instruction in the node
-		for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
-				it != trace.getEntries().end(); it++) {
-			if (InstructionTraceEntry *instEntry = dynamic_cast<InstructionTraceEntry*>(*it)) {
-				klee::KInstruction *ki = instEntry->getInstruction();
-				bool newBB = false;
-				bool newFn = false;
-
-				if (ki->inst->getParent() != crtBasicBlock) {
-					crtBasicBlock = ki->inst->getParent();
-					newBB = true;
-				}
-
-				if (crtBasicBlock != NULL && crtBasicBlock->getParent() != crtFunction) {
-					crtFunction = crtBasicBlock->getParent();
-					newFn = true;
-				}
-
-				if (newFn) {
-					os << std::endl;
-					os << "   Function '" << ((crtFunction != NULL) ? crtFunction->getNameStr() : "") << "':" << std::endl;
-				}
-
-				if (newBB) {
-					os << "----------- " << ((crtBasicBlock != NULL) ? crtBasicBlock->getNameStr() : "") << " ----" << std::endl;
-				}
-
-				boost::io::ios_all_saver saver(os);
-				os << std::setw(9) << ki->info->assemblyLine << ": ";
-				saver.restore();
-				ki->inst->print(raw_os, NULL);
-				os << std::endl;
-			} else if (DebugLogEntry *logEntry = dynamic_cast<DebugLogEntry*>(*it)) {
-				os << logEntry->getMessage() << std::endl;
-			}
-		}
-
-		if (i < path.size()) {
-			crtNode = crtNode->getChild(WORKER_LAYER_STATES, path[i]);
-		}
-	}
-}
-
-static void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
-	const WorkerTree::Node *node = state->getWorkerNode().get();
-	serializeExecutionTrace(os, node);
-}
-
-void JobExecutor::externalsAndGlobalsCheck(const llvm::Module *m) {
-	std::map<std::string, bool> externals;
-	std::set<std::string> modelled(modelledExternals, modelledExternals
-			+NELEMS(modelledExternals));
-	std::set<std::string> dontCare(dontCareExternals, dontCareExternals
-			+NELEMS(dontCareExternals));
-	std::set<std::string> unsafe(unsafeExternals, unsafeExternals
-			+NELEMS(unsafeExternals));
-
-	switch (Libc) {
-	case UcLibc:
-		dontCare.insert(dontCareUclibc, dontCareUclibc + NELEMS(dontCareUclibc));
-		break;
-	case NoLibc: /* silence compiler warning */
-		break;
-	}
-
-	if (WithPOSIXRuntime)
-		dontCare.insert("syscall");
-
-	for (Module::const_iterator fnIt = m->begin(), fn_ie = m->end(); fnIt
-			!= fn_ie; ++fnIt) {
-		if (fnIt->isDeclaration() && !fnIt->use_empty())
-			externals.insert(std::make_pair(fnIt->getName(), false));
-		for (Function::const_iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt
-				!= bb_ie; ++bbIt) {
-			for (BasicBlock::const_iterator it = bbIt->begin(), ie =
-					bbIt->end(); it != it; ++it) {
-				if (const CallInst *ci = dyn_cast<CallInst>(it)) {
-					if (isa<InlineAsm> (ci->getCalledValue())) {
-						klee_warning_once(&*fnIt,
-								"function \"%s\" has inline asm",
-								fnIt->getName().data());
-					}
-				}
-			}
-		}
-	}
-	for (Module::const_global_iterator it = m->global_begin(), ie =
-			m->global_end(); it != ie; ++it)
-		if (it->isDeclaration() && !it->use_empty())
-			externals.insert(std::make_pair(it->getName(), true));
-	// and remove aliases (they define the symbol after global
-	// initialization)
-	for (Module::const_alias_iterator it = m->alias_begin(), ie =
-			m->alias_end(); it != ie; ++it) {
-		std::map<std::string, bool>::iterator it2 = externals.find(
-				it->getName());
-		if (it2 != externals.end())
-			externals.erase(it2);
-	}
-
-	std::map<std::string, bool> foundUnsafe;
-	for (std::map<std::string, bool>::iterator it = externals.begin(), ie =
-			externals.end(); it != ie; ++it) {
-		const std::string &ext = it->first;
-		if (!modelled.count(ext) && (WarnAllExternals || !dontCare.count(ext))) {
-			if (unsafe.count(ext)) {
-				foundUnsafe.insert(*it);
-			} else {
-				klee_warning("undefined reference to %s: %s",
-						it->second ? "variable" : "function", ext.c_str());
-			}
-		}
-	}
-
-	for (std::map<std::string, bool>::iterator it = foundUnsafe.begin(), ie =
-			foundUnsafe.end(); it != ie; ++it) {
-		const std::string &ext = it->first;
-		klee_warning("undefined reference to %s: %s (UNSAFE)!",
-				it->second ? "variable" : "function", ext.c_str());
-	}
-}
-
-JobExecutor::JobExecutor(JobManager *_manager, llvm::Module *module, int argc, char **argv)
-		: manager(_manager), tree(manager->getTree()), currentJob(NULL), traceCounter(0) {
-
-	klee::Interpreter::InterpreterOptions iOpts;
-	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
-
-
-	llvm::sys::Path libraryPath(getKleeLibraryPath());
-
-	Interpreter::ModuleOptions mOpts(libraryPath.c_str(),
-	/*Optimize=*/OptimizeModule,
-	/*CheckDivZero=*/CheckDivZero);
-
-	kleeHandler = new KleeHandler(argc, argv);
-	interpreter = klee::Interpreter::create(iOpts, kleeHandler);
-	kleeHandler->setInterpreter(interpreter);
-
-	symbEngine = dynamic_cast<SymbolicEngine*>(interpreter);
-	interpreter->setModule(module, mOpts);
-
-	finalModule = symbEngine->getModule();
-
-	externalsAndGlobalsCheck(finalModule->module);
-
-	symbEngine->registerStateEventHandler(this);
-
-	theStatisticManager->trackChanges(stats::locallyCoveredInstructions);
-	initHandlers();
-	initInstrumentation();
-	initBreakpoints();
-}
-
-const llvm::Module *JobExecutor::getModule() const {
-	return finalModule->module;
-}
 
 unsigned JobExecutor::getModuleCRC() const {
 	std::string moduleContents;
@@ -341,52 +39,6 @@ unsigned JobExecutor::getModuleCRC() const {
 	crc.process_bytes(moduleContents.c_str(), moduleContents.size());
 
 	return crc.checksum();
-}
-
-void JobExecutor::initHandlers() {
-	switch (JobSizing) {
-	case UnlimitedSize:
-	  sizingHandler = new UnlimitedSizingHandler();
-	  break;
-	case FixedSize:
-	  sizingHandler = new FixedSizingHandler(MaxJobSize, MaxJobDepth,
-						 MaxJobOperations);
-	  break;
-	default:
-	  assert(0 && "unknown JobSizing");
-	}
-	
-	///XXX: exploring states within the same job
-	///might become obsolete after implementing the interleaved searcher
-	switch (JobExploration) {
-	case RandomPathExpl:
-	  //this will choose states at random path exploration
-	  expHandler = new RandomPathExplorationHandler();
-	  break;
-	default:
-	  assert(0 && "undefined job exploration strategy");
-	}
-}
-
-void JobExecutor::initInstrumentation() {
-	std::string statsFileName = kleeHandler->getOutputFilename(CLOUD9_STATS_FILE_NAME);
-	std::string eventsFileName = kleeHandler->getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
-
-	std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
-	std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
-	cloud9::instrum::InstrumentationWriter *writer =
-			new cloud9::instrum::LocalFileWriter(*instrStatsStream,
-					*instrEventsStream);
-
-	cloud9::instrum::theInstrManager.registerWriter(writer);
-	cloud9::instrum::theInstrManager.start();
-}
-
-void JobExecutor::initBreakpoints() {
-	// Register code breakpoints
-	for (unsigned int i = 0; i < CodeBreakpoints.size(); i++) {
-		setCodeBreakpoint(CodeBreakpoints[i]);
-	}
 }
 
 void JobExecutor::initRootState(llvm::Function *f, int argc,
@@ -403,14 +55,6 @@ void JobExecutor::initRootState(llvm::Function *f, int argc,
 void JobExecutor::finalizeExecution() {
 	symbEngine->deregisterStateEventHandler(this);
 	symbEngine->destroyStates();
-}
-
-JobExecutor::~JobExecutor() {
-	if (symbEngine != NULL) {
-		delete symbEngine;
-	}
-
-	cloud9::instrum::theInstrManager.stop();
 }
 
 WorkerTree::Node *JobExecutor::getNextNode() {
@@ -544,74 +188,7 @@ void JobExecutor::updateTreeOnDestroy(klee::ExecutionState *state) {
 	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentPathCount);
 }
 
-void JobExecutor::onStateBranched(klee::ExecutionState *state,
-		klee::ExecutionState *parent, int index) {
 
-	assert(parent);
-
-	//CLOUD9_DEBUG("State branched: [A] -> " << ((index == 0) ?
-	//		((state == NULL) ? "([], [A])" : "([B], [A])") :
-	//		((state == NULL) ? "([A], [])" : "([A], [B])")));
-
-	WorkerTree::NodePin pNode = parent->getWorkerNode();
-
-	updateTreeOnBranch(state, parent, index);
-
-	fireNodeExplored(pNode.get());
-
-}
-
-void JobExecutor::onStateDestroy(klee::ExecutionState *state,
-		bool &allow) {
-
-	assert(state);
-
-	//CLOUD9_DEBUG("State destroyed! " << *state);
-
-	WorkerTree::NodePin nodePin = state->getWorkerNode();
-
-	updateTreeOnDestroy(state);
-
-	fireNodeDeleted(nodePin.get());
-}
-
-void JobExecutor::onOutOfResources(klee::ExecutionState *destroyedState) {
-	// TODO: Implement a job migration mechanism
-	CLOUD9_INFO("Executor ran out of resources. Dropping state.");
-}
-
-void JobExecutor::onControlFlowEvent(klee::ExecutionState *state,
-				ControlFlowEvent event) {
-	WorkerTree::Node *node = state->getWorkerNode().get();
-
-	// Add the instruction to the node trace
-	if (DumpStateTraces) {
-		switch (event) {
-		case STEP:
-			(**node).trace.appendEntry(new InstructionTraceEntry(state->pc));
-			break;
-		case BRANCH_FALSE:
-		case BRANCH_TRUE:
-			//(**node).trace.appendEntry(new ConstraintLogEntry(state));
-			(**node).trace.appendEntry(new ControlFlowEntry(true, false, false));
-			break;
-		case CALL:
-			break;
-		case RETURN:
-			break;
-		}
-
-	}
-}
-
-void JobExecutor::onDebugInfo(klee::ExecutionState *state,
-			const std::string &message) {
-	WorkerTree::Node *node = state->getWorkerNode().get();
-
-	if (DumpStateTraces) {
-		(**node).trace.appendEntry(new DebugLogEntry(message));
-	}
-}
 
 void JobExecutor::executeJob(ExplorationJob *job) {
 
@@ -712,70 +289,6 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 			fireBreakpointHit(lastValidState);
 		}
 	}
-}
-
-void JobExecutor::setPathBreakpoint(ExecutionPathPin path) {
-	assert(0 && "Not yet implemented"); // TODO: Implement this as soon as the
-	// tree data structures are refactored
-}
-
-void JobExecutor::setCodeBreakpoint(int assemblyLine) {
-	CLOUD9_INFO("Code breakpoint at assembly line " << assemblyLine);
-	codeBreaks.insert(assemblyLine);
-}
-
-void JobExecutor::dumpStateTrace(WorkerTree::Node *node) {
-	if (!DumpStateTraces) {
-		// Do nothing
-		return;
-	}
-
-	// Get a file to dump the path into
-	char fileName[256];
-	snprintf(fileName, 256, "pathDump%05d.txt", traceCounter);
-	traceCounter++;
-
-	CLOUD9_INFO("Dumping state trace in file '" << fileName << "'");
-
-	std::ostream *os = kleeHandler->openOutputFile(fileName);
-	assert(os != NULL);
-
-	(*os) << (*node) << std::endl;
-
-	ExecutionState *state = (**node).symState;
-	assert(state != NULL);
-
-	serializeExecutionTrace(*os, state);
-
-	delete os;
-}
-
-void JobExecutor::getUpdatedLocalCoverage(cov_update_t &data) {
-	boost::unique_lock<boost::mutex> lock(executorMutex);
-
-	theStatisticManager->collectChanges(stats::locallyCoveredInstructions, data);
-	theStatisticManager->resetChanges(stats::locallyCoveredInstructions);
-}
-
-void JobExecutor::setUpdatedGlobalCoverage(const cov_update_t &data) {
-	boost::unique_lock<boost::mutex> lock(executorMutex);
-
-	for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {
-		assert(it->second != 0 && "code uncovered after update");
-
-		uint32_t index = it->first;
-
-		if (!theStatisticManager->getIndexedValue(stats::globallyCoveredInstructions, index)) {
-			theStatisticManager->incrementIndexedValue(stats::globallyCoveredInstructions, index, 1);
-			theStatisticManager->incrementIndexedValue(stats::globallyUncoveredInstructions, index, (uint64_t) -1);
-
-			assert(!theStatisticManager->getIndexedValue(stats::globallyUncoveredInstructions, index));
-		}
-	}
-}
-
-uint32_t JobExecutor::getCoverageIDCount() const {
-	return symbEngine->getModule()->infos->getMaxID();
 }
 
 }
