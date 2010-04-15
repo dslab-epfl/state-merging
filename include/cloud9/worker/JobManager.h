@@ -141,15 +141,20 @@ private:
 	void initInstrumentation();
 	void initBreakpoints();
 
+	void initRootState(llvm::Function *f, int argc,
+			char **argv, char **envp);
+
+	void exploreNode(WorkerTree::Node *node);
+
+	void replayPath(WorkerTree::Node *pathEnd);
+
 	JobManager(WorkerTree *tree, llvm::Module *module);
 
-	/*
-	 * Coverage related functionality
-	 */
+	void updateTreeOnBranch(klee::ExecutionState *state,
+			klee::ExecutionState *parent, int index);
+	void updateTreeOnDestroy(klee::ExecutionState *state);
 
-	void getUpdatedLocalCoverage(cov_update_t &data);
-	void setUpdatedGlobalCoverage(const cov_update_t &data);
-	uint32_t getCoverageIDCount() const;
+	void fireBreakpointHit(WorkerTree::Node *node);
 
 	/*
 	 * Breakpoint management
@@ -168,11 +173,17 @@ public:
 
 	WorkerTree *getTree() { return tree; }
 
+	unsigned getModuleCRC() const;
+
+	void finalizeExecution();
+
 	/*
 	 * Main methods
 	 */
 	void processJobs(unsigned int timeOut = 0);
 	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
+
+	void executeJob(ExplorationJob *job);
 
 	void finalize();
 
@@ -195,6 +206,14 @@ public:
 	void setRefineStatistics() { refineStats = true; }
 
 	void requestTermination() { terminationRequest = true; }
+
+	/*
+	 * Coverage related functionality
+	 */
+
+	void getUpdatedLocalCoverage(cov_update_t &data);
+	void setUpdatedGlobalCoverage(const cov_update_t &data);
+	uint32_t getCoverageIDCount() const;
 
 	/*
 	 * Job import/export methods
