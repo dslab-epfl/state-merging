@@ -21,28 +21,24 @@ namespace cloud9 {
 
 namespace worker {
 
-class ExplorationJob;
 class ExecutionTrace;
+class SymbolicState;
 
 class TreeNodeInfo {
-	friend class JobExecutor;
 	friend class JobManager;
 private:
-	klee::ExecutionState *symState;
+	SymbolicState *symState;
 	ExecutionTrace trace;
 
 	bool breakpoint;
-	ExplorationJob *job;
 public:
 	TreeNodeInfo() : symState(NULL), breakpoint(false), job(NULL) {};
 
 	virtual ~TreeNodeInfo() {};
 
-	klee::ExecutionState* getSymbolicState() const { return symState; }
+	SymbolicState* getSymbolicState() const { return symState; }
 
 	bool isBreakpoint() const { return breakpoint; }
-
-	ExplorationJob *getJob() const { return job; }
 
 	const ExecutionTrace &getTrace() const { return trace; }
 };

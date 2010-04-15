@@ -8,7 +8,7 @@
 #ifndef JOBMANAGER_H_
 #define JOBMANAGER_H_
 
-#include "cloud9/worker/JobExecutor.h"
+
 #include "cloud9/Logger.h"
 
 #include <boost/thread.hpp>
@@ -30,6 +30,23 @@ class Searcher;
 namespace cloud9 {
 
 namespace worker {
+
+class SymbolicState {
+	friend class JobManager;
+private:
+	klee::ExecutionState *kleeState;
+	bool job;
+public:
+	SymbolicState(klee::ExecutionState *state) :
+		kleeState(state), job(false) {
+
+	}
+
+	virtual ~SymbolicState() { }
+
+	klee::ExecutionState *getKleeState() const { return kleeState; }
+	bool isJob() const { return job; }
+};
 
 class JobSelectionHandler {
 public:
