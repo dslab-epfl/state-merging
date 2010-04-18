@@ -27,7 +27,7 @@ typedef boost::shared_ptr<ExecutionPath> ExecutionPathPin;
 typedef boost::shared_ptr<ExecutionPathSet> ExecutionPathSetPin;
 
 class ExecutionPath {
-	template<class>
+	template<class, int, int>
 	friend class ExecutionTree;
 	friend class ExecutionPathSet;
 
@@ -57,7 +57,7 @@ public:
 
 
 class ExecutionPathSet {
-	template<class>
+	template<class, int, int>
 	friend class ExecutionTree;
 
 	friend ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &ps);

@@ -84,7 +84,7 @@ public:
 
     void swap(NodePin & rhs)
     {
-        T * tmp = p_;
+        NodeType * tmp = p_;
         p_ = rhs.p_;
         rhs.p_ = tmp;
     }
@@ -132,10 +132,10 @@ class TreeNode {
 	friend class ExecutionTree;
 
 	template<class NI, int L, int D>
-	friend void intrusive_ptr_add_ref(TreeNode<NI, L, D> * p);
+	friend void node_pin_add_ref(TreeNode<NI, L, D> * p, int layer);
 
 	template<class NI, int L, int D>
-	friend void intrusive_ptr_release(TreeNode<NI, L, D> * p);
+	friend void node_pin_release(TreeNode<NI, L, D> * p, int layer);
 
 public:
 	typedef NodePin<TreeNode<NodeInfo, Layers, Degree> > Pin;
@@ -273,7 +273,7 @@ public:
 template<class NodeInfo, int Layers, int Degree>
 class ExecutionTree {
 	template<class NI, int L, int D>
-	friend void intrusive_ptr_release(TreeNode<NI, L, D> * p);
+	friend void node_pin_release(TreeNode<NI, L, D> * p, int layer);
 public:
 	typedef TreeNode<NodeInfo, Layers, Degree> Node;
 	typedef typename TreeNode<NodeInfo, Layers, Degree>::Pin NodePin;
@@ -505,7 +505,7 @@ void node_pin_release(TreeNode<NI, L, D> *p, int layer) {
 	p->_decRefCount(layer);
 
 	if (p->_refCount[layer] == 0) {
-		ExecutionTree<NI>::removeSupportingBranch(layer, p, NULL);
+		ExecutionTree<NI, L, D>::removeSupportingBranch(layer, p, NULL);
 	}
 }
 
