@@ -9,13 +9,13 @@
 #define EXECUTIONTREE_H_
 
 #include <cassert>
+#include <cstring>
 #include <vector>
 #include <stack>
 #include <set>
 #include <algorithm>
 #include <iostream>
 #include <string>
-#include <boost/intrusive_ptr.hpp>
 
 #include "cloud9/Protocols.h"
 #include "cloud9/Logger.h"
@@ -23,43 +23,138 @@
 
 namespace cloud9 {
 
-template<class NodeInfo, int Layers=1, int Degree=2>
-class TreeNode {
-	template<class>
-	friend class ExecutionTree;
+template<class, int, int>
+class TreeNode;
 
-	template<class NI>
-	friend void intrusive_ptr_add_ref(TreeNode<NI> * p);
-
-	template<class NI>
-	friend void intrusive_ptr_release(TreeNode<NI> * p);
+template <class NodeType>
+class NodePin
+{
+private:
+    typedef NodePin this_type;
 
 public:
-	class Pin: public boost::intrusive_ptr<TreeNode<NodeInfo> > {
-	private:
-		int layer;
-	public:
-		Pin(TreeNode<NodeInfo> *node, int _layer) :
-			boost::intrusive_ptr<TreeNode<NodeInfo> >(node), layer(_layer) {
+    NodePin(NodeType * p, int layer): p_(p), layer_(layer)
+    {
+    	assert(p_ != 0);
+        node_pin_add_ref(p_, layer_);
+    }
 
-		}
+    NodePin(NodePin const & rhs): p_(rhs.p_), layer_(rhs.layer_)
+    {
+    	assert(p_ != 0);
+        node_pin_add_ref(p_, layer_);
+    }
 
-		~Pin() { }
+    ~NodePin()
+    {
+        if(p_ != 0) node_pin_release(p_, layer_);
+    }
 
-		int getLayer() const { return layer; }
+    NodePin & operator=(NodePin const & rhs)
+    {
+        this_type(rhs).swap(*this);
+        return *this;
+    }
 
-	};
-	typedef TreeNode<NodeInfo> *Ptr;
+    NodeType * get() const
+    {
+        return p_;
+    }
+
+    int layer() const { return layer_; }
+
+    NodeType & operator*() const
+    {
+        assert( p_ != 0 );
+        return *p_;
+    }
+
+    NodeType * operator->() const
+    {
+        assert( p_ != 0 );
+        return p_;
+    }
+
+    typedef NodeType * NodePin::*unspecified_bool_type;
+
+    operator unspecified_bool_type () const
+    {
+        return p_ == 0? 0: &this_type::p_;
+    }
+
+    void swap(NodePin & rhs)
+    {
+        T * tmp = p_;
+        p_ = rhs.p_;
+        rhs.p_ = tmp;
+    }
+
 private:
-	TreeNode *children[Degree];		// Pointers to the children of the node
-	TreeNode *parent;				// Pointer to the parent of the node
+
+    NodeType * p_;
+    int layer_;
+};
+
+template<class T, class U> inline bool operator==(NodePin<T> const & a, NodePin<U> const & b)
+{
+    return a.get() == b.get();
+}
+
+template<class T, class U> inline bool operator!=(NodePin<T> const & a, NodePin<U> const & b)
+{
+    return a.get() != b.get();
+}
+
+template<class T, class U> inline bool operator==(NodePin<T> const & a, U * b)
+{
+    return a.get() == b;
+}
+
+template<class T, class U> inline bool operator!=(NodePin<T> const & a, U * b)
+{
+    return a.get() != b;
+}
+
+template<class T, class U> inline bool operator==(T * a, NodePin<U> const & b)
+{
+    return a == b.get();
+}
+
+template<class T, class U> inline bool operator!=(T * a, NodePin<U> const & b)
+{
+    return a != b.get();
+}
+
+
+template<class NodeInfo, int Layers, int Degree>
+class TreeNode {
+	template<class, int, int>
+	friend class ExecutionTree;
+
+	template<class NI, int L, int D>
+	friend void intrusive_ptr_add_ref(TreeNode<NI, L, D> * p);
+
+	template<class NI, int L, int D>
+	friend void intrusive_ptr_release(TreeNode<NI, L, D> * p);
+
+public:
+	typedef NodePin<TreeNode<NodeInfo, Layers, Degree> > Pin;
+
+	typedef TreeNode<NodeInfo, Layers, Degree> *ptr;
+private:
+	ptr childrenNodes[Degree];		// Pointers to the children of the node
+	ptr parent;				// Pointer to the parent of the node
 
 	unsigned int level;				// Node level in the tree
-	unsigned int index;
+	unsigned int index;				// The index of the child in the parent children vector
 
-	unsigned int count[Layers];
+	unsigned int count[Layers];		// The number of children per each layer
+	unsigned int totalCount;		// The total number of children (used for internal ref-counting)
 
-	unsigned int _label;
+	bool children[Degree][Layers];
+	bool exists[Layers];	// Whether the current node exists on a specific layer
+
+	unsigned int _label;	// Internal
 
 	/*
 	 * Basically, the difference between count and _refCount is that count keeps
@@ -70,9 +165,7 @@ private:
 	 * and avoid performance issues when the tree grows very large.
 	 */
 	unsigned int _refCount[Layers];
-
-	bool exists[Layers];
-	bool count[Layers];
+	unsigned int _totalRefCount;
 
 	NodeInfo _info;
 
@@ -81,13 +174,16 @@ private:
 	 * node
 	 */
 	TreeNode(TreeNode* p, int index) :
-		parent(p), count(0), _label(0), _refCount(0) {
+		parent(p), totalCount(0), _label(0), _totalRefCount(0) {
 
-		memset(children, 0, Degree*sizeof(TreeNode*));
+		memset(childrenNodes, 0, Degree*sizeof(TreeNode*));
+		memset(children, 0, Degree*Layers*sizeof(bool));
+		memset(count, 0, Layers*sizeof(unsigned int));
+		memset(_refCount, 0, Layers*sizeof(unsigned int));
+		memset(exists, 0, Layers*sizeof(bool));
 
 		if (p != NULL) {
-			p->children[index] = this;
-			p->count++;
+			p->childrenNodes[index] = this;
 
 			level = p->level + 1;
 			this->index = index;
@@ -96,41 +192,69 @@ private:
 			this->index = 0;
 		}
 	}
+
+	void incCount(int layer) { count[layer]++; totalCount++; }
+	void decCount(int layer) { count[layer]--; totalCount--; }
+
+	void _incRefCount(int layer) { _refCount[layer]++; _totalRefCount++; }
+	void _decRefCount(int layer) { _refCount[layer]--; _totalRefCount--; }
+
+	void makeNode(int layer) {
+		assert(!exists[layer]);
+
+		if (parent != NULL) {
+			assert(!parent->children[index][layer]);
+
+			parent->children[index][layer] = true;
+			parent->incCount(layer);
+		}
+
+		exists[layer] = true;
+	}
+
+	void clearNode(int layer) {
+		assert(exists[layer]);
+
+		exists[layer] = false;
+
+		if (parent != NULL) {
+			assert(parent->children[index][layer]);
+
+			parent->children[index][layer] = false;
+			parent->decCount(layer);
+		}
+	}
 public:
 
-	Ptr getLeft() const {
-		return children.front();
-	}
+	ptr getParent(int layer) const {
+		//assert(exists[layer]);
 
-	Ptr getRight() const {
-		return children.back();
-	}
-
-	Ptr getParent() const {
 		return parent;
 	}
 
-	Ptr getSibling() const {
-		if (parent == NULL)
+
+	ptr getChild(int layer, int index) const {
+		//assert(exists[layer]);
+
+		if (children[index][layer])
+			return childrenNodes[index];
+		else
 			return NULL;
-
-		return parent->getChild(1 - index);
 	}
 
-
-	Ptr getChild(int index) const {
-		return children[index];
+	ptr getLeft(int layer) const {
+		return getChild(layer, 0);
 	}
 
-	int getLevel() const {
-		return level;
+	ptr getRight(int layer) const {
+		return getChild(layer, Degree-1);
 	}
-	int getIndex() const {
-		return index;
-	}
-	int getCount() const {
-		return count;
-	}
+
+	int getLevel() const { return level; }
+	int getIndex() const { return index; }
+	int getCount(int layer) const { return count[layer]; }
+	int getTotalCount() const { return totalCount; }
+
 
 	NodeInfo& operator*() {
 		return _info;
@@ -140,23 +264,19 @@ public:
 		return _info;
 	}
 
-	Pin pin() {
-		return Pin(this);
+	Pin pin(int layer) {
+		return Pin(this, layer);
 	}
 
 };
 
-template<class NodeInfo>
-class TreeNode
-
-template<class NodeInfo>
+template<class NodeInfo, int Layers, int Degree>
 class ExecutionTree {
-	template<class NI>
-	friend void intrusive_ptr_release(TreeNode<NI> * p);
+	template<class NI, int L, int D>
+	friend void intrusive_ptr_release(TreeNode<NI, L, D> * p);
 public:
-	typedef TreeNode<NodeInfo> Node;
-	typedef typename TreeNode<NodeInfo>::Pin NodePin;
-	typedef typename TreeNode<NodeInfo>::Ptr NodePtr;
+	typedef TreeNode<NodeInfo, Layers, Degree> Node;
+	typedef typename TreeNode<NodeInfo, Layers, Degree>::Pin NodePin;
 
 	struct NodeBreadthCompare {
 		bool operator()(const Node *a, const Node *b) {
@@ -191,14 +311,14 @@ public:
 		}
 	};
 private:
-	unsigned int degree;
 	Node* root;
 
-	Node *getNode(ExecutionPath *p, Node* root, int pos) {
+	Node *getNode(int layer, ExecutionPath *p, Node* root, int pos) {
 		Node *crtNode = root;
+		assert(root->exists[layer]);
 
 		if (p->parent != NULL) {
-			crtNode = getNode(p->parent, root, p->parentIndex);
+			crtNode = getNode(layer, p->parent, root, p->parentIndex);
 		}
 
 		for (ExecutionPath::path_iterator it = p->path.begin();
@@ -207,7 +327,7 @@ private:
 			if (pos == 0)
 				return crtNode;
 
-			Node *newNode = getNode(crtNode, *it);
+			Node *newNode = getNode(layer, crtNode, *it);
 
 			crtNode = newNode;
 			pos--;
@@ -216,53 +336,58 @@ private:
 		return crtNode;
 	}
 
-	static void removeSupportingBranch(Node *node, Node *root) {
+	static void removeSupportingBranch(int layer, Node *node, Node *root) {
 		// Checking for node->parent ensures that we will never delete the
 		// root node
 		while (node->parent && node != root) {
-			if (node->count > 0 || node->_refCount > 0) // Stop when joining another branch, or hitting the job root
+			if (node->count[layer] > 0 || node->_refCount[layer] > 0) // Stop when joining another branch, or hitting the job root
 				break;
 
 			Node *temp = node;
 			node = node->parent;
-			removeNode(temp);
+			removeNode(layer, temp);
 		}
 	}
 
-	static void removeNode(Node *node) {
-		assert(node->count == 0);
-		assert(node->_refCount == 0);
+	static void removeNode(int layer, Node *node) {
+		assert(node->count[layer] == 0);
+		assert(node->_refCount[layer] == 0);
 
-		if (node->parent != NULL) {
-			node->parent->children[node->index] = NULL;
-			node->parent->count--;
-		}
+		node->clearNode(layer);
 
-		delete node;
+		if (node->totalCount == 0 && node->_totalRefCount == 0)
+			delete node; // Clean it for good, nobody references it anymore
 	}
 
 public:
-	ExecutionTree(int deg): degree(deg){
-		root = new Node(deg, NULL, 0);
-	};
+	ExecutionTree() {
+		root = new Node(NULL, 0);
 
-	virtual ~ExecutionTree() { };
-
-	Node* getRoot() const { return root; }
-
-	int getDegree() const { return degree; }
-
-	Node *getNode(ExecutionPathPin p) {
-		return getNode(p.get(), root, p->path.size());
+		// Create a root node in each layer
+		for (int layer = 0; layer < Layers; layer++)
+			root->makeNode(layer);
 	}
 
-	Node *getNode(Node *root, int index) {
-		Node *result = root->getChild(index);
+	virtual ~ExecutionTree() { }
 
-		if (result != NULL)
-			return result;
+	Node* getRoot() const {
+		return root;
+	}
 
-		result = new Node(degree, root, index);
+	Node *getNode(int layer, ExecutionPathPin p) {
+		return getNode(layer, p.get(), root, p->path.size());
+	}
+
+	Node *getNode(int layer, Node *root, int index) {
+		assert(root->exists[layer]);
+
+		Node *result = root->childrenNodes[index];
+
+		if (result == NULL)
+			result = new Node(root, index);
+
+		if (!root->children[index][layer])
+			result->makeNode(layer);
 
 		return result;
 	}
@@ -324,12 +449,12 @@ public:
 	}
 
 	template<typename NodeCollection>
-	void getNodes(ExecutionPathSetPin pathSet, NodeCollection &nodes) {
+	void getNodes(int layer, ExecutionPathSetPin pathSet, NodeCollection &nodes) {
 		nodes.clear();
 
 		for (ExecutionPathSet::iterator it = pathSet->paths.begin();
 				it != pathSet->paths.end(); it++) {
-			Node *crtNode = getNode(*it, root, (*it)->path.size());
+			Node *crtNode = getNode(layer, *it, root, (*it)->path.size());
 			nodes.push_back(crtNode);
 		}
 	}
@@ -337,11 +462,11 @@ public:
 };
 
 
-template<class NI>
-void getASCIINode(const TreeNode<NI> &node, std::string &result) {
+template<class NI, int L, int D>
+void getASCIINode(const TreeNode<NI, L, D> &node, std::string &result) {
 	result.push_back('<');
 
-	const TreeNode<NI> *crtNode = &node;
+	const TreeNode<NI, L, D> *crtNode = &node;
 
 	while (crtNode->getParent() != NULL) {
 		result.push_back(crtNode->getIndex() ? '1' : '0');
@@ -354,9 +479,9 @@ void getASCIINode(const TreeNode<NI> &node, std::string &result) {
 	std::reverse(result.begin() + 1, result.end() - 1);
 }
 
-template<class NI>
+template<class NI, int L, int D>
 std::ostream& operator<<(std::ostream &os,
-		const TreeNode<NI> &node) {
+		const TreeNode<NI, L, D> &node) {
 
 	std::string str;
 	getASCIINode(node, str);
@@ -365,22 +490,22 @@ std::ostream& operator<<(std::ostream &os,
 	return os;
 }
 
-template<class NI>
-void intrusive_ptr_add_ref(TreeNode<NI> * p) {
+template<class NI, int L, int D>
+void node_pin_add_ref(TreeNode<NI, L, D> *p, int layer) {
 	assert(p);
 
-	p->_refCount++;
+	p->_incRefCount(layer);
 }
 
-template<class NI>
-void intrusive_ptr_release(TreeNode<NI> * p) {
+template<class NI, int L, int D>
+void node_pin_release(TreeNode<NI, L, D> *p, int layer) {
 	assert(p);
-	assert(p->_refCount > 0);
+	assert(p->_refCount[layer] > 0);
 
-	p->_refCount--;
+	p->_decRefCount(layer);
 
-	if (p->_refCount == 0) {
-		ExecutionTree<NI>::removeSupportingBranch(p, NULL);
+	if (p->_refCount[layer] == 0) {
+		ExecutionTree<NI>::removeSupportingBranch(layer, p, NULL);
 	}
 }
 
