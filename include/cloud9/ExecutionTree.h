@@ -23,7 +23,7 @@
 
 namespace cloud9 {
 
-template<class NodeInfo>
+template<class NodeInfo, int Layers=1, int Degree=2>
 class TreeNode {
 	template<class>
 	friend class ExecutionTree;
@@ -35,15 +35,29 @@ class TreeNode {
 	friend void intrusive_ptr_release(TreeNode<NI> * p);
 
 public:
-	typedef boost::intrusive_ptr<TreeNode<NodeInfo> > Pin;
+	class Pin: public boost::intrusive_ptr<TreeNode<NodeInfo> > {
+	private:
+		int layer;
+	public:
+		Pin(TreeNode<NodeInfo> *node, int _layer) :
+			boost::intrusive_ptr<TreeNode<NodeInfo> >(node), layer(_layer) {
+
+		}
+
+		~Pin() { }
+
+		int getLayer() const { return layer; }
+
+	};
 	typedef TreeNode<NodeInfo> *Ptr;
 private:
-	std::vector<TreeNode*> children;
-	TreeNode* parent;
+	TreeNode *children[Degree];		// Pointers to the children of the node
+	TreeNode *parent;				// Pointer to the parent of the node
 
-	unsigned int level;
+	unsigned int level;				// Node level in the tree
 	unsigned int index;
-	unsigned int count;
+
+	unsigned int count[Layers];
 
 	unsigned int _label;
 
@@ -55,7 +69,10 @@ private:
 	 * The reason of doing this is to control the destruction of nodes in cascade
 	 * and avoid performance issues when the tree grows very large.
 	 */
-	unsigned int _refCount;
+	unsigned int _refCount[Layers];
+
+	bool exists[Layers];
+	bool count[Layers];
 
 	NodeInfo _info;
 
@@ -63,8 +80,10 @@ private:
 	 * Creates a new node and connects it in position "index" in a parent
 	 * node
 	 */
-	TreeNode(int deg, TreeNode* p, int index) :
-		children(deg), parent(p), count(0), _label(0), _refCount(0) {
+	TreeNode(TreeNode* p, int index) :
+		parent(p), count(0), _label(0), _refCount(0) {
+
+		memset(children, 0, Degree*sizeof(TreeNode*));
 
 		if (p != NULL) {
 			p->children[index] = this;
@@ -126,6 +145,9 @@ public:
 	}
 
 };
+
+template<class NodeInfo>
+class TreeNode
 
 template<class NodeInfo>
 class ExecutionTree {
