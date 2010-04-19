@@ -35,7 +35,7 @@ private:
 	bool breakpoint;
 	ExplorationJob *job;
 public:
-	TreeNodeInfo() : symState(NULL), jobCount(0), stats(false),
+	TreeNodeInfo() : symState(NULL), stats(false),
 		breakpoint(false), job(NULL) {};
 
 	virtual ~TreeNodeInfo() {};

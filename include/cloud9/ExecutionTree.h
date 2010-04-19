@@ -286,6 +286,22 @@ template<class NodeInfo, int Layers, int Degree>
 class ExecutionTree {
 	template<class NI, int L, int D>
 	friend void node_pin_release(TreeNode<NI, L, D> * p, int layer);
+
+#define BEGIN_DFS_SCAN(layer, root, node) \
+		std::stack<Node*> __dfs_nodes; \
+		__dfs_nodes.push((root)); \
+		while (!__dfs_nodes.empty()) { \
+			Node *node = __dfs_nodes.top(); \
+			__dfs_nodes.pop();
+
+#define END_DFS_SCAN(layer, root, node) \
+			for (int __i = 0; __i < Degree; __i++) { \
+				Node *__child = node->getChild((layer), __i); \
+				if (__child) \
+					__dfs_nodes.push(__child); \
+			} \
+		}
+
 public:
 	typedef TreeNode<NodeInfo, Layers, Degree> Node;
 	typedef typename TreeNode<NodeInfo, Layers, Degree>::Pin NodePin;
@@ -404,6 +420,32 @@ public:
 		return result;
 	}
 
+	unsigned int countLeaves(int layer, Node *root) {
+		assert(root->exists[layer]);
+		unsigned int result = 0;
+
+		BEGIN_DFS_SCAN(layer, root, node)
+
+		if (node->isLeaf(layer))
+			result++;
+
+		END_DFS_SCAN(layer, root, node)
+
+		return result;
+	}
+
+	template<typename NodeCollection>
+	void getLeaves(int layer, Node *root, NodeCollection &nodes) {
+		assert(root->exists[layer]);
+
+		BEGIN_DFS_SCAN(layer, root, node)
+
+		if (node->isLeaf(layer))
+			nodes.push_back(node);
+
+		END_DFS_SCAN(layer, root, node)
+	}
+
 	template<typename NodeIterator>
 	ExecutionPathSetPin buildPathSet(NodeIterator begin, NodeIterator end) {
 		ExecutionPathSet *set = new ExecutionPathSet();
@@ -471,7 +513,10 @@ public:
 		}
 	}
 
-};
+#undef BEGIN_DFS_SCAN
+#undef END_DFS_SCAN
+
+}; // End of ExecutionTree class
 
 
 template<class NI, int L, int D>
