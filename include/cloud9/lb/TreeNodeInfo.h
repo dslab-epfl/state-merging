@@ -37,8 +37,11 @@ public:
 	virtual ~TreeNodeInfo() {};
 };
 
+#define LB_LAYER_COUNT		1
 
-typedef ExecutionTree<TreeNodeInfo> LBTree;
+#define LB_LAYER_DEFAULT	0
+
+typedef ExecutionTree<TreeNodeInfo, LB_LAYER_COUNT, 2> LBTree;
 
 }
 

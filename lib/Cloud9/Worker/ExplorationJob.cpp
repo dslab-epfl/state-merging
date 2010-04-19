@@ -17,9 +17,10 @@ ExplorationJob::ExplorationJob(WorkerTree::Node *r, bool f)
 		  operations(0),
 		  started(false),
 		  finished(false),
-		  foreign(f) {
+		  foreign(f),
+		  jobRoot(WORKER_LAYER_JOBS) {
 
-	jobRoot = r->pin();
+	jobRoot = r->pin(WORKER_LAYER_JOBS);
 	frontier.insert(jobRoot.get());
 }
 

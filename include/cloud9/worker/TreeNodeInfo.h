@@ -53,7 +53,10 @@ public:
 	const ExecutionTrace &getTrace() const { return trace; }
 };
 
-typedef ExecutionTree<TreeNodeInfo, 1, 2> WorkerTree; // Single layered, binary tree
+#define WORKER_LAYER_COUNT		1
+#define WORKER_LAYER_JOBS		0
+
+typedef ExecutionTree<TreeNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Single layered, binary tree
 
 }
 

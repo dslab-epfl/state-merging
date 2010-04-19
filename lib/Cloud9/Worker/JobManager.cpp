@@ -46,7 +46,7 @@ namespace worker {
 JobManager::JobManager(llvm::Module *module) :
 		initialized(false), terminationRequest(false), origModule(module) {
 
-	tree = new WorkerTree(2);
+	tree = new WorkerTree();
 
 	switch (JobSelection) {
 	case RandomSel:
@@ -68,7 +68,7 @@ JobManager::JobManager(llvm::Module *module) :
 	}
 
 	// Configure the root as a statistics node
-	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin();
+	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin(WORKER_LAYER_JOBS);
 	(**rootPin).stats = true;
 
 	stats.insert(rootPin);
@@ -156,7 +156,7 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	bool emptyJob = (job->frontier.size() == 0);
 
 	if (emptyJob) {
-		assert(job->jobRoot->getCount() == 0);
+		assert(job->jobRoot->getCount(WORKER_LAYER_JOBS) == 0);
 	}
 
 	while (crtNode != NULL) {
@@ -316,12 +316,12 @@ void JobManager::refineStatistics() {
 
 		bool keep = true;
 
-		WorkerTree::Node *left = nodePin->getChild(0);
-		WorkerTree::Node *right = nodePin->getChild(1);
+		WorkerTree::Node *left = nodePin->getChild(WORKER_LAYER_JOBS, 0);
+		WorkerTree::Node *right = nodePin->getChild(WORKER_LAYER_JOBS, 1);
 
 		if (left && (**left).jobCount > 0) {
 			assert(!(**left).stats);
-			WorkerTree::NodePin leftPin = left->pin();
+			WorkerTree::NodePin leftPin = left->pin(WORKER_LAYER_JOBS);
 
 			(**left).stats = true;
 			newStats.insert(leftPin);
@@ -330,7 +330,7 @@ void JobManager::refineStatistics() {
 
 		if (right && (**right).jobCount > 0) {
 			assert(!(**right).stats);
-			WorkerTree::NodePin rightPin = right->pin();
+			WorkerTree::NodePin rightPin = right->pin(WORKER_LAYER_JOBS);
 
 			(**right).stats = true;
 			newStats.insert(rightPin);
@@ -365,7 +365,7 @@ void JobManager::cleanupStatistics() {
 
 	if (stats.empty()) {
 		// Add back the root state in the statistics
-		WorkerTree::NodePin rootPin = tree->getRoot()->pin();
+		WorkerTree::NodePin rootPin = tree->getRoot()->pin(WORKER_LAYER_JOBS);
 		(**rootPin).stats = true;
 		stats.insert(rootPin);
 		statChanged = true;
@@ -421,13 +421,13 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 				continue;
 			}
 
-			assert(node->getCount() == 0 && (**node).jobCount == 1);
+			assert(node->getCount(WORKER_LAYER_JOBS) == 0 && (**node).jobCount == 1);
 
 			jobSet.push_back(job);
 			maxCount--;
 		} else {
-			WorkerTree::Node *left = node->getChild(0);
-			WorkerTree::Node *right = node->getChild(1);
+			WorkerTree::Node *left = node->getChild(WORKER_LAYER_JOBS, 0);
+			WorkerTree::Node *right = node->getChild(WORKER_LAYER_JOBS, 1);
 
 			if (left == NULL && right == NULL) {
 				assert((**node).symState != NULL && (**node).jobCount == 0);
@@ -453,7 +453,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 	std::vector<WorkerTree::Node*> nodes;
 	std::vector<ExplorationJob*> jobs;
 
-	tree->getNodes(paths, nodes);
+	tree->getNodes(WORKER_LAYER_JOBS, paths, nodes);
 
 	CLOUD9_DEBUG("Importing " << paths->count() << " jobs");
 
@@ -461,7 +461,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 			it != nodes.end(); it++) {
 		WorkerTree::Node *crtNode = *it;
 
-		if (crtNode->getCount() > 0) {
+		if (crtNode->getCount(WORKER_LAYER_JOBS) > 0) {
 			CLOUD9_INFO("Discarding job as being obsolete: " << *crtNode);
 		} else {
 			// The exploration job object gets a pin on the node, thus
@@ -488,7 +488,7 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 	std::vector<ExplorationJob*> jobs;
 	std::vector<WorkerTree::Node*> jobRoots;
 
-	tree->getNodes(seeds, roots);
+	tree->getNodes(WORKER_LAYER_JOBS, seeds, roots);
 
 	assert(roots.size() == counts.size());
 
@@ -511,7 +511,7 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		// Cancel each job
 		ExplorationJob *job = *it;
 		assert(!job->isStarted());
-		assert(job->jobRoot->getCount() == 0);
+		assert(job->jobRoot->getCount(WORKER_LAYER_JOBS) == 0);
 
 		job->started = true;
 		job->finished = true;

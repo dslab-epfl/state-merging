@@ -33,10 +33,10 @@ static ExplorationJob *selectRandomPathJob(WorkerTree *tree) {
   
   while ((**crtNode).getJob() == NULL) {
     int index = (int)theRNG.getBool();
-    WorkerTree::Node *child = crtNode->getChild(index);
+    WorkerTree::Node *child = crtNode->getChild(WORKER_LAYER_JOBS, index);
     
     if (child == NULL || (**child).getJobCount() == 0)
-      child = crtNode->getChild(1 - index);
+      child = crtNode->getChild(WORKER_LAYER_JOBS, 1 - index);
     
     assert(child && (**child).getJobCount() > 0);
     

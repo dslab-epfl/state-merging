@@ -209,7 +209,7 @@ static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *no
 		}
 
 		if (i < path.size()) {
-			crtNode = crtNode->getChild(path[i]);
+			crtNode = crtNode->getChild(WORKER_LAYER_JOBS, path[i]);
 		}
 	}
 }
@@ -320,8 +320,6 @@ JobExecutor::JobExecutor(llvm::Module *module, WorkerTree *t,
 
 	symbEngine->registerStateEventHandler(this);
 
-	assert(tree->getDegree() == 2);
-
 	theStatisticManager->trackChanges(stats::locallyCoveredInstructions);
 	initHandlers();
 	initInstrumentation();
@@ -394,7 +392,7 @@ void JobExecutor::initBreakpoints() {
 void JobExecutor::initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp) {
 	klee::ExecutionState *state = symbEngine->createRootState(f);
-	WorkerTree::NodePin node = tree->getRoot()->pin();
+	WorkerTree::NodePin node = tree->getRoot()->pin(WORKER_LAYER_JOBS);
 
 	(**node).symState = state;
 	state->setWorkerNode(node);
@@ -435,7 +433,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	//CLOUD9_DEBUG("Exploring new node!");
 
 	// Keep the node alive until we finish with it
-	WorkerTree::NodePin nodePin = node->pin();
+	WorkerTree::NodePin nodePin = node->pin(WORKER_LAYER_JOBS);
 
 	if (!currentJob) {
 		//CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
@@ -494,10 +492,10 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = parent->getWorkerNode().get();
 
-	WorkerTree::NodePin newNodePin, oldNodePin;
+	WorkerTree::NodePin newNodePin(WORKER_LAYER_JOBS), oldNodePin(WORKER_LAYER_JOBS);
 
 	// Obtain the new node pointers
-	oldNodePin = tree->getNode(pNode, 1 - index)->pin();
+	oldNodePin = tree->getNode(WORKER_LAYER_JOBS, pNode, 1 - index)->pin(WORKER_LAYER_JOBS);
 
 	// Update state -> node references
 	parent->setWorkerNode(oldNodePin);
@@ -513,7 +511,7 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 	}
 
 	if (state) {
-		newNodePin = tree->getNode(pNode, index)->pin();
+		newNodePin = tree->getNode(WORKER_LAYER_JOBS, pNode, index)->pin(WORKER_LAYER_JOBS);
 
 		state->setWorkerNode(newNodePin);
 		(**newNodePin).symState = state;
@@ -701,15 +699,9 @@ void JobExecutor::replayPath(WorkerTree::Node *pathEnd) {
 		} else {
 			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
 					" out of " << path.size() << " in the path.");
-
-			WorkerTree::Node *siblingNode = crtNode->getSibling();
-
-			if (siblingNode != NULL && (**siblingNode).symState != NULL) {
-				//CLOUD9_DEBUG("Found alternative path: " << *((**siblingNode).symState));
-			}
 		}
 
-		crtNode = crtNode->getChild(path[i]);
+		crtNode = crtNode->getChild(WORKER_LAYER_JOBS, path[i]);
 		assert(crtNode != NULL);
 	}
 

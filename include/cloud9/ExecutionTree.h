@@ -26,6 +26,8 @@ namespace cloud9 {
 template<class, int, int>
 class TreeNode;
 
+
+/* An adaptation of boost::intrusive_ptr */
 template <class NodeType>
 class NodePin
 {
@@ -33,20 +35,19 @@ private:
     typedef NodePin this_type;
 
 public:
-    NodePin(NodeType * p, int layer): p_(p), layer_(layer)
-    {
+    NodePin(int layer): p_(0), layer_(layer) { }
+
+    NodePin(NodeType * p, int layer): p_(p), layer_(layer) {
     	assert(p_ != 0);
         node_pin_add_ref(p_, layer_);
     }
 
-    NodePin(NodePin const & rhs): p_(rhs.p_), layer_(rhs.layer_)
-    {
+    NodePin(NodePin const & rhs): p_(rhs.p_), layer_(rhs.layer_) {
     	assert(p_ != 0);
         node_pin_add_ref(p_, layer_);
     }
 
-    ~NodePin()
-    {
+    ~NodePin() {
         if(p_ != 0) node_pin_release(p_, layer_);
     }
 
@@ -62,6 +63,10 @@ public:
     }
 
     int layer() const { return layer_; }
+
+    void reset() {
+		this_type(layer_).swap(*this);
+	}
 
     NodeType & operator*() const
     {
@@ -84,6 +89,8 @@ public:
 
     void swap(NodePin & rhs)
     {
+    	assert(layer_ == rhs.layer_);
+
         NodeType * tmp = p_;
         p_ = rhs.p_;
         rhs.p_ = tmp;
@@ -123,6 +130,11 @@ template<class T, class U> inline bool operator==(T * a, NodePin<U> const & b)
 template<class T, class U> inline bool operator!=(T * a, NodePin<U> const & b)
 {
     return a != b.get();
+}
+
+template<class T> inline bool operator<(NodePin<T> const & a, NodePin<T> const & b)
+{
+    return std::less<T *>()(a.get(), b.get());
 }
 
 
@@ -226,8 +238,7 @@ private:
 	}
 public:
 
-	ptr getParent(int layer) const {
-		//assert(exists[layer]);
+	ptr getParent() const {
 
 		return parent;
 	}

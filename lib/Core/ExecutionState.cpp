@@ -63,7 +63,8 @@ StackFrame::~StackFrame() {
 /***/
 
 ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
-  : executor(_executor),
+  : nodePtr(WORKER_LAYER_JOBS),
+    executor(_executor),
     fakeState(false),
     underConstrained(false),
     depth(0),
@@ -80,7 +81,8 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
-  : executor(_executor),
+  : nodePtr(WORKER_LAYER_JOBS),
+    executor(_executor),
     fakeState(true),
     underConstrained(false),
     constraints(assumptions),

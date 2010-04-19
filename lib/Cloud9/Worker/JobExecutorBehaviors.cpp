@@ -31,10 +31,10 @@ void RandomPathExplorationHandler::onNextStateQuery(ExplorationJob *job,
 	while ((**crtNode).getSymbolicState() == NULL) {
 		int index = (int)theRNG.getBool();
 
-		if (crtNode->getChild(index) == NULL)
+		if (crtNode->getChild(WORKER_LAYER_JOBS, index) == NULL)
 			index = 1 - index;
 
-		crtNode = crtNode->getChild(index);
+		crtNode = crtNode->getChild(WORKER_LAYER_JOBS, index);
 
 		if (!crtNode) {
 			CLOUD9_ERROR("Found empty state inside job; " <<

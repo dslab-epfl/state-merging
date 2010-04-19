@@ -16,7 +16,7 @@ namespace cloud9 {
 namespace lb {
 
 LoadBalancer::LoadBalancer(int br) : nextID(1), balanceRate(br), rounds(0) {
-	tree = new LBTree(2);
+	tree = new LBTree();
 }
 
 LoadBalancer::~LoadBalancer() {

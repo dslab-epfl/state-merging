@@ -201,7 +201,7 @@ bool WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) 
 	std::vector<LBTree::Node*> nodes;
 	ExecutionPathSetPin paths = parseExecutionPathSet(nodeSetUpdateMsg.pathset());
 
-	lb->getTree()->getNodes(paths, nodes);
+	lb->getTree()->getNodes(LB_LAYER_DEFAULT, paths, nodes);
 
 	CLOUD9_DEBUG("Received node set: " << getASCIINodeSet(nodes.begin(),
 			nodes.end()));
