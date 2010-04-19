@@ -161,7 +161,7 @@ public:
   void removeFnAlias(std::string fn);
   
 private:
-  ExecutionState(Executor *_executor) : nodePtr(WORKER_LAYER_JOBS), executor(_executor), fakeState(false), underConstrained(0), addressSpace(this), ptreeNode(0) {};
+  ExecutionState(Executor *_executor) : nodePtr(WORKER_LAYER_STATES), executor(_executor), fakeState(false), underConstrained(0), addressSpace(this), ptreeNode(0) {};
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);

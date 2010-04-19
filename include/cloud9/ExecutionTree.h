@@ -238,14 +238,11 @@ private:
 	}
 public:
 
-	ptr getParent() const {
-
-		return parent;
-	}
+	ptr getParent() const { return parent; }
 
 
 	ptr getChild(int layer, int index) const {
-		//assert(exists[layer]);
+		assert(exists[layer]);
 
 		if (children[index][layer])
 			return childrenNodes[index];
@@ -266,6 +263,9 @@ public:
 	int getCount(int layer) const { return count[layer]; }
 	int getTotalCount() const { return totalCount; }
 
+	bool layerExists(int layer) { return exists[layer]; }
+	bool isLeaf(int layer) { return count[layer] == 0; }
+
 
 	NodeInfo& operator*() {
 		return _info;
@@ -276,6 +276,7 @@ public:
 	}
 
 	Pin pin(int layer) {
+		assert(exists[layer]);
 		return Pin(this, layer);
 	}
 

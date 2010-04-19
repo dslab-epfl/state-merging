@@ -156,7 +156,7 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	bool emptyJob = (job->frontier.size() == 0);
 
 	if (emptyJob) {
-		assert(job->jobRoot->getCount(WORKER_LAYER_JOBS) == 0);
+		assert(job->jobRoot->isLeaf(WORKER_LAYER_JOBS) == 0);
 	}
 
 	while (crtNode != NULL) {

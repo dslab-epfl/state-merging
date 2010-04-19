@@ -31,7 +31,6 @@ private:
 	klee::ExecutionState *symState;
 	ExecutionTrace trace;
 
-	int jobCount;
 	bool stats;
 	bool breakpoint;
 	ExplorationJob *job;
@@ -42,7 +41,6 @@ public:
 	virtual ~TreeNodeInfo() {};
 
 	klee::ExecutionState* getSymbolicState() const { return symState; }
-	int getJobCount() const { return jobCount; }
 
 	bool isStats() const { return stats; }
 
@@ -53,8 +51,11 @@ public:
 	const ExecutionTrace &getTrace() const { return trace; }
 };
 
-#define WORKER_LAYER_COUNT		1
-#define WORKER_LAYER_JOBS		0
+#define WORKER_LAYER_COUNT			3
+
+#define WORKER_LAYER_JOBS			0
+#define WORKER_LAYER_STATES			1
+#define WORKER_LAYER_BREAKPOINTS	2
 
 typedef ExecutionTree<TreeNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Single layered, binary tree
 

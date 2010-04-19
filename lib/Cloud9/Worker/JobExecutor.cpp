@@ -152,6 +152,7 @@ static const char *unsafeExternals[] = { "fork", // oh lord
 #define NELEMS(array) (sizeof(array)/sizeof(array[0]))
 
 static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) {
+	assert(node->layerExists(WORKER_LAYER_STATES));
 	std::vector<int> path;
 	const WorkerTree::Node *crtNode = node;
 
@@ -209,7 +210,7 @@ static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *no
 		}
 
 		if (i < path.size()) {
-			crtNode = crtNode->getChild(WORKER_LAYER_JOBS, path[i]);
+			crtNode = crtNode->getChild(WORKER_LAYER_STATES, path[i]);
 		}
 	}
 }
@@ -392,7 +393,7 @@ void JobExecutor::initBreakpoints() {
 void JobExecutor::initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp) {
 	klee::ExecutionState *state = symbEngine->createRootState(f);
-	WorkerTree::NodePin node = tree->getRoot()->pin(WORKER_LAYER_JOBS);
+	WorkerTree::NodePin node = tree->getRoot()->pin(WORKER_LAYER_STATES);
 
 	(**node).symState = state;
 	state->setWorkerNode(node);
@@ -433,7 +434,7 @@ void JobExecutor::exploreNode(WorkerTree::Node *node) {
 	//CLOUD9_DEBUG("Exploring new node!");
 
 	// Keep the node alive until we finish with it
-	WorkerTree::NodePin nodePin = node->pin(WORKER_LAYER_JOBS);
+	WorkerTree::NodePin nodePin = node->pin(WORKER_LAYER_STATES);
 
 	if (!currentJob) {
 		//CLOUD9_DEBUG("Starting to replay node at position " << *((**node).symState));
@@ -492,10 +493,10 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 
 	WorkerTree::Node *pNode = parent->getWorkerNode().get();
 
-	WorkerTree::NodePin newNodePin(WORKER_LAYER_JOBS), oldNodePin(WORKER_LAYER_JOBS);
+	WorkerTree::NodePin newNodePin(WORKER_LAYER_STATES), oldNodePin(WORKER_LAYER_STATES);
 
 	// Obtain the new node pointers
-	oldNodePin = tree->getNode(WORKER_LAYER_JOBS, pNode, 1 - index)->pin(WORKER_LAYER_JOBS);
+	oldNodePin = tree->getNode(WORKER_LAYER_STATES, pNode, 1 - index)->pin(WORKER_LAYER_STATES);
 
 	// Update state -> node references
 	parent->setWorkerNode(oldNodePin);
@@ -511,7 +512,7 @@ void JobExecutor::updateTreeOnBranch(klee::ExecutionState *state,
 	}
 
 	if (state) {
-		newNodePin = tree->getNode(WORKER_LAYER_JOBS, pNode, index)->pin(WORKER_LAYER_JOBS);
+		newNodePin = tree->getNode(WORKER_LAYER_STATES, pNode, index)->pin(WORKER_LAYER_STATES);
 
 		state->setWorkerNode(newNodePin);
 		(**newNodePin).symState = state;
