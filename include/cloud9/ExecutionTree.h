@@ -471,6 +471,32 @@ public:
 		END_DFS_SCAN(layer, root, node)
 	}
 
+	template<class Generator>
+	Node* selectRandomLeaf(int layer, Node *root, Generator &gen) {
+		assert(root->exists[layer]);
+		Node *crtNode = root;
+		int crtCount;
+
+		while ((crtCount = crtNode->getCount(layer)) > 0) {
+			int index = gen.getInt32() % crtCount;
+
+			for (int i = 0; i < Degree; i++) {
+				Node *child = crtNode->getChild(layer, i);
+				if (child) {
+					if (index == 0) {
+						crtNode = child;
+						break;
+					} else {
+						index--;
+					}
+				}
+			}
+		}
+
+		return crtNode;
+
+	}
+
 	template<typename NodeIterator>
 	ExecutionPathSetPin buildPathSet(NodeIterator begin, NodeIterator end) {
 		ExecutionPathSet *set = new ExecutionPathSet();

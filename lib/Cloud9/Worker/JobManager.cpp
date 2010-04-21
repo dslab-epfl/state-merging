@@ -466,8 +466,6 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
 		job->started = true;
 		job->finished = true;
-
-		finalizeJob(job);
 	}
 
 	selHandler->onJobsExported();

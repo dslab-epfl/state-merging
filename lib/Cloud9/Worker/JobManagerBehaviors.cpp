@@ -29,21 +29,12 @@ namespace cloud9 {
 namespace worker {
 
 static ExplorationJob *selectRandomPathJob(WorkerTree *tree) {
-  WorkerTree::Node *crtNode = tree->getRoot();
-  
-  while ((**crtNode).getJob() == NULL) {
-    int index = (int)theRNG.getBool();
-    WorkerTree::Node *child = crtNode->getChild(WORKER_LAYER_JOBS, index);
-    
-    if (child == NULL || (**child).getJobCount() == 0)
-      child = crtNode->getChild(WORKER_LAYER_JOBS, 1 - index);
-    
-    assert(child && (**child).getJobCount() > 0);
-    
-    crtNode = child;
-  }
-  
-  return (**crtNode).getJob();
+	WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_JOBS, tree->getRoot(), theRNG);
+	ExplorationJob *job = (**node).getJob();
+
+	assert(job != NULL || node == tree->getRoot());
+
+	return job;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -76,7 +67,7 @@ public:
 	bool empty() {
 		WorkerTree::Node *root = tree->getRoot();
 
-		return (**root).getJobCount() == 0;
+		return root->getCount(WORKER_LAYER_JOBS) == 0 && (**root).getJob() == NULL;
 	}
 	void printName(std::ostream &os) {
 		os << "RandomPathSearcher\n";
@@ -149,13 +140,6 @@ void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
 
 
 void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
-  WorkerTree::Node *crtNode = tree->getRoot();
-  
-  if ((**crtNode).getJobCount() == 0) {
-    job = NULL;
-    return;
-  }
-  
   job = selectRandomPathJob(tree);
 }
 
@@ -320,12 +304,11 @@ ExplorationJob * WeightedRandomSelectionHandler::selectWeightedRandomJob(WorkerT
 
 void WeightedRandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
   
-  WorkerTree::Node *crtNode = tree->getRoot();
-  if((**crtNode).getJobCount() == 0) {
-    //if the root of the tree has no more jobs, we just return NULL
-    //the worker will loop-wait until job != NULL
-    job = NULL;
-    return;
+  WorkerTree::Node *root = tree->getRoot();
+
+  if (root->getCount(WORKER_LAYER_JOBS) && (**root).getJob() == NULL) {
+	  job = NULL;
+	  return;
   }
   
   job = selectWeightedRandomJob(tree);

@@ -47,11 +47,12 @@ public:
 	const ExecutionTrace &getTrace() const { return trace; }
 };
 
-#define WORKER_LAYER_COUNT			3
+#define WORKER_LAYER_COUNT			4
 
 #define WORKER_LAYER_JOBS			0
 #define WORKER_LAYER_STATES			1
-#define WORKER_LAYER_BREAKPOINTS	2
+#define WORKER_LAYER_STATISTICS		2
+#define WORKER_LAYER_BREAKPOINTS	3
 
 typedef ExecutionTree<TreeNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Single layered, binary tree
 
