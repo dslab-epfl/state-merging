@@ -87,7 +87,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 
 	for (ExplorationJob::frontier_t::iterator it = job->frontier.begin();
 			it != job->frontier.end(); it++) {
-		WorkerTree::Node *node = *it;
+		WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
 
 		ExplorationJob *newJob = new ExplorationJob(node, false);
 
@@ -129,41 +129,9 @@ void JobManager::submitJob(ExplorationJob* job) {
 
 	selHandler->onJobEnqueued(job);
 
-	// Update job statistics
-	WorkerTree::Node *crtNode = job->jobRoot.get();
-	(**crtNode).job = job;
-
-	while (crtNode != NULL) {
-		(**crtNode).jobCount++;
-
-		crtNode = crtNode->getParent();
-	}
-
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentQueueSize);
 
 	//CLOUD9_DEBUG("Submitted job on level " << (job->jobRoot->getLevel()));
-}
-
-ExplorationJob *JobManager::createJob(WorkerTree::Node *root, bool foreign) {
-	return new ExplorationJob(root, foreign);
-}
-
-void JobManager::finalizeJob(ExplorationJob *job) {
-	// Update job statistics
-	WorkerTree::Node *crtNode = job->jobRoot.get();
-	(**crtNode).job = NULL;
-
-	bool emptyJob = (job->frontier.size() == 0);
-
-	if (emptyJob) {
-		assert(job->jobRoot->isLeaf(WORKER_LAYER_JOBS) == 0);
-	}
-
-	while (crtNode != NULL) {
-		(**crtNode).jobCount--;
-
-		crtNode = crtNode->getParent();
-	}
 }
 
 ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock,  unsigned int timeOut) {
@@ -255,7 +223,6 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 		lock.lock();
 
 		job->finished = true;
-		finalizeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
 

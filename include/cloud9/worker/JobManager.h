@@ -81,8 +81,6 @@ private:
 		//CLOUD9_DEBUG("Submitted " << count << " jobs to the local queue");
 	}
 
-	void finalizeJob(ExplorationJob *job);
-
 
 	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
 	ExplorationJob* dequeueJob();
@@ -96,8 +94,6 @@ private:
 			std::vector<ExplorationJob*> &jobSet, int maxCount);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
-	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
-
 public:
 	JobManager(llvm::Module *module);
 	virtual ~JobManager();

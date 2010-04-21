@@ -263,8 +263,8 @@ public:
 	int getCount(int layer) const { return count[layer]; }
 	int getTotalCount() const { return totalCount; }
 
-	bool layerExists(int layer) { return exists[layer]; }
-	bool isLeaf(int layer) { return count[layer] == 0; }
+	bool layerExists(int layer) const { return exists[layer]; }
+	bool isLeaf(int layer) const { return count[layer] == 0; }
 
 
 	NodeInfo& operator*() {
@@ -418,6 +418,16 @@ public:
 			result->makeNode(layer);
 
 		return result;
+	}
+
+	Node *getNode(int layer, Node *node) {
+		Node *crtNode = node;
+		while (!crtNode->exists[layer]) {
+			crtNode->makeNode(layer);
+			crtNode = crtNode->parent;
+		}
+
+		return node;
 	}
 
 	unsigned int countLeaves(int layer, Node *root) {
