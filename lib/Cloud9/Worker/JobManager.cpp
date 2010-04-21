@@ -43,6 +43,10 @@ namespace cloud9 {
 
 namespace worker {
 
+static bool isJob(WorkerTree::Node *node) {
+	return (**node).getJob() != NULL;
+}
+
 JobManager::JobManager(llvm::Module *module) :
 		initialized(false), terminationRequest(false), origModule(module) {
 
@@ -308,7 +312,7 @@ void JobManager::cleanupStatistics() {
 		std::set<WorkerTree::NodePin>::iterator oldIt = it++;
 		WorkerTree::NodePin nodePin = *oldIt;
 
-		if (nodePin->getCount() == 0 && (**nodePin).job == NULL &&
+		if (nodePin->getCount(WORKER_LAYER_JOBS) == 0 && (**nodePin).job == NULL &&
 				nodePin->getParent() != NULL) {
 			stats.erase(oldIt);
 			statChanged = true;
@@ -347,7 +351,8 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 	for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
 			it != stats.end(); it++) {
 		const WorkerTree::NodePin &crtNodePin = *it;
-		data.push_back((**crtNodePin).jobCount);
+		unsigned int jobCount = tree->countLeaves(WORKER_LAYER_JOBS, crtNodePin.get(), &isJob);
+		data.push_back(jobCount);
 	}
 
 	CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
@@ -364,42 +369,29 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 		WorkerTree::Node *node = nodes.top();
 		nodes.pop();
 
-		if ((**node).job != NULL) {
+		if (node->getCount(WORKER_LAYER_JOBS) == 0) {
 			ExplorationJob *job = (**node).job;
 
-			if (job->isStarted()) {
-				CLOUD9_DEBUG("FOUND A STARTED JOB: " << *(job->jobRoot));
-				continue;
+			if (job) {
+				if (job->isStarted()) {
+					CLOUD9_DEBUG("FOUND A STARTED JOB: " << *(job->jobRoot));
+					continue;
+				}
+
+				jobSet.push_back(job);
+				maxCount--;
 			}
-
-			assert(node->getCount(WORKER_LAYER_JOBS) == 0 && (**node).jobCount == 1);
-
-			jobSet.push_back(job);
-			maxCount--;
 		} else {
 			WorkerTree::Node *left = node->getChild(WORKER_LAYER_JOBS, 0);
 			WorkerTree::Node *right = node->getChild(WORKER_LAYER_JOBS, 1);
 
-			if (left == NULL && right == NULL) {
-				assert((**node).symState != NULL && (**node).jobCount == 0);
-			}
-
-			if (left && (**left).jobCount > 0) {
-				nodes.push(left);
-			}
-
-			if (right && (**right).jobCount > 0) {
-				nodes.push(right);
-			}
+			if (left) nodes.push(left);
+			if (right) nodes.push(right);
 		}
 	}
 
 	CLOUD9_DEBUG("Selected " << jobSet.size() << " jobs");
 
-}
-
-static bool isJob(WorkerTree::Node *node) {
-	return (**node).getJob() != NULL;
 }
 
 unsigned int JobManager::countJobs(WorkerTree::Node *root) {

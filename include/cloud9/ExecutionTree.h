@@ -445,7 +445,7 @@ public:
 	}
 
 	template<class Predicate>
-	unsigned int countLeaves(int layer, Node *root, Predicate &pred) {
+	unsigned int countLeaves(int layer, Node *root, Predicate pred) {
 		assert(root->exists[layer]);
 		unsigned int result = 0;
 
