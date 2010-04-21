@@ -72,7 +72,7 @@ JobManager::JobManager(llvm::Module *module) :
 	}
 
 	// Configure the root as a statistics node
-	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin(WORKER_LAYER_JOBS);
+	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin(WORKER_LAYER_STATISTICS);
 
 	stats.insert(rootPin);
 	statChanged = true;
@@ -281,6 +281,11 @@ void JobManager::refineStatistics() {
 			it != stats.end(); it++) {
 		const WorkerTree::NodePin &nodePin = *it;
 
+		if (!nodePin->layerExists(WORKER_LAYER_JOBS)) {
+			// Statistic node invalidated
+			continue;
+		}
+
 		if (nodePin->getCount(WORKER_LAYER_JOBS) > 0) {
 			// Move along the path
 
@@ -312,8 +317,7 @@ void JobManager::cleanupStatistics() {
 		std::set<WorkerTree::NodePin>::iterator oldIt = it++;
 		WorkerTree::NodePin nodePin = *oldIt;
 
-		if (nodePin->getCount(WORKER_LAYER_JOBS) == 0 && (**nodePin).job == NULL &&
-				nodePin->getParent() != NULL) {
+		if (!nodePin->layerExists(WORKER_LAYER_JOBS)) {
 			stats.erase(oldIt);
 			statChanged = true;
 		}
@@ -321,7 +325,7 @@ void JobManager::cleanupStatistics() {
 
 	if (stats.empty()) {
 		// Add back the root state in the statistics
-		WorkerTree::NodePin rootPin = tree->getRoot()->pin(WORKER_LAYER_JOBS);
+		WorkerTree::NodePin rootPin = tree->getRoot()->pin(WORKER_LAYER_STATISTICS);
 		stats.insert(rootPin);
 		statChanged = true;
 	}
