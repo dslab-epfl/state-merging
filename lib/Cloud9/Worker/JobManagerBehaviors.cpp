@@ -306,7 +306,7 @@ void WeightedRandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
   
   WorkerTree::Node *root = tree->getRoot();
 
-  if (root->getCount(WORKER_LAYER_JOBS) && (**root).getJob() == NULL) {
+  if (root->getCount(WORKER_LAYER_JOBS) == 0 && (**root).getJob() == NULL) {
 	  job = NULL;
 	  return;
   }

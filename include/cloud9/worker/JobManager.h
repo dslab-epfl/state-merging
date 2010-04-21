@@ -85,6 +85,8 @@ private:
 	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
 	ExplorationJob* dequeueJob();
 
+	void finalizeJob(ExplorationJob *job);
+
 	void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
 	void refineStatistics();

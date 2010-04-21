@@ -127,14 +127,20 @@ JobExecutor *JobManager::createExecutor(llvm::Module *module, int argc, char **a
 	return new JobExecutor(module, tree, argc, argv);
 }
 
-void JobManager::submitJob(ExplorationJob* job) {
+void JobManager::submitJob(ExplorationJob *job) {
 	assert((**job->jobRoot).symState || job->foreign);
 
 	selHandler->onJobEnqueued(job);
 
+	(**job->jobRoot).job = job;
+
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentQueueSize);
 
 	//CLOUD9_DEBUG("Submitted job on level " << (job->jobRoot->getLevel()));
+}
+
+void JobManager::finalizeJob(ExplorationJob *job) {
+	(**job->jobRoot).job = NULL;
 }
 
 ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock,  unsigned int timeOut) {
@@ -226,6 +232,7 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 		lock.lock();
 
 		job->finished = true;
+		finalizeJob(job);
 
 		std::set<ExplorationJob*> newJobs;
 
@@ -470,6 +477,8 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
 		job->started = true;
 		job->finished = true;
+
+		finalizeJob(job);
 	}
 
 	selHandler->onJobsExported();
