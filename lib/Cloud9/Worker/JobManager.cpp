@@ -69,7 +69,6 @@ JobManager::JobManager(llvm::Module *module) :
 
 	// Configure the root as a statistics node
 	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin(WORKER_LAYER_JOBS);
-	(**rootPin).stats = true;
 
 	stats.insert(rootPin);
 	statChanged = true;
@@ -237,7 +236,7 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 			cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentImportedPathCount);
 
 		if (allowGrowth)
-			submitJobs(newJobs.begin(), newJobs.end());
+			submitJobs(newJobs.begin(), newJobs.end()); // XXX Memory leak here, if allowGrowth == false
 
 		if (refineStats) {
 			refineStatistics();
@@ -278,38 +277,24 @@ void JobManager::refineStatistics() {
 			it != stats.end(); it++) {
 		const WorkerTree::NodePin &nodePin = *it;
 
-		assert((**nodePin).stats);
-		(**nodePin).stats = false;
+		if (nodePin->getCount(WORKER_LAYER_JOBS) > 0) {
+			// Move along the path
 
-		bool keep = true;
+			WorkerTree::Node *left = nodePin->getChild(WORKER_LAYER_JOBS, 0);
+			WorkerTree::Node *right = nodePin->getChild(WORKER_LAYER_JOBS, 1);
 
-		WorkerTree::Node *left = nodePin->getChild(WORKER_LAYER_JOBS, 0);
-		WorkerTree::Node *right = nodePin->getChild(WORKER_LAYER_JOBS, 1);
+			if (left) {
+				WorkerTree::NodePin leftPin = left->pin(WORKER_LAYER_JOBS);
+				newStats.insert(leftPin);
+			}
 
-		if (left && (**left).jobCount > 0) {
-			assert(!(**left).stats);
-			WorkerTree::NodePin leftPin = left->pin(WORKER_LAYER_JOBS);
-
-			(**left).stats = true;
-			newStats.insert(leftPin);
-			keep = false;
-		}
-
-		if (right && (**right).jobCount > 0) {
-			assert(!(**right).stats);
-			WorkerTree::NodePin rightPin = right->pin(WORKER_LAYER_JOBS);
-
-			(**right).stats = true;
-			newStats.insert(rightPin);
-			keep = false;
-		}
-
-		if (keep) {
-			(**nodePin).stats = true;
+			if (right) {
+				WorkerTree::NodePin rightPin = right->pin(WORKER_LAYER_JOBS);
+				newStats.insert(rightPin);
+			}
+		} else {
 			newStats.insert(nodePin);
-			continue;
 		}
-
 	}
 
 	stats = newStats;
@@ -323,8 +308,8 @@ void JobManager::cleanupStatistics() {
 		std::set<WorkerTree::NodePin>::iterator oldIt = it++;
 		WorkerTree::NodePin nodePin = *oldIt;
 
-		if ((**nodePin).jobCount == 0 && nodePin->getParent() != NULL) {
-			(**nodePin).stats = false;
+		if (nodePin->getCount() == 0 && (**nodePin).job == NULL &&
+				nodePin->getParent() != NULL) {
 			stats.erase(oldIt);
 			statChanged = true;
 		}
@@ -333,7 +318,6 @@ void JobManager::cleanupStatistics() {
 	if (stats.empty()) {
 		// Add back the root state in the statistics
 		WorkerTree::NodePin rootPin = tree->getRoot()->pin(WORKER_LAYER_JOBS);
-		(**rootPin).stats = true;
 		stats.insert(rootPin);
 		statChanged = true;
 	}
@@ -412,6 +396,14 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 
 	CLOUD9_DEBUG("Selected " << jobSet.size() << " jobs");
 
+}
+
+static bool isJob(WorkerTree::Node *node) {
+	return (**node).getJob() != NULL;
+}
+
+unsigned int JobManager::countJobs(WorkerTree::Node *root) {
+	return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
 void JobManager::importJobs(ExecutionPathSetPin paths) {

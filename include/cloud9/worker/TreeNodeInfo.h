@@ -31,18 +31,14 @@ private:
 	klee::ExecutionState *symState;
 	ExecutionTrace trace;
 
-	bool stats;
 	bool breakpoint;
 	ExplorationJob *job;
 public:
-	TreeNodeInfo() : symState(NULL), stats(false),
-		breakpoint(false), job(NULL) {};
+	TreeNodeInfo() : symState(NULL), breakpoint(false), job(NULL) {};
 
 	virtual ~TreeNodeInfo() {};
 
 	klee::ExecutionState* getSymbolicState() const { return symState; }
-
-	bool isStats() const { return stats; }
 
 	bool isBreakpoint() const { return breakpoint; }
 

@@ -93,6 +93,8 @@ private:
 	void selectJobs(WorkerTree::Node *root,
 			std::vector<ExplorationJob*> &jobSet, int maxCount);
 
+	unsigned int countJobs(WorkerTree::Node *root);
+
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 public:
 	JobManager(llvm::Module *module);

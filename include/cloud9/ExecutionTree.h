@@ -444,6 +444,21 @@ public:
 		return result;
 	}
 
+	template<class Predicate>
+	unsigned int countLeaves(int layer, Node *root, Predicate &pred) {
+		assert(root->exists[layer]);
+		unsigned int result = 0;
+
+		BEGIN_DFS_SCAN(layer, root, node);
+
+		if (node->isLeaf(layer) && pred(node))
+			result++;
+
+		END_DFS_SCAN(layer, root, node);
+
+		return result;
+	}
+
 	template<typename NodeCollection>
 	void getLeaves(int layer, Node *root, NodeCollection &nodes) {
 		assert(root->exists[layer]);
