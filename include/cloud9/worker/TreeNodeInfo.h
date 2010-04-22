@@ -23,22 +23,21 @@ namespace worker {
 
 class ExecutionTrace;
 class SymbolicState;
+class ExecutionJob;
 
 class TreeNodeInfo {
 	friend class JobManager;
 private:
 	SymbolicState *symState;
+	ExecutionJob *job;
 	ExecutionTrace trace;
-
-	bool breakpoint;
 public:
-	TreeNodeInfo() : symState(NULL), breakpoint(false), job(NULL) {};
+	TreeNodeInfo() : symState(NULL), job(NULL) {};
 
 	virtual ~TreeNodeInfo() {};
 
 	SymbolicState* getSymbolicState() const { return symState; }
-
-	bool isBreakpoint() const { return breakpoint; }
+	ExecutionJob* getJob() const { return job; }
 
 	const ExecutionTrace &getTrace() const { return trace; }
 };

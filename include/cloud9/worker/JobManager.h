@@ -35,17 +35,29 @@ class SymbolicState {
 	friend class JobManager;
 private:
 	klee::ExecutionState *kleeState;
-	bool job;
+	WorkerTree::NodePin node;
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), job(false) {
-
+		kleeState(state) {
+			kleeState->setCloud9State(this);
 	}
 
 	virtual ~SymbolicState() { }
 
 	klee::ExecutionState *getKleeState() const { return kleeState; }
-	bool isJob() const { return job; }
+
+	WorkerTree::NodePin &getNode() const { return kleeState->getWorkerNode(); }
+};
+
+class ExecutionJob {
+	friend class JobManager;
+private:
+	WorkerTree::NodePin node;
+public:
+	ExecutionJob() {}
+	virtual ~ExecutionJob() {}
+
+	WorkerTree::NodePin &getNode() const { return node; }
 };
 
 class JobSelectionHandler {

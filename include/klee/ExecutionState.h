@@ -14,9 +14,6 @@
 #include "klee/Expr.h"
 #include "klee/Internal/ADT/TreeStream.h"
 
-// XXX Intrusive, but I don't know how to do it another way
-#include "cloud9/worker/TreeNodeInfo.h"
-
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
@@ -25,7 +22,11 @@
 #include <set>
 #include <vector>
 
-using cloud9::worker::WorkerTree;
+namespace cloud9 {
+namespace worker {
+class SymbolicState;
+}
+}
 
 namespace klee {
   class Array;
@@ -114,7 +115,7 @@ private:
   ExecutionState &operator=(const ExecutionState&); 
   std::map< std::string, std::string > fnAliases;
 
-  WorkerTree::NodePin nodePtr;
+  cloud9::worker::SymbolicState *c9State;
 
 public:
   Executor *executor;
@@ -161,7 +162,7 @@ public:
   void removeFnAlias(std::string fn);
   
 private:
-  ExecutionState(Executor *_executor) : nodePtr(WORKER_LAYER_STATES), executor(_executor), fakeState(false), underConstrained(0), addressSpace(this), ptreeNode(0) {};
+  ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor), fakeState(false), underConstrained(0), addressSpace(this), ptreeNode(0) {};
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);
@@ -188,8 +189,8 @@ public:
 
 
 
-  WorkerTree::NodePin &getWorkerNode() { return nodePtr; }
-  void setWorkerNode(WorkerTree::NodePin &ptr) { nodePtr = ptr; }
+  cloud9::worker::SymbolicState *getCloud9State() const { return c9State; }
+  void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
 };
 
 
