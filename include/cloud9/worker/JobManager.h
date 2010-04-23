@@ -10,6 +10,7 @@
 
 
 #include "cloud9/Logger.h"
+#include "cloud9/worker/TreeNodeInfo.h"
 
 #include <boost/thread.hpp>
 #include <list>
@@ -31,6 +32,9 @@ namespace cloud9 {
 
 namespace worker {
 
+/*
+ *
+ */
 class SymbolicState {
 	friend class JobManager;
 private:
@@ -38,7 +42,7 @@ private:
 	WorkerTree::NodePin node;
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state) {
+		kleeState(state), node(WORKER_LAYER_STATES) {
 			kleeState->setCloud9State(this);
 	}
 
@@ -49,21 +53,27 @@ public:
 	WorkerTree::NodePin &getNode() const { return kleeState->getWorkerNode(); }
 };
 
+/*
+ *
+ */
 class ExecutionJob {
 	friend class JobManager;
 private:
 	WorkerTree::NodePin node;
 public:
-	ExecutionJob() {}
+	ExecutionJob() : node(WORKER_LAYER_JOBS) {}
 	virtual ~ExecutionJob() {}
 
 	WorkerTree::NodePin &getNode() const { return node; }
 };
 
-class JobSelectionHandler {
+/*
+ *
+ */
+class JobSelectionStrategy {
 public:
-	JobSelectionHandler() {};
-	virtual ~JobSelectionHandler() {};
+	JobSelectionStrategy() {};
+	virtual ~JobSelectionStrategy() {};
 
 public:
 	virtual void onJobEnqueued(ExplorationJob *job) { };
@@ -78,15 +88,21 @@ public:
 
 class JobManager {
 private:
-	/* Klee integration */
+	/*
+	 * KLEE integration
+	 */
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
 
 	KleeHandler *kleeHandler;
 
-	const klee::KModule *finalModule;
+	klee::KModule *module;
+	llvm::Function *mainFn;
 
 
+	/*
+	 * Symbolic tree
+	 */
 	WorkerTree* tree;
 
 	boost::condition_variable jobsAvailabe;
@@ -97,14 +113,11 @@ private:
 	bool statChanged;
 	bool refineStats;
 
-	bool initialized;
 	bool terminationRequest;
 
-	llvm::Module *origModule;
-	const llvm::Module *finalModule;
-	llvm::Function *mainFn;
 
-	SelectionHandler *selHandler;
+
+	JobSelectionStrategy *selHandler;
 
 	/*
 	 * Breakpoint management data structures
@@ -128,10 +141,6 @@ private:
 	void explodeJob(ExplorationJob *job, std::set<ExplorationJob*> &newJobs);
 
 	void submitJob(ExplorationJob* job);
-
-	void externalsAndGlobalsCheck(const llvm::Module *m);
-
-	const llvm::Module *getModule() const;
 
 	template<typename JobIterator>
 	void submitJobs(JobIterator begin, JobIterator end) {

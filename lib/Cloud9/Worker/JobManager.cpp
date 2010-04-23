@@ -18,7 +18,6 @@
  * - A job import cannot happen in such a way that a job lies within the limits
  * of the frontier.
  *
- * - Statistics cannot grow past the frontier of symbolic states
  */
 
 #include "cloud9/worker/JobManager.h"
@@ -93,10 +92,86 @@ namespace cloud9 {
 
 namespace worker {
 
+/*******************************************************************************
+ * HELPER FUNCTIONS FOR THE JOB MANAGER
+ ******************************************************************************/
 
 static bool isJob(WorkerTree::Node *node) {
 	return (**node).getJob() != NULL;
 }
+
+static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
+	assert(node->layerExists(WORKER_LAYER_STATES));
+	std::vector<int> path;
+	const WorkerTree::Node *crtNode = node;
+
+	while (crtNode->getParent() != NULL) {
+		path.push_back(crtNode->getIndex());
+		crtNode = crtNode->getParent();
+	}
+
+	std::reverse(path.begin(), path.end());
+
+
+	const llvm::BasicBlock *crtBasicBlock = NULL;
+	const llvm::Function *crtFunction = NULL;
+
+	llvm::raw_os_ostream raw_os(os);
+
+
+	for (unsigned int i = 0; i <= path.size(); i++) {
+		const ExecutionTrace &trace = (**crtNode).getTrace();
+		// Output each instruction in the node
+		for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
+				it != trace.getEntries().end(); it++) {
+			if (InstructionTraceEntry *instEntry = dynamic_cast<InstructionTraceEntry*>(*it)) {
+				klee::KInstruction *ki = instEntry->getInstruction();
+				bool newBB = false;
+				bool newFn = false;
+
+				if (ki->inst->getParent() != crtBasicBlock) {
+					crtBasicBlock = ki->inst->getParent();
+					newBB = true;
+				}
+
+				if (crtBasicBlock != NULL && crtBasicBlock->getParent() != crtFunction) {
+					crtFunction = crtBasicBlock->getParent();
+					newFn = true;
+				}
+
+				if (newFn) {
+					os << std::endl;
+					os << "   Function '" << ((crtFunction != NULL) ? crtFunction->getNameStr() : "") << "':" << std::endl;
+				}
+
+				if (newBB) {
+					os << "----------- " << ((crtBasicBlock != NULL) ? crtBasicBlock->getNameStr() : "") << " ----" << std::endl;
+				}
+
+				boost::io::ios_all_saver saver(os);
+				os << std::setw(9) << ki->info->assemblyLine << ": ";
+				saver.restore();
+				ki->inst->print(raw_os, NULL);
+				os << std::endl;
+			} else if (DebugLogEntry *logEntry = dynamic_cast<DebugLogEntry*>(*it)) {
+				os << logEntry->getMessage() << std::endl;
+			}
+		}
+
+		if (i < path.size()) {
+			crtNode = crtNode->getChild(WORKER_LAYER_STATES, path[i]);
+		}
+	}
+}
+
+static void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
+	const WorkerTree::Node *node = state->getWorkerNode().get();
+	serializeExecutionTrace(os, node);
+}
+
+/*******************************************************************************
+ * KLEE INITIALIZATION CODE
+ ******************************************************************************/
 
 // This is a terrible hack until we get some real modelling of the
 // system. All we do is check the undefined symbols and m and warn about
@@ -166,76 +241,7 @@ static const char *unsafeExternals[] = { "fork", // oh lord
 
 #define NELEMS(array) (sizeof(array)/sizeof(array[0]))
 
-static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) {
-	assert(node->layerExists(WORKER_LAYER_STATES));
-	std::vector<int> path;
-	const WorkerTree::Node *crtNode = node;
-
-	while (crtNode->getParent() != NULL) {
-		path.push_back(crtNode->getIndex());
-		crtNode = crtNode->getParent();
-	}
-
-	std::reverse(path.begin(), path.end());
-
-
-	const llvm::BasicBlock *crtBasicBlock = NULL;
-	const llvm::Function *crtFunction = NULL;
-
-	llvm::raw_os_ostream raw_os(os);
-
-
-	for (unsigned int i = 0; i <= path.size(); i++) {
-		const ExecutionTrace &trace = (**crtNode).getTrace();
-		// Output each instruction in the node
-		for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
-				it != trace.getEntries().end(); it++) {
-			if (InstructionTraceEntry *instEntry = dynamic_cast<InstructionTraceEntry*>(*it)) {
-				klee::KInstruction *ki = instEntry->getInstruction();
-				bool newBB = false;
-				bool newFn = false;
-
-				if (ki->inst->getParent() != crtBasicBlock) {
-					crtBasicBlock = ki->inst->getParent();
-					newBB = true;
-				}
-
-				if (crtBasicBlock != NULL && crtBasicBlock->getParent() != crtFunction) {
-					crtFunction = crtBasicBlock->getParent();
-					newFn = true;
-				}
-
-				if (newFn) {
-					os << std::endl;
-					os << "   Function '" << ((crtFunction != NULL) ? crtFunction->getNameStr() : "") << "':" << std::endl;
-				}
-
-				if (newBB) {
-					os << "----------- " << ((crtBasicBlock != NULL) ? crtBasicBlock->getNameStr() : "") << " ----" << std::endl;
-				}
-
-				boost::io::ios_all_saver saver(os);
-				os << std::setw(9) << ki->info->assemblyLine << ": ";
-				saver.restore();
-				ki->inst->print(raw_os, NULL);
-				os << std::endl;
-			} else if (DebugLogEntry *logEntry = dynamic_cast<DebugLogEntry*>(*it)) {
-				os << logEntry->getMessage() << std::endl;
-			}
-		}
-
-		if (i < path.size()) {
-			crtNode = crtNode->getChild(WORKER_LAYER_STATES, path[i]);
-		}
-	}
-}
-
-static void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
-	const WorkerTree::Node *node = state->getWorkerNode().get();
-	serializeExecutionTrace(os, node);
-}
-
-void JobManager::externalsAndGlobalsCheck(const llvm::Module *m) {
+static void externalsAndGlobalsCheck(const llvm::Module *m) {
 	std::map<std::string, bool> externals;
 	std::set<std::string> modelled(modelledExternals, modelledExternals
 			+NELEMS(modelledExternals));
@@ -308,6 +314,10 @@ void JobManager::externalsAndGlobalsCheck(const llvm::Module *m) {
 				it->second ? "variable" : "function", ext.c_str());
 	}
 }
+
+/*******************************************************************************
+ * Job Manager Methods
+ ******************************************************************************/
 
 JobManager::JobManager(llvm::Module *module) :
 		initialized(false), terminationRequest(false), origModule(module) {
