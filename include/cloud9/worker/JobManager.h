@@ -11,6 +11,7 @@
 
 #include "cloud9/Logger.h"
 #include "cloud9/worker/TreeNodeInfo.h"
+#include "cloud9/worker/SymbolicEngine.h"
 
 #include <boost/thread.hpp>
 #include <list>
@@ -26,64 +27,16 @@ namespace klee {
 class Interpreter;
 class ExecutionState;
 class Searcher;
+class KModule;
 }
 
 namespace cloud9 {
 
 namespace worker {
 
-/*
- *
- */
-class SymbolicState {
-	friend class JobManager;
-private:
-	klee::ExecutionState *kleeState;
-	WorkerTree::NodePin nodePin;
-
-	void rebindToNode(WorkerTree::Node *node) {
-		if (nodePin) {
-			(**nodePin).symState = NULL;
-		}
-
-		nodePin = node->pin(WORKER_LAYER_STATES);
-		(**node).symState = this;
-	}
-public:
-	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), nodePin(WORKER_LAYER_STATES) {
-			kleeState->setCloud9State(this);
-	}
-
-	virtual ~SymbolicState() { }
-
-	klee::ExecutionState *getKleeState() const { return kleeState; }
-
-	WorkerTree::NodePin &getNode() const { return nodePin; }
-};
-
-/*
- *
- */
-class ExecutionJob {
-	friend class JobManager;
-private:
-	WorkerTree::NodePin nodePin;
-
-	void rebindToNode(WorkerTree::Node *node) {
-		if (nodePin) {
-			(**nodePin).job = NULL;
-		}
-
-		nodePin = node->pin(WORKER_LAYER_JOBS);
-		(**node).job = this;
-	}
-public:
-	ExecutionJob() : nodePin(WORKER_LAYER_JOBS) {}
-	virtual ~ExecutionJob() {}
-
-	WorkerTree::NodePin &getNode() const { return nodePin; }
-};
+class SymbolicState;
+class ExecutionJob;
+class KleeHandler;
 
 /*
  *
@@ -94,13 +47,14 @@ public:
 	virtual ~JobSelectionStrategy() {};
 
 public:
-	virtual void onJobEnqueued(ExplorationJob *job) { };
-	virtual void onJobsExported() { };
+	virtual void onJobAdded(ExecutionJob *job) = 0;
+	virtual ExecutionJob* onNextJobSelection() = 0;
+	virtual void onRemovingJob(ExecutionJob *job) = 0;
+	virtual void onRemovingJobs() = 0;
 
-	virtual void onStateActivated(klee::ExecutionState *state) { };
-	virtual void onStateDeactivated(klee::ExecutionState *state) { };
-
-	virtual void onNextJobSelection(ExplorationJob *&job) = 0;
+	virtual void onStateActivated(SymbolicState *state) = 0;
+	virtual void onStateUpdated(SymbolicState *state) = 0;
+	virtual void onStateDeactivated(SymbolicState *state) = 0;
 };
 
 
@@ -149,14 +103,7 @@ private:
 
 	void dumpStateTrace(WorkerTree::Node *node);
 
-	boost::mutex executorMutex;
-
-	/*
-	 *
-	 */
-	void explodeJob(ExplorationJob *job, std::set<ExplorationJob*> &newJobs);
-
-	void submitJob(ExplorationJob* job);
+	void submitJob(ExecutionJob* job);
 
 	template<typename JobIterator>
 	void submitJobs(JobIterator begin, JobIterator end) {
@@ -172,10 +119,10 @@ private:
 	}
 
 
-	ExplorationJob* dequeueJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
-	ExplorationJob* dequeueJob();
+	ExecutionJob* selectJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
+	ExecutionJob* selectJob();
 
-	void finalizeJob(ExplorationJob *job);
+	void finalizeJob(ExecutionJob *job);
 
 	void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
@@ -183,12 +130,11 @@ private:
 	void cleanupStatistics();
 
 	void selectJobs(WorkerTree::Node *root,
-			std::vector<ExplorationJob*> &jobSet, int maxCount);
+			std::vector<ExecutionJob*> &jobSet, int maxCount);
 
 	unsigned int countJobs(WorkerTree::Node *root);
-	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
+	ExecutionJob *createJob(WorkerTree::Node *root, bool foreign);
 
-	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
 
 	void initialize(llvm::Module *module, llvm::Function *mainFn, int argc, char **argv,
 			char **envp);
@@ -205,8 +151,6 @@ private:
 	void exploreNode(WorkerTree::Node *node);
 
 	void replayPath(WorkerTree::Node *pathEnd);
-
-	JobManager(WorkerTree *tree, llvm::Module *module);
 
 	void updateTreeOnBranch(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
@@ -237,7 +181,7 @@ public:
 	void processJobs(unsigned int timeOut = 0);
 	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
 
-	void executeJob(ExplorationJob *job);
+	void executeJob(ExecutionJob *job);
 
 	void finalize();
 

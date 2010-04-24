@@ -21,6 +21,7 @@
  */
 
 #include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/TreeObjects.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManagerBehaviors.h"
 #include "cloud9/Logger.h"
@@ -316,8 +317,11 @@ static void externalsAndGlobalsCheck(const llvm::Module *m) {
 }
 
 /*******************************************************************************
- * Job Manager Methods
+ * JOB MANAGER METHODS
  ******************************************************************************/
+
+
+/* Initialization Methods *****************************************************/
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
 		char **argv, char **envp) : terminationRequest(false) {
@@ -360,19 +364,10 @@ void JobManager::initialize(llvm::Module *module, llvm::Function *_mainFn, int a
 
 	initStrategy();
 	initStatistics();
-	initHandlers();
 	initInstrumentation();
 	initBreakpoints();
 
 	initRootState(mainFn, argc, argv, envp);
-}
-
-JobManager::~JobManager() {
-	if (symbEngine != NULL) {
-		delete symbEngine;
-	}
-
-	cloud9::instrum::theInstrManager.stop();
 }
 
 void JobManager::initRootState(llvm::Function *f, int argc,
@@ -415,11 +410,45 @@ void JobManager::initStatistics() {
 	refineStats = false;
 }
 
-const llvm::Module *JobExecutor::getModule() const {
-	return finalModule->module;
+void JobManager::initInstrumentation() {
+	std::string statsFileName = kleeHandler->getOutputFilename(CLOUD9_STATS_FILE_NAME);
+	std::string eventsFileName = kleeHandler->getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
+
+	std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
+	std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
+	cloud9::instrum::InstrumentationWriter *writer =
+			new cloud9::instrum::LocalFileWriter(*instrStatsStream,
+					*instrEventsStream);
+
+	cloud9::instrum::theInstrManager.registerWriter(writer);
+	cloud9::instrum::theInstrManager.start();
 }
 
-void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs) {
+void JobManager::initBreakpoints() {
+	// Register code breakpoints
+	for (unsigned int i = 0; i < CodeBreakpoints.size(); i++) {
+		setCodeBreakpoint(CodeBreakpoints[i]);
+	}
+}
+
+/* Finalization Methods *******************************************************/
+
+JobManager::~JobManager() {
+	if (symbEngine != NULL) {
+		delete symbEngine;
+	}
+
+	cloud9::instrum::theInstrManager.stop();
+}
+
+void JobManager::finalizeExecution() {
+	symbEngine->deregisterStateEventHandler(this);
+	symbEngine->destroyStates();
+}
+
+
+
+/*void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs) {
 	assert(job->isFinished());
 
 	for (ExplorationJob::frontier_t::iterator it = job->frontier.begin();
@@ -430,7 +459,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 
 		newJobs.insert(newJob);
 	}
-}
+}*/
 
 
 
@@ -447,10 +476,7 @@ unsigned JobManager::getModuleCRC() const {
 	return crc.checksum();
 }
 
-void JobManager::finalizeExecution() {
-	symbEngine->deregisterStateEventHandler(this);
-	symbEngine->destroyStates();
-}
+
 
 void JobManager::submitJob(ExplorationJob* job) {
 	assert((**job->jobRoot).symState || job->foreign);
@@ -468,7 +494,7 @@ void JobManager::finalizeJob(ExplorationJob *job) {
 	(**job->jobRoot).job = NULL;
 }
 
-ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock,  unsigned int timeOut) {
+ExplorationJob* JobManager::selectJob(boost::unique_lock<boost::mutex> &lock,  unsigned int timeOut) {
 	ExplorationJob *job;
 
 	selHandler->onNextJobSelection(job);
@@ -499,7 +525,7 @@ ExplorationJob* JobManager::dequeueJob(boost::unique_lock<boost::mutex> &lock,  
 	return job;
 }
 
-ExplorationJob* JobManager::dequeueJob() {
+ExplorationJob* JobManager::selectJob() {
 	ExplorationJob *job;
 	selHandler->onNextJobSelection(job);
 
@@ -530,12 +556,12 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 			if (timeOut > 0) {
 				TimeValue remaining = deadline - now;
 
-				job = dequeueJob(lock, remaining.seconds());
+				job = selectJob(lock, remaining.seconds());
 			} else {
-				job = dequeueJob(lock, 0);
+				job = selectJob(lock, 0);
 			}
 		} else {
-			job = dequeueJob();
+			job = selectJob();
 		}
 
 		if (blocking && timeOut == 0) {
@@ -981,27 +1007,6 @@ void JobManager::dumpStateTrace(WorkerTree::Node *node) {
 	serializeExecutionTrace(*os, state);
 
 	delete os;
-}
-
-void JobManager::initInstrumentation() {
-	std::string statsFileName = kleeHandler->getOutputFilename(CLOUD9_STATS_FILE_NAME);
-	std::string eventsFileName = kleeHandler->getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
-
-	std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
-	std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
-	cloud9::instrum::InstrumentationWriter *writer =
-			new cloud9::instrum::LocalFileWriter(*instrStatsStream,
-					*instrEventsStream);
-
-	cloud9::instrum::theInstrManager.registerWriter(writer);
-	cloud9::instrum::theInstrManager.start();
-}
-
-void JobManager::initBreakpoints() {
-	// Register code breakpoints
-	for (unsigned int i = 0; i < CodeBreakpoints.size(); i++) {
-		setCodeBreakpoint(CodeBreakpoints[i]);
-	}
 }
 
 void JobManager::onStateBranched(klee::ExecutionState *state,
