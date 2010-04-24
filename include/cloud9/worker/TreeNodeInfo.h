@@ -27,6 +27,8 @@ class ExecutionJob;
 
 class TreeNodeInfo {
 	friend class JobManager;
+	friend class SymbolicState;
+	friend class ExecutionJob;
 private:
 	SymbolicState *symState;
 	ExecutionJob *job;

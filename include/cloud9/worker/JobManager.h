@@ -39,10 +39,19 @@ class SymbolicState {
 	friend class JobManager;
 private:
 	klee::ExecutionState *kleeState;
-	WorkerTree::NodePin node;
+	WorkerTree::NodePin nodePin;
+
+	void rebindToNode(WorkerTree::Node *node) {
+		if (nodePin) {
+			(**nodePin).symState = NULL;
+		}
+
+		nodePin = node->pin(WORKER_LAYER_STATES);
+		(**node).symState = this;
+	}
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), node(WORKER_LAYER_STATES) {
+		kleeState(state), nodePin(WORKER_LAYER_STATES) {
 			kleeState->setCloud9State(this);
 	}
 
@@ -50,7 +59,7 @@ public:
 
 	klee::ExecutionState *getKleeState() const { return kleeState; }
 
-	WorkerTree::NodePin &getNode() const { return kleeState->getWorkerNode(); }
+	WorkerTree::NodePin &getNode() const { return nodePin; }
 };
 
 /*
@@ -59,12 +68,21 @@ public:
 class ExecutionJob {
 	friend class JobManager;
 private:
-	WorkerTree::NodePin node;
+	WorkerTree::NodePin nodePin;
+
+	void rebindToNode(WorkerTree::Node *node) {
+		if (nodePin) {
+			(**nodePin).job = NULL;
+		}
+
+		nodePin = node->pin(WORKER_LAYER_JOBS);
+		(**node).job = this;
+	}
 public:
-	ExecutionJob() : node(WORKER_LAYER_JOBS) {}
+	ExecutionJob() : nodePin(WORKER_LAYER_JOBS) {}
 	virtual ~ExecutionJob() {}
 
-	WorkerTree::NodePin &getNode() const { return node; }
+	WorkerTree::NodePin &getNode() const { return nodePin; }
 };
 
 /*
@@ -95,8 +113,8 @@ private:
 	SymbolicEngine *symbEngine;
 
 	KleeHandler *kleeHandler;
+	klee::KModule *kleeModule;
 
-	klee::KModule *module;
 	llvm::Function *mainFn;
 
 
@@ -115,9 +133,7 @@ private:
 
 	bool terminationRequest;
 
-
-
-	JobSelectionStrategy *selHandler;
+	JobSelectionStrategy *selStrategy;
 
 	/*
 	 * Breakpoint management data structures
@@ -173,11 +189,15 @@ private:
 	ExplorationJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	JobExecutor *createExecutor(llvm::Module *module, int argc, char **argv);
-	void terminateJobs(WorkerTree::Node *root);
 
-	void initHandlers();
+	void initialize(llvm::Module *module, llvm::Function *mainFn, int argc, char **argv,
+			char **envp);
+
+	void initKlee();
 	void initInstrumentation();
 	void initBreakpoints();
+	void initStatistics();
+	void initStrategy();
 
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
@@ -201,13 +221,9 @@ private:
 	void setCodeBreakpoint(int assemblyLine);
 	void setPathBreakpoint(ExecutionPathPin path);
 public:
-	JobManager(llvm::Module *module);
+	JobManager(llvm::Module *module, std::string mainFnName, int argc, char **argv,
+			char **envp);
 	virtual ~JobManager();
-
-	void setupStartingPoint(llvm::Function *mainFn, int argc, char **argv,
-			char **envp);
-	void setupStartingPoint(std::string mainFnName, int argc, char **argv,
-			char **envp);
 
 	WorkerTree *getTree() { return tree; }
 
@@ -259,7 +275,6 @@ public:
 	void importJobs(ExecutionPathSetPin paths);
 	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
 			std::vector<int> counts);
-	void terminateJobs(WorkerTree::Node *root);
 };
 
 }

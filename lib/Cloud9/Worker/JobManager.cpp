@@ -319,11 +319,73 @@ static void externalsAndGlobalsCheck(const llvm::Module *m) {
  * Job Manager Methods
  ******************************************************************************/
 
-JobManager::JobManager(llvm::Module *module) :
-		initialized(false), terminationRequest(false), origModule(module) {
+JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
+		char **argv, char **envp) : terminationRequest(false) {
 
 	tree = new WorkerTree();
 
+	llvm::Function *mainFn = module->getFunction(mainFnName);
+
+	initialize(module, mainFn, argc, argv, envp);
+}
+
+void JobManager::initialize(llvm::Module *module, llvm::Function *_mainFn, int argc, char **argv,
+		char **envp) {
+	mainFn = _mainFn;
+	assert(mainFn);
+
+	klee::Interpreter::InterpreterOptions iOpts;
+	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
+
+	llvm::sys::Path libraryPath(getKleeLibraryPath());
+
+	Interpreter::ModuleOptions mOpts(libraryPath.c_str(),
+	/*Optimize=*/OptimizeModule,
+	/*CheckDivZero=*/CheckDivZero);
+
+	kleeHandler = new KleeHandler(argc, argv);
+	interpreter = klee::Interpreter::create(iOpts, kleeHandler);
+	kleeHandler->setInterpreter(interpreter);
+
+	symbEngine = dynamic_cast<SymbolicEngine*>(interpreter);
+	interpreter->setModule(module, mOpts);
+
+	kleeModule = symbEngine->getModule();
+
+	externalsAndGlobalsCheck(kleeModule->module);
+
+	symbEngine->registerStateEventHandler(this);
+
+	theStatisticManager->trackChanges(stats::locallyCoveredInstructions);
+
+	initStrategy();
+	initStatistics();
+	initHandlers();
+	initInstrumentation();
+	initBreakpoints();
+
+	initRootState(mainFn, argc, argv, envp);
+}
+
+JobManager::~JobManager() {
+	if (symbEngine != NULL) {
+		delete symbEngine;
+	}
+
+	cloud9::instrum::theInstrManager.stop();
+}
+
+void JobManager::initRootState(llvm::Function *f, int argc,
+			char **argv, char **envp) {
+	klee::ExecutionState *kState = symbEngine->createRootState(f);
+	SymbolicState *state = new SymbolicState(kState);
+
+	state->rebindToNode(tree->getRoot());
+
+	symbEngine->initRootState(kState, argc, argv, envp);
+}
+
+void JobManager::initStrategy() {
 	switch (JobSelection) {
 	case RandomSel:
 	  selHandler = new RandomSelectionHandler();
@@ -335,28 +397,22 @@ JobManager::JobManager(llvm::Module *module) :
 	  break;
 	case CoverageOptimizedSel:
 	  selHandler = 
-	    new WeightedRandomSelectionHandler(WeightedRandomSelectionHandler::CoveringNew,
+		new WeightedRandomSelectionHandler(WeightedRandomSelectionHandler::CoveringNew,
 							  tree);
 	  CLOUD9_INFO("Using weighted random job selection strategy");
 	  break;
 	default:
 	  assert(0 && "undefined job selection strategy");
 	}
+}
 
+void JobManager::initStatistics() {
 	// Configure the root as a statistics node
-	WorkerTree::NodePin rootPin = this->tree->getRoot()->pin(WORKER_LAYER_STATISTICS);
+	WorkerTree::NodePin rootPin = tree->getRoot()->pin(WORKER_LAYER_STATISTICS);
 
 	stats.insert(rootPin);
 	statChanged = true;
 	refineStats = false;
-}
-
-JobManager::~JobManager() {
-	if (symbEngine != NULL) {
-		delete symbEngine;
-	}
-
-	cloud9::instrum::theInstrManager.stop();
 }
 
 const llvm::Module *JobExecutor::getModule() const {
@@ -376,69 +432,7 @@ void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJ
 	}
 }
 
-void JobManager::setupStartingPoint(llvm::Function *mainFn, int argc,
-		char **argv, char **envp) {
 
-	assert(!initialized);
-	assert(mainFn);
-
-	this->mainFn = mainFn;
-
-	klee::Interpreter::InterpreterOptions iOpts;
-	iOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
-
-
-	llvm::sys::Path libraryPath(getKleeLibraryPath());
-
-	Interpreter::ModuleOptions mOpts(libraryPath.c_str(),
-	/*Optimize=*/OptimizeModule,
-	/*CheckDivZero=*/CheckDivZero);
-
-	kleeHandler = new KleeHandler(argc, argv);
-	interpreter = klee::Interpreter::create(iOpts, kleeHandler);
-	kleeHandler->setInterpreter(interpreter);
-
-	symbEngine = dynamic_cast<SymbolicEngine*>(interpreter);
-	interpreter->setModule(module, mOpts);
-
-	finalModule = symbEngine->getModule();
-
-	externalsAndGlobalsCheck(finalModule->module);
-
-	symbEngine->registerStateEventHandler(this);
-
-	assert(tree->getDegree() == 2);
-
-	theStatisticManager->trackChanges(stats::locallyCoveredInstructions);
-	initHandlers();
-	initInstrumentation();
-	initBreakpoints();
-
-	// Update the module with the optimizations
-	finalModule = executor->getModule();
-	initRootState(mainFn, argc, argv, envp);
-
-	initialized = true;
-}
-
-void JobManager::setupStartingPoint(std::string mainFnName, int argc,
-		char **argv, char **envp) {
-
-	llvm::Function *mainFn = origModule->getFunction(mainFnName);
-
-	setupStartingPoint(mainFn, argc, argv, envp);
-}
-
-void JobManager::initRootState(llvm::Function *f, int argc,
-			char **argv, char **envp) {
-	klee::ExecutionState *state = symbEngine->createRootState(f);
-	WorkerTree::NodePin node = tree->getRoot()->pin(WORKER_LAYER_STATES);
-
-	(**node).symState = state;
-	state->setWorkerNode(node);
-
-	symbEngine->initRootState(state, argc, argv, envp);
-}
 
 unsigned JobManager::getModuleCRC() const {
 	std::string moduleContents;
@@ -987,31 +981,6 @@ void JobManager::dumpStateTrace(WorkerTree::Node *node) {
 	serializeExecutionTrace(*os, state);
 
 	delete os;
-}
-
-void JobManager::initHandlers() {
-	switch (JobSizing) {
-	case UnlimitedSize:
-	  sizingHandler = new UnlimitedSizingHandler();
-	  break;
-	case FixedSize:
-	  sizingHandler = new FixedSizingHandler(MaxJobSize, MaxJobDepth,
-						 MaxJobOperations);
-	  break;
-	default:
-	  assert(0 && "unknown JobSizing");
-	}
-
-	///XXX: exploring states within the same job
-	///might become obsolete after implementing the interleaved searcher
-	switch (JobExploration) {
-	case RandomPathExpl:
-	  //this will choose states at random path exploration
-	  expHandler = new RandomPathExplorationHandler();
-	  break;
-	default:
-	  assert(0 && "undefined job exploration strategy");
-	}
 }
 
 void JobManager::initInstrumentation() {
