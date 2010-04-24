@@ -42,7 +42,7 @@ public:
 
 	klee::ExecutionState *getKleeState() const { return kleeState; }
 
-	WorkerTree::NodePin &getNode() const { return nodePin; }
+	WorkerTree::NodePin &getNode() { return nodePin; }
 };
 
 /*
@@ -65,7 +65,7 @@ public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS) {}
 	virtual ~ExecutionJob() {}
 
-	WorkerTree::NodePin &getNode() const { return nodePin; }
+	WorkerTree::NodePin &getNode() { return nodePin; }
 };
 
 }

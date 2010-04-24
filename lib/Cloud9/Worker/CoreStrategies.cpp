@@ -5,8 +5,8 @@
  *      Author: stefan
  */
 
-#include "cloud9/worker/JobManagerBehaviors.h"
-#include "cloud9/worker/ExplorationJob.h"
+#include "cloud9/worker/CoreStrategies.h"
+#include "cloud9/worker/TreeObjects.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/Logger.h"
@@ -28,70 +28,13 @@ namespace cloud9 {
 
 namespace worker {
 
-static ExplorationJob *selectRandomPathJob(WorkerTree *tree) {
+static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
 	WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_JOBS, tree->getRoot(), theRNG);
-	ExplorationJob *job = (**node).getJob();
+	ExecutionJob *job = (**node).getJob();
 
 	assert(job != NULL || node == tree->getRoot());
 
 	return job;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// KLEE Selection Handler
-////////////////////////////////////////////////////////////////////////////////
-
-class RandomPathSearcher: public Searcher {
-private:
-	WorkerTree *tree;
-public:
-	RandomPathSearcher(WorkerTree *t) :
-		tree(t) {
-
-	}
-
-	~RandomPathSearcher() {};
-
-	ExecutionState &selectState() {
-		ExplorationJob *job = selectRandomPathJob(tree);
-
-		return *(**(job->getJobRoot())).getSymbolicState();
-	}
-
-	void update(ExecutionState *current,
-			const std::set<ExecutionState*> &addedStates, const std::set<
-					ExecutionState*> &removedStates) {
-		// Do nothing
-	}
-
-	bool empty() {
-		WorkerTree::Node *root = tree->getRoot();
-
-		return root->getCount(WORKER_LAYER_JOBS) == 0 && (**root).getJob() == NULL;
-	}
-	void printName(std::ostream &os) {
-		os << "RandomPathSearcher\n";
-	}
-};
-
-KleeSelectionHandler::KleeSelectionHandler(SymbolicEngine *e) {
-	// TODO
-}
-
-KleeSelectionHandler::~KleeSelectionHandler() {
-	// TODO
-}
-
-void KleeSelectionHandler::onJobEnqueued(ExplorationJob *job) {
-	// TODO
-}
-
-void KleeSelectionHandler::onJobsExported() {
-	// TODO
-}
-
-void KleeSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
-	// TODO
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,33 +26,50 @@ namespace worker {
 #define CLOUD9_CHOOSE_NEW_JOBS 0.8
 
 
-class ExplorationJob;
+class ExecutionJob;
 class SymbolicEngine;
+class SymbolicState;
 
-class RandomSelectionHandler: public JobManager::SelectionHandler {
+class BasicStrategy : public JobSelectionStrategy {
+public:
+	BasicStrategy() {};
+	virtual ~BasicStrategy() {};
+
+public:
+	virtual void onJobAdded(ExecutionJob *job) { };
+	virtual ExecutionJob* onNextJobSelection() = 0;
+	virtual void onRemovingJob(ExecutionJob *job) { };
+	virtual void onRemovingJobs() { };
+
+	virtual void onStateActivated(SymbolicState *state) { };
+	virtual void onStateUpdated(SymbolicState *state) { };
+	virtual void onStateDeactivated(SymbolicState *state) { };
+};
+
+class RandomSelectionHandler: public BasicStrategy {
 private:
-	std::vector<ExplorationJob*> jobs;
+	std::vector<ExecutionJob*> jobs;
 public:
 	RandomSelectionHandler() {};
 	virtual ~RandomSelectionHandler() {};
 
-	virtual void onJobEnqueued(ExplorationJob *job);
-	virtual void onJobsExported();
-
-	virtual void onNextJobSelection(ExplorationJob *&job);
+	virtual void onJobAdded(ExecutionJob *job) { };
+	virtual ExecutionJob* onNextJobSelection() = 0;
+	virtual void onRemovingJob(ExecutionJob *job) { };
+	virtual void onRemovingJobs() { };
 };
 
-class RandomPathSelectionHandler: public JobManager::SelectionHandler {
+class RandomPathSelectionHandler: public BasicStrategy {
 private:
 	WorkerTree *tree;
 public:
 	RandomPathSelectionHandler(WorkerTree *t) : tree(t) {};
 	virtual ~RandomPathSelectionHandler() {};
 
-	virtual void onNextJobSelection(ExplorationJob *&job);
+	virtual ExecutionJob* onNextJobSelection() = 0;
 };
 
-class WeightedRandomSelectionHandler: public JobManager::SelectionHandler {
+class WeightedRandomSelectionHandler: public BasicStrategy {
 public:
   enum WeightType {
     Depth,
@@ -95,7 +112,7 @@ public:
   virtual void onNextJobSelection(ExplorationJob *&job);
 };
   
-class KleeSelectionHandler: public JobManager::SelectionHandler {
+class KleeSelectionHandler: public BasicStrategy {
 private:
 	klee::Searcher *kleeSearcher;
 	std::vector<ExplorationJob*> jobs;
