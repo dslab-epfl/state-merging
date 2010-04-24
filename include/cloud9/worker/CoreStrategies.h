@@ -12,6 +12,7 @@
 #include "cloud9/worker/JobManager.h"
 
 #include <vector>
+#include <map>
 #include "klee/ExecutionState.h"
 #include "klee/Internal/ADT/DiscretePDF.h"
 
@@ -29,6 +30,25 @@ namespace worker {
 class ExecutionJob;
 class SymbolicEngine;
 class SymbolicState;
+
+/*
+ * The abstract base class for all job strategies
+ */
+class JobSelectionStrategy {
+public:
+	JobSelectionStrategy() {};
+	virtual ~JobSelectionStrategy() {};
+
+public:
+	virtual void onJobAdded(ExecutionJob *job) = 0;
+	virtual ExecutionJob* onNextJobSelection() = 0;
+	virtual void onRemovingJob(ExecutionJob *job) = 0;
+	virtual void onRemovingJobs() = 0;
+
+	virtual void onStateActivated(SymbolicState *state) = 0;
+	virtual void onStateUpdated(SymbolicState *state) = 0;
+	virtual void onStateDeactivated(SymbolicState *state) = 0;
+};
 
 class BasicStrategy : public JobSelectionStrategy {
 public:
@@ -49,14 +69,15 @@ public:
 class RandomSelectionHandler: public BasicStrategy {
 private:
 	std::vector<ExecutionJob*> jobs;
+	std::map<ExecutionJob*, unsigned> indices;
 public:
 	RandomSelectionHandler() {};
 	virtual ~RandomSelectionHandler() {};
 
-	virtual void onJobAdded(ExecutionJob *job) { };
-	virtual ExecutionJob* onNextJobSelection() = 0;
-	virtual void onRemovingJob(ExecutionJob *job) { };
-	virtual void onRemovingJobs() { };
+	virtual void onJobAdded(ExecutionJob *job);
+	virtual ExecutionJob* onNextJobSelection();
+	virtual void onRemovingJob(ExecutionJob *job);
+	virtual void onRemovingJobs();
 };
 
 class RandomPathSelectionHandler: public BasicStrategy {
@@ -66,8 +87,10 @@ public:
 	RandomPathSelectionHandler(WorkerTree *t) : tree(t) {};
 	virtual ~RandomPathSelectionHandler() {};
 
-	virtual ExecutionJob* onNextJobSelection() = 0;
+	virtual ExecutionJob* onNextJobSelection();
 };
+
+#if 0
 
 class WeightedRandomSelectionHandler: public BasicStrategy {
 public:
@@ -80,8 +103,8 @@ public:
     CoveringNew
   };
 private:
-  std::vector<ExplorationJob*> jobs;
-  std::vector<ExplorationJob*> toReplayJobs;
+  std::vector<ExecutionJob*> jobs;
+  std::vector<ExecutionJob*> toReplayJobs;
   klee::DiscretePDF<klee::ExecutionState*> *states;
   WeightType type;
   WorkerTree *tree;
@@ -125,6 +148,8 @@ public:
 
 	virtual void onNextJobSelection(ExplorationJob *&job);
 };
+
+#endif
 
 }
 

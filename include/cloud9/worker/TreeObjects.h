@@ -53,19 +53,23 @@ class ExecutionJob {
 private:
 	WorkerTree::NodePin nodePin;
 
-	void rebindToNode(WorkerTree::Node *node) {
-		if (nodePin) {
-			(**nodePin).job = NULL;
-		}
+	bool exported;
+	bool removing;
+
+	void bindToNode(WorkerTree::Node *node) {
+		assert(!nodePin);
 
 		nodePin = node->pin(WORKER_LAYER_JOBS);
 		(**node).job = this;
 	}
 public:
-	ExecutionJob() : nodePin(WORKER_LAYER_JOBS) {}
+	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), exported(false), removing(false) {}
 	virtual ~ExecutionJob() {}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
+
+	bool isExported() const { return exported; }
+	bool isRemoving() const { return removing; }
 };
 
 }

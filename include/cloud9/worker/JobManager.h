@@ -37,25 +37,7 @@ namespace worker {
 class SymbolicState;
 class ExecutionJob;
 class KleeHandler;
-
-/*
- *
- */
-class JobSelectionStrategy {
-public:
-	JobSelectionStrategy() {};
-	virtual ~JobSelectionStrategy() {};
-
-public:
-	virtual void onJobAdded(ExecutionJob *job) = 0;
-	virtual ExecutionJob* onNextJobSelection() = 0;
-	virtual void onRemovingJob(ExecutionJob *job) = 0;
-	virtual void onRemovingJobs() = 0;
-
-	virtual void onStateActivated(SymbolicState *state) = 0;
-	virtual void onStateUpdated(SymbolicState *state) = 0;
-	virtual void onStateDeactivated(SymbolicState *state) = 0;
-};
+class JobSelectionStrategy;
 
 
 class JobManager {

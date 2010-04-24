@@ -28,78 +28,82 @@ class TreeNode;
 
 
 /* An adaptation of boost::intrusive_ptr */
-template <class NodeType>
-class NodePin
-{
+template<class NodeType>
+class NodePin {
 private:
-    typedef NodePin this_type;
+	typedef NodePin this_type;
 
 public:
-    NodePin(int layer): p_(0), layer_(layer) { }
+	NodePin(int layer) :
+		p_(0), layer_(layer) {
+	}
 
-    NodePin(NodeType * p, int layer): p_(p), layer_(layer) {
-    	assert(p_ != 0);
-        node_pin_add_ref(p_, layer_);
-    }
+	NodePin(NodeType * p, int layer) :
+		p_(p), layer_(layer) {
+		assert(p_ != 0);
+		node_pin_add_ref(p_, layer_);
+	}
 
-    NodePin(NodePin const & rhs): p_(rhs.p_), layer_(rhs.layer_) {
-    	assert(p_ != 0);
-        node_pin_add_ref(p_, layer_);
-    }
+	NodePin(NodePin const & rhs) :
+		p_(rhs.p_), layer_(rhs.layer_) {
+		assert(p_ != 0);
+		node_pin_add_ref(p_, layer_);
+	}
 
-    ~NodePin() {
-        if(p_ != 0) node_pin_release(p_, layer_);
-    }
+	~NodePin() {
+		if (p_ != 0)
+			node_pin_release(p_, layer_);
+	}
 
-    NodePin & operator=(NodePin const & rhs)
-    {
-        this_type(rhs).swap(*this);
-        return *this;
-    }
+	NodePin & operator=(NodePin const & rhs) {
+		this_type(rhs).swap(*this);
+		return *this;
+	}
 
-    NodeType * get() const
-    {
-        return p_;
-    }
+	NodeType * get() const {
+		return p_;
+	}
 
-    int layer() const { return layer_; }
+	int layer() const {
+		return layer_;
+	}
 
-    void reset() {
+	void reset() {
 		this_type(layer_).swap(*this);
 	}
 
-    NodeType & operator*() const
-    {
-        assert( p_ != 0 );
-        return *p_;
-    }
+	NodeType & operator*() const {
+		assert( p_ != 0 );
+		return *p_;
+	}
 
-    NodeType * operator->() const
-    {
-        assert( p_ != 0 );
-        return p_;
-    }
+	NodeType * operator->() const {
+		assert( p_ != 0 );
+		return p_;
+	}
 
-    typedef NodeType * NodePin::*unspecified_bool_type;
+	bool operator!() const {
+		return p_ == 0;
+	}
 
-    operator unspecified_bool_type () const
-    {
-        return p_ == 0? 0: &this_type::p_;
-    }
+	typedef NodeType * NodePin::*unspecified_bool_type;
 
-    void swap(NodePin & rhs)
-    {
-    	assert(layer_ == rhs.layer_);
+	operator unspecified_bool_type() const {
+		return p_ == 0 ? 0 : &this_type::p_;
+	}
 
-        NodeType * tmp = p_;
-        p_ = rhs.p_;
-        rhs.p_ = tmp;
-    }
+	void swap(NodePin & rhs) {
+		assert(layer_ == rhs.layer_);
+
+		NodeType * tmp = p_;
+		p_ = rhs.p_;
+		rhs.p_ = tmp;
+	}
 
 private:
 
-    NodeType * p_;
-    int layer_;
+	NodeType * p_;
+	int layer_;
 };
 
 template<class T, class U> inline bool operator==(NodePin<T> const & a, NodePin<U> const & b)

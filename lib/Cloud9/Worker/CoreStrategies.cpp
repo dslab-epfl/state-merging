@@ -41,18 +41,39 @@ static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
 // Random Selection Handler
 ////////////////////////////////////////////////////////////////////////////////
 
-void RandomSelectionHandler::onJobEnqueued(ExplorationJob *job) {
+void RandomSelectionHandler::onJobAdded(ExecutionJob *job) {
+	indices[job] = jobs.size();
 	jobs.push_back(job);
 }
 
-void RandomSelectionHandler::onJobsExported() {
+ExecutionJob* RandomSelectionHandler::onNextJobSelection() {
+	if (jobs.empty()) {
+		return NULL;
+	}
+
+	int index = klee::theRNG.getInt32() % jobs.size();
+
+	return jobs[index];
+}
+
+void RandomSelectionHandler::onRemovingJob(ExecutionJob *job) {
+	unsigned i = indices[job];
+	assert(job->isRemoving());
+
+	jobs[i] = jobs.back();
+	indices[jobs[i]] = i;
+	jobs.pop_back();
+}
+
+void RandomSelectionHandler::onRemovingJobs() {
 	unsigned i = 0;
 
 	while (i < jobs.size()) {
-		ExplorationJob *job = jobs[i];
+		ExecutionJob *job = jobs[i];
 
-		if (job->isFinished()) {
+		if (job->isRemoving()) {
 			jobs[i] = jobs.back();
+			indices[jobs[i]] = i;
 			jobs.pop_back();
 		} else {
 			i++;
@@ -60,31 +81,17 @@ void RandomSelectionHandler::onJobsExported() {
 
 	}
 
-	//CLOUD9_DEBUG("Removed " << removed << " jobs after export");
-}
-
-void RandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
-	if (jobs.empty()) {
-		job = NULL;
-		return;
-	}
-
-	int index = klee::theRNG.getInt32() % jobs.size();
-
-	job = jobs[index];
-	jobs[index] = jobs.back();
-
-	jobs.pop_back();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Random Path Selection Handler
 ////////////////////////////////////////////////////////////////////////////////
 
-
-void RandomPathSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
-  job = selectRandomPathJob(tree);
+ExecutionJob* RandomPathSelectionHandler::onNextJobSelection() {
+	return selectRandomPathJob(tree);
 }
+
+#if 0
 
 ////////////////////////////////////////////////////////////////////////////////
 // Weighted Random Selection Handler
@@ -260,6 +267,8 @@ void WeightedRandomSelectionHandler::onNextJobSelection(ExplorationJob *&job) {
   
   job = selectWeightedRandomJob(tree);
 }
+
+#endif
 
 
 }

@@ -23,7 +23,7 @@
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/TreeObjects.h"
 #include "cloud9/worker/WorkerCommon.h"
-#include "cloud9/worker/JobManagerBehaviors.h"
+#include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/instrum/InstrumentationManager.h"
