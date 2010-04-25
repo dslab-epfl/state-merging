@@ -53,6 +53,7 @@ class ExecutionJob {
 private:
 	WorkerTree::NodePin nodePin;
 
+	bool imported;
 	bool exported;
 	bool removing;
 
@@ -63,11 +64,12 @@ private:
 		(**node).job = this;
 	}
 public:
-	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), exported(false), removing(false) {}
+	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false), exported(false), removing(false) {}
 	virtual ~ExecutionJob() {}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
 
+	bool isImported() const { return imported; }
 	bool isExported() const { return exported; }
 	bool isRemoving() const { return removing; }
 };

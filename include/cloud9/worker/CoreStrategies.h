@@ -1,13 +1,13 @@
-//===-- JobManagerBehaviors.h ----------------------------------------------*- C++ -*-===//
+//===-- CoreStrategies.h ----------------------------------------*- C++ -*-===//
 /*
- * JobManagerBehaviors.h
+ * CoreStrategies.h
  *
  *  Created on: Jan 6, 2010
  *      Author: stefan
  */
 
-#ifndef JOBMANAGERBEHAVIORS_H_
-#define JOBMANAGERBEHAVIORS_H_
+#ifndef CORESTRATEGIES_H_
+#define CORESTRATEGIES_H_
 
 #include "cloud9/worker/JobManager.h"
 
@@ -155,4 +155,4 @@ public:
 
 }
 
-#endif /* JOBMANAGERBEHAVIORS_H_ */
+#endif /* CORESTRATEGIES_H_ */

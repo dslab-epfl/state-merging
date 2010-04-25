@@ -23,14 +23,20 @@
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/TreeObjects.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/instrum/InstrumentationManager.h"
+#include "cloud9/instrum/LocalFileWriter.h"
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"
+#include "llvm/Instructions.h"
 #include "llvm/System/TimeValue.h"
+#include "llvm/System/Path.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "klee/Interpreter.h"
 #include "klee/Statistics.h"
@@ -56,6 +62,7 @@
 #define CLOUD9_EVENTS_FILE_NAME		"c9-events.txt"
 
 using llvm::sys::TimeValue;
+using namespace llvm;
 
 namespace klee {
 namespace stats {
@@ -165,8 +172,8 @@ static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *no
 	}
 }
 
-static void serializeExecutionTrace(std::ostream &os, klee::ExecutionState *state) {
-	const WorkerTree::Node *node = state->getWorkerNode().get();
+static void serializeExecutionTrace(std::ostream &os, SymbolicState *state) {
+	const WorkerTree::Node *node = state->getNode().get();
 	serializeExecutionTrace(os, node);
 }
 
@@ -383,19 +390,21 @@ void JobManager::initRootState(llvm::Function *f, int argc,
 void JobManager::initStrategy() {
 	switch (JobSelection) {
 	case RandomSel:
-	  selHandler = new RandomSelectionHandler();
+	  selStrategy = new RandomSelectionHandler();
 	  CLOUD9_INFO("Using random job selection strategy");
 	  break;
 	case RandomPathSel:
-	  selHandler = new RandomPathSelectionHandler(tree);
+	  selStrategy = new RandomPathSelectionHandler(tree);
 	  CLOUD9_INFO("Using random path job selection strategy");
 	  break;
+#if 0
 	case CoverageOptimizedSel:
-	  selHandler = 
+	  selStrategy =
 		new WeightedRandomSelectionHandler(WeightedRandomSelectionHandler::CoveringNew,
 							  tree);
 	  CLOUD9_INFO("Using weighted random job selection strategy");
 	  break;
+#endif
 	default:
 	  assert(0 && "undefined job selection strategy");
 	}
@@ -461,13 +470,14 @@ void JobManager::finalizeExecution() {
 	}
 }*/
 
-
+/* Misc. Methods **************************************************************/
 
 unsigned JobManager::getModuleCRC() const {
 	std::string moduleContents;
 	llvm::raw_string_ostream os(moduleContents);
 
-	finalModule->module->print(os, NULL);
+	kleeModule->module->print(os, NULL);
+
 	os.flush();
 
 	boost::crc_ccitt_type crc;
@@ -476,9 +486,244 @@ unsigned JobManager::getModuleCRC() const {
 	return crc.checksum();
 }
 
+/* Job Manipulation Methods ***************************************************/
+
+void JobManager::processJobs(unsigned int timeOut) {
+	if (timeOut > 0) {
+		CLOUD9_INFO("Processing jobs with a timeout of " << timeOut << " seconds.");
+	}
+	processLoop(true, true, timeOut);
+}
+
+void JobManager::processJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
+	// First, we need to import the jobs in the manager
+	importJobs(paths);
+
+	// Then we execute them, but only them (non blocking, don't allow growth),
+	// until the queue is exhausted
+	processLoop(false, false, timeOut);
+}
+
+void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeOut) {
+	ExecutionJob *job = NULL;
+
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+	TimeValue deadline = TimeValue::now() + TimeValue(timeOut, 0);
+
+	while (!terminationRequest) {
+		TimeValue now = TimeValue::now();
+
+		if (timeOut > 0 && now > deadline) {
+			CLOUD9_INFO("Timeout reached. Suspending execution.");
+			break;
+		}
+
+		if (blocking) {
+			if (timeOut > 0) {
+				TimeValue remaining = deadline - now;
+
+				job = selectJob(lock, remaining.seconds());
+			} else {
+				job = selectJob(lock, 0);
+			}
+		} else {
+			job = selectJob();
+		}
+
+		if (blocking && timeOut == 0) {
+			assert(job != NULL);
+		} else {
+			if (job == NULL)
+				break;
+		}
+
+		bool foreign = job->imported;
+
+		lock.unlock();
+
+		executeJob(job);
+
+		lock.lock();
+
+		std::set<ExplorationJob*> newJobs;
+
+		if (allowGrowth)
+			explodeJob(job, newJobs);
+
+		if (allowGrowth)
+			submitJobs(newJobs.begin(), newJobs.end());
+
+		finalizeJob(job);
+		delete job;
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
+
+		if (foreign)
+			cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentImportedPathCount);
+
+		if (allowGrowth)
+			submitJobs(newJobs.begin(), newJobs.end()); // XXX Memory leak here, if allowGrowth == false
+
+		if (refineStats) {
+			refineStatistics();
+			refineStats = false;
+		}
+	}
+
+	if (terminationRequest)
+		CLOUD9_INFO("Termination was requested.");
+}
 
 
-void JobManager::submitJob(ExplorationJob* job) {
+/* Symbolic Engine Callbacks **************************************************/
+
+void JobManager::onStateBranched(klee::ExecutionState *state,
+		klee::ExecutionState *parent, int index) {
+
+	assert(parent);
+
+	//CLOUD9_DEBUG("State branched: [A] -> " << ((index == 0) ?
+	//		((state == NULL) ? "([], [A])" : "([B], [A])") :
+	//		((state == NULL) ? "([A], [])" : "([A], [B])")));
+
+	WorkerTree::NodePin pNode = parent->getWorkerNode();
+
+	updateTreeOnBranch(state, parent, index);
+
+	fireNodeExplored(pNode.get());
+
+}
+
+void JobManager::onStateDestroy(klee::ExecutionState *state,
+		bool &allow) {
+
+	assert(state);
+
+	//CLOUD9_DEBUG("State destroyed! " << *state);
+
+	WorkerTree::NodePin nodePin = state->getWorkerNode();
+
+	updateTreeOnDestroy(state);
+
+	fireNodeDeleted(nodePin.get());
+}
+
+void JobManager::onOutOfResources(klee::ExecutionState *destroyedState) {
+	// TODO: Implement a job migration mechanism
+	CLOUD9_INFO("Executor ran out of resources. Dropping state.");
+}
+
+void JobManager::onControlFlowEvent(klee::ExecutionState *state,
+				ControlFlowEvent event) {
+	WorkerTree::Node *node = state->getWorkerNode().get();
+
+	// Add the instruction to the node trace
+	if (DumpStateTraces) {
+		switch (event) {
+		case STEP:
+			(**node).trace.appendEntry(new InstructionTraceEntry(state->pc));
+			break;
+		case BRANCH_FALSE:
+		case BRANCH_TRUE:
+			//(**node).trace.appendEntry(new ConstraintLogEntry(state));
+			(**node).trace.appendEntry(new ControlFlowEntry(true, false, false));
+			break;
+		case CALL:
+			break;
+		case RETURN:
+			break;
+		}
+
+	}
+}
+
+void JobManager::onDebugInfo(klee::ExecutionState *state,
+			const std::string &message) {
+	WorkerTree::Node *node = state->getWorkerNode().get();
+
+	if (DumpStateTraces) {
+		(**node).trace.appendEntry(new DebugLogEntry(message));
+	}
+}
+
+void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
+	klee::ExecutionState *state = (**node).symState;
+
+	CLOUD9_INFO("Breakpoint hit!");
+	CLOUD9_DEBUG("State at position: " << *node);
+
+	if (state) {
+		CLOUD9_DEBUG("State stack trace: " << *state);
+		klee::ExprPPrinter::printConstraints(std::cerr, state->constraints);
+		dumpStateTrace(node);
+	}
+
+	// Also signal a breakpoint, for stopping GDB
+	cloud9::breakSignal();
+}
+
+void JobManager::updateTreeOnBranch(klee::ExecutionState *state,
+		klee::ExecutionState *parent, int index) {
+
+	WorkerTree::Node *pNode = parent->getWorkerNode().get();
+
+	WorkerTree::NodePin newNodePin(WORKER_LAYER_STATES), oldNodePin(WORKER_LAYER_STATES);
+
+	// Obtain the new node pointers
+	oldNodePin = tree->getNode(WORKER_LAYER_STATES, pNode, 1 - index)->pin(WORKER_LAYER_STATES);
+
+	// Update state -> node references
+	parent->setWorkerNode(oldNodePin);
+
+	// Update node -> state references
+	(**pNode).symState = NULL;
+	(**oldNodePin).symState = parent;
+
+	// Update frontier
+	if (currentJob) {
+		currentJob->removeFromFrontier(pNode);
+		currentJob->addToFrontier(oldNodePin.get());
+	}
+
+	if (state) {
+		newNodePin = tree->getNode(WORKER_LAYER_STATES, pNode, index)->pin(WORKER_LAYER_STATES);
+
+		state->setWorkerNode(newNodePin);
+		(**newNodePin).symState = state;
+
+		if (currentJob) {
+			currentJob->addToFrontier(newNodePin.get());
+			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);
+		}
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsStarted);
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentPathCount);
+	}
+}
+
+void JobManager::updateTreeOnDestroy(klee::ExecutionState *state) {
+	WorkerTree::Node *pNode = state->getWorkerNode().get();
+
+	(**pNode).symState = NULL;
+
+
+
+	if (currentJob) {
+		currentJob->removeFromFrontier(pNode);
+	}
+
+	// Unpin the node
+	state->getWorkerNode().reset();
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsFinished);
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentPathCount);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+void JobManager::submitJob(ExecutionJob* job) {
 	assert((**job->jobRoot).symState || job->foreign);
 
 	selHandler->onJobEnqueued(job);
@@ -536,80 +781,7 @@ ExplorationJob* JobManager::selectJob() {
 	return job;
 }
 
-void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeOut) {
-	ExplorationJob *job = NULL;
 
-	boost::unique_lock<boost::mutex> lock(jobsMutex);
-
-	TimeValue deadline = TimeValue::now() + TimeValue(timeOut, 0);
-
-	// TODO: Put an abort condition here
-	while (!terminationRequest) {
-		TimeValue now = TimeValue::now();
-
-		if (timeOut > 0 && now > deadline) {
-			CLOUD9_INFO("Timeout reached. Suspending execution.");
-			break;
-		}
-
-		if (blocking) {
-			if (timeOut > 0) {
-				TimeValue remaining = deadline - now;
-
-				job = selectJob(lock, remaining.seconds());
-			} else {
-				job = selectJob(lock, 0);
-			}
-		} else {
-			job = selectJob();
-		}
-
-		if (blocking && timeOut == 0) {
-			assert(job != NULL);
-		} else {
-			if (job == NULL)
-				break;
-		}
-
-		bool foreign = job->foreign;
-
-		job->started = true;
-		lock.unlock();
-		//CLOUD9_DEBUG("Processing job: " << *(job->jobRoot));
-
-		executor->executeJob(job);
-
-		lock.lock();
-		job->finished = true;
-
-		std::set<ExplorationJob*> newJobs;
-
-		if (allowGrowth)
-			explodeJob(job, newJobs);
-
-		if (allowGrowth)
-			submitJobs(newJobs.begin(), newJobs.end());
-
-		finalizeJob(job);
-		delete job;
-
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
-
-		if (foreign)
-			cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentImportedPathCount);
-
-		if (allowGrowth)
-			submitJobs(newJobs.begin(), newJobs.end()); // XXX Memory leak here, if allowGrowth == false
-
-		if (refineStats) {
-			refineStatistics();
-			refineStats = false;
-		}
-	}
-
-	if (terminationRequest)
-		CLOUD9_INFO("Termination was requested.");
-}
 
 void JobManager::exploreNode(WorkerTree::Node *node) {
 	boost::unique_lock<boost::mutex> lock(executorMutex);
@@ -661,7 +833,7 @@ void JobManager::exploreNode(WorkerTree::Node *node) {
 
 }
 
-void JobExecutor::executeJob(ExplorationJob *job) {
+void JobManager::executeJob(ExecutionJob *job) {
 
 	if ((**(job->jobRoot)).symState == NULL) {
 		if (!job->foreign) {
@@ -711,22 +883,6 @@ void JobManager::finalize() {
 	executor->finalizeExecution();
 
 	CLOUD9_INFO("Finalized job execution.");
-}
-
-void JobManager::processJobs(unsigned int timeOut) {
-	if (timeOut > 0) {
-		CLOUD9_INFO("Processing jobs with a timeout of " << timeOut << " seconds.");
-	}
-	processLoop(true, true, timeOut);
-}
-
-void JobManager::processJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
-	// First, we need to import the jobs in the manager
-	importJobs(paths);
-
-	// Then we execute them, but only them (non blocking, don't allow growth),
-	// until the queue is exhausted
-	processLoop(false, false, timeOut);
 }
 
 void JobManager::refineStatistics() {
@@ -1007,148 +1163,6 @@ void JobManager::dumpStateTrace(WorkerTree::Node *node) {
 	serializeExecutionTrace(*os, state);
 
 	delete os;
-}
-
-void JobManager::onStateBranched(klee::ExecutionState *state,
-		klee::ExecutionState *parent, int index) {
-
-	assert(parent);
-
-	//CLOUD9_DEBUG("State branched: [A] -> " << ((index == 0) ?
-	//		((state == NULL) ? "([], [A])" : "([B], [A])") :
-	//		((state == NULL) ? "([A], [])" : "([A], [B])")));
-
-	WorkerTree::NodePin pNode = parent->getWorkerNode();
-
-	updateTreeOnBranch(state, parent, index);
-
-	fireNodeExplored(pNode.get());
-
-}
-
-void JobManager::onStateDestroy(klee::ExecutionState *state,
-		bool &allow) {
-
-	assert(state);
-
-	//CLOUD9_DEBUG("State destroyed! " << *state);
-
-	WorkerTree::NodePin nodePin = state->getWorkerNode();
-
-	updateTreeOnDestroy(state);
-
-	fireNodeDeleted(nodePin.get());
-}
-
-void JobManager::onOutOfResources(klee::ExecutionState *destroyedState) {
-	// TODO: Implement a job migration mechanism
-	CLOUD9_INFO("Executor ran out of resources. Dropping state.");
-}
-
-void JobManager::onControlFlowEvent(klee::ExecutionState *state,
-				ControlFlowEvent event) {
-	WorkerTree::Node *node = state->getWorkerNode().get();
-
-	// Add the instruction to the node trace
-	if (DumpStateTraces) {
-		switch (event) {
-		case STEP:
-			(**node).trace.appendEntry(new InstructionTraceEntry(state->pc));
-			break;
-		case BRANCH_FALSE:
-		case BRANCH_TRUE:
-			//(**node).trace.appendEntry(new ConstraintLogEntry(state));
-			(**node).trace.appendEntry(new ControlFlowEntry(true, false, false));
-			break;
-		case CALL:
-			break;
-		case RETURN:
-			break;
-		}
-
-	}
-}
-
-void JobManager::onDebugInfo(klee::ExecutionState *state,
-			const std::string &message) {
-	WorkerTree::Node *node = state->getWorkerNode().get();
-
-	if (DumpStateTraces) {
-		(**node).trace.appendEntry(new DebugLogEntry(message));
-	}
-}
-
-void JobExecutor::fireBreakpointHit(WorkerTree::Node *node) {
-	klee::ExecutionState *state = (**node).symState;
-
-	CLOUD9_INFO("Breakpoint hit!");
-	CLOUD9_DEBUG("State at position: " << *node);
-
-	if (state) {
-		CLOUD9_DEBUG("State stack trace: " << *state);
-		klee::ExprPPrinter::printConstraints(std::cerr, state->constraints);
-		dumpStateTrace(node);
-	}
-
-	// Also signal a breakpoint, for stopping GDB
-	cloud9::breakSignal();
-}
-
-void JobManager::updateTreeOnBranch(klee::ExecutionState *state,
-		klee::ExecutionState *parent, int index) {
-
-	WorkerTree::Node *pNode = parent->getWorkerNode().get();
-
-	WorkerTree::NodePin newNodePin(WORKER_LAYER_STATES), oldNodePin(WORKER_LAYER_STATES);
-
-	// Obtain the new node pointers
-	oldNodePin = tree->getNode(WORKER_LAYER_STATES, pNode, 1 - index)->pin(WORKER_LAYER_STATES);
-
-	// Update state -> node references
-	parent->setWorkerNode(oldNodePin);
-
-	// Update node -> state references
-	(**pNode).symState = NULL;
-	(**oldNodePin).symState = parent;
-
-	// Update frontier
-	if (currentJob) {
-		currentJob->removeFromFrontier(pNode);
-		currentJob->addToFrontier(oldNodePin.get());
-	}
-
-	if (state) {
-		newNodePin = tree->getNode(WORKER_LAYER_STATES, pNode, index)->pin(WORKER_LAYER_STATES);
-
-		state->setWorkerNode(newNodePin);
-		(**newNodePin).symState = state;
-
-		if (currentJob) {
-			currentJob->addToFrontier(newNodePin.get());
-			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);
-		}
-
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsStarted);
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentPathCount);
-	}
-}
-
-void JobManager::updateTreeOnDestroy(klee::ExecutionState *state) {
-	WorkerTree::Node *pNode = state->getWorkerNode().get();
-
-	(**pNode).symState = NULL;
-
-
-
-	if (currentJob) {
-		currentJob->removeFromFrontier(pNode);
-	}
-
-	// Unpin the node
-	state->getWorkerNode().reset();
-
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsFinished);
-	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentPathCount);
 }
 
 void JobManager::replayPath(WorkerTree::Node *pathEnd) {

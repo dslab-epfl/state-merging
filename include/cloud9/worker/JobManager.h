@@ -40,7 +40,7 @@ class KleeHandler;
 class JobSelectionStrategy;
 
 
-class JobManager {
+class JobManager: public StateEventHandler {
 private:
 	/*
 	 * KLEE integration
