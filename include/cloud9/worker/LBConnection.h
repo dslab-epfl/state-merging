@@ -29,7 +29,7 @@ private:
 
 	JobManager *jobManager;
 
-	int id; // The worker ID assigned by the load balancer
+	unsigned int id; // The worker ID assigned by the load balancer
 
 	void transferJobs(std::string &destAddr, int destPort,
 			ExecutionPathSetPin paths,

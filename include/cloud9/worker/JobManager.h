@@ -127,8 +127,8 @@ private:
 	}
 
 
-	ExecutionJob* selectJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
-	ExecutionJob* selectJob();
+	ExecutionJob* selectNextJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
+	ExecutionJob* selectNextJob();
 
 	void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew);
 

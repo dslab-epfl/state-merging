@@ -69,8 +69,24 @@ private:
 		nodePin = node->pin(WORKER_LAYER_JOBS);
 		(**node).job = this;
 	}
+
+	void unbind() {
+		assert(nodePin);
+
+		(**nodePin).job = NULL;
+		nodePin.reset();
+	}
 public:
-	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false), exported(false), removing(false) {}
+	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
+		exported(false), removing(false) {}
+
+	ExecutionJob(WorkerTree::Node *node, bool _imported) :
+		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
+		removing(false) {
+
+		bindToNode(node);
+	}
+
 	virtual ~ExecutionJob() {}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }

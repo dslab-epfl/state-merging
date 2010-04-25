@@ -602,6 +602,12 @@ std::ostream& operator<<(std::ostream &os,
 	return os;
 }
 
+template<class NodeType>
+std::ostream& operator<<(std::ostream &os, const NodePin<NodeType> &pin) {
+	os << *(pin.get());
+	return os;
+}
+
 template<class NI, int L, int D>
 void node_pin_add_ref(TreeNode<NI, L, D> *p, int layer) {
 	assert(p);

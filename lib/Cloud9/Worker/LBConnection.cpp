@@ -60,8 +60,8 @@ void LBConnection::registerWorker() {
 	llvm::sys::Path progPath(InputFile);
 
 	reg->set_prog_name(progPath.getBasename());
-	reg->set_stat_id_count(jobManager->getJobExecutor()->getCoverageIDCount());
-	reg->set_prog_crc(jobManager->getJobExecutor()->getModuleCRC());
+	reg->set_stat_id_count(jobManager->getCoverageIDCount());
+	reg->set_prog_crc(jobManager->getModuleCRC());
 
 	// Send the message
 	std::string msgString;
@@ -113,7 +113,7 @@ void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
 
 void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 	cov_update_t data;
-	jobManager->getJobExecutor()->getUpdatedLocalCoverage(data);
+	jobManager->getUpdatedLocalCoverage(data);
 
 	if (data.size() > 0) {
 		CLOUD9_DEBUG("Sending " << data.size() << " local coverage updates.");
@@ -189,7 +189,7 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 	}
 
 	if (UseGlobalCoverage) {
-		for (unsigned i = 0; i < response.globalupdates_size(); i++) {
+		for (int i = 0; i < response.globalupdates_size(); i++) {
 			const StatisticUpdate &update = response.globalupdates(i);
 
 			if (update.name() == CLOUD9_STAT_NAME_GLOBAL_COVERAGE) {
@@ -199,7 +199,7 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
 				if (data.size() > 0) {
 					CLOUD9_INFO("Receiving " << data.size() << " global coverage updates.");
-					jobManager->getJobExecutor()->setUpdatedGlobalCoverage(data);
+					jobManager->setUpdatedGlobalCoverage(data);
 				}
 			}
 		}

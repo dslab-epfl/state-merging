@@ -534,9 +534,7 @@ int main(int argc, char **argv, char **envp) {
 	readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
 	// Create the job manager
-	theJobManager = new JobManager(mainModule);
-	theJobManager->setupStartingPoint("main", pArgc, pArgv, envp);
-
+	theJobManager = new JobManager(mainModule, "main", pArgc, pArgv, envp);
 
 	if (ReplayPath.size() > 0) {
 		CLOUD9_INFO("Running in replay mode. No load balancer involved.");
