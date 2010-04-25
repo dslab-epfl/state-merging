@@ -31,16 +31,12 @@ void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
 	}
 }
 
-void SymbolicEngine::fireStateDestroy(klee::ExecutionState *state, bool &allow) {
-	allow = true;
+void SymbolicEngine::fireStateDestroy(klee::ExecutionState *state) {
 
 	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
 		StateEventHandler *h = *it;
-		bool crtAllow = true;
 
-		h->onStateDestroy(state, crtAllow);
-
-		allow = allow && crtAllow;
+		h->onStateDestroy(state);
 	}
 }
 

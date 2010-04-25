@@ -2477,12 +2477,7 @@ std::string Executor::getAddressInfo(ExecutionState &state,
 }
 
 bool Executor::terminateState(ExecutionState &state) {
-	bool allow = true;
-
-	fireStateDestroy(&state, allow);
-
-	if (!allow)
-		return false;
+	fireStateDestroy(&state);
 
 	if (replayOut && replayPosition != replayOut->numObjects) {
 		klee_warning_once(replayOut,

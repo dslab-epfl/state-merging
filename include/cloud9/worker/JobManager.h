@@ -42,9 +42,24 @@ class JobSelectionStrategy;
 
 class JobManager: public StateEventHandler {
 private:
-	/*
+	/***************************************************************************
+	 * Initialization
+	 **************************************************************************/
+	void initialize(llvm::Module *module, llvm::Function *mainFn, int argc,
+			char **argv, char **envp);
+
+	void initKlee();
+	void initInstrumentation();
+	void initBreakpoints();
+	void initStatistics();
+	void initStrategy();
+
+	void initRootState(llvm::Function *f, int argc,
+			char **argv, char **envp);
+
+	/***************************************************************************
 	 * KLEE integration
-	 */
+	 **************************************************************************/
 	klee::Interpreter *interpreter;
 	SymbolicEngine *symbEngine;
 
@@ -60,16 +75,26 @@ private:
 	WorkerTree* tree;
 
 	boost::condition_variable jobsAvailabe;
-
 	boost::mutex jobsMutex;
+	bool terminationRequest;
+
+	JobSelectionStrategy *selStrategy;
+
+	/*
+	 * Job execution state
+	 */
+	ExecutionJob *currentJob;
+	bool replaying;
+	std::set<ExecutionJob*> addedJobs;
+	bool currentRemoved;
+
+	/*
+	 * Statistics
+	 */
 
 	std::set<WorkerTree::NodePin> stats;
 	bool statChanged;
 	bool refineStats;
-
-	bool terminationRequest;
-
-	JobSelectionStrategy *selStrategy;
 
 	/*
 	 * Breakpoint management data structures
@@ -84,6 +109,7 @@ private:
 	int traceCounter;
 
 	void dumpStateTrace(WorkerTree::Node *node);
+
 
 	void submitJob(ExecutionJob* job);
 
@@ -104,7 +130,7 @@ private:
 	ExecutionJob* selectJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
 	ExecutionJob* selectJob();
 
-	void finalizeJob(ExecutionJob *job);
+	void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew);
 
 	void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
@@ -117,20 +143,7 @@ private:
 	unsigned int countJobs(WorkerTree::Node *root);
 	ExecutionJob *createJob(WorkerTree::Node *root, bool foreign);
 
-
-	void initialize(llvm::Module *module, llvm::Function *mainFn, int argc, char **argv,
-			char **envp);
-
-	void initKlee();
-	void initInstrumentation();
-	void initBreakpoints();
-	void initStatistics();
-	void initStrategy();
-
-	void initRootState(llvm::Function *f, int argc,
-			char **argv, char **envp);
-
-	void exploreNode(WorkerTree::Node *node);
+	void stepInNode(WorkerTree::Node *node, bool exhaust);
 
 	void replayPath(WorkerTree::Node *pathEnd);
 
@@ -155,21 +168,14 @@ public:
 
 	unsigned getModuleCRC() const;
 
-	void finalizeExecution();
-
-	/*
-	 * Main methods
-	 */
 	void processJobs(unsigned int timeOut = 0);
 	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
-
-	void executeJob(ExecutionJob *job);
 
 	void finalize();
 
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
-	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow);
+	virtual void onStateDestroy(klee::ExecutionState *state);
 	virtual void onControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);
 	virtual void onDebugInfo(klee::ExecutionState *state,

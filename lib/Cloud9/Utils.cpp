@@ -15,7 +15,6 @@
 #include <unistd.h>
 
 
-
 #define BREAK_SIGNAL	SIGUSR2
 
 namespace cloud9 {

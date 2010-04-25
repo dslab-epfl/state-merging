@@ -11,6 +11,8 @@
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "klee/ExecutionState.h"
 
+#include <ostream>
+
 namespace cloud9 {
 
 namespace worker {
@@ -29,8 +31,12 @@ private:
 			(**nodePin).symState = NULL;
 		}
 
-		nodePin = node->pin(WORKER_LAYER_STATES);
-		(**node).symState = this;
+		if (node) {
+			nodePin = node->pin(WORKER_LAYER_STATES);
+			(**node).symState = this;
+		} else {
+			nodePin.reset();
+		}
 	}
 public:
 	SymbolicState(klee::ExecutionState *state) :
@@ -58,7 +64,7 @@ private:
 	bool removing;
 
 	void bindToNode(WorkerTree::Node *node) {
-		assert(!nodePin);
+		assert(!nodePin && node);
 
 		nodePin = node->pin(WORKER_LAYER_JOBS);
 		(**node).job = this;
@@ -73,6 +79,9 @@ public:
 	bool isExported() const { return exported; }
 	bool isRemoving() const { return removing; }
 };
+
+
+std::ostream &operator<< (std::ostream &os, const SymbolicState &state);
 
 }
 }

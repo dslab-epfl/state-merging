@@ -41,7 +41,7 @@ public:
 public:
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index) = 0;
-	virtual void onStateDestroy(klee::ExecutionState *state, bool &allow) = 0;
+	virtual void onStateDestroy(klee::ExecutionState *state) = 0;
 	virtual void onControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event) = 0;
 	virtual void onDebugInfo(klee::ExecutionState *state,
@@ -57,7 +57,7 @@ private:
 protected:
 	void fireStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
-	void fireStateDestroy(klee::ExecutionState *state, bool &allow);
+	void fireStateDestroy(klee::ExecutionState *state);
 	void fireControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);
 	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);
