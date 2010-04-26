@@ -122,67 +122,6 @@ public:
 
 };
 
-#if 0
-
-class WeightedRandomSelectionHandler: public BasicStrategy {
-public:
-  enum WeightType {
-    Depth,
-    QueryCost,
-    InstCount,
-    CPInstCount,
-    MinDistToUncovered,
-    CoveringNew
-  };
-private:
-  std::vector<ExecutionJob*> jobs;
-  std::vector<ExecutionJob*> toReplayJobs;
-  klee::DiscretePDF<klee::ExecutionState*> *states;
-  WeightType type;
-  WorkerTree *tree;
-  bool updateWeights;
-
-  void onJobRemoved(ExplorationJob *job);
-
-  ExplorationJob * selectWeightedRandomJob(WorkerTree *tree);
-	bool empty();
-	double getWeight(klee::ExecutionState *state);
-	void printName(std::ostream &os) {
-	  os << "WeightedRandomSelectionHandler::";
-	  switch(type) {
-	  case Depth              : os << "Depth\n"; return;
-	  case QueryCost          : os << "QueryCost\n"; return;
-	  case InstCount          : os << "InstCount\n"; return;
-	  case CPInstCount        : os << "CPInstCount\n"; return;
-	  case MinDistToUncovered : os << "MinDistToUncovered\n"; return;
-	  case CoveringNew        : os << "CoveringNew\n"; return;
-	  default                 : os << "<unknown type>\n"; return;
-	  }};
-public:
-  WeightedRandomSelectionHandler(WeightType _type, WorkerTree *_tree);
-  virtual ~WeightedRandomSelectionHandler();
-
-  virtual void onJobEnqueued(ExplorationJob *job);
-  virtual void onJobsExported() ;
-  virtual void onNextJobSelection(ExplorationJob *&job);
-};
-  
-class KleeSelectionHandler: public BasicStrategy {
-private:
-	klee::Searcher *kleeSearcher;
-	std::vector<ExplorationJob*> jobs;
-public:
-	KleeSelectionHandler(SymbolicEngine *e);
-	virtual ~KleeSelectionHandler();
-
-	virtual void onJobEnqueued(ExplorationJob *job);
-	virtual void onJobsExported();
-
-	virtual void onNextJobSelection(ExplorationJob *&job);
-};
-
-#endif
-
 }
 
 }

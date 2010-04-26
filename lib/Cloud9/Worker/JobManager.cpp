@@ -588,9 +588,6 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 	if (activateStates) {
 		// Check for the state on the supporting branch
 		while (node) {
-			if (node->getCount(WORKER_LAYER_JOBS) > 1)
-				break; // We reached a junction
-
 			SymbolicState *state = (**node).getSymbolicState();
 
 			if (state) {
