@@ -394,14 +394,12 @@ void JobManager::initStrategy() {
 	  selStrategy = new RandomPathStrategy(tree);
 	  CLOUD9_INFO("Using random path job selection strategy");
 	  break;
-#if 0
 	case CoverageOptimizedSel:
 	  selStrategy =
-		new WeightedRandomSelectionHandler(WeightedRandomSelectionHandler::CoveringNew,
-							  tree);
+		new WeightedRandomStrategy(WeightedRandomStrategy::CoveringNew,
+							  tree, symbEngine);
 	  CLOUD9_INFO("Using weighted random job selection strategy");
 	  break;
-#endif
 	default:
 	  assert(0 && "undefined job selection strategy");
 	}

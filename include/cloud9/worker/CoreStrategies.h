@@ -13,8 +13,6 @@
 
 #include <vector>
 #include <map>
-#include "klee/ExecutionState.h"
-#include "klee/Internal/ADT/DiscretePDF.h"
 
 namespace klee {
 class Searcher;
@@ -92,9 +90,11 @@ public:
 };
 
 class KleeStrategy: public BasicStrategy {
-private:
+protected:
 	WorkerTree *tree;
 	klee::Searcher *searcher;
+
+	KleeStrategy(WorkerTree *_tree);
 public:
 	KleeStrategy(WorkerTree *_tree, klee::Searcher *_searcher);
 	virtual ~KleeStrategy();
@@ -104,6 +104,22 @@ public:
 	virtual void onStateDeactivated(SymbolicState *state);
 
 	virtual ExecutionJob* onNextJobSelection();
+};
+
+class WeightedRandomStrategy: public KleeStrategy {
+public:
+	enum WeightType {
+	    Depth,
+	    QueryCost,
+	    InstCount,
+	    CPInstCount,
+	    MinDistToUncovered,
+	    CoveringNew
+	  };
+public:
+	WeightedRandomStrategy(WeightType _type, WorkerTree *_tree, SymbolicEngine *_engine);
+	virtual ~WeightedRandomStrategy();
+
 };
 
 #if 0

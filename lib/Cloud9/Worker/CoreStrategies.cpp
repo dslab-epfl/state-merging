@@ -14,6 +14,8 @@
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Searcher.h"
 #include "klee/Statistics.h"
+#include "klee/Executor.h"
+#include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 ///XXX: ugly, remove this dependency
@@ -95,6 +97,10 @@ ExecutionJob* RandomPathStrategy::onNextJobSelection() {
 // Klee Imported Strategy
 ////////////////////////////////////////////////////////////////////////////////
 
+KleeStrategy::KleeStrategy(WorkerTree *_tree) : tree(_tree), searcher(NULL) {
+
+}
+
 KleeStrategy::KleeStrategy(WorkerTree *_tree, klee::Searcher *_searcher) :
 		tree(_tree), searcher(_searcher) {
 
@@ -139,6 +145,24 @@ ExecutionJob* KleeStrategy::onNextJobSelection() {
 	assert(job != NULL);
 
 	return job;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Weighted Random Strategy
+////////////////////////////////////////////////////////////////////////////////
+
+WeightedRandomStrategy::WeightedRandomStrategy(WeightType _type,
+		WorkerTree *_tree, SymbolicEngine *_engine) : KleeStrategy(_tree) {
+
+	klee::Executor *executor = dynamic_cast<klee::Executor*>(_engine);
+	searcher = new WeightedRandomSearcher(*executor,
+			static_cast<klee::WeightedRandomSearcher::WeightType>(_type));
+
+}
+
+WeightedRandomStrategy::~WeightedRandomStrategy() {
+	delete searcher;
 }
 
 #if 0
