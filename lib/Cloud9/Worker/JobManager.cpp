@@ -809,14 +809,14 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 
 		replayPath(nodePin.get());
 
-		job->imported = false;
-
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
 	} else {
 		if (job->isImported()) {
 			CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
 		}
 	}
+
+	job->imported = false;
 
 	if ((**nodePin).symState == NULL) {
 		CLOUD9_INFO("Job canceled before start");
@@ -839,9 +839,11 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 			std::vector<WorkerTree::Node*> nodes;
 			tree->getLeaves(WORKER_LAYER_STATES, nodePin.get(), nodes);
 
+			//CLOUD9_DEBUG("New jobs: " << nodes.size());
+
 			for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
 					it != nodes.end(); it++) {
-				WorkerTree::Node *node = *it;
+				WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
 				assert((**node).symState != NULL);
 				ExecutionJob *newJob = new ExecutionJob(node, false);
 
@@ -852,8 +854,6 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 		// Just mark the state as updated
 		updateState((**nodePin).symState);
 	}
-
-	delete job;
 }
 
 void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
@@ -946,6 +946,9 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 
 	assert(parent);
 
+	//if (kState)
+	//	CLOUD9_DEBUG("State branched: " << parent->getCloud9State()->getNode());
+
 	updateTreeOnBranch(kState, parent, index);
 
 	if (kState) {
@@ -963,11 +966,15 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 	} else {
 		deactivateState(pState);
 	}
+
+
 }
 
 void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
 	assert(kState);
+
+	CLOUD9_DEBUG("State destroyed: " << kState->getCloud9State()->getNode());
 
 	SymbolicState *state = kState->getCloud9State();
 
@@ -1045,7 +1052,8 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
 
 	if (kState) {
 		newNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), index);
-		kState->getCloud9State()->rebindToNode(newNode);
+		SymbolicState *state = new SymbolicState(kState);
+		state->rebindToNode(newNode);
 
 		if (!replaying) {
 			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);

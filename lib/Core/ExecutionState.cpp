@@ -102,6 +102,7 @@ ExecutionState *ExecutionState::branch() {
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
   falseState->addressSpace.state = falseState;
+  falseState->c9State = NULL;
 
   weight *= .5;
   falseState->weight -= weight;
