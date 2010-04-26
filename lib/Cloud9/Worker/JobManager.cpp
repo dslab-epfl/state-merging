@@ -25,6 +25,7 @@
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CoreStrategies.h"
+#include "cloud9/worker/ComplexStrategies.h"
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/instrum/InstrumentationManager.h"
@@ -403,6 +404,9 @@ void JobManager::initStrategy() {
 	default:
 	  assert(0 && "undefined job selection strategy");
 	}
+
+	// Wrap this in a batching strategy, to speed up things
+	selStrategy = new BatchingStrategy(selStrategy);
 }
 
 void JobManager::initStatistics() {
@@ -961,13 +965,11 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
 	assert(kState);
 
-	CLOUD9_DEBUG("State destroyed: " << kState->getCloud9State()->getNode());
+	//CLOUD9_DEBUG("State destroyed: " << kState->getCloud9State()->getNode());
 
 	SymbolicState *state = kState->getCloud9State();
 
 	deactivateState(state);
-
-	//CLOUD9_DEBUG("State destroyed! " << *state);
 
 	updateTreeOnDestroy(kState);
 }
