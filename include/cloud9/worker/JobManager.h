@@ -85,8 +85,6 @@ private:
 	 */
 	ExecutionJob *currentJob;
 	bool replaying;
-	std::set<SymbolicState*> addedStates;
-	SymbolicState *currentState;
 
 	/*
 	 * Statistics
@@ -109,6 +107,10 @@ private:
 	int traceCounter;
 
 	void dumpStateTrace(WorkerTree::Node *node);
+
+	void activateState(SymbolicState *state);
+	void deactivateState(SymbolicState *state);
+	void updateState(SymbolicState *state);
 
 
 	void submitJob(ExecutionJob* job, bool activateStates);
@@ -143,7 +145,7 @@ private:
 
 	unsigned int countJobs(WorkerTree::Node *root);
 
-	void stepInNode(WorkerTree::Node *node, bool exhaust);
+	void stepInNode(WorkerTree::Node *node, bool exhaust, bool activateAll);
 
 	void replayPath(WorkerTree::Node *pathEnd);
 
