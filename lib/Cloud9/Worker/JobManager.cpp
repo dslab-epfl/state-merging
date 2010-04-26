@@ -104,14 +104,6 @@ namespace worker {
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
 
-static bool isJob(WorkerTree::Node *node) {
-	return (**node).getJob() != NULL;
-}
-
-static bool isState(WorkerTree::Node *node) {
-	return (**node).getSymbolicState() != NULL;
-}
-
 static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
 	assert(node->layerExists(WORKER_LAYER_STATES));
 	std::vector<int> path;
@@ -395,11 +387,11 @@ void JobManager::initRootState(llvm::Function *f, int argc,
 void JobManager::initStrategy() {
 	switch (JobSelection) {
 	case RandomSel:
-	  selStrategy = new RandomSelectionHandler();
+	  selStrategy = new RandomStrategy();
 	  CLOUD9_INFO("Using random job selection strategy");
 	  break;
 	case RandomPathSel:
-	  selStrategy = new RandomPathSelectionHandler(tree);
+	  selStrategy = new RandomPathStrategy(tree);
 	  CLOUD9_INFO("Using random path job selection strategy");
 	  break;
 #if 0
@@ -677,7 +669,7 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 }
 
 unsigned int JobManager::countJobs(WorkerTree::Node *root) {
-	return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
+	return tree->countLeaves(WORKER_LAYER_JOBS, root);
 }
 
 void JobManager::importJobs(ExecutionPathSetPin paths) {
@@ -1158,7 +1150,7 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 	for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
 			it != stats.end(); it++) {
 		const WorkerTree::NodePin &crtNodePin = *it;
-		unsigned int jobCount = tree->countLeaves(WORKER_LAYER_JOBS, crtNodePin.get(), &isJob);
+		unsigned int jobCount = tree->countLeaves(WORKER_LAYER_JOBS, crtNodePin.get());
 		data.push_back(jobCount);
 	}
 

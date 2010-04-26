@@ -38,15 +38,15 @@ static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Random Selection Handler
+// Random Strategy
 ////////////////////////////////////////////////////////////////////////////////
 
-void RandomSelectionHandler::onJobAdded(ExecutionJob *job) {
+void RandomStrategy::onJobAdded(ExecutionJob *job) {
 	indices[job] = jobs.size();
 	jobs.push_back(job);
 }
 
-ExecutionJob* RandomSelectionHandler::onNextJobSelection() {
+ExecutionJob* RandomStrategy::onNextJobSelection() {
 	if (jobs.empty()) {
 		return NULL;
 	}
@@ -56,7 +56,7 @@ ExecutionJob* RandomSelectionHandler::onNextJobSelection() {
 	return jobs[index];
 }
 
-void RandomSelectionHandler::onRemovingJob(ExecutionJob *job) {
+void RandomStrategy::onRemovingJob(ExecutionJob *job) {
 	unsigned i = indices[job];
 	assert(job->isRemoving());
 
@@ -65,7 +65,7 @@ void RandomSelectionHandler::onRemovingJob(ExecutionJob *job) {
 	jobs.pop_back();
 }
 
-void RandomSelectionHandler::onRemovingJobs() {
+void RandomStrategy::onRemovingJobs() {
 	unsigned i = 0;
 
 	while (i < jobs.size()) {
@@ -84,11 +84,61 @@ void RandomSelectionHandler::onRemovingJobs() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Random Path Selection Handler
+// Random Path Strategy
 ////////////////////////////////////////////////////////////////////////////////
 
-ExecutionJob* RandomPathSelectionHandler::onNextJobSelection() {
+ExecutionJob* RandomPathStrategy::onNextJobSelection() {
 	return selectRandomPathJob(tree);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Klee Imported Strategy
+////////////////////////////////////////////////////////////////////////////////
+
+KleeStrategy::KleeStrategy(WorkerTree *_tree, klee::Searcher *_searcher) :
+		tree(_tree), searcher(_searcher) {
+
+}
+
+KleeStrategy::~KleeStrategy() {
+
+}
+
+void KleeStrategy::onStateActivated(SymbolicState *state) {
+	std::set<klee::ExecutionState*> added;
+	added.insert(state->getKleeState());
+
+	searcher->update(NULL, added, std::set<klee::ExecutionState*>());
+}
+
+void KleeStrategy::onStateUpdated(SymbolicState *state) {
+	searcher->update(state->getKleeState(),
+			std::set<klee::ExecutionState*>(), std::set<klee::ExecutionState*>());
+}
+
+void KleeStrategy::onStateDeactivated(SymbolicState *state) {
+	std::set<klee::ExecutionState*> removed;
+	removed.insert(state->getKleeState());
+
+	searcher->update(NULL, std::set<klee::ExecutionState*>(), removed);
+}
+
+ExecutionJob* KleeStrategy::onNextJobSelection() {
+	if (searcher->empty())
+		return NULL;
+
+	klee::ExecutionState &kState = searcher->selectState();
+	SymbolicState *state = kState.getCloud9State();
+	WorkerTree::Node *node = state->getNode().get();
+
+	assert(node->layerExists(WORKER_LAYER_JOBS));
+
+	WorkerTree::Node *jobNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, node, theRNG);
+	ExecutionJob *job = (**jobNode).getJob();
+
+	assert(job != NULL);
+
+	return job;
 }
 
 #if 0

@@ -18,6 +18,7 @@
 
 namespace klee {
 class Searcher;
+class ExecutionState;
 }
 
 namespace cloud9 {
@@ -66,13 +67,13 @@ public:
 	virtual void onStateDeactivated(SymbolicState *state) { };
 };
 
-class RandomSelectionHandler: public BasicStrategy {
+class RandomStrategy: public BasicStrategy {
 private:
 	std::vector<ExecutionJob*> jobs;
 	std::map<ExecutionJob*, unsigned> indices;
 public:
-	RandomSelectionHandler() {};
-	virtual ~RandomSelectionHandler() {};
+	RandomStrategy() {};
+	virtual ~RandomStrategy() {};
 
 	virtual void onJobAdded(ExecutionJob *job);
 	virtual ExecutionJob* onNextJobSelection();
@@ -80,12 +81,27 @@ public:
 	virtual void onRemovingJobs();
 };
 
-class RandomPathSelectionHandler: public BasicStrategy {
+class RandomPathStrategy: public BasicStrategy {
 private:
 	WorkerTree *tree;
 public:
-	RandomPathSelectionHandler(WorkerTree *t) : tree(t) {};
-	virtual ~RandomPathSelectionHandler() {};
+	RandomPathStrategy(WorkerTree *t) : tree(t) {};
+	virtual ~RandomPathStrategy() {};
+
+	virtual ExecutionJob* onNextJobSelection();
+};
+
+class KleeStrategy: public BasicStrategy {
+private:
+	WorkerTree *tree;
+	klee::Searcher *searcher;
+public:
+	KleeStrategy(WorkerTree *_tree, klee::Searcher *_searcher);
+	virtual ~KleeStrategy();
+
+	virtual void onStateActivated(SymbolicState *state);
+	virtual void onStateUpdated(SymbolicState *state);
+	virtual void onStateDeactivated(SymbolicState *state);
 
 	virtual ExecutionJob* onNextJobSelection();
 };
