@@ -145,7 +145,7 @@ private:
 
 	unsigned int countJobs(WorkerTree::Node *root);
 
-	void stepInNode(WorkerTree::Node *node, bool exhaust, bool activateAll);
+	void stepInNode(WorkerTree::Node *node, bool exhaust);
 
 	void replayPath(WorkerTree::Node *pathEnd);
 

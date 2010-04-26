@@ -108,6 +108,10 @@ static bool isJob(WorkerTree::Node *node) {
 	return (**node).getJob() != NULL;
 }
 
+static bool isState(WorkerTree::Node *node) {
+	return (**node).getSymbolicState() != NULL;
+}
+
 static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
 	assert(node->layerExists(WORKER_LAYER_STATES));
 	std::vector<int> path;
@@ -818,9 +822,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 		CLOUD9_INFO("Job canceled before start");
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
 	} else {
-		stepInNode(nodePin.get(), false, true);
-
-		assert(0 && "TODO");
+		stepInNode(nodePin.get(), false);
 	}
 
 	lock.lock();
@@ -829,12 +831,32 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 	if ((**nodePin).symState == NULL) {
 		// Job finished here, need to remove it
 		finalizeJob(job, false, true);
+
+		delete job;
+
+		// Spawn new jobs if there are states left
+		if (nodePin->layerExists(WORKER_LAYER_STATES)) {
+			std::vector<WorkerTree::Node*> nodes;
+			tree->getLeaves(WORKER_LAYER_STATES, nodePin.get(), nodes);
+
+			for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
+					it != nodes.end(); it++) {
+				WorkerTree::Node *node = *it;
+				assert((**node).symState != NULL);
+				ExecutionJob *newJob = new ExecutionJob(node, false);
+
+				submitJob(newJob, false);
+			}
+		}
+	} else {
+		// Just mark the state as updated
+		updateState((**nodePin).symState);
 	}
 
 	delete job;
 }
 
-void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust, bool activateAll) {
+void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
 	assert((**node).symState != NULL);
 
 	// Keep the node alive until we finish with it
@@ -895,7 +917,7 @@ void JobManager::replayPath(WorkerTree::Node *pathEnd) {
 	for (unsigned int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
 			lastValidState = crtNode;
-			stepInNode(crtNode, true, false);
+			stepInNode(crtNode, true);
 		} else {
 			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
 					" out of " << path.size() << " in the path.");
