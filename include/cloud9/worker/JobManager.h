@@ -85,8 +85,8 @@ private:
 	 */
 	ExecutionJob *currentJob;
 	bool replaying;
-	std::set<ExecutionJob*> addedJobs;
-	bool currentRemoved;
+	std::set<SymbolicState*> addedStates;
+	SymbolicState *currentState;
 
 	/*
 	 * Statistics
@@ -111,13 +111,14 @@ private:
 	void dumpStateTrace(WorkerTree::Node *node);
 
 
-	void submitJob(ExecutionJob* job);
+	void submitJob(ExecutionJob* job, bool activateStates);
+	void finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher);
 
 	template<typename JobIterator>
-	void submitJobs(JobIterator begin, JobIterator end) {
+	void submitJobs(JobIterator begin, JobIterator end, bool activateStates) {
 		int count = 0;
 		for (JobIterator it = begin; it != end; it++) {
-			submitJob(*it);
+			submitJob(*it, activateStates);
 			count++;
 		}
 
@@ -141,7 +142,6 @@ private:
 			std::vector<ExecutionJob*> &jobSet, int maxCount);
 
 	unsigned int countJobs(WorkerTree::Node *root);
-	ExecutionJob *createJob(WorkerTree::Node *root, bool foreign);
 
 	void stepInNode(WorkerTree::Node *node, bool exhaust);
 

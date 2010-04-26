@@ -331,7 +331,8 @@ static void externalsAndGlobalsCheck(const llvm::Module *m) {
 /* Initialization Methods *****************************************************/
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
-		char **argv, char **envp) : terminationRequest(false), currentJob(NULL) {
+		char **argv, char **envp) : terminationRequest(false),
+		currentJob(NULL), replaying(false) {
 
 	tree = new WorkerTree();
 
@@ -457,21 +458,6 @@ void JobManager::finalize() {
 	CLOUD9_INFO("Finalized job execution.");
 }
 
-
-
-/*void JobManager::explodeJob(ExplorationJob* job, std::set<ExplorationJob*> &newJobs) {
-	assert(job->isFinished());
-
-	for (ExplorationJob::frontier_t::iterator it = job->frontier.begin();
-			it != job->frontier.end(); it++) {
-		WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
-
-		ExplorationJob *newJob = new ExplorationJob(node, false);
-
-		newJobs.insert(newJob);
-	}
-}*/
-
 /* Misc. Methods **************************************************************/
 
 unsigned JobManager::getModuleCRC() const {
@@ -584,7 +570,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock, 
 			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "working");
 	}
 
-	//cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
 
 	return job;
 }
@@ -592,20 +578,62 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock, 
 ExecutionJob* JobManager::selectNextJob() {
 	ExecutionJob *job = selStrategy->onNextJobSelection();
 
-	//if (job != NULL) {
-	//	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
-	//}
+	if (job != NULL) {
+		cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
+	}
 
 	return job;
 }
 
-void JobManager::submitJob(ExecutionJob* job) {
+void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 	WorkerTree::Node *node = job->getNode().get();
 	assert((**node).symState || job->isImported());
 
 	selStrategy->onJobAdded(job);
 
+	if (activateStates) {
+		// Check for the state on the supporting branch
+		while (node) {
+			if (node->getCount(WORKER_LAYER_JOBS) > 1)
+				break; // We reached a junction
+
+			SymbolicState *state = (**node).getSymbolicState();
+
+			if (state) {
+				selStrategy->onStateActivated(state);
+				break;
+			}
+
+			node = node->getParent();
+		}
+	}
+
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentQueueSize);
+}
+
+void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher) {
+	WorkerTree::Node *node = job->getNode().get();
+
+	job->removing = true;
+
+	if (deactivateStates) {
+		while (node) {
+			if (node->getCount(WORKER_LAYER_JOBS) > 1)
+				break; // We reached a junction
+
+			SymbolicState *state = (**node).getSymbolicState();
+
+			if (state) {
+				selStrategy->onStateDeactivated(state);
+				break;
+			}
+
+			node = node->getParent();
+		}
+	}
+
+	if (notifySearcher)
+		selStrategy->onRemovingJob(job);
 }
 
 void JobManager::selectJobs(WorkerTree::Node *root,
@@ -661,6 +689,10 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
 			it != nodes.end(); it++) {
 		WorkerTree::Node *crtNode = *it;
+		assert(crtNode->getCount(WORKER_LAYER_JOBS) == 0
+				&& "Job duplication detected");
+		assert((!crtNode->layerExists(WORKER_LAYER_STATES) || crtNode->getCount(WORKER_LAYER_STATES) == 0)
+				&& "Job before the state frontier");
 
 		if (crtNode->getCount(WORKER_LAYER_JOBS) > 0) {
 			CLOUD9_INFO("Discarding job as being obsolete: " << *crtNode);
@@ -673,7 +705,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 		}
 	}
 
-	submitJobs(jobs.begin(), jobs.end());
+	submitJobs(jobs.begin(), jobs.end(), true);
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalImportedJobs,
 			jobs.size());
@@ -712,9 +744,10 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		// Cancel each job
 		ExecutionJob *job = *it;
 		assert(currentJob != job);
-		assert(job->getNode()->getCount(WORKER_LAYER_JOBS) == 0);
 
-		//finalizeJob(job);
+		job->exported = true;
+
+		finalizeJob(job, true, false);
 	}
 
 	selStrategy->onRemovingJobs();
@@ -771,6 +804,11 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 	lock.lock();
 	currentJob = NULL;
 
+	if ((**nodePin).symState == NULL) {
+		// Job finished here, need to remove it
+		finalizeJob(job, false, true);
+	}
+
 	delete job;
 }
 
@@ -779,6 +817,9 @@ void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
 
 	// Keep the node alive until we finish with it
 	WorkerTree::NodePin nodePin = node->pin(WORKER_LAYER_STATES);
+
+	addedStates.clear();
+	currentState = (**node).symState;
 
 	while ((**node).symState != NULL) {
 
@@ -804,6 +845,8 @@ void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
 		if (!exhaust)
 			break;
 	}
+
+
 }
 
 void JobManager::replayPath(WorkerTree::Node *pathEnd) {
@@ -829,6 +872,8 @@ void JobManager::replayPath(WorkerTree::Node *pathEnd) {
 	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
 	WorkerTree::Node *lastValidState = NULL;
 
+	replaying = true;
+
 	// Perform the replay work
 	for (unsigned int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
@@ -842,6 +887,8 @@ void JobManager::replayPath(WorkerTree::Node *pathEnd) {
 		crtNode = crtNode->getChild(WORKER_LAYER_JOBS, path[i]);
 		assert(crtNode != NULL);
 	}
+
+	replaying = false;
 
 	if ((**crtNode).symState == NULL) {
 		CLOUD9_ERROR("Replay broken, NULL state at the end of the path. Maybe the state went past the job root?");
@@ -861,11 +908,26 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 	assert(parent);
 
 	updateTreeOnBranch(kState, parent, index);
+
+	if (kState) {
+		addedStates.insert(kState->getCloud9State());
+	}
 }
 
 void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
 	assert(kState);
+
+	SymbolicState *state = kState->getCloud9State();
+
+	if (state == currentState) {
+		currentState = NULL;
+	} else if (addedStates.count(state) > 0) {
+		addedStates.erase(state);
+	} else {
+		// State removed from somewhere else
+		assert(0 && "Not yet implemented");
+	}
 
 	//CLOUD9_DEBUG("State destroyed! " << *state);
 
@@ -941,7 +1003,7 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
 		newNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), index);
 		kState->getCloud9State()->rebindToNode(newNode);
 
-		if (currentJob) {
+		if (!replaying) {
 			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);
 		}
 
