@@ -134,6 +134,8 @@ private:
 	ExecutionJob* selectNextJob();
 
 	void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew);
+	void stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust);
+	void replayPath(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *pathEnd);
 
 	void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
@@ -144,10 +146,6 @@ private:
 			std::vector<ExecutionJob*> &jobSet, int maxCount);
 
 	unsigned int countJobs(WorkerTree::Node *root);
-
-	void stepInNode(WorkerTree::Node *node, bool exhaust);
-
-	void replayPath(WorkerTree::Node *pathEnd);
 
 	void updateTreeOnBranch(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
