@@ -386,6 +386,8 @@ void JobManager::initRootState(llvm::Function *f, int argc,
 }
 
 void JobManager::initStrategy() {
+	std::vector<JobSelectionStrategy*> strategies;
+
 	switch (JobSelection) {
 	case RandomSel:
 	  selStrategy = new RandomStrategy();
@@ -396,9 +398,10 @@ void JobManager::initStrategy() {
 	  CLOUD9_INFO("Using random path job selection strategy");
 	  break;
 	case CoverageOptimizedSel:
-	  selStrategy =
-		new WeightedRandomStrategy(WeightedRandomStrategy::CoveringNew,
-							  tree, symbEngine);
+		strategies.push_back(new WeightedRandomStrategy(
+				WeightedRandomStrategy::CoveringNew, tree, symbEngine));
+		strategies.push_back(new RandomPathStrategy(tree));
+	  selStrategy = new TimeMultiplexedStrategy(strategies);
 	  CLOUD9_INFO("Using weighted random job selection strategy");
 	  break;
 	default:

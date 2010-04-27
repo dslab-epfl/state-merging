@@ -64,6 +64,83 @@ void BatchingStrategy::onStateDeactivated(SymbolicState *state) {
 	underlying->onStateDeactivated(state);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Composed Strategy
+////////////////////////////////////////////////////////////////////////////////
+
+ComposedStrategy::ComposedStrategy(std::vector<JobSelectionStrategy*> &_underlying) : underlying(_underlying) {
+	assert(underlying.size() > 0);
+}
+
+ComposedStrategy::~ComposedStrategy() {
+
+}
+
+#define FOR_EACH_STRATEGY(strat) \
+		strat_vector::iterator __it; JobSelectionStrategy *strat; \
+		for (__it = underlying.begin(), strat = *__it; __it != underlying.end(); ++__it, strat = *__it)
+
+
+void ComposedStrategy::onJobAdded(ExecutionJob *job) {
+	FOR_EACH_STRATEGY(strat) {
+		strat->onJobAdded(job);
+	}
+}
+
+void ComposedStrategy::onRemovingJob(ExecutionJob *job) {
+	FOR_EACH_STRATEGY(strat) {
+		strat->onRemovingJob(job);
+	}
+}
+
+void ComposedStrategy::onRemovingJobs() {
+	FOR_EACH_STRATEGY(strat) {
+		strat->onRemovingJobs();
+	}
+}
+
+void ComposedStrategy::onStateActivated(SymbolicState *state) {
+	FOR_EACH_STRATEGY(strat) {
+		strat->onStateActivated(state);
+	}
+}
+
+void ComposedStrategy::onStateUpdated(SymbolicState *state) {
+	FOR_EACH_STRATEGY(strat) {
+		strat->onStateUpdated(state);
+	}
+}
+
+void ComposedStrategy::onStateDeactivated(SymbolicState *state) {
+	FOR_EACH_STRATEGY(strat) {
+		strat->onStateDeactivated(state);
+	}
+}
+
+#undef FOR_EACH_STRATEGY
+
+////////////////////////////////////////////////////////////////////////////////
+// Time Multiplexed Strategy
+////////////////////////////////////////////////////////////////////////////////
+
+
+TimeMultiplexedStrategy::TimeMultiplexedStrategy(std::vector<JobSelectionStrategy*> strategies) :
+	ComposedStrategy(strategies), position(0) {
+
+}
+
+TimeMultiplexedStrategy::~TimeMultiplexedStrategy() {
+
+}
+
+ExecutionJob* TimeMultiplexedStrategy::onNextJobSelection() {
+	ExecutionJob *job = underlying[position]->onNextJobSelection();
+
+	position = (position + 1) % underlying.size();
+
+	return job;
+}
+
 }
 
 }
