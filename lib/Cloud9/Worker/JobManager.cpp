@@ -744,15 +744,16 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		assert(currentJob != job);
 
 		job->exported = true;
-
-		finalizeJob(job, true, false);
 	}
 
 	selStrategy->onRemovingJobs();
 
 	for (std::vector<ExecutionJob*>::iterator it = jobs.begin();
 				it != jobs.end(); it++) {
-		delete (*it);
+		ExecutionJob *job = *it;
+
+		finalizeJob(job, true, false);
+		delete job;
 	}
 
 
