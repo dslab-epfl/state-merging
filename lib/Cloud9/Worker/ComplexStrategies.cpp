@@ -76,48 +76,48 @@ ComposedStrategy::~ComposedStrategy() {
 
 }
 
-#define FOR_EACH_STRATEGY(strat) \
-		strat_vector::iterator __it; JobSelectionStrategy *strat; \
-		for (__it = underlying.begin(), strat = *__it; __it != underlying.end(); ++__it, strat = *__it)
-
 
 void ComposedStrategy::onJobAdded(ExecutionJob *job) {
-	FOR_EACH_STRATEGY(strat) {
+	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+		JobSelectionStrategy *strat = *it;
 		strat->onJobAdded(job);
 	}
 }
 
 void ComposedStrategy::onRemovingJob(ExecutionJob *job) {
-	FOR_EACH_STRATEGY(strat) {
+	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+		JobSelectionStrategy *strat = *it;
 		strat->onRemovingJob(job);
 	}
 }
 
 void ComposedStrategy::onRemovingJobs() {
-	FOR_EACH_STRATEGY(strat) {
+	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+		JobSelectionStrategy *strat = *it;
 		strat->onRemovingJobs();
 	}
 }
 
 void ComposedStrategy::onStateActivated(SymbolicState *state) {
-	FOR_EACH_STRATEGY(strat) {
+	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+		JobSelectionStrategy *strat = *it;
 		strat->onStateActivated(state);
 	}
 }
 
 void ComposedStrategy::onStateUpdated(SymbolicState *state) {
-	FOR_EACH_STRATEGY(strat) {
+	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+		JobSelectionStrategy *strat = *it;
 		strat->onStateUpdated(state);
 	}
 }
 
 void ComposedStrategy::onStateDeactivated(SymbolicState *state) {
-	FOR_EACH_STRATEGY(strat) {
+	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+		JobSelectionStrategy *strat = *it;
 		strat->onStateDeactivated(state);
 	}
 }
-
-#undef FOR_EACH_STRATEGY
 
 ////////////////////////////////////////////////////////////////////////////////
 // Time Multiplexed Strategy

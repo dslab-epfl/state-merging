@@ -789,10 +789,9 @@ void JobManager::updateState(SymbolicState *state) {
 /* Job Execution Methods ******************************************************/
 
 void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew) {
-	currentJob = job;
-	lock.unlock();
-
 	WorkerTree::NodePin nodePin = job->getNode(); // Keep the node around until we finish with it
+
+	currentJob = job;
 
 	if ((**nodePin).symState == NULL) {
 		if (!job->isImported()) {
@@ -801,7 +800,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
 
-		replayPath(nodePin.get());
+		replayPath(lock, nodePin.get());
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
 	} else {
@@ -816,10 +815,9 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 		CLOUD9_INFO("Job canceled before start");
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
 	} else {
-		stepInNode(nodePin.get(), false);
+		stepInNode(lock, nodePin.get(), false);
 	}
 
-	lock.lock();
 	currentJob = NULL;
 
 	if ((**nodePin).symState == NULL) {
@@ -850,7 +848,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 	}
 }
 
-void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
+void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust) {
 	assert((**node).symState != NULL);
 
 	// Keep the node alive until we finish with it
@@ -870,7 +868,10 @@ void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
 		}
 
 		// Execute the instruction
+		lock.unlock();
 		symbEngine->stepInState(state->getKleeState());
+		lock.lock();
+
 		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
 
 		if (!replaying) {
@@ -882,7 +883,7 @@ void JobManager::stepInNode(WorkerTree::Node *node, bool exhaust) {
 	}
 }
 
-void JobManager::replayPath(WorkerTree::Node *pathEnd) {
+void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *pathEnd) {
 	std::vector<int> path;
 
 	WorkerTree::Node *crtNode = pathEnd;
@@ -911,7 +912,7 @@ void JobManager::replayPath(WorkerTree::Node *pathEnd) {
 	for (unsigned int i = 0; i < path.size(); i++) {
 		if ((**crtNode).symState != NULL) {
 			lastValidState = crtNode;
-			stepInNode(crtNode, true);
+			stepInNode(lock, crtNode, true);
 		} else {
 			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
 					" out of " << path.size() << " in the path.");
@@ -937,6 +938,7 @@ void JobManager::replayPath(WorkerTree::Node *pathEnd) {
 
 void JobManager::onStateBranched(klee::ExecutionState *kState,
 		klee::ExecutionState *parent, int index) {
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	assert(parent);
 
@@ -965,6 +967,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 }
 
 void JobManager::onStateDestroy(klee::ExecutionState *kState) {
+	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	assert(kState);
 
@@ -1033,7 +1036,6 @@ void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
 
 void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
 		klee::ExecutionState *parent, int index) {
-
 	WorkerTree::NodePin pNodePin = parent->getCloud9State()->getNode();
 
 	WorkerTree::Node *newNode, *oldNode;
