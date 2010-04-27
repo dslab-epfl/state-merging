@@ -857,9 +857,9 @@ getInlineAsmSpecialCase(const InlineAsm* asm_instr) {
   
   std::string instr = asm_instr->getAsmString();
   std::string constraint = asm_instr->getConstraintString();
-  
+  std::cerr << "constraint = " << constraint << "\n";
   if(instr == "cld; rep; stosl" &&
-     constraint == "={cx},=*{di},{ax},0,1,~{dirflag},~{fpsr},~{flags},~{memory}")
+     constraint == "={cx},={di},{ax},0,1,~{dirflag},~{fpsr},~{flags},~{memory}")
     return FD_ZERO_ID;
   if(instr == "btsl $1,$0" &&
      constraint == "=*m,r,~{dirflag},~{fpsr},~{flags},~{memory},~{cc}")
@@ -907,7 +907,7 @@ void externalsAndGlobalsCheck(const Module *m) {
     for (Function::const_iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
 	 bbIt != bb_ie; ++bbIt) {
       for (BasicBlock::const_iterator it = bbIt->begin(), ie = bbIt->end(); 
-	   it != it; ++it) {
+	   it != ie; ++it) {
 	if (const CallInst *ci = dyn_cast<CallInst>(it)) {
 	  if (isa<InlineAsm>(ci->getCalledValue())) {
 	    klee_warning_once(&*fnIt,
@@ -1073,13 +1073,13 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
     const std::string &name = f->getName();
     
     if(name.compare("__strdup") == 0 ) {
-      std::cerr << "replacing __strdup\n";
       if (Function *StrDup = mainModule->getFunction("strdup")) {
 	f->replaceAllUsesWith(StrDup);
 	f->eraseFromParent();
       } else {
 	f->setName("strdup");
       }
+      continue;
     }
 
     if (name[0]=='\01') {
@@ -1309,18 +1309,15 @@ int main(int argc, char **argv, char **envp) {
     mainModule = klee::linkWithLibrary(mainModule, Path.c_str());
     assert(mainModule && "unable to link with simple model");
   }  
-
-
   
   for (Module::const_iterator fnIt = mainModule->begin(), fn_ie = mainModule->end(); 
        fnIt != fn_ie; ++fnIt) {
     for (Function::const_iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
          bbIt != bb_ie; ++bbIt) {
       for (BasicBlock::const_iterator it = bbIt->begin(), ie = bbIt->end(); 
-           it != it; ++it) {
+           it != ie; ++it) {
         if (const CallInst *ci = dyn_cast<CallInst>(it)) {
-          if (isa<InlineAsm>(ci->getCalledValue())) {
-	    std::cerr << "mata\n"; 
+	  if (isa<InlineAsm>(ci->getCalledValue())) {
 	    klee_warning_once(&*fnIt,
                               "function \"%s\" has inline asm", 
                               fnIt->getName().data());
@@ -1409,7 +1406,7 @@ int main(int argc, char **argv, char **envp) {
 	    }
 	      
 	    case FD_ZERO_ID: {
-
+	      std::cerr << "matched fd_ZERO_ID \n";
 	      Value * reg = cs.getArgument(3);
 	      //this is how these uclibc macros are translated to LLVM code                                                                                                                                                               
 	      if(!GetElementPtrInst::classof(reg))

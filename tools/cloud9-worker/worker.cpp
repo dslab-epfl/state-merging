@@ -200,6 +200,23 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 		Function *f = fi;
 		++fi;
 		const std::string &name = f->getName();
+
+		if(name.compare("__strdup") == 0 ) {
+		  if (Function *StrDup = mainModule->getFunction("strdup")) {
+		    f->replaceAllUsesWith(StrDup);
+		    f->eraseFromParent();
+		  } else {
+		    f->setName("strdup");
+		  }
+		  continue;
+		}
+
+		if(name.compare("vprintf") == 0) {
+		  f->deleteBody();
+		  continue;
+		}
+
+
 		if (name[0] == '\01') {
 			unsigned size = name.size();
 			if (name[size - 2] == '6' && name[size - 1] == '4') {
