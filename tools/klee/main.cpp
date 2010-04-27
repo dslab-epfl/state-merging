@@ -37,6 +37,9 @@
 #undef PACKAGE_VERSION
 #include "llvm/Target/TargetSelect.h"
 #include "llvm/System/Signals.h"
+#include "llvm/Support/CallSite.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/InlineAsm.h"
 #include <iostream>
 #include <fstream>
 #include <cerrno>
@@ -842,6 +845,35 @@ static const char *unsafeExternals[] = {
   "kill", // mmmhmmm
 };
 #define NELEMS(array) (sizeof(array)/sizeof(array[0]))
+
+
+#define FD_ZERO_ID      5
+#define FD_SET_ID       6
+#define FD_ISSET_ID     7
+#define FD_CLR_ID       8
+
+int
+getInlineAsmSpecialCase(const InlineAsm* asm_instr) {
+  
+  std::string instr = asm_instr->getAsmString();
+  std::string constraint = asm_instr->getConstraintString();
+  
+  if(instr == "cld; rep; stosl" &&
+     constraint == "={cx},=*{di},{ax},0,1,~{dirflag},~{fpsr},~{flags},~{memory}")
+    return FD_ZERO_ID;
+  if(instr == "btsl $1,$0" &&
+     constraint == "=*m,r,~{dirflag},~{fpsr},~{flags},~{memory},~{cc}")
+    return FD_SET_ID;
+  if(instr == "btl $1,$2 ; setcb ${0:b}" &&
+     constraint == "=q,r,*m,~{dirflag},~{fpsr},~{flags},~{cc}")
+    return FD_ISSET_ID;
+  if(instr == "btrl $1,$0" &&
+     constraint ==  "=*m,r,~{dirflag},~{fpsr},~{flags},~{memory},~{cc}")
+    return FD_CLR_ID;
+  return 0;
+}
+
+
 void externalsAndGlobalsCheck(const Module *m) {
   std::map<std::string, bool> externals;
   std::set<std::string> modelled(modelledExternals, 
@@ -867,24 +899,27 @@ void externalsAndGlobalsCheck(const Module *m) {
   if (WithPOSIXRuntime)
     dontCare.insert("syscall");
 
+  
   for (Module::const_iterator fnIt = m->begin(), fn_ie = m->end(); 
        fnIt != fn_ie; ++fnIt) {
     if (fnIt->isDeclaration() && !fnIt->use_empty())
       externals.insert(std::make_pair(fnIt->getName(), false));
     for (Function::const_iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
-         bbIt != bb_ie; ++bbIt) {
+	 bbIt != bb_ie; ++bbIt) {
       for (BasicBlock::const_iterator it = bbIt->begin(), ie = bbIt->end(); 
-           it != it; ++it) {
-        if (const CallInst *ci = dyn_cast<CallInst>(it)) {
-          if (isa<InlineAsm>(ci->getCalledValue())) {
-            klee_warning_once(&*fnIt,
-                              "function \"%s\" has inline asm", 
-                              fnIt->getName().data());
-          }
-        }
+	   it != it; ++it) {
+	if (const CallInst *ci = dyn_cast<CallInst>(it)) {
+	  if (isa<InlineAsm>(ci->getCalledValue())) {
+	    klee_warning_once(&*fnIt,
+			      "function \"%s\" has inline asm", 
+			      fnIt->getName().data());
+	  }
+	}
       }
     }
   }
+  
+  
   for (Module::const_global_iterator 
          it = m->global_begin(), ie = m->global_end(); 
        it != ie; ++it)
@@ -1036,6 +1071,17 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
     Function *f = fi;
     ++fi;
     const std::string &name = f->getName();
+    
+    if(name.compare("__strdup") == 0 ) {
+      std::cerr << "replacing __strdup\n";
+      if (Function *StrDup = mainModule->getFunction("strdup")) {
+	f->replaceAllUsesWith(StrDup);
+	f->eraseFromParent();
+      } else {
+	f->setName("strdup");
+      }
+    }
+
     if (name[0]=='\01') {
       unsigned size = name.size();
       if (name[size-2]=='6' && name[size-1]=='4') {
@@ -1263,6 +1309,159 @@ int main(int argc, char **argv, char **envp) {
     mainModule = klee::linkWithLibrary(mainModule, Path.c_str());
     assert(mainModule && "unable to link with simple model");
   }  
+
+
+  
+  for (Module::const_iterator fnIt = mainModule->begin(), fn_ie = mainModule->end(); 
+       fnIt != fn_ie; ++fnIt) {
+    for (Function::const_iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
+         bbIt != bb_ie; ++bbIt) {
+      for (BasicBlock::const_iterator it = bbIt->begin(), ie = bbIt->end(); 
+           it != it; ++it) {
+        if (const CallInst *ci = dyn_cast<CallInst>(it)) {
+          if (isa<InlineAsm>(ci->getCalledValue())) {
+	    std::cerr << "mata\n"; 
+	    klee_warning_once(&*fnIt,
+                              "function \"%s\" has inline asm", 
+                              fnIt->getName().data());
+	    const InlineAsm *asm_instr = dyn_cast<InlineAsm>(ci->getCalledValue());
+	    
+	    CallSite cs;
+	    cs = CallSite(const_cast<CallInst*>(ci));
+	    Function *f = NULL;
+	    bool replacementDone = false;
+	    
+	    //just some special case inline asm instructions will be replaced
+	    switch(getInlineAsmSpecialCase(asm_instr)) {
+	      /* need to identify the correct parameter and pass it to the function
+		 this needs to be done because these inline asm functions have more than one inline asm params 
+		 usually the 4th one is the one needed to pass to our stub implementation in the network model                                                                                                                             
+	      */
+	      
+	    case FD_SET_ID: {
+	      f = mainModule->getFunction("_FD_SET");
+	      assert(f != NULL);
+
+	      //arg1                                                                                                                                                                                                                      
+	      Value *arg0 = cs.getArgument(0);
+
+	      if(!GetElementPtrInst::classof(arg0))
+		break;
+	      GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(arg0);
+	      Value *used_arg = gep->getPointerOperand();
+
+	      if(!GetElementPtrInst::classof(used_arg))
+		break;
+	      GetElementPtrInst *struct_gep = dyn_cast<GetElementPtrInst>(used_arg);
+	      Value *struct_arg = struct_gep->getPointerOperand();
+
+	      //arg2                                                                         
+	      Value *arg1 = cs.getArgument(1);
+	      std::vector<Value*> args;
+	      //push order matters
+	      
+	      args.push_back(arg1);
+	      args.push_back(struct_arg);
+
+	      Function::arg_iterator f_args = f->arg_begin();
+	      f_args++;
+	      f_args++;
+	      
+	      Instruction* replacement = CallInst::Create(f, args.begin(), args.end());
+
+	      ReplaceInstWithInst(const_cast<CallInst*>(ci), replacement);
+	      replacementDone = true;
+	      break;
+	    }
+
+	    case FD_ISSET_ID: {
+	      f = mainModule->getFunction("_FD_ISSET");
+	      assert(f != NULL);
+
+	      //arg0                                                                                                                                                                                                                      
+	      Value *arg0 = cs.getArgument(1);
+
+	      if(!GetElementPtrInst::classof(arg0))
+		break;
+	      GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(arg0);
+	      Value *used_arg = gep->getPointerOperand();
+
+	      if(!GetElementPtrInst::classof(used_arg))
+		break;
+	      GetElementPtrInst *struct_gep = dyn_cast<GetElementPtrInst>(used_arg);
+	      Value *struct_arg = struct_gep->getPointerOperand();
+
+	      //arg1                                                                                                                                                                                                                      
+	      Value *arg1 = cs.getArgument(0);
+	      //push order matters                                                                                                                                                                                                        
+	      std::vector<Value*> args;
+	      args.push_back(arg1);
+	      args.push_back(struct_arg);
+
+	      Function::arg_iterator f_args = f->arg_begin();
+	      f_args++;
+	      f_args++;
+	      Instruction* replacement = CallInst::Create(f, args.begin(), args.end());
+
+	      ReplaceInstWithInst(const_cast<CallInst*>(ci), replacement);
+	      replacementDone = true;
+	      break;
+	    }
+	      
+	    case FD_ZERO_ID: {
+
+	      Value * reg = cs.getArgument(3);
+	      //this is how these uclibc macros are translated to LLVM code                                                                                                                                                               
+	      if(!GetElementPtrInst::classof(reg))
+		break;
+
+	      GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(reg);
+	      Value *used_reg = gep->getPointerOperand();
+
+
+	      if(!GetElementPtrInst::classof(used_reg))
+		break;
+
+	      GetElementPtrInst *struct_gep = dyn_cast<GetElementPtrInst>(used_reg);
+	      Value *struct_reg = struct_gep->getPointerOperand();
+	      f = mainModule->getFunction("_FD_ZERO");
+	      assert(f != NULL);
+	      
+	      std::vector<Value*> args;
+	      args.push_back(struct_reg);
+	      
+	      Function::arg_iterator f_args = f->arg_begin();
+	      f_args++;
+	      Instruction* replacement = CallInst::Create(f, args.begin(), args.end());
+	      
+	      ReplaceInstWithInst(const_cast<CallInst*>(ci), replacement);
+	      replacementDone = true;
+	      break;
+	    }
+	    case FD_CLR_ID: {
+	      f = mainModule->getFunction("FD_CLR");
+	      assert(f != NULL);
+	      break;
+	    }
+
+	    default:
+	      klee_warning("coult not patch inline asm %s",
+			   asm_instr->getAsmString().c_str());
+	      
+	    }
+
+	    //if not replaced already                                                                                                                                                                                                     
+	    if(f && !replacementDone)
+	      // simply change the funtion to be called                                                                                                                                                                                   
+	      cs.setCalledFunction(f);
+
+	  }
+	}
+      }
+    }
+  }
+  
+
 
   // Get the desired main function.  klee_main initializes uClibc
   // locale and other data and then calls main.
