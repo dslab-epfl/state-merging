@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <assert.h>
 #include <unistd.h>
+#include <string.h>
 
 
 #define BREAK_SIGNAL	SIGUSR2
@@ -21,6 +22,8 @@ namespace cloud9 {
 
 void initBreakSignal() {
 	struct sigaction act;
+	memset(&act, 0, sizeof(struct sigaction));
+
 	act.sa_handler = SIG_IGN;
 	act.sa_flags = 0;
 	act.sa_restorer = NULL;
