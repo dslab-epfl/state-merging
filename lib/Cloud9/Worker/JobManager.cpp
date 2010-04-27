@@ -105,6 +105,10 @@ namespace worker {
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
 
+static bool isJob(WorkerTree::Node *node) {
+	return (**node).getJob() != NULL;
+}
+
 static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
 	assert(node->layerExists(WORKER_LAYER_STATES));
 	std::vector<int> path;
@@ -632,6 +636,8 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool noti
 
 	if (notifySearcher)
 		selStrategy->onRemovingJob(job);
+
+	delete job;
 }
 
 void JobManager::selectJobs(WorkerTree::Node *root,
@@ -671,7 +677,7 @@ void JobManager::selectJobs(WorkerTree::Node *root,
 }
 
 unsigned int JobManager::countJobs(WorkerTree::Node *root) {
-	return tree->countLeaves(WORKER_LAYER_JOBS, root);
+	return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
 void JobManager::importJobs(ExecutionPathSetPin paths) {
@@ -753,7 +759,7 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		ExecutionJob *job = *it;
 
 		finalizeJob(job, true, false);
-		delete job;
+
 	}
 
 
@@ -824,8 +830,6 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 	if ((**nodePin).symState == NULL) {
 		// Job finished here, need to remove it
 		finalizeJob(job, false, true);
-
-		delete job;
 
 		// Spawn new jobs if there are states left
 		if (nodePin->layerExists(WORKER_LAYER_STATES)) {
@@ -1153,7 +1157,7 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 	for (std::set<WorkerTree::NodePin>::iterator it = stats.begin();
 			it != stats.end(); it++) {
 		const WorkerTree::NodePin &crtNodePin = *it;
-		unsigned int jobCount = tree->countLeaves(WORKER_LAYER_JOBS, crtNodePin.get());
+		unsigned int jobCount = countJobs(crtNodePin.get());
 		data.push_back(jobCount);
 	}
 
