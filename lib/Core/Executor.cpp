@@ -2655,11 +2655,15 @@ void Executor::callExternalFunction(ExecutionState &state,
       klee_warning_once(function, "%s", os.str().c_str());
   }
   
-  bool success = externalDispatcher->executeCall(function, target->inst, args);
-  if (!success) {
-    terminateStateOnError(state, "failed external call: " + function->getName(),
-                          "external.err");
-    return;
+  if (function->getNameStr() == "vprintf") {
+	  CLOUD9_INFO("Skipping vprintf string: " << (char*)args[1]);
+  } else {
+	  bool success = externalDispatcher->executeCall(function, target->inst, args);
+	  if (!success) {
+		terminateStateOnError(state, "failed external call: " + function->getName(),
+							  "external.err");
+		return;
+	  }
   }
 
   if (!state.addressSpace.copyInConcretes()) {
