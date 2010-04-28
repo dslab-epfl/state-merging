@@ -910,18 +910,18 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock, WorkerTree::
 	std::reverse(path.begin(), path.end());
 
 	CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
-	WorkerTree::Node *lastValidState = NULL;
 
 	replaying = true;
 
 	// Perform the replay work
 	for (unsigned int i = 0; i < path.size(); i++) {
+		if (!crtNode->layerExists(WORKER_LAYER_STATES)) {
+			// We have a broken replay
+			break;
+		}
+
 		if ((**crtNode).symState != NULL) {
-			lastValidState = crtNode;
 			stepInNode(lock, crtNode, true);
-		} else {
-			CLOUD9_DEBUG("Potential fast-forward at position " << i <<
-					" out of " << path.size() << " in the path.");
 		}
 
 		crtNode = crtNode->getChild(WORKER_LAYER_JOBS, path[i]);
@@ -930,11 +930,11 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock, WorkerTree::
 
 	replaying = false;
 
-	if ((**crtNode).symState == NULL) {
-		CLOUD9_ERROR("Replay broken, NULL state at the end of the path. Maybe the state went past the job root?");
+	if (!crtNode->layerExists(WORKER_LAYER_STATES)) {
+		assert((**crtNode).symState == NULL);
+		CLOUD9_ERROR("Replay broken, NULL state at the end of the path.");
 		if (BreakOnReplayBroken) {
-			assert(lastValidState != NULL);
-			fireBreakpointHit(lastValidState);
+			fireBreakpointHit(crtNode->getParent());
 		}
 	}
 }
