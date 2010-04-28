@@ -1096,12 +1096,14 @@ void JobManager::refineStatistics() {
 			WorkerTree::Node *right = nodePin->getChild(WORKER_LAYER_JOBS, 1);
 
 			if (left) {
-				WorkerTree::NodePin leftPin = left->pin(WORKER_LAYER_JOBS);
+				WorkerTree::NodePin leftPin =
+						tree->getNode(WORKER_LAYER_STATISTICS, left)->pin(WORKER_LAYER_STATISTICS);
 				newStats.insert(leftPin);
 			}
 
 			if (right) {
-				WorkerTree::NodePin rightPin = right->pin(WORKER_LAYER_JOBS);
+				WorkerTree::NodePin rightPin =
+						tree->getNode(WORKER_LAYER_STATISTICS, right)->pin(WORKER_LAYER_STATISTICS);
 				newStats.insert(rightPin);
 			}
 		} else {
