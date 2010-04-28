@@ -22,11 +22,13 @@ namespace worker {
  */
 class SymbolicState {
 	friend class JobManager;
+	friend class StrategyPortfolio;
 private:
 	klee::ExecutionState *kleeState;
 	WorkerTree::NodePin nodePin;
 
 	bool _active;
+	bool _free;
 
 	void rebindToNode(WorkerTree::Node *node) {
 		if (nodePin) {
@@ -42,7 +44,7 @@ private:
 	}
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), nodePin(WORKER_LAYER_STATES), _active(false) {
+		kleeState(state), nodePin(WORKER_LAYER_STATES), _active(false), _free(false) {
 			kleeState->setCloud9State(this);
 	}
 
@@ -60,12 +62,15 @@ public:
  */
 class ExecutionJob {
 	friend class JobManager;
+	friend class StrategyPortfolio;
 private:
 	WorkerTree::NodePin nodePin;
 
 	bool imported;
 	bool exported;
 	bool removing;
+
+	unsigned int _strategy;
 
 	void bindToNode(WorkerTree::Node *node) {
 		assert(!nodePin && node);
@@ -82,11 +87,11 @@ private:
 	}
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
-		exported(false), removing(false) {}
+		exported(false), removing(false), _strategy(0) {}
 
 	ExecutionJob(WorkerTree::Node *node, bool _imported) :
 		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
-		removing(false) {
+		removing(false), _strategy(0) {
 
 		bindToNode(node);
 
