@@ -90,11 +90,11 @@ public:
 
 		bindToNode(node);
 
-		CLOUD9_DEBUG("Created job at " << *node);
+		//CLOUD9_DEBUG("Created job at " << *node);
 	}
 
 	virtual ~ExecutionJob() {
-		CLOUD9_DEBUG("Destroyed job at " << nodePin);
+		//CLOUD9_DEBUG("Destroyed job at " << nodePin);
 		unbind();
 	}
 
