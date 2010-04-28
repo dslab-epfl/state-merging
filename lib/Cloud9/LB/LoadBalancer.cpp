@@ -137,7 +137,7 @@ void LoadBalancer::updateStrategyPortfolioStats(unsigned id, std::vector<Strateg
   Worker *worker = workers[id];
   assert(worker);
   
-  for(unsigned i = 0; i < stats.size() ; i++) {
+  for(unsigned i = 0; i < stats.size(); i++) {
     StrategyPortfolioData spd = stats[i];
     
     //updating worker statistics per strategy
@@ -198,6 +198,23 @@ void LoadBalancer::getAndResetCoverageUpdates(int id, cov_update_t &data) {
 		}
 	}
 }
+
+void LoadBalancer::getStrategyPortfolioData(int id, strategy_portfolio_t &data) {
+  Worker *worker = workers[id];
+  assert(worker && "non-existent worker");
+  
+  for(unsigned i = 0; i < worker->strategyStatistics.size(); i++) {
+    StrategyStatistic stat = worker->strategyStatistics[i];
+    if(stat.toChange) {
+      //if we decide we need to make any strategy portfolio changes
+      //we insert data in the reponse about the index and the nrJobsToMove 
+      //to the stragegy index i
+      data.push_back(std::make_pair(i, stat.nrJobsToMove));
+      worker->strategyStatistics[i].toChange = false;
+    }    
+  }
+}
+
 
 void LoadBalancer::analyzeBalance() {
 	if (workers.size() < 2) {

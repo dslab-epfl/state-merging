@@ -46,7 +46,7 @@ private:
 	std::vector<char> coverageUpdates;
 
 	std::vector<StrategyStatistic> strategyStatistics;
-
+	
 	unsigned totalJobs;
 
 	Worker() : nodesRevision(1), totalJobs(0) { };

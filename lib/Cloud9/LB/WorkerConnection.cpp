@@ -98,6 +98,8 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 			if (worker->wantsUpdates())
 				sendStatisticsUpdates(response);
+
+			sendStrategyPortfolioUpdates(response);
 		}
 
 		std::string respString;
@@ -146,17 +148,29 @@ void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
 }
 
 void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
-	unsigned id = response.id();
-	cov_update_t data;
-
-	lb->getAndResetCoverageUpdates(id, data);
-
-	if (data.size() > 0) {
-		StatisticUpdate *update = response.add_globalupdates();
-		serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data, *update);
-	}
-
+  unsigned id = response.id();
+  cov_update_t data;
+  
+  lb->getAndResetCoverageUpdates(id, data);
+  
+  if (data.size() > 0) {
+    StatisticUpdate *update = response.add_globalupdates();
+    serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data, *update);
+  }
+  
 }
+
+void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response){
+  unsigned id = response.id();
+  
+  strategy_portfolio_t data;
+  lb->getStrategyPortfolioData(id, data);
+  if(data.size() > 0) {
+    StrategyPortfolioResponse *update = response.add_strategyportfolioresponse();
+    serializeStrategyPortfolioResponse(CLOUD9_STRATEGY_PORTFOLIO, data, *update);
+  }
+}
+
 
 void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
 	if (!error) {

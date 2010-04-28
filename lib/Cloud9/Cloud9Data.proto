@@ -32,6 +32,11 @@ message StrategyPortfolioData {
 }
 
 
+message StrategyPortfolioResponse {
+	required uint32 strategy = 1;
+	required uint32 nrJobs = 2;
+}
+
 message WorkerReportMessage {
 	message Registration {
 		required string address = 1;
@@ -87,6 +92,8 @@ message LBResponseMessage {
 	required bool more_details = 4;
 	
 	repeated StatisticUpdate globalUpdates = 5;
+
+	repeated StrategyPortfolioResponse strategyPortfolioResponse = 6;
 }
 
 message PeerTransferMessage {

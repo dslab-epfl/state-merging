@@ -52,6 +52,7 @@ private:
 
 	void sendJobTransfers(LBResponseMessage &response);
 	void sendStatisticsUpdates(LBResponseMessage &response);
+	void sendStrategyPortfolioUpdates(LBResponseMessage &response);
 
 public:
 	typedef boost::shared_ptr<WorkerConnection> pointer;

@@ -102,6 +102,7 @@ public:
 	}
 
 	void getAndResetCoverageUpdates(int id, cov_update_t &data);
+	void getStrategyPortfolioData(int id, strategy_portfolio_t &data);
 
 	TransferRequest *requestAndResetTransfer(int id) {
 		if (reqTransfer.count(id) > 0) {

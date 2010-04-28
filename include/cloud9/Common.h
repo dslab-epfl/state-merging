@@ -14,4 +14,5 @@
 //#define CLOUD9_HAVE_ADVANCED_LOGGING	// Use log4cxx for logging purposes
 
 
+
 #endif /* COMMON_H_ */
