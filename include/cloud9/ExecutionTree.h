@@ -387,8 +387,11 @@ private:
 
 		node->clearNode(layer);
 
-		if (node->totalCount == 0 && node->_totalRefCount == 0)
+		if (node->totalCount == 0 && node->_totalRefCount == 0) {
+			assert(node->parent);
+			node->parent->childrenNodes[node->index] = NULL;
 			delete node; // Clean it for good, nobody references it anymore
+		}
 	}
 
 public:
