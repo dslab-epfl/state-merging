@@ -9,6 +9,7 @@
 #define WORKER_H_
 
 #include "cloud9/lb/TreeNodeInfo.h"
+#include "cloud9/lb/StrategyStatistic.h"
 
 #include <vector>
 #include <map>
@@ -43,6 +44,8 @@ private:
 	unsigned nodesRevision;
 
 	std::vector<char> coverageUpdates;
+
+	std::vector<StrategyStatistic> strategyStatistics;
 
 	unsigned totalJobs;
 

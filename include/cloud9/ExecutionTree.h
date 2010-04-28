@@ -681,6 +681,7 @@ std::string getASCIIDataSet(DataIterator begin, DataIterator end) {
 
 	return result;
 }
+
 #endif
 
 }

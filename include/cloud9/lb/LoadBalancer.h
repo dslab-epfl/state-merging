@@ -79,6 +79,8 @@ public:
 	void updateWorkerStatNodes(unsigned id, std::vector<LBTree::Node*> &newNodes);
 	void updateWorkerStats(unsigned id, std::vector<int> &stats);
 
+	void updateStrategyPortfolioStats(unsigned id, std::vector<StrategyPortfolioData> &stats);
+
 	void updateCoverageData(unsigned id, const cov_update_t &data);
 
 	Worker* getWorker(unsigned id) {

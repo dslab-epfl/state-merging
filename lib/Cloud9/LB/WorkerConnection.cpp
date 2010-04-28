@@ -87,7 +87,8 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 			processNodeSetUpdate(message);
 			processNodeDataUpdate(message);
 			processStatisticsUpdates(message);
-
+			processStrategyPortfolioUpdates(message);
+			
 			lb->analyzeBalance();
 
 			response.set_id(id);
@@ -230,6 +231,25 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
 
 	return true;
 }
+
+
+  bool WorkerConnection::processStrategyPortfolioUpdates(const WorkerReportMessage &message) {
+    if(!message.has_strategyportfolioupdate())
+      return false;
+    
+    unsigned id = message.id();
+    const WorkerReportMessage_StrategyPortfolioUpdate &strategyPortfolioUpdateMsg = 
+      message.strategyportfolioupdate();
+
+    std::vector<StrategyPortfolioData> data;
+    data.insert(data.begin(), strategyPortfolioUpdateMsg.data().begin(), 
+		strategyPortfolioUpdateMsg.data().end());
+
+    //TODO - implement proper printing for aggregate data types
+    CLOUD9_DEBUG("Received strategy portfolio update "); // << getASCIIDataSet(data.begin(), data.end()));
+    lb->updateStrategyPortfolioStats(id, data);
+    return true;
+  }
 
 }
 

@@ -133,6 +133,20 @@ void LoadBalancer::updateWorkerStatNodes(unsigned id, std::vector<LBTree::Node*>
 	worker->nodes = newNodes;
 }
 
+void LoadBalancer::updateStrategyPortfolioStats(unsigned id, std::vector<StrategyPortfolioData> &stats) {
+  Worker *worker = workers[id];
+  assert(worker);
+  
+  for(unsigned i = 0; i < stats.size() ; i++) {
+    StrategyPortfolioData spd = stats[i];
+    
+    //updating worker statistics per strategy
+    worker->strategyStatistics[spd.strategy()].performance = (uint32_t) spd.performance();
+    worker->strategyStatistics[spd.strategy()].allocation = (uint32_t) spd.allocation();
+  }
+
+}
+
 void LoadBalancer::updateWorkerStats(unsigned id, std::vector<int> &stats) {
 	Worker *worker = workers[id];
 	assert(worker);

@@ -25,6 +25,13 @@ message StatisticUpdate {
 	repeated StatisticData data = 2;
 }
 
+message StrategyPortfolioData {
+	required uint32 strategy = 1;
+	required uint32 performance = 2;
+	required uint32 allocation = 3;
+}
+
+
 message WorkerReportMessage {
 	message Registration {
 		required string address = 1;
@@ -44,14 +51,19 @@ message WorkerReportMessage {
 	message NodeDataUpdate {
 		repeated uint32 data = 1;
 	}
+
+	message StrategyPortfolioUpdate {
+		repeated StrategyPortfolioData data = 1;
+	}
 	
 	required uint32 id = 1;
 	
 	optional NodeSetUpdate nodeSetUpdate = 2;
 	optional NodeDataUpdate nodeDataUpdate = 3;
 	optional Registration registration = 4;
-	
+		
 	repeated StatisticUpdate localUpdates = 5;
+	optional StrategyPortfolioUpdate strategyPortfolioUpdate= 6;
 }
 
 message LBResponseMessage {
