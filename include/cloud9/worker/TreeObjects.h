@@ -46,7 +46,9 @@ public:
 			kleeState->setCloud9State(this);
 	}
 
-	virtual ~SymbolicState() { }
+	virtual ~SymbolicState() {
+		rebindToNode(NULL);
+	}
 
 	klee::ExecutionState *getKleeState() const { return kleeState; }
 
@@ -73,10 +75,10 @@ private:
 	}
 
 	void unbind() {
-		assert(nodePin);
-
-		(**nodePin).job = NULL;
-		nodePin.reset();
+		if (nodePin) {
+			(**nodePin).job = NULL;
+			nodePin.reset();
+		}
 	}
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
@@ -87,9 +89,14 @@ public:
 		removing(false) {
 
 		bindToNode(node);
+
+		CLOUD9_DEBUG("Created job at " << *node);
 	}
 
-	virtual ~ExecutionJob() {}
+	virtual ~ExecutionJob() {
+		CLOUD9_DEBUG("Destroyed job at " << nodePin);
+		unbind();
+	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
 

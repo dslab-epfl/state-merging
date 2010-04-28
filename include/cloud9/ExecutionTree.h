@@ -613,6 +613,8 @@ void node_pin_add_ref(TreeNode<NI, L, D> *p, int layer) {
 	assert(p);
 
 	p->_incRefCount(layer);
+
+	//if (layer == 0) CLOUD9_DEBUG("New inc ref count " << p->_refCount[0] << " for node " << *p);
 }
 
 template<class NI, int L, int D>
@@ -621,6 +623,8 @@ void node_pin_release(TreeNode<NI, L, D> *p, int layer) {
 	assert(p->_refCount[layer] > 0);
 
 	p->_decRefCount(layer);
+
+	//if (layer == 0) CLOUD9_DEBUG("New dec ref count " << p->_refCount[0] << " for node " << *p);
 
 	if (p->_refCount[layer] == 0) {
 		ExecutionTree<NI, L, D>::removeSupportingBranch(layer, p, NULL);

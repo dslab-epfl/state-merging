@@ -750,6 +750,7 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		assert(currentJob != job);
 
 		job->exported = true;
+		job->removing = true;
 	}
 
 	selStrategy->onRemovingJobs();
