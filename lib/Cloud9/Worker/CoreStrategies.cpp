@@ -67,24 +67,6 @@ void RandomStrategy::onRemovingJob(ExecutionJob *job) {
 	jobs.pop_back();
 }
 
-void RandomStrategy::onRemovingJobs() {
-	unsigned i = 0;
-
-	while (i < jobs.size()) {
-		ExecutionJob *job = jobs[i];
-
-		if (job->isRemoving()) {
-			jobs[i] = jobs.back();
-			indices[jobs[i]] = i;
-			jobs.pop_back();
-		} else {
-			i++;
-		}
-
-	}
-
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Random Path Strategy
 ////////////////////////////////////////////////////////////////////////////////

@@ -45,13 +45,6 @@ void BatchingStrategy::onRemovingJob(ExecutionJob *job) {
 	underlying->onRemovingJob(job);
 }
 
-void BatchingStrategy::onRemovingJobs() {
-	// Play it safe here
-	currentJob = NULL;
-
-	underlying->onRemovingJobs();
-}
-
 void BatchingStrategy::onStateActivated(SymbolicState *state) {
 	underlying->onStateActivated(state);
 }
@@ -88,13 +81,6 @@ void ComposedStrategy::onRemovingJob(ExecutionJob *job) {
 	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
 		JobSelectionStrategy *strat = *it;
 		strat->onRemovingJob(job);
-	}
-}
-
-void ComposedStrategy::onRemovingJobs() {
-	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		JobSelectionStrategy *strat = *it;
-		strat->onRemovingJobs();
 	}
 }
 

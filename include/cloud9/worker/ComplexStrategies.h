@@ -29,7 +29,6 @@ public:
 	virtual void onJobAdded(ExecutionJob *job);
 	virtual ExecutionJob* onNextJobSelection();
 	virtual void onRemovingJob(ExecutionJob *job);
-	virtual void onRemovingJobs();
 
 	virtual void onStateActivated(SymbolicState *state);
 	virtual void onStateUpdated(SymbolicState *state);
@@ -46,7 +45,6 @@ public:
 
 	virtual void onJobAdded(ExecutionJob *job);
 	virtual void onRemovingJob(ExecutionJob *job);
-	virtual void onRemovingJobs();
 
 	virtual void onStateActivated(SymbolicState *state);
 	virtual void onStateUpdated(SymbolicState *state);

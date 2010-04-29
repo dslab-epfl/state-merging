@@ -22,15 +22,25 @@ class JobManager;
 class StrategyPortfolio: public JobSelectionStrategy {
 public:
 	typedef unsigned int strat_id_t;
+	typedef std::vector<strat_id_t> strat_id_vector;
 private:
+	struct strat_info {
+		JobSelectionStrategy *strategy;
+		unsigned int allocation;
+		unsigned int performance;
+	};
+
 	JobManager *manager;
 	WorkerTree *tree;
 
-	typedef std::map<strat_id_t, JobSelectionStrategy*> strat_map;
+	typedef std::map<strat_id_t, strat_info> strat_map;
+
 	typedef std::vector<JobSelectionStrategy*> strat_vector;
 
 	strat_map stratMap;
+
 	strat_vector stratVector;
+	strat_id_vector stratIdVector;
 
 	unsigned int position;
 
@@ -44,10 +54,14 @@ public:
 
 	virtual ~StrategyPortfolio();
 
+	const strat_id_vector &getStrategies() const { return stratIdVector; }
+	JobSelectionStrategy* getStrategy(strat_id_t id) const { return stratMap[id].strategy; }
+	unsigned int getStrategyAllocation(strat_id_t id) const { return stratMap[id].allocation; }
+	unsigned int getStrategyPerformance(strat_id_t id) const { return stratMap[id].performance; }
+
 	virtual void onJobAdded(ExecutionJob *job);
 	virtual ExecutionJob* onNextJobSelection();
 	virtual void onRemovingJob(ExecutionJob *job);
-	virtual void onRemovingJobs();
 
 	virtual void onStateActivated(SymbolicState *state);
 	virtual void onStateUpdated(SymbolicState *state);

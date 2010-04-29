@@ -86,15 +86,6 @@ void StrategyPortfolio::onRemovingJob(ExecutionJob *job) {
 	stratMap[id].allocation--;
 }
 
-void StrategyPortfolio::onRemovingJobs() { //XXX
-	// Broadcast this to all strategies
-	for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
-		JobSelectionStrategy *strat = it->second.strategy;
-
-		strat->onRemovingJobs();
-	}
-}
-
 void StrategyPortfolio::onStateActivated(SymbolicState *state) {
 	bool free = isStateFree(state);
 

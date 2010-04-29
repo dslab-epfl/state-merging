@@ -116,7 +116,7 @@ private:
 
 
 	void submitJob(ExecutionJob* job, bool activateStates);
-	void finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher);
+	void finalizeJob(ExecutionJob *job, bool deactivateStates);
 
 	template<typename JobIterator>
 	void submitJobs(JobIterator begin, JobIterator end, bool activateStates) {
