@@ -37,6 +37,8 @@ void InstrumentationManager::instrumThreadControl() {
 
 		if (terminated) {
 			CLOUD9_INFO("Instrumentation interrupted. Stopping.");
+			writeStatistics();
+			writeEvents();
 			break;
 		}
 
