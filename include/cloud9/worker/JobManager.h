@@ -12,6 +12,7 @@
 #include "cloud9/Logger.h"
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/SymbolicEngine.h"
+#include "cloud9/worker/CoreStrategies.h"
 
 #include <boost/thread.hpp>
 #include <list>
@@ -37,7 +38,6 @@ namespace worker {
 class SymbolicState;
 class ExecutionJob;
 class KleeHandler;
-class JobSelectionStrategy;
 
 
 class JobManager: public StateEventHandler {
@@ -53,6 +53,8 @@ private:
 	void initBreakpoints();
 	void initStatistics();
 	void initStrategy();
+
+	StrategyPortfolio *createStrategyPortfolio();
 
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
@@ -171,6 +173,8 @@ public:
 
 	WorkerTree::Node *getCurrentNode();
 
+	JobSelectionStrategy *getStrategy() { return selStrategy; }
+
 	unsigned getModuleCRC() const;
 
 	void processJobs(unsigned int timeOut = 0);
@@ -209,9 +213,9 @@ public:
 	/*
 	 * Job import/export methods
 	 */
-	void importJobs(ExecutionPathSetPin paths);
+	void importJobs(ExecutionPathSetPin paths, std::vector<unsigned int> *strategies);
 	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
-			std::vector<int> counts);
+			std::vector<int> &counts, std::vector<unsigned int> *strategies);
 };
 
 }

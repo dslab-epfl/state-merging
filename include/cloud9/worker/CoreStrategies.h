@@ -9,7 +9,7 @@
 #ifndef CORESTRATEGIES_H_
 #define CORESTRATEGIES_H_
 
-#include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/TreeNodeInfo.h"
 
 #include <vector>
 #include <map>

@@ -123,6 +123,18 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 	}
 }
 
+void LBConnection::sendStrategyUpdates(WorkerReportMessage &message) {
+	StrategyPortfolio *portfolio =
+			dynamic_cast<StrategyPortfolio*>(jobManager->getStrategy());
+
+	if (portfolio == NULL) {
+		// The manager does not use a strategy portfolio, just drop these updates
+		return;
+	}
+
+
+}
+
 void LBConnection::sendUpdates() {
 	// Prepare the updates message
 	WorkerReportMessage message;
@@ -210,7 +222,8 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
 		ExecutionPathSetPin paths,
 		std::vector<int> counts) {
 
-	ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts);
+	std::vector<unsigned int> strategies;
+	ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts, &strategies);
 
 	tcp::socket peerSocket(service);
 	boost::system::error_code error;
@@ -226,6 +239,10 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
 	cloud9::data::ExecutionPathSet *pSet = message.mutable_path_set();
 
 	serializeExecutionPathSet(jobPaths, *pSet);
+
+	for (unsigned int i = 0; i < strategies.size(); i++) {
+		message.add_strategies(strategies[i]);
+	}
 
 	std::string msgString;
 	message.SerializeToString(&msgString);

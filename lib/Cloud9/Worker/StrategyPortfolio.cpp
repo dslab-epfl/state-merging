@@ -21,8 +21,10 @@ StrategyPortfolio::StrategyPortfolio(JobManager *_manager,
 
 	tree = manager->getTree();
 
-	for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
-		stratVector.push_back(it->second);
+	for (strat_map::iterator it = strategies.begin(); it != strategies.end(); it++) {
+		stratMap[it->first].strategy = it->second;
+		stratMap[it->first].allocation = 0;
+		stratMap[it->first].performance = 0;
 	}
 }
 
@@ -55,11 +57,13 @@ bool StrategyPortfolio::isValidJob(strat_id_t strat, WorkerTree::Node *jobNode) 
 
 void StrategyPortfolio::onJobAdded(ExecutionJob *job) {
 	strat_id_t id = job->_strategy;
-	JobSelectionStrategy *strat = stratMap[id];
+	JobSelectionStrategy *strat = stratMap[id].strategy;
 
 	assert(strat != NULL);
 
 	strat->onJobAdded(job);
+
+	stratMap[id].allocation++;
 }
 
 ExecutionJob* StrategyPortfolio::onNextJobSelection() {
@@ -73,17 +77,19 @@ ExecutionJob* StrategyPortfolio::onNextJobSelection() {
 
 void StrategyPortfolio::onRemovingJob(ExecutionJob *job) {
 	strat_id_t id = job->_strategy;
-	JobSelectionStrategy *strat = stratMap[id];
+	JobSelectionStrategy *strat = stratMap[id].strategy;
 
 	assert(strat != NULL);
 
 	strat->onRemovingJob(job);
+
+	stratMap[id].allocation--;
 }
 
-void StrategyPortfolio::onRemovingJobs() {
+void StrategyPortfolio::onRemovingJobs() { //XXX
 	// Broadcast this to all strategies
 	for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
-		JobSelectionStrategy *strat = it->second;
+		JobSelectionStrategy *strat = it->second.strategy;
 
 		strat->onRemovingJobs();
 	}
@@ -95,13 +101,13 @@ void StrategyPortfolio::onStateActivated(SymbolicState *state) {
 	if (free) {
 		// Broadcast to everyone
 		for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
-			JobSelectionStrategy *strat = it->second;
+			JobSelectionStrategy *strat = it->second.strategy;
 
 			strat->onStateActivated(state);
 		}
 	} else {
 		strat_id_t id = getStateStrategy(state);
-		JobSelectionStrategy *strat = stratMap[id];
+		JobSelectionStrategy *strat = stratMap[id].strategy;
 
 		assert(strat != NULL);
 
@@ -120,7 +126,7 @@ void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 
 		// Broadcast to everyone
 		for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
-			JobSelectionStrategy *strat = it->second;
+			JobSelectionStrategy *strat = it->second.strategy;
 
 			strat->onStateUpdated(state);
 		}
@@ -132,12 +138,12 @@ void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 
 			for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
 				if (it->first != id) {
-					JobSelectionStrategy *strat = it->second;
+					JobSelectionStrategy *strat = it->second.strategy;
 					strat->onStateDeactivated(state);
 				}
 			}
 
-			JobSelectionStrategy *strat = stratMap[id];
+			JobSelectionStrategy *strat = stratMap[id].strategy;
 			assert(strat != NULL);
 
 			strat->onStateUpdated(state);
@@ -153,13 +159,13 @@ void StrategyPortfolio::onStateDeactivated(SymbolicState *state) {
 	if (free) {
 		// Broadcast to everyone
 		for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
-			JobSelectionStrategy *strat = it->second;
+			JobSelectionStrategy *strat = it->second.strategy;
 
 			strat->onStateDeactivated(state);
 		}
 	} else {
 		strat_id_t id = getStateStrategy(state);
-		JobSelectionStrategy *strat = stratMap[id];
+		JobSelectionStrategy *strat = stratMap[id].strategy;
 
 		assert(strat != NULL);
 
@@ -203,12 +209,15 @@ void StrategyPortfolio::reInvestJobs(strat_id_t newStrat, std::vector<ExecutionJ
 			SymbolicState *state = (**node).getSymbolicState();
 
 			// We also need to move the state from one strategy to another
-			stratMap[job->_strategy]->onStateDeactivated(state);
-			stratMap[newStrat]->onStateActivated(state);
+			stratMap[job->_strategy].strategy->onStateDeactivated(state);
+			stratMap[newStrat].strategy->onStateActivated(state);
 		}
 
-		stratMap[job->_strategy]->onRemovingJob(job);
-		stratMap[newStrat]->onJobAdded(job);
+		stratMap[job->_strategy].strategy->onRemovingJob(job);
+		stratMap[newStrat].strategy->onJobAdded(job);
+
+		stratMap[job->_strategy].allocation--;
+		stratMap[newStrat].allocation++;
 
 		job->_strategy = newStrat;
 	}

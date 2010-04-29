@@ -19,15 +19,7 @@ std::string InputFile;
 LibcType Libc;
 bool WithPOSIXRuntime;
 
-JobSelectionType JobSelection;
-JobSizingType JobSizing;
-JobExplorationType JobExploration;
-
 bool UseGlobalCoverage;
-
-int MaxJobSize;
-int MaxJobDepth;
-int MaxJobOperations;
 
 std::string LBAddress;
 int LBPort;
@@ -56,33 +48,9 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(RandomSel, "random", "Random selection"),
 				clEnumValN(RandomPathSel, "random-path", "Random path selection"),
 				clEnumValN(CoverageOptimizedSel, "coverage-optimized", "Coverage optimized job selection"),
+				clEnumValN(PortfolioSel, "portfolio", "Strategy portfolio"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
-
-static cl::opt<JobSizingType, true> JobSizingOpt("c9-jobsizing",
-		cl::desc("Job sizing strategy"), cl::values(
-				clEnumValN(UnlimitedSize, "unlimited", "Use a single, large job"),
-				clEnumValN(FixedSize, "fixed", "Use fix jobs"),
-				clEnumValEnd),
-		cl::location(JobSizing), cl::init(UnlimitedSize));
-
-static cl::opt<JobExplorationType, true> JobExplorationOpt("c9-jobexpl",
-		cl::desc("Job exploration strategy"), cl::values(
-				clEnumValN(RandomPathExpl, "random", "Random exploration"),
-				clEnumValEnd),
-		cl::location(JobExploration), cl::init(RandomPathExpl));
-
-static cl::opt<int, true> MaxJobSizeOpt("c9-job-max-size",
-		cl::desc("Maximum size for a job in a fixed size strategy"),
-		cl::location(MaxJobSize), cl::init(0));
-
-static cl::opt<int, true> MaxJobDepthOpt("c9-job-max-depth",
-		cl::desc("Maximum depth for a job in a fixed size strategy"),
-		cl::location(MaxJobDepth), cl::init(0));
-
-static cl::opt<int, true> MaxJobOperationsOpt("c9-job-max-ops",
-		cl::desc("Maximum count of operations for a job in a fixed size strategy"),
-		cl::location(MaxJobOperations), cl::init(0));
 
 static cl::opt<bool, true> UseGlobalCoverageOpt("c9-use-global-cov",
 		cl::desc("Use global coverage information in the searcher"),

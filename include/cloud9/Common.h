@@ -8,10 +8,16 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
-/* Cloud9 features and capabilities */
+namespace cloud9 {
 
-#define CLOUD9_HAVE_WATCHDOG			// Implement a fork-based watchdog mechanism
-//#define CLOUD9_HAVE_ADVANCED_LOGGING	// Use log4cxx for logging purposes
+enum Strategies {
+	RANDOM_PATH_STRATEGY = 1,
+	WEIGHTED_RANDOM_STRATEGY = 2,
+	RANDOM_STRATEGY = 3,
+	//DFS_STRATEGY = 4
+};
+
+}
 
 
 

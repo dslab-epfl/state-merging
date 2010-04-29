@@ -39,12 +39,6 @@ using namespace cloud9::data;
 namespace cloud9 {
 
 
-enum Strategies {RandomPathStrategy = 1, 
-		 WeightedRandomStrategy = 2,
-		 DFSStrategy = 3, 
-		 RandomStrategy = 4};
-
-
 class ExecutionPath;
 class ExecutionPathSet;
 

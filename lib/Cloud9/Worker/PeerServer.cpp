@@ -47,7 +47,16 @@ void PeerConnection::handleMessageReceived(std::string &msgString,
 
 		ExecutionPathSetPin paths = parseExecutionPathSet(pathSet);
 
-		jobManager->importJobs(paths);
+		if (message.strategies_size() > 0) {
+			std::vector<unsigned int> strategies;
+
+			for (unsigned int i = 0; i < message.strategies_size(); i++)
+				strategies.push_back(message.strategies(i));
+
+			jobManager->importJobs(paths, &strategies);
+		} else {
+			jobManager->importJobs(paths, NULL);
+		}
 	} else {
 		CLOUD9_ERROR("Error receiving message from peer");
 	}

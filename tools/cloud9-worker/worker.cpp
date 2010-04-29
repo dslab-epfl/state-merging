@@ -439,7 +439,6 @@ static void interrupt_handle() {
 	Interrupted = true;
 }
 
-#ifdef CLOUD9_HAVE_WATCHDOG
 static int watchdog(int pid) {
   CLOUD9_INFO("Watchdog: Watching " << pid);
   
@@ -499,7 +498,6 @@ static int watchdog(int pid) {
 
   return 0;
 }
-#endif
 
 int main(int argc, char **argv, char **envp) {
 	// Make sure to clean up properly before any exit point in the program
@@ -519,7 +517,6 @@ int main(int argc, char **argv, char **envp) {
 	// Fill up every global cl::opt object declared in the program
 	parseArguments(argc, argv);
 
-#ifdef CLOUD9_HAVE_WATCHDOG
 	// Setup the watchdog process
 	if (MaxTime == 0) {
 		CLOUD9_INFO("No max time specified; running without watchdog");
@@ -534,7 +531,6 @@ int main(int argc, char **argv, char **envp) {
 			//return watchdog(pid);
 		}
 	}
-#endif
 
 	// At this point, if the watchdog is enabled, we are in the child process of
 	// the fork().

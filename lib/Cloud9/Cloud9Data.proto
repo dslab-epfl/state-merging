@@ -33,7 +33,8 @@ message StrategyPortfolioData {
 
 
 message StrategyPortfolioResponse {
-	required uint32 strategy = 1;
+	required uint32 oldStrategy = 3;
+	required uint32 newStrategy = 1;
 	required uint32 nrJobs = 2;
 }
 
@@ -68,7 +69,7 @@ message WorkerReportMessage {
 	optional Registration registration = 4;
 		
 	repeated StatisticUpdate localUpdates = 5;
-	optional StrategyPortfolioUpdate strategyPortfolioUpdate= 6;
+	optional StrategyPortfolioUpdate strategyPortfolioUpdate = 6;
 }
 
 message LBResponseMessage {
@@ -81,6 +82,7 @@ message LBResponseMessage {
 	
 	message JobSeed {
 		required ExecutionPathSet path_set = 1;
+		repeated uint32 strategies = 2;
 	}
 	
 	required uint32 id = 1;
@@ -98,4 +100,5 @@ message LBResponseMessage {
 
 message PeerTransferMessage {
 	required ExecutionPathSet path_set = 1;
+	repeated uint32 strategies = 2;
 }

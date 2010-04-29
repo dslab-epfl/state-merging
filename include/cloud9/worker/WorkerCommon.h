@@ -27,31 +27,15 @@ enum LibcType {
 enum JobSelectionType {
 	RandomSel,
 	RandomPathSel,
-	CoverageOptimizedSel
-};
-
-enum JobSizingType {
-	UnlimitedSize,
-	FixedSize
-};
-
-enum JobExplorationType {
-	RandomPathExpl
+	CoverageOptimizedSel,
+	PortfolioSel
 };
 
 extern std::string InputFile;
 extern LibcType Libc;
 extern bool WithPOSIXRuntime;
 
-extern JobSelectionType JobSelection;
-extern JobSizingType JobSizing;
-extern JobExplorationType JobExploration;
-
 extern bool UseGlobalCoverage;
-
-extern int MaxJobSize;
-extern int MaxJobDepth;
-extern int MaxJobOperations;
 
 extern std::string LBAddress;
 extern int LBPort;

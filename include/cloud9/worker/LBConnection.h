@@ -41,6 +41,7 @@ private:
 
 	void sendJobStatistics(WorkerReportMessage &message);
 	void sendCoverageUpdates(WorkerReportMessage &message);
+	void sendStrategyUpdates(WorkerReportMessage &message);
 
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);

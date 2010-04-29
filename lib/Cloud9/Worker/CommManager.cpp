@@ -59,6 +59,9 @@ void CommManager::lbCommunicationControl() {
 		while (!terminated) {
 			t.wait();
 			t.expires_at(t.expires_at() + boost::posix_time::seconds(UpdateTime));
+			// XXX If the worker is blocked (e.g. debugging), take care not to
+			// trigger the timer multiple times - use expires_from_now() to
+			// check this out.
 
 			lbConnection.sendUpdates();
 		}
