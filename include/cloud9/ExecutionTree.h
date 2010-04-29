@@ -456,12 +456,12 @@ public:
 		assert(root->exists[layer]);
 		unsigned int result = 0;
 
-		BEGIN_DFS_SCAN(layer, root, node);
+		BEGIN_DFS_SCAN(layer, root, node)
 
 		if (node->isLeaf(layer) && pred(node))
 			result++;
 
-		END_DFS_SCAN(layer, root, node);
+		END_DFS_SCAN(layer, root, node)
 
 		return result;
 	}
@@ -474,6 +474,28 @@ public:
 
 		if (node->isLeaf(layer))
 			nodes.push_back(node);
+
+		END_DFS_SCAN(layer, root, node)
+	}
+
+	template<typename NodeCollection, typename Predicate>
+	void getLeaves(int layer, Node *root, Predicate pred, unsigned int maxCount, NodeCollection &nodes) {
+		assert(root->exists[layer]);
+		bool unlimited = (maxCount == 0);
+
+		BEGIN_DFS_SCAN(layer, root, node)
+
+		if (node->isLeaf(layer) && pred(node)) {
+			if (unlimited || maxCount > 0)
+				nodes.push_back(node);
+
+			if (!unlimited) {
+				if (maxCount > 0)
+					maxCount--;
+				else
+					break;
+			}
+		}
 
 		END_DFS_SCAN(layer, root, node)
 	}
