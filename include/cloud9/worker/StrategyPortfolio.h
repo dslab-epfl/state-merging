@@ -17,10 +17,13 @@ namespace cloud9 {
 
 namespace worker {
 
+class JobManager;
+
 class StrategyPortfolio: public JobSelectionStrategy {
 public:
 	typedef unsigned int strat_id_t;
 private:
+	JobManager *manager;
 	WorkerTree *tree;
 
 	typedef std::map<strat_id_t, JobSelectionStrategy*> strat_map;
@@ -33,9 +36,11 @@ private:
 
 	static inline bool isStateFree(SymbolicState *state);
 	static strat_id_t getStateStrategy(SymbolicState *state);
+
+	bool isValidJob(strat_id_t strat, WorkerTree::Node *jobNode);
 public:
-	StrategyPortfolio(WorkerTree *_tree,
-			std::map<strat_id_t, JobSelectionStrategy*> strategies);
+	StrategyPortfolio(JobManager *_manager,
+			std::map<strat_id_t, JobSelectionStrategy*> &strategies);
 
 	virtual ~StrategyPortfolio();
 
@@ -47,6 +52,9 @@ public:
 	virtual void onStateActivated(SymbolicState *state);
 	virtual void onStateUpdated(SymbolicState *state);
 	virtual void onStateDeactivated(SymbolicState *state);
+
+	void reInvestJobs(strat_id_t newStrat, strat_id_t oldStrat, unsigned int maxCount);
+	void reInvestJobs(strat_id_t newStrat, std::vector<ExecutionJob*> &jobs);
 };
 
 }

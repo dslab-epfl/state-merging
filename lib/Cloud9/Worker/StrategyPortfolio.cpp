@@ -7,14 +7,19 @@
 
 #include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/worker/TreeObjects.h"
+#include "cloud9/worker/JobManager.h"
+
+#include <boost/bind.hpp>
 
 namespace cloud9 {
 
 namespace worker {
 
-StrategyPortfolio::StrategyPortfolio(WorkerTree *_tree,
-		std::map<strat_id_t, JobSelectionStrategy*> strategies) :
-		tree(_tree), stratMap(strategies), position(0) {
+StrategyPortfolio::StrategyPortfolio(JobManager *_manager,
+		std::map<strat_id_t, JobSelectionStrategy*> &strategies) :
+		manager(_manager), stratMap(strategies), position(0) {
+
+	tree = manager->getTree();
 
 	for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
 		stratVector.push_back(it->second);
@@ -38,6 +43,14 @@ StrategyPortfolio::strat_id_t StrategyPortfolio::getStateStrategy(SymbolicState 
 
 	assert(node != NULL);
 	return (**node).getJob()->_strategy;
+}
+
+bool StrategyPortfolio::isValidJob(strat_id_t strat, WorkerTree::Node *jobNode) {
+	if (jobNode == manager->getCurrentNode())
+		return false;
+
+	assert((**jobNode).getJob() != NULL);
+	return (**jobNode).getJob()->_strategy == strat;
 }
 
 void StrategyPortfolio::onJobAdded(ExecutionJob *job) {
@@ -151,6 +164,53 @@ void StrategyPortfolio::onStateDeactivated(SymbolicState *state) {
 		assert(strat != NULL);
 
 		strat->onStateDeactivated(state);
+	}
+}
+
+void StrategyPortfolio::reInvestJobs(strat_id_t newStrat, strat_id_t oldStrat, unsigned int maxCount) {
+	// Select the jobs containing the old strategy
+	std::vector<WorkerTree::Node*> nodes;
+
+	tree->getLeaves(WORKER_LAYER_JOBS, tree->getRoot(),
+			boost::bind(&StrategyPortfolio::isValidJob, this, oldStrat, _1),
+			maxCount, nodes);
+
+	std::vector<ExecutionJob*> jobs;
+
+	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
+			it != nodes.end(); it++) {
+		WorkerTree::Node *node = *it;
+
+		jobs.push_back((**node).getJob());
+	}
+
+	reInvestJobs(newStrat, jobs);
+}
+
+void StrategyPortfolio::reInvestJobs(strat_id_t newStrat, std::vector<ExecutionJob*> &jobs) {
+	for (std::vector<ExecutionJob*>::iterator it = jobs.begin();
+			it != jobs.end(); it++) {
+
+		ExecutionJob *job = *it;
+		if (job->_strategy == newStrat) {
+			// Nothing to do here, move on
+			continue;
+		}
+
+		WorkerTree::Node *node = job->getNode().get();
+
+		if ((**node).getSymbolicState() != NULL) {
+			SymbolicState *state = (**node).getSymbolicState();
+
+			// We also need to move the state from one strategy to another
+			stratMap[job->_strategy]->onStateDeactivated(state);
+			stratMap[newStrat]->onStateActivated(state);
+		}
+
+		stratMap[job->_strategy]->onRemovingJob(job);
+		stratMap[newStrat]->onJobAdded(job);
+
+		job->_strategy = newStrat;
 	}
 }
 
