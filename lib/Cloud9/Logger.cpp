@@ -76,7 +76,7 @@ void Logger::updateTimeStamp() {
 	llvm::sys::TimeValue elapsed = llvm::sys::TimeValue::now() - startTime;
 	char buff[16];
 
-	snprintf(buff, 16, "[%05d.%03d] ", elapsed.seconds(), elapsed.milliseconds());
+	snprintf(buff, 16, "[%05ld.%03d] ", elapsed.seconds(), elapsed.milliseconds());
 
 	timeStamp.assign(buff);
 }

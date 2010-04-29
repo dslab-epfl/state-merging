@@ -17,11 +17,12 @@ namespace worker {
 
 StrategyPortfolio::StrategyPortfolio(JobManager *_manager,
 		std::map<strat_id_t, JobSelectionStrategy*> &strategies) :
-		manager(_manager), stratMap(strategies), position(0) {
+		manager(_manager), position(0) {
 
 	tree = manager->getTree();
 
-	for (strat_map::iterator it = strategies.begin(); it != strategies.end(); it++) {
+	for (std::map<strat_id_t, JobSelectionStrategy*>::iterator it = strategies.begin();
+			it != strategies.end(); it++) {
 		stratMap[it->first].strategy = it->second;
 		stratMap[it->first].allocation = 0;
 		stratMap[it->first].performance = 0;

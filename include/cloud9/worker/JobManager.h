@@ -38,6 +38,7 @@ namespace worker {
 class SymbolicState;
 class ExecutionJob;
 class KleeHandler;
+class StrategyPortfolio;
 
 
 class JobManager: public StateEventHandler {

@@ -26,6 +26,7 @@
 #include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/worker/ComplexStrategies.h"
+#include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
@@ -527,7 +528,7 @@ void JobManager::processJobs(unsigned int timeOut) {
 
 void JobManager::processJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
 	// First, we need to import the jobs in the manager
-	importJobs(paths);
+	importJobs(paths, NULL);
 
 	// Then we execute them, but only them (non blocking, don't allow growth),
 	// until the queue is exhausted
@@ -711,8 +712,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths,
 
 	CLOUD9_DEBUG("Importing " << paths->count() << " jobs");
 
-	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
-			it != nodes.end(); it++) {
+	for (unsigned int i = 0; i < nodes.size(); i++) {
 		WorkerTree::Node *crtNode = nodes[i];
 		assert(crtNode->getCount(WORKER_LAYER_JOBS) == 0
 				&& "Job duplication detected");
@@ -728,7 +728,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths,
 			ExecutionJob *job = new ExecutionJob(crtNode, true);
 
 			if (strategies != NULL)
-				job->_strategy = strategies[i];
+				job->_strategy = (*strategies)[i];
 
 			jobs.push_back(job);
 		}

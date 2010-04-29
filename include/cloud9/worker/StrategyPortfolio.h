@@ -57,9 +57,9 @@ public:
 	virtual ~StrategyPortfolio();
 
 	const strat_id_vector &getStrategies() const { return stratIdVector; }
-	JobSelectionStrategy* getStrategy(strat_id_t id) const { return stratMap[id].strategy; }
-	unsigned int getStrategyAllocation(strat_id_t id) const { return stratMap[id].allocation; }
-	unsigned int getStrategyPerformance(strat_id_t id) const { return stratMap[id].performance; }
+	JobSelectionStrategy* getStrategy(strat_id_t id) { return stratMap[id].strategy; }
+	unsigned int getStrategyAllocation(strat_id_t id) { return stratMap[id].allocation; }
+	unsigned int getStrategyPerformance(strat_id_t id) { return stratMap[id].performance; }
 
 	virtual void onJobAdded(ExecutionJob *job);
 	virtual ExecutionJob* onNextJobSelection();

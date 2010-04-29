@@ -8,6 +8,7 @@
 #include "cloud9/worker/LBConnection.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Protocols.h"
 
@@ -207,7 +208,16 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
 		CLOUD9_DEBUG("Job seed request: " << paths->count() << " paths");
 
-		jobManager->importJobs(paths);
+		if (seedDetails.strategies_size() > 0) {
+			std::vector<unsigned int> strategies;
+
+			for (int i = 0; i < seedDetails.strategies_size(); i++)
+				strategies.push_back(seedDetails.strategies(i));
+
+			jobManager->importJobs(paths, &strategies);
+		} else {
+			jobManager->importJobs(paths, NULL);
+		}
 	}
 
 	if (UseGlobalCoverage) {

@@ -13,7 +13,7 @@ namespace cloud9 {
 enum Strategies {
 	RANDOM_PATH_STRATEGY = 1,
 	WEIGHTED_RANDOM_STRATEGY = 2,
-	RANDOM_STRATEGY = 3,
+	RANDOM_STRATEGY = 3
 	//DFS_STRATEGY = 4
 };
 

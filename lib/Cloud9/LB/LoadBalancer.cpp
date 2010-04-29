@@ -240,8 +240,8 @@ void LoadBalancer::analyzeBalance() {
 	std::sort(wList.begin(), wList.end(), comp);
 
 	// Compute average and deviation
-	int loadAvg = 0;
-	int sqDeviation = 0;
+	unsigned loadAvg = 0;
+	unsigned sqDeviation = 0;
 
 	for (std::vector<Worker*>::iterator it = wList.begin();
 			it != wList.end(); it++) {

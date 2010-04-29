@@ -153,15 +153,4 @@ void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
 	}
 }
 
-
-void serializeStrategyPortfolioResponse(const std::string &name, const strategy_portfolio_t &data,
-		cloud9::data::StrategyPortfolioResponse &update) {
-  
-  for (unsigned i = 0; i < data.size(); i++) {
-    
-    update.set_strategy(data[i].first);
-    update.set_nrjobs(data[i].second);
-  }
-}
-
 }

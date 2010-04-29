@@ -50,7 +50,7 @@ void PeerConnection::handleMessageReceived(std::string &msgString,
 		if (message.strategies_size() > 0) {
 			std::vector<unsigned int> strategies;
 
-			for (unsigned int i = 0; i < message.strategies_size(); i++)
+			for (int i = 0; i < message.strategies_size(); i++)
 				strategies.push_back(message.strategies(i));
 
 			jobManager->importJobs(paths, &strategies);

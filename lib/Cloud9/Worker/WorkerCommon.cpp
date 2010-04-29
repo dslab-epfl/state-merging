@@ -19,6 +19,8 @@ std::string InputFile;
 LibcType Libc;
 bool WithPOSIXRuntime;
 
+JobSelectionType JobSelection;
+
 bool UseGlobalCoverage;
 
 std::string LBAddress;

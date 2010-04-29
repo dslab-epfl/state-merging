@@ -35,6 +35,8 @@ extern std::string InputFile;
 extern LibcType Libc;
 extern bool WithPOSIXRuntime;
 
+extern JobSelectionType JobSelection;
+
 extern bool UseGlobalCoverage;
 
 extern std::string LBAddress;

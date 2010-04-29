@@ -43,7 +43,6 @@ class ExecutionPath;
 class ExecutionPathSet;
 
 typedef std::vector<std::pair<uint32_t, uint64_t> > cov_update_t;
-typedef std::vector<std::pair<uint32_t, uint32_t> > strategy_portfolio_t;
 
 #if 0
 // XXX Debugging
@@ -197,9 +196,6 @@ void parseStatisticUpdate(const cloud9::data::StatisticUpdate &update,
 
 void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
 		cloud9::data::StatisticUpdate &update);
-
-void serializeStrategyPortfolioResponse(const std::string &name, const strategy_portfolio_t &data,
-					 cloud9::data::StrategyPortfolioResponse &update);
  
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port, boost::system::error_code &error);
