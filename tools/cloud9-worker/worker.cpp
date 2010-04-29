@@ -48,6 +48,7 @@
 #include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CommManager.h"
 #include "cloud9/Utils.h"
+#include "cloud9/instrum/InstrumentationManager.h"
 
 using namespace llvm;
 using namespace cloud9::worker;
@@ -570,6 +571,8 @@ int main(int argc, char **argv, char **envp) {
 		commManager.setup();
 
 		theJobManager->processJobs((int)MaxTime.getValue()); // Blocking when no jobs are on the queue
+
+		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TimeOut, "Timeout");
 
 		// The order here matters, in order to avoid memory corruption
 		commManager.finalize();

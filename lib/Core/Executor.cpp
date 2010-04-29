@@ -58,6 +58,8 @@
 #include "llvm/System/Process.h"
 #include "llvm/Target/TargetData.h"
 
+#include "cloud9/instrum/InstrumentationManager.h"
+
 #include <cassert>
 #include <algorithm>
 #include <iostream>
@@ -3263,6 +3265,8 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
 	initRootState(state, argc, argv, envp);
 
 	run(*state);
+
+	cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TimeOut, "Timeout");
 
 	destroyStates();
 
