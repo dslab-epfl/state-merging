@@ -48,6 +48,8 @@ private:
 	static strat_id_t getStateStrategy(SymbolicState *state);
 
 	bool isValidJob(strat_id_t strat, WorkerTree::Node *jobNode);
+
+	void reInvestJobs(strat_id_t newStrat, std::vector<ExecutionJob*> &jobs);
 public:
 	StrategyPortfolio(JobManager *_manager,
 			std::map<strat_id_t, JobSelectionStrategy*> &strategies);
@@ -68,7 +70,6 @@ public:
 	virtual void onStateDeactivated(SymbolicState *state);
 
 	void reInvestJobs(strat_id_t newStrat, strat_id_t oldStrat, unsigned int maxCount);
-	void reInvestJobs(strat_id_t newStrat, std::vector<ExecutionJob*> &jobs);
 };
 
 }

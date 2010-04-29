@@ -165,6 +165,8 @@ void StrategyPortfolio::onStateDeactivated(SymbolicState *state) {
 }
 
 void StrategyPortfolio::reInvestJobs(strat_id_t newStrat, strat_id_t oldStrat, unsigned int maxCount) {
+	manager->lockJobs();
+
 	// Select the jobs containing the old strategy
 	std::vector<WorkerTree::Node*> nodes;
 
@@ -182,6 +184,8 @@ void StrategyPortfolio::reInvestJobs(strat_id_t newStrat, strat_id_t oldStrat, u
 	}
 
 	reInvestJobs(newStrat, jobs);
+
+	manager->unlockJobs();
 }
 
 void StrategyPortfolio::reInvestJobs(strat_id_t newStrat, std::vector<ExecutionJob*> &jobs) {

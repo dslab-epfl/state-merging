@@ -175,6 +175,9 @@ public:
 
 	JobSelectionStrategy *getStrategy() { return selStrategy; }
 
+	void lockJobs() { jobsMutex.lock(); }
+	void unlockJobs() { jobsMutex.unlock(); }
+
 	unsigned getModuleCRC() const;
 
 	void processJobs(unsigned int timeOut = 0);

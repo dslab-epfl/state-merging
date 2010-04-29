@@ -27,6 +27,7 @@
 #include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/worker/ComplexStrategies.h"
 #include "cloud9/Logger.h"
+#include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/instrum/LocalFileWriter.h"
@@ -406,26 +407,43 @@ void JobManager::initStrategy() {
 
 	switch (JobSelection) {
 	case RandomSel:
-	  selStrategy = new RandomStrategy();
-	  CLOUD9_INFO("Using random job selection strategy");
-	  break;
+		selStrategy = new RandomStrategy();
+		CLOUD9_INFO("Using random job selection strategy");
+		break;
 	case RandomPathSel:
-	  selStrategy = new RandomPathStrategy(tree);
-	  CLOUD9_INFO("Using random path job selection strategy");
-	  break;
+		selStrategy = new RandomPathStrategy(tree);
+		CLOUD9_INFO("Using random path job selection strategy");
+		break;
 	case CoverageOptimizedSel:
 		strategies.push_back(new WeightedRandomStrategy(
 				WeightedRandomStrategy::CoveringNew, tree, symbEngine));
 		strategies.push_back(new RandomPathStrategy(tree));
-	  selStrategy = new TimeMultiplexedStrategy(strategies);
-	  CLOUD9_INFO("Using weighted random job selection strategy");
-	  break;
+		selStrategy = new TimeMultiplexedStrategy(strategies);
+		CLOUD9_INFO("Using weighted random job selection strategy");
+		break;
+	case PortfolioSel:
+		selStrategy = createStrategyPortfolio();
+		break;
 	default:
-	  assert(0 && "undefined job selection strategy");
+		assert(0 && "undefined job selection strategy");
 	}
 
 	// Wrap this in a batching strategy, to speed up things
 	selStrategy = new BatchingStrategy(selStrategy);
+}
+
+StrategyPortfolio *JobManager::createStrategyPortfolio() {
+	std::map<unsigned int, JobSelectionStrategy*> strategies;
+
+	strategies[RANDOM_PATH_STRATEGY] = new RandomPathStrategy(tree);
+	strategies[WEIGHTED_RANDOM_STRATEGY] =
+			new WeightedRandomStrategy(WeightedRandomStrategy::CoveringNew,
+					tree, symbEngine);
+	strategies[RANDOM_STRATEGY] = new RandomStrategy();
+
+	StrategyPortfolio *result = new StrategyPortfolio(this, strategies);
+
+	return result;
 }
 
 void JobManager::initStatistics() {
@@ -632,7 +650,7 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentQueueSize);
 }
 
-void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher) {
+void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
 	WorkerTree::Node *node = job->getNode().get();
 
 	job->removing = true;
@@ -653,8 +671,8 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool noti
 		}
 	}
 
-	if (notifySearcher)
-		selStrategy->onRemovingJob(job);
+
+	selStrategy->onRemovingJob(job);
 
 	delete job;
 }
@@ -682,7 +700,8 @@ unsigned int JobManager::countJobs(WorkerTree::Node *root) {
 	return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
-void JobManager::importJobs(ExecutionPathSetPin paths) {
+void JobManager::importJobs(ExecutionPathSetPin paths,
+		std::vector<unsigned int> *strategies) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> nodes;
@@ -694,7 +713,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 
 	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
 			it != nodes.end(); it++) {
-		WorkerTree::Node *crtNode = *it;
+		WorkerTree::Node *crtNode = nodes[i];
 		assert(crtNode->getCount(WORKER_LAYER_JOBS) == 0
 				&& "Job duplication detected");
 		assert((!crtNode->layerExists(WORKER_LAYER_STATES) || crtNode->getCount(WORKER_LAYER_STATES) == 0)
@@ -706,7 +725,11 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 			// The exploration job object gets a pin on the node, thus
 			// ensuring it will be released automatically after it's no
 			// longer needed
-			ExecutionJob *job = new ExecutionJob(*it, true);
+			ExecutionJob *job = new ExecutionJob(crtNode, true);
+
+			if (strategies != NULL)
+				job->_strategy = strategies[i];
+
 			jobs.push_back(job);
 		}
 	}
@@ -720,7 +743,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
-		std::vector<int> counts) {
+		std::vector<int> &counts, std::vector<unsigned int> *strategies) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> roots;
@@ -739,6 +762,9 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 			it != jobs.end(); it++) {
 		ExecutionJob *job = *it;
 		jobRoots.push_back(job->getNode().get());
+
+		if (strategies != NULL)
+			strategies->push_back(job->_strategy);
 	}
 
 	// Do this before de-registering the jobs, in order to keep the nodes pinned
@@ -753,18 +779,11 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
 		job->exported = true;
 		job->removing = true;
+
+		selStrategy->onRemovingJob(job);
+
+		finalizeJob(job, true);
 	}
-
-	selStrategy->onRemovingJobs();
-
-	for (std::vector<ExecutionJob*>::iterator it = jobs.begin();
-				it != jobs.end(); it++) {
-		ExecutionJob *job = *it;
-
-		finalizeJob(job, true, false);
-
-	}
-
 
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
 			jobs.size());
@@ -832,7 +851,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 
 	if ((**nodePin).symState == NULL) {
 		// Job finished here, need to remove it
-		finalizeJob(job, false, true);
+		finalizeJob(job, false);
 
 		// Spawn new jobs if there are states left
 		if (nodePin->layerExists(WORKER_LAYER_STATES)) {

@@ -132,7 +132,17 @@ void LBConnection::sendStrategyUpdates(WorkerReportMessage &message) {
 		return;
 	}
 
+	WorkerReportMessage_StrategyPortfolioUpdate *update =
+					message.mutable_strategyportfolioupdate();
 
+	for (std::vector<unsigned int>::const_iterator it = portfolio->getStrategies().begin();
+			it != portfolio->getStrategies().end(); it++) {
+		unsigned int strat = *it;
+		StrategyPortfolioData *data = update->add_data();
+		data->set_strategy(strat);
+		data->set_allocation(portfolio->getStrategyAllocation(strat));
+		data->set_performance(portfolio->getStrategyPerformance(strat));
+	}
 }
 
 void LBConnection::sendUpdates() {
@@ -216,6 +226,15 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 			}
 		}
 	}
+
+	if (response.strategyportfolioresponse_size() > 0) {
+		for (int i = 0; i < response.strategyportfolioresponse_size(); i++) {
+			const StrategyPortfolioResponse &stratResp = response.strategyportfolioresponse(i);
+
+			reInvestJobs(stratResp.newstrategy(), stratResp.oldstrategy(),
+					stratResp.nrjobs());
+		}
+	}
 }
 
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
@@ -250,6 +269,19 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
 	sendMessage(peerSocket, msgString);
 
 	peerSocket.close();
+}
+
+void LBConnection::reInvestJobs(unsigned int oldStrat, unsigned int newStrat,
+		unsigned int maxCount) {
+	StrategyPortfolio *portfolio =
+			dynamic_cast<StrategyPortfolio*>(jobManager->getStrategy());
+
+	if (portfolio == NULL) {
+		CLOUD9_INFO("Cannot reinvest jobs as no strategy portfolio is used.");
+		return;
+	}
+
+	portfolio->reInvestJobs(newStrat, oldStrat, maxCount);
 }
 
 }

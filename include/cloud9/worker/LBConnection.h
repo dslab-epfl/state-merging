@@ -35,6 +35,9 @@ private:
 			ExecutionPathSetPin paths,
 			std::vector<int> counts);
 
+	void reInvestJobs(unsigned int newStrat, unsigned int oldStrat,
+			unsigned int maxCount);
+
 	void processResponse(LBResponseMessage &response);
 
 	void updateLogPrefix();
