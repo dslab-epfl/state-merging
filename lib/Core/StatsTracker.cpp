@@ -273,7 +273,7 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 				// to line number propogation.
 				if (isa<DbgStopPointInst> (inst))
 					es.coveredLines[&ii.file].insert(ii.line);
-				es.coveredNew = true;
+				es.setCoveredNew();
 				es.instsSinceCovNew = 1;
 				++stats::locallyCoveredInstructions;
 				stats::locallyUncoveredInstructions += (uint64_t) -1;
@@ -327,7 +327,7 @@ void StatsTracker::markBranchVisited(ExecutionState *visitedTrue,
     uint64_t hasTrue = theStatisticManager->getIndexedValue(stats::trueBranches, id);
     uint64_t hasFalse = theStatisticManager->getIndexedValue(stats::falseBranches, id);
     if (visitedTrue && !hasTrue) {
-      visitedTrue->coveredNew = true;
+      visitedTrue->setCoveredNew();
       visitedTrue->instsSinceCovNew = 1;
       ++stats::trueBranches;
       if (hasFalse) { ++fullBranches; --partialBranches; }
@@ -335,7 +335,7 @@ void StatsTracker::markBranchVisited(ExecutionState *visitedTrue,
       hasTrue = 1;
     }
     if (visitedFalse && !hasFalse) {
-      visitedFalse->coveredNew = true;
+      visitedFalse->setCoveredNew();
       visitedFalse->instsSinceCovNew = 1;
       ++stats::falseBranches;
       if (hasTrue) { ++fullBranches; --partialBranches; }

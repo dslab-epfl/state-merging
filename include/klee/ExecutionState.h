@@ -18,9 +18,13 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
+#include "llvm/System/TimeValue.h"
+
 #include <map>
 #include <set>
 #include <vector>
+
+using namespace llvm;
 
 namespace cloud9 {
 namespace worker {
@@ -135,7 +139,14 @@ public:
   AddressSpace addressSpace;
   TreeOStream pathOS, symPathOS;
   unsigned instsSinceCovNew;
+
   bool coveredNew;
+  sys::TimeValue lastCoveredTime;
+
+  void setCoveredNew() {
+	  coveredNew = true;
+	  lastCoveredTime = sys::TimeValue::now();
+  }
 
   // for printing execution traces when this state terminates
   ExecutionTraceManager exeTraceMgr;
@@ -162,7 +173,9 @@ public:
   void removeFnAlias(std::string fn);
   
 private:
-  ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor), fakeState(false), underConstrained(0), addressSpace(this), ptreeNode(0) {};
+  ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor),
+  fakeState(false), underConstrained(0), addressSpace(this),
+  lastCoveredTime(sys::TimeValue::now()), ptreeNode(0) {};
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);

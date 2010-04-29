@@ -75,6 +75,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     addressSpace(this),
     instsSinceCovNew(0),
     coveredNew(false),
+    lastCoveredTime(sys::TimeValue::now()),
     forkDisabled(false),
     ptreeNode(0) {
   pushFrame(0, kf);
@@ -88,6 +89,7 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     constraints(assumptions),
     queryCost(0.),
     addressSpace(this),
+    lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0) {
 }
 

@@ -10,6 +10,9 @@
 #include "llvm/Support/CommandLine.h"
 #include "cloud9/Logger.h"
 
+#include <iomanip>
+#include <boost/io/ios_state.hpp>
+
 using namespace llvm;
 
 namespace {
@@ -46,7 +49,7 @@ void InstrumentationManager::instrumThreadControl() {
 
 
 InstrumentationManager::InstrumentationManager() :
-		referenceTime(now()), terminated(false), timer(service, boost::posix_time::seconds(InstrUpdateRate)) {
+		referenceTime(now()), timer(service, boost::posix_time::seconds(InstrUpdateRate)), terminated(false) {
 
 }
 
@@ -94,6 +97,27 @@ void InstrumentationManager::writeEvents() {
 
 		writer->writeEvents(eventsCopy);
 	}
+}
+
+std::string InstrumentationManager::stampToString(TimeStamp stamp) {
+	std::ostringstream ss;
+	ss << stamp;
+	ss.flush();
+
+	return ss.str();
+}
+
+InstrumentationManager::TimeStamp InstrumentationManager::getRelativeTime(TimeStamp absoluteStamp) {
+	return absoluteStamp - referenceTime;
+}
+
+std::ostream &operator<<(std::ostream &s,
+			const InstrumentationManager::TimeStamp &stamp) {
+	boost::io::ios_all_saver saver(s);
+
+	s << stamp.seconds() << "." << setw(9) << setfill('0') << stamp.nanoseconds();
+
+	return s;
 }
 
 }

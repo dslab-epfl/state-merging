@@ -54,7 +54,8 @@ enum Statistics {
 enum Events {
 	TestCase = 0,
 	ErrorCase = 1,
-	JobExecutionState = 2
+	JobExecutionState = 2,
+	TimeOut = 3
 };
 
 class InstrumentationManager {
@@ -131,9 +132,15 @@ public:
 
 		return manager;
 	}
+
+	std::string stampToString(TimeStamp stamp);
+	TimeStamp getRelativeTime(TimeStamp absoluteStamp);
 };
 
 extern InstrumentationManager &theInstrManager;
+
+std::ostream &operator<<(std::ostream &s,
+			const InstrumentationManager::TimeStamp &stamp);
 
 }
 
