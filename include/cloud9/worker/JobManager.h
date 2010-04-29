@@ -133,6 +133,9 @@ private:
 	ExecutionJob* selectNextJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
 	ExecutionJob* selectNextJob();
 
+	static bool isJob(WorkerTree::Node *node);
+	bool isExportableJob(WorkerTree::Node *node);
+
 	void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew);
 	void stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust);
 	void replayPath(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *pathEnd);
@@ -165,6 +168,8 @@ public:
 	virtual ~JobManager();
 
 	WorkerTree *getTree() { return tree; }
+
+	WorkerTree::Node *getCurrentNode();
 
 	unsigned getModuleCRC() const;
 

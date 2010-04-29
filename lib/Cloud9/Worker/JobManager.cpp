@@ -50,9 +50,10 @@
 
 #include "../../Core/Common.h"
 
-#include <stack>
 #include <boost/io/ios_state.hpp>
 #include <boost/crc.hpp>
+#include <boost/bind.hpp>
+#include <stack>
 #include <map>
 #include <set>
 #include <fstream>
@@ -105,8 +106,19 @@ namespace worker {
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
 
-static bool isJob(WorkerTree::Node *node) {
+bool JobManager::isJob(WorkerTree::Node *node) {
 	return (**node).getJob() != NULL;
+}
+
+bool JobManager::isExportableJob(WorkerTree::Node *node) {
+	ExecutionJob *job = (**node).getJob();
+	if (!job)
+		return false;
+
+	if (job == currentJob)
+		return false;
+
+	return true;
 }
 
 static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
@@ -479,6 +491,13 @@ unsigned JobManager::getModuleCRC() const {
 	return crc.checksum();
 }
 
+WorkerTree::Node *JobManager::getCurrentNode() {
+	if (!currentJob)
+		return NULL;
+
+	return currentJob->getNode().get();
+}
+
 /* Job Manipulation Methods ***************************************************/
 
 void JobManager::processJobs(unsigned int timeOut) {
@@ -642,34 +661,17 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool noti
 
 void JobManager::selectJobs(WorkerTree::Node *root,
 		std::vector<ExecutionJob*> &jobSet, int maxCount) {
-	/// XXX: Prevent node creation
-	std::stack<WorkerTree::Node*> nodes;
 
-	nodes.push(root);
+	std::vector<WorkerTree::Node*> nodes;
 
-	while (!nodes.empty() && maxCount > 0) {
-		WorkerTree::Node *node = nodes.top();
-		nodes.pop();
+	tree->getLeaves(WORKER_LAYER_JOBS, root,
+			boost::bind(&JobManager::isExportableJob, this, _1),
+			maxCount, nodes);
 
-		if (node->getCount(WORKER_LAYER_JOBS) == 0) {
-			ExecutionJob *job = (**node).job;
-
-			if (job) {
-				if (job == currentJob) {
-					CLOUD9_DEBUG("FOUND A STARTED JOB: " << job->getNode());
-					continue;
-				}
-
-				jobSet.push_back(job);
-				maxCount--;
-			}
-		} else {
-			WorkerTree::Node *left = node->getChild(WORKER_LAYER_JOBS, 0);
-			WorkerTree::Node *right = node->getChild(WORKER_LAYER_JOBS, 1);
-
-			if (left) nodes.push(left);
-			if (right) nodes.push(right);
-		}
+	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
+			it != nodes.end(); it++) {
+		WorkerTree::Node* node = *it;
+		jobSet.push_back((**node).getJob());
 	}
 
 	CLOUD9_DEBUG("Selected " << jobSet.size() << " jobs");
