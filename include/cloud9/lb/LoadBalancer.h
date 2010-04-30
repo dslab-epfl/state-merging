@@ -10,6 +10,7 @@
 
 #include "cloud9/lb/TreeNodeInfo.h"
 #include "cloud9/lb/Worker.h"
+#include "cloud9/lb/StrategyStatistic.h"
 
 #include <set>
 #include <map>
@@ -29,10 +30,18 @@ public:
 	std::vector<int> counts;
 public:
 	TransferRequest(worker_id_t from, worker_id_t to) : fromID(from), toID(to) { }
-
 };
 
-typedef unsigned int strat_id_t;
+class InvestmentRequest {
+public:
+	strat_id_t fromID;
+	strat_id_t toID;
+
+	unsigned int count;
+public:
+	InvestmentRequest(strat_id_t from, strat_id_t to, unsigned int _count) :
+		fromID(from), toID(to), count(_count) { }
+};
 
 // TODO: Refactor this into a more generic class
 class LoadBalancer {
@@ -53,13 +62,18 @@ private:
 	std::map<worker_id_t, Worker*> workers;
 	std::set<worker_id_t> reqDetails;
 	std::map<worker_id_t, TransferRequest*> reqTransfer;
+	std::map<worker_id_t, std::vector<InvestmentRequest*> > reqsInvest;
 
 	std::set<worker_id_t> reports;
 
+	// TODO: Restructure this to a more intuitive representation with
+	// global coverage + coverage deltas
 	std::vector<uint64_t> globalCoverageData;
 	std::vector<char> globalCoverageUpdates;
 
 	TransferRequest *computeTransfer(worker_id_t fromID, worker_id_t toID, unsigned count);
+
+	void computeGlobalPortfolioStats(strat_stat_map &portfolioStats);
 
 public:
 	LoadBalancer(int balanceRate);
@@ -80,7 +94,7 @@ public:
 	void updateWorkerStatNodes(worker_id_t id, std::vector<LBTree::Node*> &newNodes);
 	void updateWorkerStats(worker_id_t id, std::vector<int> &stats);
 
-	void updateStrategyPortfolioStats(worker_id_t id, std::vector<StrategyPortfolioData> &stats);
+	void updateStrategyPortfolioStats(worker_id_t id, strat_stat_map &stats);
 
 	void updateCoverageData(worker_id_t id, const cov_update_t &data);
 
@@ -103,7 +117,6 @@ public:
 	}
 
 	void getAndResetCoverageUpdates(worker_id_t id, cov_update_t &data);
-	void getStrategyPortfolioData(worker_id_t id, strategy_portfolio_t &data);
 
 	TransferRequest *requestAndResetTransfer(worker_id_t id) {
 		if (reqTransfer.count(id) > 0) {
@@ -116,6 +129,16 @@ public:
 		}
 
 		return NULL;
+	}
+
+	void requestAndResetInvestments(worker_id_t id, std::vector<InvestmentRequest*> &invs) {
+		if (reqsInvest[id].size() > 0) {
+			invs.assign(reqsInvest[id].begin(), reqsInvest[id].end());
+
+			reqsInvest[id].clear();
+		} else {
+			invs.clear();
+		}
 	}
 };
 

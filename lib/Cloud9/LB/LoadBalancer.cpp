@@ -51,7 +51,7 @@ unsigned LoadBalancer::registerWorker(const std::string &address, int port, bool
 	worker->_wantsUpdates = wantsUpdates;
 
 	if (wantsUpdates)
-		worker->coverageUpdates = globalCoverageUpdates;
+		worker->globalCoverageUpdates = globalCoverageUpdates;
 
 
 	workers[nextWorkerID] = worker;
@@ -133,20 +133,6 @@ void LoadBalancer::updateWorkerStatNodes(worker_id_t id, std::vector<LBTree::Nod
 	worker->nodes = newNodes;
 }
 
-void LoadBalancer::updateStrategyPortfolioStats(worker_id_t id, std::vector<StrategyPortfolioData> &stats) {
-  Worker *worker = workers[id];
-  assert(worker);
-  
-  for(unsigned i = 0; i < stats.size(); i++) {
-    StrategyPortfolioData spd = stats[i];
-    
-    //updating worker statistics per strategy
-    worker->strategyStatistics[spd.strategy()].performance = (uint32_t) spd.performance();
-    worker->strategyStatistics[spd.strategy()].allocation = (uint32_t) spd.allocation();
-  }
-
-}
-
 void LoadBalancer::updateWorkerStats(worker_id_t id, std::vector<int> &stats) {
 	Worker *worker = workers[id];
 	assert(worker);
@@ -183,38 +169,37 @@ void LoadBalancer::updateCoverageData(worker_id_t id, const cov_update_t &data) 
 			continue;
 
 		for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {
-			wIt->second->coverageUpdates[it->first] = true;
+			wIt->second->globalCoverageUpdates[it->first] = true;
 		}
 	}
+}
+
+void LoadBalancer::updateStrategyPortfolioStats(worker_id_t id, strat_stat_map &stats) {
+  Worker *worker = workers[id];
+  assert(worker);
+
+  for (strat_stat_map::iterator it = stats.begin(); it != stats.end(); it++) {
+	  StrategyStatistic &stat = it->second;
+
+	  worker->localPortfolioStats[it->first] = stat; // Replace it
+
+  }
+}
+
+void LoadBalancer::computeGlobalPortfolioStats(strat_stat_map &portfolioStats) {
+	// TODO Find an aggregation formula, e.g. sum of performances, weighted by allocations
 }
 
 void LoadBalancer::getAndResetCoverageUpdates(worker_id_t id, cov_update_t &data) {
 	Worker *w = workers[id];
 
-	for (unsigned i = 0; i < w->coverageUpdates.size(); i++) {
-		if (w->coverageUpdates[i]) {
+	for (unsigned i = 0; i < w->globalCoverageUpdates.size(); i++) {
+		if (w->globalCoverageUpdates[i]) {
 			data.push_back(std::make_pair(i, globalCoverageData[i]));
-			w->coverageUpdates[i] = false;
+			w->globalCoverageUpdates[i] = false;
 		}
 	}
 }
-
-void LoadBalancer::getStrategyPortfolioData(worker_id_t id, strategy_portfolio_t &data) {
-  Worker *worker = workers[id];
-  assert(worker && "non-existent worker");
-  
-  for(unsigned i = 0; i < worker->strategyStatistics.size(); i++) {
-    StrategyStatistic stat = worker->strategyStatistics[i];
-    if(stat.toChange) {
-      //if we decide we need to make any strategy portfolio changes
-      //we insert data in the reponse about the index and the nrJobsToMove 
-      //to the stragegy index i
-      data.push_back(std::make_pair(i, stat.nrJobsToMove));
-      worker->strategyStatistics[i].toChange = false;
-    }    
-  }
-}
-
 
 void LoadBalancer::analyzeBalance() {
 	if (workers.size() < 2) {

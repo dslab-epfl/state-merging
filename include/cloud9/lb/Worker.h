@@ -44,13 +44,15 @@ private:
 	std::vector<LBTree::Node*> nodes;
 	unsigned nodesRevision;
 
-	std::vector<char> coverageUpdates;
+	std::vector<char> globalCoverageUpdates;
 
-	std::vector<StrategyStatistic> strategyStatistics;
+	strat_stat_map localPortfolioStats;
 	
 	unsigned totalJobs;
 
-	Worker() : nodesRevision(1), totalJobs(0) { };
+	Worker() : nodesRevision(1), totalJobs(0) {
+		StrategyStatistic::initPortfolioStat(localPortfolioStats);
+	};
 public:
 	virtual ~Worker() { };
 

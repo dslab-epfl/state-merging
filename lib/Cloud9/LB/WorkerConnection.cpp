@@ -149,26 +149,38 @@ void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
 
 void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
 	worker_id_t id = response.id();
-  cov_update_t data;
-  
-  lb->getAndResetCoverageUpdates(id, data);
-  
-  if (data.size() > 0) {
-    StatisticUpdate *update = response.add_globalupdates();
-    serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data, *update);
-  }
-  
+	cov_update_t data;
+
+	lb->getAndResetCoverageUpdates(id, data);
+
+	if (data.size() > 0) {
+		StatisticUpdate *update = response.add_globalupdates();
+		serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data,
+				*update);
+	}
+
 }
 
-void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response){
+void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response) {
 	worker_id_t id = response.id();
-  
-  strategy_portfolio_t data;
-  lb->getStrategyPortfolioData(id, data);
-  if(data.size() > 0) {
-    StrategyPortfolioResponse *update = response.add_strategyportfolioresponse();
-    serializeStrategyPortfolioResponse(CLOUD9_STRATEGY_PORTFOLIO, data, *update);
-  }
+
+	std::vector<InvestmentRequest*> invs;
+
+	lb->requestAndResetInvestments(id, invs);
+
+	if (invs.size() > 0) {
+		for (std::vector<InvestmentRequest*>::iterator it = invs.begin();
+				it != invs.end(); it++) {
+			InvestmentRequest *inv = *it;
+			StrategyPortfolioResponse *invMsg = response.add_strategyportfolioresponse();
+
+			invMsg->set_newstrategy(inv->toID);
+			invMsg->set_oldstrategy(inv->fromID);
+			invMsg->set_nrjobs(inv->count);
+
+			delete inv;
+		}
+	}
 }
 
 
@@ -247,23 +259,32 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
 }
 
 
-  bool WorkerConnection::processStrategyPortfolioUpdates(const WorkerReportMessage &message) {
-    if(!message.has_strategyportfolioupdate())
-      return false;
-    
-    worker_id_t id = message.id();
-    const WorkerReportMessage_StrategyPortfolioUpdate &strategyPortfolioUpdateMsg = 
-      message.strategyportfolioupdate();
+bool WorkerConnection::processStrategyPortfolioUpdates(const WorkerReportMessage &message) {
+	if (!message.has_strategyportfolioupdate())
+		return false;
 
-    std::vector<StrategyPortfolioData> data;
-    data.insert(data.begin(), strategyPortfolioUpdateMsg.data().begin(), 
-		strategyPortfolioUpdateMsg.data().end());
+	worker_id_t id = message.id();
+	const WorkerReportMessage_StrategyPortfolioUpdate
+			&updateMsg = message.strategyportfolioupdate();
 
-    //TODO - implement proper printing for aggregate data types
-    CLOUD9_DEBUG("Received strategy portfolio update "); // << getASCIIDataSet(data.begin(), data.end()));
-    lb->updateStrategyPortfolioStats(id, data);
-    return true;
-  }
+	if (updateMsg.data_size() > 0) {
+		strat_stat_map portfolioStats;
+
+		for (int i = 0; i < updateMsg.data_size(); i++) {
+			const StrategyPortfolioData &data = updateMsg.data(i);
+
+			portfolioStats[data.strategy()].allocation = data.allocation();
+			portfolioStats[data.strategy()].performance = data.performance();
+		}
+
+		lb->updateStrategyPortfolioStats(id, portfolioStats);
+
+		//TODO - implement proper printing for aggregate data types
+		CLOUD9_DEBUG("Received strategy portfolio update "); // << getASCIIDataSet(data.begin(), data.end()));
+	}
+
+	return true;
+}
 
 }
 
