@@ -123,7 +123,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 }
 
 void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
-	unsigned id = response.id();
+	worker_id_t id = response.id();
 	TransferRequest *transfer = lb->requestAndResetTransfer(id);
 
 	if (transfer) {
@@ -148,7 +148,7 @@ void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
 }
 
 void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
-  unsigned id = response.id();
+	worker_id_t id = response.id();
   cov_update_t data;
   
   lb->getAndResetCoverageUpdates(id, data);
@@ -161,7 +161,7 @@ void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
 }
 
 void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response){
-  unsigned id = response.id();
+	worker_id_t id = response.id();
   
   strategy_portfolio_t data;
   lb->getStrategyPortfolioData(id, data);
@@ -187,7 +187,7 @@ bool WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &messa
 	if (message.localupdates_size() == 0)
 		return false;
 
-	unsigned id = message.id();
+	worker_id_t id = message.id();
 
 	for (int i = 0; i < message.localupdates_size(); i++) {
 		const StatisticUpdate &update = message.localupdates(i);
@@ -209,7 +209,7 @@ bool WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) 
 	if (!message.has_nodesetupdate())
 		return false;
 
-	unsigned id = message.id();
+	worker_id_t id = message.id();
 	const WorkerReportMessage_NodeSetUpdate &nodeSetUpdateMsg =
 			message.nodesetupdate();
 
@@ -230,7 +230,7 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
 	if (!message.has_nodedataupdate())
 		return false;
 
-	unsigned id = message.id();
+	worker_id_t id = message.id();
 	const WorkerReportMessage_NodeDataUpdate &nodeDataUpdateMsg =
 			message.nodedataupdate();
 
@@ -251,7 +251,7 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
     if(!message.has_strategyportfolioupdate())
       return false;
     
-    unsigned id = message.id();
+    worker_id_t id = message.id();
     const WorkerReportMessage_StrategyPortfolioUpdate &strategyPortfolioUpdateMsg = 
       message.strategyportfolioupdate();
 

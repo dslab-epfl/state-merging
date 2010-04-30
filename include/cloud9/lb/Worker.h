@@ -18,6 +18,7 @@ namespace cloud9 {
 
 namespace lb {
 
+typedef unsigned int worker_id_t;
 
 class Worker {
 	friend class LoadBalancer;
@@ -34,7 +35,7 @@ public:
 		}
 	};
 private:
-	unsigned id;
+	worker_id_t id;
 	std::string address;
 	int port;
 
@@ -53,7 +54,7 @@ private:
 public:
 	virtual ~Worker() { };
 
-	unsigned getID() const { return id; }
+	worker_id_t getID() const { return id; }
 
 	unsigned getTotalJobs() const { return totalJobs; }
 
