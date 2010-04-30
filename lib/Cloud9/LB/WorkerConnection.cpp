@@ -82,6 +82,10 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 						lb->getTree()->buildPathSet(nodes.begin(), nodes.end());
 
 				serializeExecutionPathSet(paths, *pathSet);
+				
+				jobSeed->add_strategies(WEIGHTED_RANDOM_STRATEGY);
+				
+
 			}
 		} else {
 			processNodeSetUpdate(message);
@@ -161,6 +165,7 @@ void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
 
 }
 
+
 void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response) {
 	worker_id_t id = response.id();
 
@@ -180,7 +185,7 @@ void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response)
 
 			delete inv;
 		}
-	}
+	} 
 }
 
 
