@@ -535,11 +535,6 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 
 		executeJob(lock, job, allowGrowth);
 
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
-
-		if (foreign)
-			cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentImportedPathCount);
-
 		if (refineStats) {
 			refineStatistics();
 			refineStats = false;
@@ -575,17 +570,11 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock, 
 			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "working");
 	}
 
-	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
-
 	return job;
 }
 
 ExecutionJob* JobManager::selectNextJob() {
 	ExecutionJob *job = selStrategy->onNextJobSelection();
-
-	if (job != NULL) {
-		cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize);
-	}
 
 	return job;
 }
@@ -610,7 +599,6 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 		}
 	}
 
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentQueueSize);
 }
 
 void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher) {
@@ -710,11 +698,6 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 	}
 
 	submitJobs(jobs.begin(), jobs.end(), true);
-
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalImportedJobs,
-			jobs.size());
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentImportedPathCount,
-			jobs.size());
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
@@ -762,12 +745,6 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		finalizeJob(job, true, false);
 
 	}
-
-
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
-			jobs.size());
-	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize,
-			jobs.size());
 
 	return paths;
 }
@@ -821,7 +798,6 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 
 	if ((**nodePin).symState == NULL) {
 		CLOUD9_INFO("Job canceled before start");
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
 	} else {
 		stepInNode(lock, nodePin.get(), false);
 	}
@@ -877,12 +853,6 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::
 		lock.unlock();
 		symbEngine->stepInState(state->getKleeState());
 		lock.lock();
-
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
-
-		if (!replaying) {
-			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewInstructions);
-		}
 
 		if (!exhaust)
 			break;
@@ -1055,12 +1025,6 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
 		SymbolicState *state = new SymbolicState(kState);
 		state->rebindToNode(newNode);
 
-		if (!replaying) {
-			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalNewPaths);
-		}
-
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsStarted);
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentPathCount);
 	}
 }
 
@@ -1070,9 +1034,6 @@ void JobManager::updateTreeOnDestroy(klee::ExecutionState *kState) {
 
 	kState->setCloud9State(NULL);
 	delete state;
-
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalPathsFinished);
-	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentPathCount);
 }
 
 /* Statistics Management ******************************************************/

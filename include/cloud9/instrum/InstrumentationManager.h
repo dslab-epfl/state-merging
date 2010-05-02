@@ -33,7 +33,6 @@ class InstrumentationWriter;
 enum Statistics {
 	TotalProcInstructions = 0,
 	TotalProcJobs = 1,
-	TotalStatesExplored = 2,
 	TotalPathsStarted = 3,
 	TotalPathsFinished = 4,
 
