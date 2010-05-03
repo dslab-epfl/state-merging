@@ -531,8 +531,6 @@ void JobManager::processLoop(bool allowGrowth, bool blocking, unsigned int timeO
 				break;
 		}
 
-		bool foreign = job->imported;
-
 		executeJob(lock, job, allowGrowth);
 
 		if (refineStats) {
@@ -698,6 +696,9 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 	}
 
 	submitJobs(jobs.begin(), jobs.end(), true);
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalImportedJobs, jobs.size());
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalTreePaths, jobs.size());
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
@@ -746,6 +747,9 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
 	}
 
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs, paths->count());
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::TotalTreePaths, paths->count());
+
 	return paths;
 }
 
@@ -788,6 +792,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 		replayPath(lock, nodePin.get());
 
 		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayedJobs);
 	} else {
 		if (job->isImported()) {
 			CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
@@ -798,6 +804,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 
 	if ((**nodePin).symState == NULL) {
 		CLOUD9_INFO("Job canceled before start");
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
 	} else {
 		stepInNode(lock, nodePin.get(), false);
 	}
@@ -807,6 +814,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 	if ((**nodePin).symState == NULL) {
 		// Job finished here, need to remove it
 		finalizeJob(job, false, true);
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
 
 		// Spawn new jobs if there are states left
 		if (nodePin->layerExists(WORKER_LAYER_STATES)) {
@@ -822,6 +831,10 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob
 				ExecutionJob *newJob = new ExecutionJob(node, false);
 
 				submitJob(newJob, false);
+			}
+
+			if (nodes.size() > 0) {
+				cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalTreePaths, nodes.size() - 1);
 			}
 		}
 	} else {
@@ -853,6 +866,10 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::
 		lock.unlock();
 		symbEngine->stepInState(state->getKleeState());
 		lock.lock();
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcInstructions);
+		if (replaying)
+			cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayInstructions);
 
 		if (!exhaust)
 			break;
@@ -929,6 +946,8 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 		if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
 			activateState(state);
 		}
+
+		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalForkedStates);
 	}
 
 	SymbolicState *pState = parent->getCloud9State();
@@ -946,6 +965,8 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	assert(kState);
+
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalFinishedStates);
 
 	//CLOUD9_DEBUG("State destroyed: " << kState->getCloud9State()->getNode());
 

@@ -32,22 +32,23 @@ class InstrumentationWriter;
 
 enum Statistics {
 	TotalProcInstructions = 0,
+
 	TotalProcJobs = 1,
-	TotalPathsStarted = 3,
-	TotalPathsFinished = 4,
-
-	TotalNewInstructions = 5,
-	TotalNewStates = 6,
-	TotalNewPaths = 7,
-
+	TotalReplayedJobs = 14,
 	TotalExportedJobs = 8,
 	TotalImportedJobs = 9,
 	TotalDroppedJobs = 10,
 
-	CurrentQueueSize = 11,
-	CurrentPathCount = 12,
-	CurrentImportedPathCount = 13
+	TotalForkedStates = 15,
+	TotalFinishedStates = 16,
 
+	TotalTreePaths = 17,
+
+	TotalReplayInstructions = 20,
+
+	CurrentJobCount = 11,
+	CurrentActiveStateCount = 18,
+	CurrentInactiveStateCount = 19
 };
 
 enum Events {
