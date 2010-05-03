@@ -769,15 +769,9 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		finalizeJob(job, true);
 	}
 
-<<<<<<< HEAD:lib/Cloud9/Worker/JobManager.cpp
+
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs, paths->count());
 	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::TotalTreePaths, paths->count());
-=======
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
-			jobs.size());
-	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize,
-			jobs.size());
->>>>>>> portfolio:lib/Cloud9/Worker/JobManager.cpp
 
 	return paths;
 }
