@@ -619,7 +619,7 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 	WorkerTree::Node *node = job->getNode().get();
 	assert((**node).symState || job->isImported());
 
-	selStrategy->onJobAdded(job);
+	fireAddJob(job);
 
 	if (activateStates) {
 		// Check for the state on the supporting branch
@@ -627,7 +627,7 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 			SymbolicState *state = (**node).getSymbolicState();
 
 			if (state) {
-				activateState(state);
+				fireActivateState(state);
 				break;
 			}
 
@@ -650,7 +650,7 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
 			SymbolicState *state = (**node).getSymbolicState();
 
 			if (state) {
-				deactivateState(state);
+				fireDeactivateState(state);
 				break;
 			}
 
@@ -658,8 +658,7 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
 		}
 	}
 
-
-	selStrategy->onRemovingJob(job);
+	fireRemovingJob(job);
 
 	delete job;
 }
@@ -764,8 +763,6 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 		job->exported = true;
 		job->removing = true;
 
-		selStrategy->onRemovingJob(job);
-
 		finalizeJob(job, true);
 	}
 
@@ -776,26 +773,38 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 	return paths;
 }
 
-/* State Manipulation Methods *************************************************/
+/* Strategy Handler Triggers *************************************************/
 
-void JobManager::activateState(SymbolicState *state) {
-	if (!state->_active) {
-		state->_active = true;
-		selStrategy->onStateActivated(state);
-	}
+void JobManager::fireActivateState(SymbolicState *state) {
+  if (!state->_active) {
+    state->_active = true;
+    selStrategy->onStateActivated(state);
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentActiveStateCount);
+  }
 }
 
-void JobManager::deactivateState(SymbolicState *state) {
-	if (state->_active) {
-		state->_active = false;
-		selStrategy->onStateDeactivated(state);
-	}
+void JobManager::fireDeactivateState(SymbolicState *state) {
+  if (state->_active) {
+    state->_active = false;
+    selStrategy->onStateDeactivated(state);
+    cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentActiveStateCount);
+  }
 }
 
-void JobManager::updateState(SymbolicState *state) {
-	if (state->_active) {
-		selStrategy->onStateUpdated(state);
-	}
+void JobManager::fireUpdateState(SymbolicState *state) {
+  if (state->_active) {
+    selStrategy->onStateUpdated(state);
+  }
+}
+
+void JobManager::fireAddJob(ExecutionJob *job) {
+  selStrategy->onJobAdded(job);
+  cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentJobCount);
+}
+
+void JobManager::fireRemovingJob(ExecutionJob *job) {
+  selStrategy->onRemovingJob(job);
+  cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentJobCount);
 }
 
 /* Job Execution Methods ******************************************************/
@@ -819,7 +828,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
     cloud9::instrum::theInstrManager.recordEvent(
         cloud9::instrum::JobExecutionState, "endReplay");
 
-    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayedJobs);
+    cloud9::instrum::theInstrManager.incStatistic(
+        cloud9::instrum::TotalReplayedJobs);
   } else {
     if (job->isImported()) {
       CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
@@ -830,7 +840,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
 
   if ((**nodePin).symState == NULL) {
     CLOUD9_INFO("Job canceled before start");
-    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
+    cloud9::instrum::theInstrManager.incStatistic(
+        cloud9::instrum::TotalDroppedJobs);
   } else {
     stepInNode(lock, nodePin.get(), false);
   }
@@ -844,7 +855,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
     // Job finished here, need to remove it
     finalizeJob(job, false);
 
-    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
+    cloud9::instrum::theInstrManager.incStatistic(
+        cloud9::instrum::TotalProcJobs);
 
     // Spawn new jobs if there are states left
     if (nodePin->layerExists(WORKER_LAYER_STATES)) {
@@ -864,14 +876,16 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
       }
 
       if (nodes.size() > 0) {
-        cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalTreePaths, nodes.size() - 1);
+        cloud9::instrum::theInstrManager.incStatistic(
+            cloud9::instrum::TotalTreePaths, nodes.size() - 1);
       }
+    }
   } else {
     // Just mark the state as updated
-    updateState((**nodePin).symState);
+    fireUpdateState((**nodePin).symState);
   }
 }
-  
+
 void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust) {
 	assert((**node).symState != NULL);
 
@@ -973,18 +987,16 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 		SymbolicState *state = kState->getCloud9State();
 
 		if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
-			activateState(state);
+			fireActivateState(state);
 		}
-
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalForkedStates);
 	}
 
 	SymbolicState *pState = parent->getCloud9State();
 
 	if (pState->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
-		updateState(pState);
+		fireUpdateState(pState);
 	} else {
-		deactivateState(pState);
+		fireDeactivateState(pState);
 	}
 
 
@@ -995,13 +1007,11 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
 	assert(kState);
 
-	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalFinishedStates);
-
 	//CLOUD9_DEBUG("State destroyed: " << kState->getCloud9State()->getNode());
 
 	SymbolicState *state = kState->getCloud9State();
 
-	deactivateState(state);
+	fireDeactivateState(state);
 
 	updateTreeOnDestroy(kState);
 }

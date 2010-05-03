@@ -111,9 +111,11 @@ private:
 
 	void dumpStateTrace(WorkerTree::Node *node);
 
-	void activateState(SymbolicState *state);
-	void deactivateState(SymbolicState *state);
-	void updateState(SymbolicState *state);
+	void fireActivateState(SymbolicState *state);
+	void fireDeactivateState(SymbolicState *state);
+	void fireUpdateState(SymbolicState *state);
+	void fireAddJob(ExecutionJob *job);
+	void fireRemovingJob(ExecutionJob *job);
 
 
 	void submitJob(ExecutionJob* job, bool activateStates);

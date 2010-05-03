@@ -6,6 +6,7 @@
  */
 
 #include "cloud9/worker/SymbolicEngine.h"
+#include "cloud9/instrum/InstrumentationManager.h"
 
 namespace cloud9 {
 
@@ -22,22 +23,30 @@ void SymbolicEngine::deregisterStateEventHandler(StateEventHandler *handler) {
 }
 
 void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
-		klee::ExecutionState *parent, int index) {
+    klee::ExecutionState *parent, int index) {
 
-	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
-		StateEventHandler *h = *it;
+  for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
+    StateEventHandler *h = *it;
 
-		h->onStateBranched(state, parent, index);
-	}
+    h->onStateBranched(state, parent, index);
+  }
+
+  if (state) {
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalForkedStates);
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::CurrentStateCount);
+  }
 }
 
 void SymbolicEngine::fireStateDestroy(klee::ExecutionState *state) {
 
-	for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
-		StateEventHandler *h = *it;
+  for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
+    StateEventHandler *h = *it;
 
-		h->onStateDestroy(state);
-	}
+    h->onStateDestroy(state);
+  }
+
+  cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalFinishedStates);
+  cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentStateCount);
 }
 
 void SymbolicEngine::fireControlFlowEvent(klee::ExecutionState *state,

@@ -48,7 +48,7 @@ enum Statistics {
 
 	CurrentJobCount = 11,
 	CurrentActiveStateCount = 18,
-	CurrentInactiveStateCount = 19
+	CurrentStateCount = 19
 };
 
 enum Events {
