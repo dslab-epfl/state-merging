@@ -8,7 +8,6 @@
 #ifndef JOBMANAGER_H_
 #define JOBMANAGER_H_
 
-
 #include "cloud9/Logger.h"
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/SymbolicEngine.h"
@@ -40,188 +39,200 @@ class ExecutionJob;
 class KleeHandler;
 class StrategyPortfolio;
 
-
 class JobManager: public StateEventHandler {
 private:
-	/***************************************************************************
-	 * Initialization
-	 **************************************************************************/
-	void initialize(llvm::Module *module, llvm::Function *mainFn, int argc,
-			char **argv, char **envp);
+  /***************************************************************************
+   * Initialization
+   **************************************************************************/
+  void initialize(llvm::Module *module, llvm::Function *mainFn, int argc,
+      char **argv, char **envp);
 
-	void initKlee();
-	void initInstrumentation();
-	void initBreakpoints();
-	void initStatistics();
-	void initStrategy();
+  void initKlee();
+  void initInstrumentation();
+  void initBreakpoints();
+  void initStatistics();
+  void initStrategy();
 
-	StrategyPortfolio *createStrategyPortfolio();
+  StrategyPortfolio *createStrategyPortfolio();
 
-	void initRootState(llvm::Function *f, int argc,
-			char **argv, char **envp);
+  void initRootState(llvm::Function *f, int argc, char **argv, char **envp);
 
-	/***************************************************************************
-	 * KLEE integration
-	 **************************************************************************/
-	klee::Interpreter *interpreter;
-	SymbolicEngine *symbEngine;
+  /***************************************************************************
+   * KLEE integration
+   **************************************************************************/
+  klee::Interpreter *interpreter;
+  SymbolicEngine *symbEngine;
 
-	KleeHandler *kleeHandler;
-	klee::KModule *kleeModule;
+  KleeHandler *kleeHandler;
+  klee::KModule *kleeModule;
 
-	llvm::Function *mainFn;
+  llvm::Function *mainFn;
 
+  /*
+   * Symbolic tree
+   */
+  WorkerTree* tree;
 
-	/*
-	 * Symbolic tree
-	 */
-	WorkerTree* tree;
+  boost::condition_variable jobsAvailabe;
+  boost::mutex jobsMutex;
+  bool terminationRequest;
 
-	boost::condition_variable jobsAvailabe;
-	boost::mutex jobsMutex;
-	bool terminationRequest;
+  JobSelectionStrategy *selStrategy;
 
-	JobSelectionStrategy *selStrategy;
+  /*
+   * Job execution state
+   */
+  ExecutionJob *currentJob;
+  bool replaying;
 
-	/*
-	 * Job execution state
-	 */
-	ExecutionJob *currentJob;
-	bool replaying;
+  /*
+   * Statistics
+   */
 
-	/*
-	 * Statistics
-	 */
+  std::set<WorkerTree::NodePin> stats;
+  bool statChanged;
+  bool refineStats;
 
-	std::set<WorkerTree::NodePin> stats;
-	bool statChanged;
-	bool refineStats;
+  /*
+   * Breakpoint management data structures
+   *
+   */
+  std::set<WorkerTree::NodePin> pathBreaks;
+  std::set<unsigned int> codeBreaks;
 
-	/*
-	 * Breakpoint management data structures
-	 *
-	 */
-	std::set<WorkerTree::NodePin> pathBreaks;
-	std::set<unsigned int> codeBreaks;
+  /*
+   * Debugging and instrumentation
+   */
+  int traceCounter;
 
-	/*
-	 * Debugging and instrumentation
-	 */
-	int traceCounter;
+  void dumpStateTrace(WorkerTree::Node *node);
 
-	void dumpStateTrace(WorkerTree::Node *node);
+  void fireActivateState(SymbolicState *state);
+  void fireDeactivateState(SymbolicState *state);
+  void fireUpdateState(SymbolicState *state);
+  void fireAddJob(ExecutionJob *job);
+  void fireRemovingJob(ExecutionJob *job);
 
-	void fireActivateState(SymbolicState *state);
-	void fireDeactivateState(SymbolicState *state);
-	void fireUpdateState(SymbolicState *state);
-	void fireAddJob(ExecutionJob *job);
-	void fireRemovingJob(ExecutionJob *job);
+  void submitJob(ExecutionJob* job, bool activateStates);
+  void finalizeJob(ExecutionJob *job, bool deactivateStates);
 
+  template<typename JobIterator>
+  void submitJobs(JobIterator begin, JobIterator end, bool activateStates) {
+    int count = 0;
+    for (JobIterator it = begin; it != end; it++) {
+      submitJob(*it, activateStates);
+      count++;
+    }
 
-	void submitJob(ExecutionJob* job, bool activateStates);
-	void finalizeJob(ExecutionJob *job, bool deactivateStates);
+    jobsAvailabe.notify_all();
 
-	template<typename JobIterator>
-	void submitJobs(JobIterator begin, JobIterator end, bool activateStates) {
-		int count = 0;
-		for (JobIterator it = begin; it != end; it++) {
-			submitJob(*it, activateStates);
-			count++;
-		}
+    //CLOUD9_DEBUG("Submitted " << count << " jobs to the local queue");
+  }
 
-		jobsAvailabe.notify_all();
+  ExecutionJob* selectNextJob(boost::unique_lock<boost::mutex> &lock,
+      unsigned int timeOut);
+  ExecutionJob* selectNextJob();
 
-		//CLOUD9_DEBUG("Submitted " << count << " jobs to the local queue");
-	}
+  static bool isJob(WorkerTree::Node *node);
+  bool isExportableJob(WorkerTree::Node *node);
 
+  void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job,
+      bool spawnNew);
+  void stepInNode(boost::unique_lock<boost::mutex> &lock,
+      WorkerTree::Node *node, bool exhaust);
+  void replayPath(boost::unique_lock<boost::mutex> &lock,
+      WorkerTree::Node *pathEnd);
 
-	ExecutionJob* selectNextJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
-	ExecutionJob* selectNextJob();
+  void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
-	static bool isJob(WorkerTree::Node *node);
-	bool isExportableJob(WorkerTree::Node *node);
+  void refineStatistics();
+  void cleanupStatistics();
 
-	void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew);
-	void stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust);
-	void replayPath(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *pathEnd);
+  void selectJobs(WorkerTree::Node *root, std::vector<ExecutionJob*> &jobSet,
+      int maxCount);
 
-	void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
+  unsigned int countJobs(WorkerTree::Node *root);
 
-	void refineStatistics();
-	void cleanupStatistics();
+  void updateTreeOnBranch(klee::ExecutionState *state,
+      klee::ExecutionState *parent, int index);
+  void updateTreeOnDestroy(klee::ExecutionState *state);
 
-	void selectJobs(WorkerTree::Node *root,
-			std::vector<ExecutionJob*> &jobSet, int maxCount);
+  void fireBreakpointHit(WorkerTree::Node *node);
 
-	unsigned int countJobs(WorkerTree::Node *root);
+  /*
+   * Breakpoint management
+   */
 
-	void updateTreeOnBranch(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index);
-	void updateTreeOnDestroy(klee::ExecutionState *state);
-
-	void fireBreakpointHit(WorkerTree::Node *node);
-
-	/*
-	 * Breakpoint management
-	 */
-
-	void setCodeBreakpoint(int assemblyLine);
-	void setPathBreakpoint(ExecutionPathPin path);
+  void setCodeBreakpoint(int assemblyLine);
+  void setPathBreakpoint(ExecutionPathPin path);
 public:
-	JobManager(llvm::Module *module, std::string mainFnName, int argc, char **argv,
-			char **envp);
-	virtual ~JobManager();
+  JobManager(llvm::Module *module, std::string mainFnName, int argc,
+      char **argv, char **envp);
+  virtual ~JobManager();
 
-	WorkerTree *getTree() { return tree; }
+  WorkerTree *getTree() {
+    return tree;
+  }
 
-	WorkerTree::Node *getCurrentNode();
+  WorkerTree::Node *getCurrentNode();
 
-	JobSelectionStrategy *getStrategy() { return selStrategy; }
+  JobSelectionStrategy *getStrategy() {
+    return selStrategy;
+  }
 
-	void lockJobs() { jobsMutex.lock(); }
-	void unlockJobs() { jobsMutex.unlock(); }
+  void lockJobs() {
+    jobsMutex.lock();
+  }
+  void unlockJobs() {
+    jobsMutex.unlock();
+  }
 
-	unsigned getModuleCRC() const;
+  unsigned getModuleCRC() const;
 
-	void processJobs(unsigned int timeOut = 0);
-	void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
+  void processJobs(unsigned int timeOut = 0);
+  void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
 
-	void finalize();
+  void finalize();
 
-	virtual void onStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index);
-	virtual void onStateDestroy(klee::ExecutionState *state);
-	virtual void onControlFlowEvent(klee::ExecutionState *state,
-			ControlFlowEvent event);
-	virtual void onDebugInfo(klee::ExecutionState *state,
-			const std::string &message);
-	virtual void onOutOfResources(klee::ExecutionState *destroyedState);
+  virtual void onStateBranched(klee::ExecutionState *state,
+      klee::ExecutionState *parent, int index);
+  virtual void onStateDestroy(klee::ExecutionState *state);
+  virtual void onControlFlowEvent(klee::ExecutionState *state,
+      ControlFlowEvent event);
+  virtual void onDebugInfo(klee::ExecutionState *state,
+      const std::string &message);
+  virtual void onOutOfResources(klee::ExecutionState *destroyedState);
 
-	/*
-	 * Statistics methods
-	 */
+  /*
+   * Statistics methods
+   */
 
-	void getStatisticsData(std::vector<int> &data,
-			ExecutionPathSetPin &paths, bool onlyChanged);
+  void getStatisticsData(std::vector<int> &data, ExecutionPathSetPin &paths,
+      bool onlyChanged);
 
-	void setRefineStatistics() { refineStats = true; }
+  void setRefineStatistics() {
+    refineStats = true;
+  }
 
-	void requestTermination() { terminationRequest = true; }
+  void requestTermination() {
+    terminationRequest = true;
+  }
 
-	/*
-	 * Coverage related functionality
-	 */
+  /*
+   * Coverage related functionality
+   */
 
-	void getUpdatedLocalCoverage(cov_update_t &data);
-	void setUpdatedGlobalCoverage(const cov_update_t &data);
-	uint32_t getCoverageIDCount() const;
+  void getUpdatedLocalCoverage(cov_update_t &data);
+  void setUpdatedGlobalCoverage(const cov_update_t &data);
+  uint32_t getCoverageIDCount() const;
 
-	/*
-	 * Job import/export methods
-	 */
-	void importJobs(ExecutionPathSetPin paths, std::vector<unsigned int> *strategies);
-	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
-			std::vector<int> &counts, std::vector<unsigned int> *strategies);
+  /*
+   * Job import/export methods
+   */
+  void importJobs(ExecutionPathSetPin paths,
+      std::vector<unsigned int> *strategies);
+  ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
+      std::vector<int> &counts, std::vector<unsigned int> *strategies);
 };
 
 }
