@@ -3033,7 +3033,6 @@ void Executor::executeMemoryOperation(ExecutionState &state,
       terminateStateEarly(*unbound, "query timed out (resolve)");
     } else {
     	//unbound->addressSpace._testAddressSpace();
-    	CLOUD9_DEBUG("Instruction: " << unbound->pc->info->assemblyLine);
       terminateStateOnError(*unbound,
                             "memory error: out of bound pointer",
                             "ptr.err",
