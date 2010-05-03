@@ -14,7 +14,6 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
 
-
 using namespace boost::asio::ip;
 using namespace cloud9::data;
 
@@ -28,44 +27,45 @@ class LoadBalancer;
 
 class WorkerConnection: public boost::enable_shared_from_this<WorkerConnection> {
 private:
-	tcp::socket socket;
+  tcp::socket socket;
 
-	LoadBalancer *lb;
+  LoadBalancer *lb;
 
-	Worker *worker;
+  Worker *worker;
 
-	AsyncMessageReader msgReader;
-	AsyncMessageWriter msgWriter;
+  AsyncMessageReader msgReader;
+  AsyncMessageWriter msgWriter;
 
-	WorkerConnection(boost::asio::io_service &service, LoadBalancer *lb);
+  WorkerConnection(boost::asio::io_service &service, LoadBalancer *lb);
 
+  void handleMessageReceived(std::string &message,
+      const boost::system::error_code &error);
 
-	void handleMessageReceived(std::string &message,
-				const boost::system::error_code &error);
+  void handleMessageSent(const boost::system::error_code &error);
 
-	void handleMessageSent(const boost::system::error_code &error);
+  bool processNodeSetUpdate(const WorkerReportMessage &message);
+  bool processNodeDataUpdate(const WorkerReportMessage &message);
+  bool processStatisticsUpdates(const WorkerReportMessage &message);
+  bool processStrategyPortfolioUpdates(const WorkerReportMessage &message);
 
-	bool processNodeSetUpdate(const WorkerReportMessage &message);
-	bool processNodeDataUpdate(const WorkerReportMessage &message);
-	bool processStatisticsUpdates(const WorkerReportMessage &message);
-	bool processStrategyPortfolioUpdates(const WorkerReportMessage &message);
-
-	void sendJobTransfers(LBResponseMessage &response);
-	void sendStatisticsUpdates(LBResponseMessage &response);
-	void sendStrategyPortfolioUpdates(LBResponseMessage &response);
+  void sendJobTransfers(LBResponseMessage &response);
+  void sendStatisticsUpdates(LBResponseMessage &response);
+  void sendStrategyPortfolioUpdates(LBResponseMessage &response);
 
 public:
-	typedef boost::shared_ptr<WorkerConnection> pointer;
+  typedef boost::shared_ptr<WorkerConnection> pointer;
 
-	static pointer create(boost::asio::io_service &service, LoadBalancer *lb) {
-		return pointer(new WorkerConnection(service, lb));
-	}
+  static pointer create(boost::asio::io_service &service, LoadBalancer *lb) {
+    return pointer(new WorkerConnection(service, lb));
+  }
 
-	void start();
+  void start();
 
-	virtual ~WorkerConnection();
+  virtual ~WorkerConnection();
 
-	tcp::socket &getSocket() { return socket; }
+  tcp::socket &getSocket() {
+    return socket;
+  }
 };
 
 }

@@ -22,29 +22,26 @@ using namespace cloud9::lb;
 namespace {
 
 cl::opt<int> ServerPort("port",
-		cl::desc("The port the load balancing server listens on"),
-		cl::init(1337)); // TODO: Move this in a #define
+    cl::desc("The port the load balancing server listens on"), cl::init(1337)); // TODO: Move this in a #define
 
 cl::opt<std::string> ServerAddress("address",
-		cl::desc("The local address the load balancer listens on"),
-		cl::init("localhost"));
+    cl::desc("The local address the load balancer listens on"), cl::init("localhost"));
 }
 
-
 int main(int argc, char **argv, char **envp) {
-	boost::asio::io_service io_service;
+  boost::asio::io_service io_service;
 
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-	cloud9::Logger::getLogger().setLogPrefix("LBalancer  : ");
+  cloud9::Logger::getLogger().setLogPrefix("LBalancer  : ");
 
-	cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
+  cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
 
-	LoadBalancer lb(io_service);
+  LoadBalancer lb(io_service);
 
-	LBServer server(&lb, io_service, ServerPort);
+  LBServer server(&lb, io_service, ServerPort);
 
-	CLOUD9_INFO("Running message handling loop...");
-	io_service.run();
-	return 0;
+  CLOUD9_INFO("Running message handling loop...");
+  io_service.run();
+  return 0;
 }

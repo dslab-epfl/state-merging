@@ -21,55 +21,67 @@ namespace lb {
 typedef unsigned int worker_id_t;
 
 class Worker {
-	friend class LoadBalancer;
+  friend class LoadBalancer;
 public:
-	struct IDCompare {
-		bool operator() (const Worker *a, const Worker *b) {
-			return a->getID() < b->getID();
-		}
-	};
+  struct IDCompare {
+    bool operator()(const Worker *a, const Worker *b) {
+      return a->getID() < b->getID();
+    }
+  };
 
-	struct LoadCompare {
-		bool operator() (const Worker *a, const Worker *b) {
-			return a->getTotalJobs() < b->getTotalJobs();
-		}
-	};
+  struct LoadCompare {
+    bool operator()(const Worker *a, const Worker *b) {
+      return a->getTotalJobs() < b->getTotalJobs();
+    }
+  };
 private:
-	worker_id_t id;
-	std::string address;
-	int port;
+  worker_id_t id;
+  std::string address;
+  int port;
 
-	bool _wantsUpdates;
+  bool _wantsUpdates;
 
-	std::vector<LBTree::Node*> nodes;
-	unsigned nodesRevision;
+  std::vector<LBTree::Node*> nodes;
+  unsigned nodesRevision;
 
-	std::vector<char> globalCoverageUpdates;
+  std::vector<char> globalCoverageUpdates;
 
-	strat_stat_map localPortfolioStats;
-	
-	unsigned totalJobs;
+  strat_stat_map localPortfolioStats;
 
-	Worker() : nodesRevision(1), totalJobs(0) {
-		StrategyStatistic::initPortfolioStat(localPortfolioStats);
-	};
+  unsigned totalJobs;
+
+  Worker() :
+    nodesRevision(1), totalJobs(0) {
+    StrategyStatistic::initPortfolioStat(localPortfolioStats);
+  }
+  ;
 public:
-	virtual ~Worker() { };
+  virtual ~Worker() {
+  }
+  ;
 
-	worker_id_t getID() const { return id; }
+  worker_id_t getID() const {
+    return id;
+  }
 
-	unsigned getTotalJobs() const { return totalJobs; }
+  unsigned getTotalJobs() const {
+    return totalJobs;
+  }
 
-	const std::string &getAddress() const { return address; }
-	int getPort() const { return port; }
+  const std::string &getAddress() const {
+    return address;
+  }
+  int getPort() const {
+    return port;
+  }
 
-	bool operator< (const Worker& w) {
-		return id < w.id;
-	}
+  bool operator<(const Worker& w) {
+    return id < w.id;
+  }
 
-	bool wantsUpdates() const {
-		return _wantsUpdates;
-	}
+  bool wantsUpdates() const {
+    return _wantsUpdates;
+  }
 };
 
 }

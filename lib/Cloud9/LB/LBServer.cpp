@@ -15,41 +15,41 @@ namespace cloud9 {
 
 namespace lb {
 
-LBServer::LBServer(LoadBalancer *_lb, boost::asio::io_service &io_service, int port) :
-	acceptor(io_service, tcp::endpoint(tcp::v4(), port)), lb(_lb) {
+LBServer::LBServer(LoadBalancer *_lb, boost::asio::io_service &io_service,
+    int port) :
+  acceptor(io_service, tcp::endpoint(tcp::v4(), port)), lb(_lb) {
 
-	startAccept();
+  startAccept();
 }
 
 LBServer::~LBServer() {
-	// TODO Auto-generated destructor stub
+  // TODO Auto-generated destructor stub
 }
 
 void LBServer::startAccept() {
-	WorkerConnection::pointer conn =
-			WorkerConnection::create(acceptor.io_service(), lb);
+  WorkerConnection::pointer conn = WorkerConnection::create(
+      acceptor.io_service(), lb);
 
-	CLOUD9_INFO("Listening for connections on port " <<
-			acceptor.local_endpoint().port());
+  CLOUD9_INFO("Listening for connections on port " <<
+      acceptor.local_endpoint().port());
 
-	acceptor.async_accept(conn->getSocket(), boost::bind(&LBServer::handleAccept,
-			this, conn, boost::asio::placeholders::error));
-
+  acceptor.async_accept(conn->getSocket(), boost::bind(&LBServer::handleAccept,
+      this, conn, boost::asio::placeholders::error));
 
 }
 
 void LBServer::handleAccept(WorkerConnection::pointer conn,
-		const boost::system::error_code &error) {
-	if (!error) {
-		CLOUD9_INFO("Connection received from " << conn->getSocket().remote_endpoint().address());
+    const boost::system::error_code &error) {
+  if (!error) {
+    CLOUD9_INFO("Connection received from " << conn->getSocket().remote_endpoint().address());
 
-		conn->start();
+    conn->start();
 
-		// Go back and accept another connection
-		startAccept();
-	} else {
-		CLOUD9_ERROR("Error accepting worker connection");
-	}
+    // Go back and accept another connection
+    startAccept();
+  } else {
+    CLOUD9_ERROR("Error accepting worker connection");
+  }
 
 }
 

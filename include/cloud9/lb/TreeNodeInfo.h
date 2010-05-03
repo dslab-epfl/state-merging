@@ -20,21 +20,25 @@ namespace lb {
 class Worker;
 
 class TreeNodeInfo {
-	friend class LoadBalancer;
+  friend class LoadBalancer;
 public:
-	class WorkerInfo {
-	public:
-		int jobCount;
-		int revision;
+  class WorkerInfo {
+  public:
+    int jobCount;
+    int revision;
 
-		WorkerInfo() : jobCount(0), revision(0) { }
-	};
+    WorkerInfo() :
+      jobCount(0), revision(0) {
+    }
+  };
 
 private:
-	std::map<int, WorkerInfo> workerData;
+  std::map<int, WorkerInfo> workerData;
 public:
-	TreeNodeInfo() {};
-	virtual ~TreeNodeInfo() {};
+  TreeNodeInfo() { }
+
+  virtual ~TreeNodeInfo() { }
+
 };
 
 #define LB_LAYER_COUNT		1
@@ -46,6 +50,5 @@ typedef ExecutionTree<TreeNodeInfo, LB_LAYER_COUNT, 2> LBTree;
 }
 
 }
-
 
 #endif /* TREENODEINFO_H_ */
