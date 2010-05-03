@@ -2658,7 +2658,8 @@ void Executor::callExternalFunction(ExecutionState &state,
   }
   
   if (function->getNameStr() == "vprintf") {
-    CLOUD9_INFO("Skipping vprintf string: " << (char*)args[1]);
+    CLOUD9_INFO("Skipping vprintf string: " << (char*)args[1] << " arg size = "
+					    << arguments.size());
   } else {
     bool success = externalDispatcher->executeCall(function, target->inst, args);
     if (!success) {
