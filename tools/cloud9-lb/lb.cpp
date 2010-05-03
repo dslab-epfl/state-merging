@@ -25,10 +25,6 @@ cl::opt<int> ServerPort("port",
 		cl::desc("The port the load balancing server listens on"),
 		cl::init(1337)); // TODO: Move this in a #define
 
-cl::opt<int> BalanceRate("balance-rate",
-		cl::desc("The rate at which load balancing decisions take place"),
-		cl::init(2));
-
 cl::opt<std::string> ServerAddress("address",
 		cl::desc("The local address the load balancer listens on"),
 		cl::init("localhost"));
@@ -44,9 +40,9 @@ int main(int argc, char **argv, char **envp) {
 
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 load balancer");
 
-	LoadBalancer *lb = new LoadBalancer(BalanceRate);
+	LoadBalancer lb(io_service);
 
-	LBServer *server = new LBServer(lb, io_service, ServerPort);
+	LBServer server(&lb, io_service, ServerPort);
 
 	CLOUD9_INFO("Running message handling loop...");
 	io_service.run();

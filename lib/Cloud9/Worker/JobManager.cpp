@@ -957,7 +957,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
   std::reverse(path.begin(), path.end());
 
-  CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
+  //CLOUD9_DEBUG("Started path replay at position: " << *crtNode);
 
   replaying = true;
 
@@ -1190,7 +1190,7 @@ void JobManager::getStatisticsData(std::vector<int> &data,
     paths = tree->buildPathSet(newStats.begin(), newStats.end());
     statChanged = false;
 
-    CLOUD9_DEBUG("Sent node set: " << getASCIINodeSet(newStats.begin(), newStats.end()));
+    //CLOUD9_DEBUG("Sent node set: " << getASCIINodeSet(newStats.begin(), newStats.end()));
   }
 
   data.clear();
@@ -1202,7 +1202,7 @@ void JobManager::getStatisticsData(std::vector<int> &data,
     data.push_back(jobCount);
   }
 
-  CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
+  //CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
 }
 
 /* Coverage Management ********************************************************/

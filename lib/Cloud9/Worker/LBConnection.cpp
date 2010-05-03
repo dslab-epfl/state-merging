@@ -91,6 +91,7 @@ void LBConnection::registerWorker() {
 void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
 	WorkerReportMessage_NodeDataUpdate *dataUpdate = message.mutable_nodedataupdate();
 	std::vector<int> data;
+	int total = 0;
 	ExecutionPathSetPin paths = ExecutionPathSet::getEmptySet();
 
 	jobManager->getStatisticsData(data, paths, true);
@@ -100,7 +101,10 @@ void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
 
 	for (std::vector<int>::iterator it = data.begin(); it != data.end(); it++) {
 		dataUpdate->add_data(*it);
+		total += *it;
 	}
+
+	CLOUD9_DEBUG("Reporting " << total << " jobs to the load balancer");
 
 	if (paths->count() > 0 || data.size() == 0) {
 		assert(paths->count() == data.size());

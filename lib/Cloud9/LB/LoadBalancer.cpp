@@ -8,15 +8,41 @@
 #include "cloud9/lb/LoadBalancer.h"
 #include "cloud9/lb/Worker.h"
 
+#include "llvm/Support/CommandLine.h"
+
 #include <cassert>
 #include <algorithm>
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
+
+using namespace llvm;
+
+namespace {
+cl::opt<unsigned int> BalanceRate("balance-rate",
+        cl::desc("The rate at which load balancing decisions take place, measured in rounds"),
+        cl::init(2));
+
+cl::opt<unsigned int> TimerRate("timer-rate",
+    cl::desc("The rate at which the internal timer triggers, measured in seconds"),
+    cl::init(1));
+
+cl::opt<unsigned int> WorkerTimeOut("worker-tout",
+    cl::desc("Timeout for worker updates"),
+    cl::init(60));
+}
 
 namespace cloud9 {
 
 namespace lb {
 
-LoadBalancer::LoadBalancer(int br) : nextWorkerID(1), balanceRate(br), rounds(0) {
-	tree = new LBTree();
+LoadBalancer::LoadBalancer(boost::asio::io_service &service) :
+    timer(service), nextWorkerID(1), rounds(0) {
+  tree = new LBTree();
+
+  timer.expires_from_now(boost::posix_time::seconds(TimerRate));
+
+  timer.async_wait(boost::bind(&LoadBalancer::periodicCheck, this,
+      boost::asio::placeholders::error));
 }
 
 LoadBalancer::~LoadBalancer() {
@@ -57,7 +83,6 @@ unsigned LoadBalancer::registerWorker(const std::string &address, int port, bool
 	workers[nextWorkerID] = worker;
 
 	nextWorkerID++;
-	activeCount++;
 
 	return worker->id;
 }
@@ -66,8 +91,13 @@ void LoadBalancer::deregisterWorker(worker_id_t id) {
 	Worker *worker = workers[id];
 	assert(worker);
 
-	activeCount--;
-	// TODO
+	// Cleanup any pending information about the worker
+	workers.erase(id);
+	reports.erase(id);
+
+	reqDetails.erase(id);
+	reqTransfer.erase(id);
+	reqsInvest.erase(id);
 }
 
 void LoadBalancer::updateWorkerStatNodes(worker_id_t id, std::vector<LBTree::Node*> &newNodes) {
@@ -142,19 +172,31 @@ void LoadBalancer::updateWorkerStats(worker_id_t id, std::vector<int> &stats) {
 	worker->totalJobs = 0;
 
 	for (unsigned i = 0; i < stats.size(); i++) {
-		LBTree::Node *node = worker->nodes[i];
+	  // XXX Enable this at some point; for now it's useless
+		//LBTree::Node *node = worker->nodes[i];
 
-		(**node).workerData[id].jobCount = stats[i];
+		//(**node).workerData[id].jobCount = stats[i];
 		worker->totalJobs += stats[i];
 	}
+}
 
-	reports.insert(id);
+void LoadBalancer::analyze(worker_id_t id) {
+  reports.insert(id);
 
-	if (reports.size() == workers.size()) {
-		// A full round finished
-		reports.clear();
-		rounds++;
-	}
+  if (reports.size() == workers.size()) {
+      // A full round finished
+      reports.clear();
+      rounds++;
+  }
+
+  analyzeBalance();
+}
+
+void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
+  timer.expires_at(timer.expires_at() + boost::posix_time::seconds(TimerRate));
+
+  timer.async_wait(boost::bind(&LoadBalancer::periodicCheck, this,
+      boost::asio::placeholders::error));
 }
 
 void LoadBalancer::updateCoverageData(worker_id_t id, const cov_update_t &data) {
@@ -206,7 +248,7 @@ void LoadBalancer::analyzeBalance() {
 		return;
 	}
 
-	if (rounds < balanceRate)
+	if (rounds < BalanceRate)
 		return;
 
 	rounds = 0;

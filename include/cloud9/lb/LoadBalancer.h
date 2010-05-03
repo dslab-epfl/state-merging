@@ -14,6 +14,7 @@
 
 #include <set>
 #include <map>
+#include <boost/asio.hpp>
 
 namespace cloud9 {
 
@@ -48,23 +49,22 @@ class LoadBalancer {
 private:
 	LBTree *tree;
 
+	boost::asio::deadline_timer timer;
+
 	std::string programName;
 	unsigned statIDCount;
 	unsigned programCRC;
 
 	worker_id_t nextWorkerID;
 
-	unsigned balanceRate;
 	unsigned rounds;
 
-	unsigned activeCount;
-
 	std::map<worker_id_t, Worker*> workers;
+	std::set<worker_id_t> reports;
+
 	std::set<worker_id_t> reqDetails;
 	std::map<worker_id_t, TransferRequest*> reqTransfer;
 	std::map<worker_id_t, std::vector<InvestmentRequest*> > reqsInvest;
-
-	std::set<worker_id_t> reports;
 
 	// TODO: Restructure this to a more intuitive representation with
 	// global coverage + coverage deltas
@@ -75,8 +75,12 @@ private:
 
 	void computeGlobalPortfolioStats(strat_stat_map &portfolioStats);
 
+	void analyzeBalance();
+
+	void periodicCheck(const boost::system::error_code& error);
+
 public:
-	LoadBalancer(int balanceRate);
+	LoadBalancer(boost::asio::io_service &service);
 	virtual ~LoadBalancer();
 
 	worker_id_t registerWorker(const std::string &address, int port, bool wantsUpdates);
@@ -85,11 +89,9 @@ public:
 	void registerProgramParams(const std::string &programName, unsigned crc, unsigned statIDCount);
 	void checkProgramParams(const std::string &programName, unsigned crc, unsigned statIDCount);
 
-	void analyzeBalance();
+	void analyze(worker_id_t id);
 
 	LBTree *getTree() const { return tree; }
-
-	unsigned getActiveCount() const { return activeCount; }
 
 	void updateWorkerStatNodes(worker_id_t id, std::vector<LBTree::Node*> &newNodes);
 	void updateWorkerStats(worker_id_t id, std::vector<int> &stats);

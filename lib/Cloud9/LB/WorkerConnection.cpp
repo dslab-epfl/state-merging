@@ -28,6 +28,15 @@ WorkerConnection::WorkerConnection(boost::asio::io_service &service, LoadBalance
 
 WorkerConnection::~WorkerConnection() {
 	CLOUD9_INFO("Connection interrupted");
+
+	if (worker) {
+        lb->deregisterWorker(worker->getID());
+
+        if (lb->getWorkerCount() == 0) {
+            // We should exit the load balancer
+            socket.get_io_service().stop();
+        }
+    }
 }
 
 void WorkerConnection::start() {
@@ -84,16 +93,18 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 				serializeExecutionPathSet(paths, *pathSet);
 				
 				jobSeed->add_strategies(WEIGHTED_RANDOM_STRATEGY); // XXX maybe start with a different one?
-				
-
 			}
 		} else {
-			processNodeSetUpdate(message);
+		  if (lb->getWorker(id) == NULL) { // The worker was timed-out
+		    CLOUD9_ERROR("Message received after time-out");
+		    return;
+		  }
+			//processNodeSetUpdate(message); // XXX We disable this for now, it's useless
 			processNodeDataUpdate(message);
 			processStatisticsUpdates(message);
 			processStrategyPortfolioUpdates(message);
 			
-			lb->analyzeBalance();
+			lb->analyze(id);
 
 			response.set_id(id);
 			response.set_more_details(lb->requestAndResetDetails(id));
@@ -112,17 +123,8 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 		msgWriter.sendMessage(respString);
 
-
 	} else {
 		CLOUD9_ERROR("Error receiving message from worker: " << error.message());
-
-		if (worker) {
-			lb->deregisterWorker(worker->getID());
-			if (lb->getActiveCount() == 0) {
-				// We should exit the load balancer
-				socket.get_io_service().stop();
-			}
-		}
 	}
 }
 
@@ -191,13 +193,11 @@ void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response)
 
 void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
 	if (!error) {
-		//CLOUD9_DEBUG("Sent reply to worker");
+	  // Wait for another message, again
+      msgReader.recvMessage();
 	} else {
 		CLOUD9_ERROR("Could not send reply");
 	}
-
-	// Wait for another message, again
-	msgReader.recvMessage();
 }
 
 bool WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
@@ -235,8 +235,8 @@ bool WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) 
 
 	lb->getTree()->getNodes(LB_LAYER_DEFAULT, paths, nodes);
 
-	CLOUD9_DEBUG("Received node set: " << getASCIINodeSet(nodes.begin(),
-			nodes.end()));
+	//CLOUD9_DEBUG("Received node set: " << getASCIINodeSet(nodes.begin(),
+	//		nodes.end()));
 
 	lb->updateWorkerStatNodes(id, nodes);
 
@@ -256,7 +256,7 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
 	data.insert(data.begin(), nodeDataUpdateMsg.data().begin(),
 			nodeDataUpdateMsg.data().end());
 
-	CLOUD9_DEBUG("Received data set: " << getASCIIDataSet(data.begin(), data.end()));
+	//CLOUD9_DEBUG("Received data set: " << getASCIIDataSet(data.begin(), data.end()));
 
 	lb->updateWorkerStats(id, data);
 
