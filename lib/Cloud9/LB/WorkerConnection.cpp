@@ -83,7 +83,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 				serializeExecutionPathSet(paths, *pathSet);
 				
-				jobSeed->add_strategies(WEIGHTED_RANDOM_STRATEGY);
+				jobSeed->add_strategies(WEIGHTED_RANDOM_STRATEGY); // XXX maybe start with a different one?
 				
 
 			}
@@ -185,7 +185,7 @@ void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response)
 
 			delete inv;
 		}
-	} 
+	}
 }
 
 

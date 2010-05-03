@@ -29,6 +29,7 @@ private:
 
 	bool _active;
 	bool _free;
+	unsigned int _strategy;
 
 	void rebindToNode(WorkerTree::Node *node) {
 		if (nodePin) {
@@ -44,7 +45,7 @@ private:
 	}
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), nodePin(WORKER_LAYER_STATES), _active(false), _free(false) {
+		kleeState(state), nodePin(WORKER_LAYER_STATES), _active(false), _free(false), _strategy(0) {
 			kleeState->setCloud9State(this);
 	}
 

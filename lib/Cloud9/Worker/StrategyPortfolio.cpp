@@ -15,20 +15,20 @@ namespace cloud9 {
 
 namespace worker {
 
-StrategyPortfolio::StrategyPortfolio(JobManager *_manager,
-		std::map<strat_id_t, JobSelectionStrategy*> &strategies) :
-		manager(_manager), position(0) {
-  
+StrategyPortfolio::StrategyPortfolio(JobManager *_manager, std::map<strat_id_t,
+    JobSelectionStrategy*> &strategies) :
+  manager(_manager), position(0) {
+
   tree = manager->getTree();
-  
-  unsigned i = 0;
-  for (std::map<strat_id_t, JobSelectionStrategy*>::iterator it = strategies.begin();
-       it != strategies.end(); 
-       it++, i++) {
+
+  for (std::map<strat_id_t, JobSelectionStrategy*>::iterator it =
+      strategies.begin(); it != strategies.end(); it++) {
     stratMap[it->first].strategy = it->second;
     stratMap[it->first].allocation = 0;
     stratMap[it->first].performance = 0;
+
     stratVector.push_back(it->second);
+    stratIdVector.push_back(it->first);
   }
 }
 
@@ -71,11 +71,20 @@ void StrategyPortfolio::onJobAdded(ExecutionJob *job) {
 }
 
 ExecutionJob* StrategyPortfolio::onNextJobSelection() {
-	ExecutionJob *job = stratVector[position]->onNextJobSelection();
+  unsigned int crtPos = position;
+  ExecutionJob *job;
 
-	position = (position + 1) % stratVector.size();
+  do {
+    job = stratVector[crtPos]->onNextJobSelection();
+    crtPos = (crtPos + 1) % stratVector.size();
 
-	return job;
+    if (job != NULL)
+      break;
+  } while (crtPos != position);
+
+  position = crtPos;
+
+  return job;
 
 }
 
@@ -92,6 +101,7 @@ void StrategyPortfolio::onRemovingJob(ExecutionJob *job) {
 
 void StrategyPortfolio::onStateActivated(SymbolicState *state) {
 	bool free = isStateFree(state);
+	strat_id_t id = 0;
 
 	if (free) {
 		// Broadcast to everyone
@@ -101,7 +111,7 @@ void StrategyPortfolio::onStateActivated(SymbolicState *state) {
 			strat->onStateActivated(state);
 		}
 	} else {
-		strat_id_t id = getStateStrategy(state);
+		id = getStateStrategy(state);
 		JobSelectionStrategy *strat = stratMap[id].strategy;
 
 		assert(strat != NULL);
@@ -111,13 +121,15 @@ void StrategyPortfolio::onStateActivated(SymbolicState *state) {
 	}
 
 	state->_free = free;
+	state->_strategy = id;
 }
 
 void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 	bool free = isStateFree(state);
+	strat_id_t id = 0;
 
 	if (free) {
-		assert(!state->_free && "State made free after being bound");
+		assert(state->_free && "State made free after being bound");
 
 		// Broadcast to everyone
 		for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
@@ -126,10 +138,11 @@ void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 			strat->onStateUpdated(state);
 		}
 	} else {
+	    id = getStateStrategy(state);
+
 		if (state->_free) {
 			// Now the state is bound to a single strategy, so deactivate it
 			// from the other strategies
-			strat_id_t id = getStateStrategy(state);
 
 			for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
 				if (it->first != id) {
@@ -146,12 +159,11 @@ void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 	}
 
 	state->_free = free;
+	state->_strategy = id;
 }
 
 void StrategyPortfolio::onStateDeactivated(SymbolicState *state) {
-	bool free = isStateFree(state);
-
-	if (free) {
+	if (state->_free) {
 		// Broadcast to everyone
 		for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
 			JobSelectionStrategy *strat = it->second.strategy;
@@ -159,7 +171,8 @@ void StrategyPortfolio::onStateDeactivated(SymbolicState *state) {
 			strat->onStateDeactivated(state);
 		}
 	} else {
-		strat_id_t id = getStateStrategy(state);
+		strat_id_t id = state->_strategy;
+
 		JobSelectionStrategy *strat = stratMap[id].strategy;
 
 		assert(strat != NULL);

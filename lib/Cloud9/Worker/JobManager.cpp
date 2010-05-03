@@ -817,58 +817,65 @@ void JobManager::updateState(SymbolicState *state) {
 
 /* Job Execution Methods ******************************************************/
   
-void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew) {
+
+void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
+    ExecutionJob *job, bool spawnNew) {
   WorkerTree::NodePin nodePin = job->getNode(); // Keep the node around until we finish with it
-  
+
   currentJob = job;
-  
+
   if ((**nodePin).symState == NULL) {
     if (!job->isImported()) {
       CLOUD9_INFO("Replaying path for non-foreign job. Most probably this job will be lost.");
     }
-    
-    cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
-    
+
+    cloud9::instrum::theInstrManager.recordEvent(
+        cloud9::instrum::JobExecutionState, "startReplay");
+
     replayPath(lock, nodePin.get());
-    
-    cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
+
+    cloud9::instrum::theInstrManager.recordEvent(
+        cloud9::instrum::JobExecutionState, "endReplay");
   } else {
     if (job->isImported()) {
       CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
     }
   }
-  
+
   job->imported = false;
-  
+
   if ((**nodePin).symState == NULL) {
     CLOUD9_INFO("Job canceled before start");
-    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
+    cloud9::instrum::theInstrManager.incStatistic(
+        cloud9::instrum::TotalDroppedJobs);
   } else {
     stepInNode(lock, nodePin.get(), false);
   }
-  
+
   currentJob = NULL;
-  
+
   if ((**nodePin).symState == NULL) {
+    // Save the job strategy - it is inherited by the new jobs
+    unsigned int strategy = job->_strategy;
+
     // Job finished here, need to remove it
-    unsigned int tmp_strategy = job->_strategy; 
     finalizeJob(job, false);
-    
+
     // Spawn new jobs if there are states left
     if (nodePin->layerExists(WORKER_LAYER_STATES)) {
       std::vector<WorkerTree::Node*> nodes;
       tree->getLeaves(WORKER_LAYER_STATES, nodePin.get(), nodes);
-      
+
       //CLOUD9_DEBUG("New jobs: " << nodes.size());
-      
-      for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
-	   it != nodes.end(); it++) {
-	WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
-	assert((**node).symState != NULL);
-	ExecutionJob *newJob = new ExecutionJob(node, false);
-	newJob->_strategy = tmp_strategy;
-	
-	submitJob(newJob, false);
+
+      for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin(); it
+          != nodes.end(); it++) {
+        WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
+        assert((**node).symState != NULL);
+        ExecutionJob *newJob = new ExecutionJob(node, false);
+        newJob->_strategy = strategy;
+
+        submitJob(newJob, false);
       }
     }
   } else {
