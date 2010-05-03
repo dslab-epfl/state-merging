@@ -870,7 +870,7 @@ getInlineAsmSpecialCase(const InlineAsm* asm_instr) {
   std::string instr = asm_instr->getAsmString();
   std::string constraint = asm_instr->getConstraintString();
   std::cerr << "constraint = " << constraint << "\n";
-  if(instr == "cld; rep; stosl" &&
+  if(instr == "cld; rep; stosq" &&
      constraint == "={cx},={di},{ax},0,1,~{dirflag},~{fpsr},~{flags},~{memory}")
     return FD_ZERO_ID;
   if(instr == "btsl $1,$0" &&
@@ -1418,7 +1418,8 @@ int main(int argc, char **argv, char **envp) {
 	    }
 	      
 	    case FD_ZERO_ID: {
-	      std::cerr << "matched fd_ZERO_ID \n";
+	      continue; //this does not work yet on 64 bit, better not break it
+	      
 	      Value * reg = cs.getArgument(3);
 	      //this is how these uclibc macros are translated to LLVM code                                                                                                                                                               
 	      if(!GetElementPtrInst::classof(reg))
