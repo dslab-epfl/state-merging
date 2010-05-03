@@ -70,7 +70,7 @@ ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &
 
 	ExecutionPathSet *set = new ExecutionPathSet();
 
-	for (unsigned i = 0; i < ps.path_size(); i++) {
+	for (int i = 0; i < ps.path_size(); i++) {
 		const ExecutionPathSet_ExecutionPath &p = ps.path(i);
 
 		ExecutionPath *path = new ExecutionPath();
@@ -134,7 +134,7 @@ void serializeExecutionPathSet(ExecutionPathSetPin &set,
 void parseStatisticUpdate(const cloud9::data::StatisticUpdate &update,
 		cov_update_t &data) {
 
-	for (unsigned i = 0; i < update.data_size(); i++) {
+	for (int i = 0; i < update.data_size(); i++) {
 		const cloud9::data::StatisticData &crtData = update.data(i);
 
 		data.push_back(std::make_pair(crtData.id(), crtData.value()));

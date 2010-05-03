@@ -48,9 +48,11 @@ private:
 	bool processNodeSetUpdate(const WorkerReportMessage &message);
 	bool processNodeDataUpdate(const WorkerReportMessage &message);
 	bool processStatisticsUpdates(const WorkerReportMessage &message);
+	bool processStrategyPortfolioUpdates(const WorkerReportMessage &message);
 
 	void sendJobTransfers(LBResponseMessage &response);
 	void sendStatisticsUpdates(LBResponseMessage &response);
+	void sendStrategyPortfolioUpdates(LBResponseMessage &response);
 
 public:
 	typedef boost::shared_ptr<WorkerConnection> pointer;

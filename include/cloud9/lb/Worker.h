@@ -9,6 +9,7 @@
 #define WORKER_H_
 
 #include "cloud9/lb/TreeNodeInfo.h"
+#include "cloud9/lb/StrategyStatistic.h"
 
 #include <vector>
 #include <map>
@@ -17,6 +18,7 @@ namespace cloud9 {
 
 namespace lb {
 
+typedef unsigned int worker_id_t;
 
 class Worker {
 	friend class LoadBalancer;
@@ -33,7 +35,7 @@ public:
 		}
 	};
 private:
-	unsigned id;
+	worker_id_t id;
 	std::string address;
 	int port;
 
@@ -42,15 +44,19 @@ private:
 	std::vector<LBTree::Node*> nodes;
 	unsigned nodesRevision;
 
-	std::vector<char> coverageUpdates;
+	std::vector<char> globalCoverageUpdates;
 
+	strat_stat_map localPortfolioStats;
+	
 	unsigned totalJobs;
 
-	Worker() : nodesRevision(1), totalJobs(0) { };
+	Worker() : nodesRevision(1), totalJobs(0) {
+		StrategyStatistic::initPortfolioStat(localPortfolioStats);
+	};
 public:
 	virtual ~Worker() { };
 
-	unsigned getID() const { return id; }
+	worker_id_t getID() const { return id; }
 
 	unsigned getTotalJobs() const { return totalJobs; }
 

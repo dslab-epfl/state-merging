@@ -12,6 +12,7 @@
 #include "cloud9/Logger.h"
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/SymbolicEngine.h"
+#include "cloud9/worker/CoreStrategies.h"
 
 #include <boost/thread.hpp>
 #include <list>
@@ -37,7 +38,7 @@ namespace worker {
 class SymbolicState;
 class ExecutionJob;
 class KleeHandler;
-class JobSelectionStrategy;
+class StrategyPortfolio;
 
 
 class JobManager: public StateEventHandler {
@@ -53,6 +54,8 @@ private:
 	void initBreakpoints();
 	void initStatistics();
 	void initStrategy();
+
+	StrategyPortfolio *createStrategyPortfolio();
 
 	void initRootState(llvm::Function *f, int argc,
 			char **argv, char **envp);
@@ -114,7 +117,7 @@ private:
 
 
 	void submitJob(ExecutionJob* job, bool activateStates);
-	void finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher);
+	void finalizeJob(ExecutionJob *job, bool deactivateStates);
 
 	template<typename JobIterator>
 	void submitJobs(JobIterator begin, JobIterator end, bool activateStates) {
@@ -132,6 +135,9 @@ private:
 
 	ExecutionJob* selectNextJob(boost::unique_lock<boost::mutex> &lock, unsigned int timeOut);
 	ExecutionJob* selectNextJob();
+
+	static bool isJob(WorkerTree::Node *node);
+	bool isExportableJob(WorkerTree::Node *node);
 
 	void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew);
 	void stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust);
@@ -165,6 +171,13 @@ public:
 	virtual ~JobManager();
 
 	WorkerTree *getTree() { return tree; }
+
+	WorkerTree::Node *getCurrentNode();
+
+	JobSelectionStrategy *getStrategy() { return selStrategy; }
+
+	void lockJobs() { jobsMutex.lock(); }
+	void unlockJobs() { jobsMutex.unlock(); }
 
 	unsigned getModuleCRC() const;
 
@@ -204,9 +217,9 @@ public:
 	/*
 	 * Job import/export methods
 	 */
-	void importJobs(ExecutionPathSetPin paths);
+	void importJobs(ExecutionPathSetPin paths, std::vector<unsigned int> *strategies);
 	ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
-			std::vector<int> counts);
+			std::vector<int> &counts, std::vector<unsigned int> *strategies);
 };
 
 }

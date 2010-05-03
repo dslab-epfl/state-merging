@@ -26,7 +26,9 @@
 #include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/worker/ComplexStrategies.h"
+#include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/Logger.h"
+#include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/instrum/LocalFileWriter.h"
@@ -50,9 +52,10 @@
 
 #include "../../Core/Common.h"
 
-#include <stack>
 #include <boost/io/ios_state.hpp>
 #include <boost/crc.hpp>
+#include <boost/bind.hpp>
+#include <stack>
 #include <map>
 #include <set>
 #include <fstream>
@@ -105,8 +108,19 @@ namespace worker {
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
 
-static bool isJob(WorkerTree::Node *node) {
+bool JobManager::isJob(WorkerTree::Node *node) {
 	return (**node).getJob() != NULL;
+}
+
+bool JobManager::isExportableJob(WorkerTree::Node *node) {
+	ExecutionJob *job = (**node).getJob();
+	if (!job)
+		return false;
+
+	if (job == currentJob)
+		return false;
+
+	return true;
 }
 
 static void serializeExecutionTrace(std::ostream &os, const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
@@ -394,26 +408,43 @@ void JobManager::initStrategy() {
 
 	switch (JobSelection) {
 	case RandomSel:
-	  selStrategy = new RandomStrategy();
-	  CLOUD9_INFO("Using random job selection strategy");
-	  break;
+		selStrategy = new RandomStrategy();
+		CLOUD9_INFO("Using random job selection strategy");
+		break;
 	case RandomPathSel:
-	  selStrategy = new RandomPathStrategy(tree);
-	  CLOUD9_INFO("Using random path job selection strategy");
-	  break;
+		selStrategy = new RandomPathStrategy(tree);
+		CLOUD9_INFO("Using random path job selection strategy");
+		break;
 	case CoverageOptimizedSel:
 		strategies.push_back(new WeightedRandomStrategy(
 				WeightedRandomStrategy::CoveringNew, tree, symbEngine));
 		strategies.push_back(new RandomPathStrategy(tree));
-	  selStrategy = new TimeMultiplexedStrategy(strategies);
-	  CLOUD9_INFO("Using weighted random job selection strategy");
-	  break;
+		selStrategy = new TimeMultiplexedStrategy(strategies);
+		CLOUD9_INFO("Using weighted random job selection strategy");
+		break;
+	case PortfolioSel:
+		selStrategy = createStrategyPortfolio();
+		break;
 	default:
-	  assert(0 && "undefined job selection strategy");
+		assert(0 && "undefined job selection strategy");
 	}
 
 	// Wrap this in a batching strategy, to speed up things
 	selStrategy = new BatchingStrategy(selStrategy);
+}
+
+StrategyPortfolio *JobManager::createStrategyPortfolio() {
+	std::map<unsigned int, JobSelectionStrategy*> strategies;
+
+	strategies[RANDOM_PATH_STRATEGY] = new RandomPathStrategy(tree);
+	strategies[WEIGHTED_RANDOM_STRATEGY] =
+			new WeightedRandomStrategy(WeightedRandomStrategy::CoveringNew,
+					tree, symbEngine);
+	strategies[RANDOM_STRATEGY] = new RandomStrategy();
+
+	StrategyPortfolio *result = new StrategyPortfolio(this, strategies);
+
+	return result;
 }
 
 void JobManager::initStatistics() {
@@ -479,6 +510,13 @@ unsigned JobManager::getModuleCRC() const {
 	return crc.checksum();
 }
 
+WorkerTree::Node *JobManager::getCurrentNode() {
+	if (!currentJob)
+		return NULL;
+
+	return currentJob->getNode().get();
+}
+
 /* Job Manipulation Methods ***************************************************/
 
 void JobManager::processJobs(unsigned int timeOut) {
@@ -490,7 +528,7 @@ void JobManager::processJobs(unsigned int timeOut) {
 
 void JobManager::processJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
 	// First, we need to import the jobs in the manager
-	importJobs(paths);
+	importJobs(paths, NULL);
 
 	// Then we execute them, but only them (non blocking, don't allow growth),
 	// until the queue is exhausted
@@ -599,7 +637,7 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 
 }
 
-void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool notifySearcher) {
+void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
 	WorkerTree::Node *node = job->getNode().get();
 
 	job->removing = true;
@@ -620,42 +658,25 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool noti
 		}
 	}
 
-	if (notifySearcher)
-		selStrategy->onRemovingJob(job);
+
+	selStrategy->onRemovingJob(job);
 
 	delete job;
 }
 
 void JobManager::selectJobs(WorkerTree::Node *root,
 		std::vector<ExecutionJob*> &jobSet, int maxCount) {
-	/// XXX: Prevent node creation
-	std::stack<WorkerTree::Node*> nodes;
 
-	nodes.push(root);
+	std::vector<WorkerTree::Node*> nodes;
 
-	while (!nodes.empty() && maxCount > 0) {
-		WorkerTree::Node *node = nodes.top();
-		nodes.pop();
+	tree->getLeaves(WORKER_LAYER_JOBS, root,
+			boost::bind(&JobManager::isExportableJob, this, _1),
+			maxCount, nodes);
 
-		if (node->getCount(WORKER_LAYER_JOBS) == 0) {
-			ExecutionJob *job = (**node).job;
-
-			if (job) {
-				if (job == currentJob) {
-					CLOUD9_DEBUG("FOUND A STARTED JOB: " << job->getNode());
-					continue;
-				}
-
-				jobSet.push_back(job);
-				maxCount--;
-			}
-		} else {
-			WorkerTree::Node *left = node->getChild(WORKER_LAYER_JOBS, 0);
-			WorkerTree::Node *right = node->getChild(WORKER_LAYER_JOBS, 1);
-
-			if (left) nodes.push(left);
-			if (right) nodes.push(right);
-		}
+	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
+			it != nodes.end(); it++) {
+		WorkerTree::Node* node = *it;
+		jobSet.push_back((**node).getJob());
 	}
 
 	CLOUD9_DEBUG("Selected " << jobSet.size() << " jobs");
@@ -666,7 +687,8 @@ unsigned int JobManager::countJobs(WorkerTree::Node *root) {
 	return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
-void JobManager::importJobs(ExecutionPathSetPin paths) {
+void JobManager::importJobs(ExecutionPathSetPin paths,
+		std::vector<unsigned int> *strategies) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> nodes;
@@ -676,9 +698,8 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 
 	CLOUD9_DEBUG("Importing " << paths->count() << " jobs");
 
-	for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
-			it != nodes.end(); it++) {
-		WorkerTree::Node *crtNode = *it;
+	for (unsigned int i = 0; i < nodes.size(); i++) {
+		WorkerTree::Node *crtNode = nodes[i];
 		assert(crtNode->getCount(WORKER_LAYER_JOBS) == 0
 				&& "Job duplication detected");
 		assert((!crtNode->layerExists(WORKER_LAYER_STATES) || crtNode->getCount(WORKER_LAYER_STATES) == 0)
@@ -690,7 +711,11 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 			// The exploration job object gets a pin on the node, thus
 			// ensuring it will be released automatically after it's no
 			// longer needed
-			ExecutionJob *job = new ExecutionJob(*it, true);
+			ExecutionJob *job = new ExecutionJob(crtNode, true);
+
+			if (strategies != NULL)
+				job->_strategy = (*strategies)[i];
+
 			jobs.push_back(job);
 		}
 	}
@@ -702,7 +727,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
-		std::vector<int> counts) {
+		std::vector<int> &counts, std::vector<unsigned int> *strategies) {
 	boost::unique_lock<boost::mutex> lock(jobsMutex);
 
 	std::vector<WorkerTree::Node*> roots;
@@ -721,6 +746,9 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 			it != jobs.end(); it++) {
 		ExecutionJob *job = *it;
 		jobRoots.push_back(job->getNode().get());
+
+		if (strategies != NULL)
+			strategies->push_back(job->_strategy);
 	}
 
 	// Do this before de-registering the jobs, in order to keep the nodes pinned
@@ -735,20 +763,21 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
 		job->exported = true;
 		job->removing = true;
+
+		selStrategy->onRemovingJob(job);
+
+		finalizeJob(job, true);
 	}
 
-	selStrategy->onRemovingJobs();
-
-	for (std::vector<ExecutionJob*>::iterator it = jobs.begin();
-				it != jobs.end(); it++) {
-		ExecutionJob *job = *it;
-
-		finalizeJob(job, true, false);
-
-	}
-
+<<<<<<< HEAD:lib/Cloud9/Worker/JobManager.cpp
 	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs, paths->count());
 	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::TotalTreePaths, paths->count());
+=======
+	cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalExportedJobs,
+			jobs.size());
+	cloud9::instrum::theInstrManager.decStatistic(cloud9::instrum::CurrentQueueSize,
+			jobs.size());
+>>>>>>> portfolio:lib/Cloud9/Worker/JobManager.cpp
 
 	return paths;
 }
@@ -777,72 +806,78 @@ void JobManager::updateState(SymbolicState *state) {
 
 /* Job Execution Methods ******************************************************/
 
-void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job, bool spawnNew) {
-	WorkerTree::NodePin nodePin = job->getNode(); // Keep the node around until we finish with it
+void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
+    ExecutionJob *job, bool spawnNew) {
+  WorkerTree::NodePin nodePin = job->getNode(); // Keep the node around until we finish with it
 
-	currentJob = job;
+  currentJob = job;
 
-	if ((**nodePin).symState == NULL) {
-		if (!job->isImported()) {
-			CLOUD9_INFO("Replaying path for non-foreign job. Most probably this job will be lost.");
-		}
+  if ((**nodePin).symState == NULL) {
+    if (!job->isImported()) {
+      CLOUD9_INFO("Replaying path for non-foreign job. Most probably this job will be lost.");
+    }
 
-		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "startReplay");
+    cloud9::instrum::theInstrManager.recordEvent(
+        cloud9::instrum::JobExecutionState, "startReplay");
 
-		replayPath(lock, nodePin.get());
+    replayPath(lock, nodePin.get());
 
-		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::JobExecutionState, "endReplay");
+    cloud9::instrum::theInstrManager.recordEvent(
+        cloud9::instrum::JobExecutionState, "endReplay");
 
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayedJobs);
-	} else {
-		if (job->isImported()) {
-			CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
-		}
-	}
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayedJobs);
+  } else {
+    if (job->isImported()) {
+      CLOUD9_INFO("Foreign job with no replay needed. Probably state was obtained through other neighbor replays.");
+    }
+  }
 
-	job->imported = false;
+  job->imported = false;
 
-	if ((**nodePin).symState == NULL) {
-		CLOUD9_INFO("Job canceled before start");
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
-	} else {
-		stepInNode(lock, nodePin.get(), false);
-	}
+  if ((**nodePin).symState == NULL) {
+    CLOUD9_INFO("Job canceled before start");
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
+  } else {
+    stepInNode(lock, nodePin.get(), false);
+  }
 
-	currentJob = NULL;
+  currentJob = NULL;
 
-	if ((**nodePin).symState == NULL) {
-		// Job finished here, need to remove it
-		finalizeJob(job, false, true);
+  if ((**nodePin).symState == NULL) {
+    // Save the job strategy - it is inherited by the new jobs
+    unsigned int strategy = job->_strategy;
 
-		cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
+    // Job finished here, need to remove it
+    finalizeJob(job, false);
 
-		// Spawn new jobs if there are states left
-		if (nodePin->layerExists(WORKER_LAYER_STATES)) {
-			std::vector<WorkerTree::Node*> nodes;
-			tree->getLeaves(WORKER_LAYER_STATES, nodePin.get(), nodes);
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalProcJobs);
 
-			//CLOUD9_DEBUG("New jobs: " << nodes.size());
+    // Spawn new jobs if there are states left
+    if (nodePin->layerExists(WORKER_LAYER_STATES)) {
+      std::vector<WorkerTree::Node*> nodes;
+      tree->getLeaves(WORKER_LAYER_STATES, nodePin.get(), nodes);
 
-			for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin();
-					it != nodes.end(); it++) {
-				WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
-				assert((**node).symState != NULL);
-				ExecutionJob *newJob = new ExecutionJob(node, false);
+      //CLOUD9_DEBUG("New jobs: " << nodes.size());
 
-				submitJob(newJob, false);
-			}
+      for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin(); it
+          != nodes.end(); it++) {
+        WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
+        assert((**node).symState != NULL);
+        ExecutionJob *newJob = new ExecutionJob(node, false);
+        newJob->_strategy = strategy;
 
-			if (nodes.size() > 0) {
-				cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalTreePaths, nodes.size() - 1);
-			}
-		}
-	} else {
-		// Just mark the state as updated
-		updateState((**nodePin).symState);
-	}
+        submitJob(newJob, false);
+      }
+
+      if (nodes.size() > 0) {
+        cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalTreePaths, nodes.size() - 1);
+      }
+  } else {
+    // Just mark the state as updated
+    updateState((**nodePin).symState);
+  }
 }
-
+  
 void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock, WorkerTree::Node *node, bool exhaust) {
 	assert((**node).symState != NULL);
 

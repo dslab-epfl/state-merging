@@ -8,6 +8,7 @@
 #include "cloud9/worker/LBConnection.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Protocols.h"
 
@@ -123,6 +124,28 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 	}
 }
 
+void LBConnection::sendStrategyUpdates(WorkerReportMessage &message) {
+	StrategyPortfolio *portfolio =
+			dynamic_cast<StrategyPortfolio*>(jobManager->getStrategy());
+
+	if (portfolio == NULL) {
+		// The manager does not use a strategy portfolio, just drop these updates
+		return;
+	}
+
+	WorkerReportMessage_StrategyPortfolioUpdate *update =
+					message.mutable_strategyportfolioupdate();
+
+	for (std::vector<unsigned int>::const_iterator it = portfolio->getStrategies().begin();
+			it != portfolio->getStrategies().end(); it++) {
+		unsigned int strat = *it;
+		StrategyPortfolioData *data = update->add_data();
+		data->set_strategy(strat);
+		data->set_allocation(portfolio->getStrategyAllocation(strat));
+		data->set_performance(portfolio->getStrategyPerformance(strat));
+	}
+}
+
 void LBConnection::sendUpdates() {
 	// Prepare the updates message
 	WorkerReportMessage message;
@@ -185,7 +208,16 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
 		CLOUD9_DEBUG("Job seed request: " << paths->count() << " paths");
 
-		jobManager->importJobs(paths);
+		if (seedDetails.strategies_size() > 0) {
+			std::vector<unsigned int> strategies;
+
+			for (int i = 0; i < seedDetails.strategies_size(); i++)
+				strategies.push_back(seedDetails.strategies(i));
+
+			jobManager->importJobs(paths, &strategies);
+		} else {
+			jobManager->importJobs(paths, NULL);
+		}
 	}
 
 	if (UseGlobalCoverage) {
@@ -204,13 +236,23 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 			}
 		}
 	}
+
+	if (response.strategyportfolioresponse_size() > 0) {
+		for (int i = 0; i < response.strategyportfolioresponse_size(); i++) {
+			const StrategyPortfolioResponse &stratResp = response.strategyportfolioresponse(i);
+
+			reInvestJobs(stratResp.newstrategy(), stratResp.oldstrategy(),
+					stratResp.nrjobs());
+		}
+	}
 }
 
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
 		ExecutionPathSetPin paths,
 		std::vector<int> counts) {
 
-	ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts);
+	std::vector<unsigned int> strategies;
+	ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts, &strategies);
 
 	tcp::socket peerSocket(service);
 	boost::system::error_code error;
@@ -227,12 +269,29 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
 
 	serializeExecutionPathSet(jobPaths, *pSet);
 
+	for (unsigned int i = 0; i < strategies.size(); i++) {
+		message.add_strategies(strategies[i]);
+	}
+
 	std::string msgString;
 	message.SerializeToString(&msgString);
 
 	sendMessage(peerSocket, msgString);
 
 	peerSocket.close();
+}
+
+void LBConnection::reInvestJobs(unsigned int oldStrat, unsigned int newStrat,
+		unsigned int maxCount) {
+	StrategyPortfolio *portfolio =
+			dynamic_cast<StrategyPortfolio*>(jobManager->getStrategy());
+
+	if (portfolio == NULL) {
+		CLOUD9_INFO("Cannot reinvest jobs as no strategy portfolio is used.");
+		return;
+	}
+
+	portfolio->reInvestJobs(newStrat, oldStrat, maxCount);
 }
 
 }

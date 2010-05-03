@@ -15,7 +15,7 @@ namespace cloud9 {
 
 namespace lb {
 
-LoadBalancer::LoadBalancer(int br) : nextID(1), balanceRate(br), rounds(0) {
+LoadBalancer::LoadBalancer(int br) : nextWorkerID(1), balanceRate(br), rounds(0) {
 	tree = new LBTree();
 }
 
@@ -29,8 +29,8 @@ void LoadBalancer::registerProgramParams(const std::string &programName,
 	this->statIDCount = statIDCount;
 	this->programCRC = crc;
 
-	coverageData.resize(statIDCount);
-	coverageUpdates.resize(statIDCount, false);
+	globalCoverageData.resize(statIDCount);
+	globalCoverageUpdates.resize(statIDCount, false);
 }
 
 void LoadBalancer::checkProgramParams(const std::string &programName,
@@ -42,27 +42,27 @@ void LoadBalancer::checkProgramParams(const std::string &programName,
 }
 
 unsigned LoadBalancer::registerWorker(const std::string &address, int port, bool wantsUpdates) {
-	assert(workers[nextID] == NULL);
+	assert(workers[nextWorkerID] == NULL);
 
 	Worker *worker = new Worker();
-	worker->id = nextID;
+	worker->id = nextWorkerID;
 	worker->address = address;
 	worker->port = port;
 	worker->_wantsUpdates = wantsUpdates;
 
 	if (wantsUpdates)
-		worker->coverageUpdates = coverageUpdates;
+		worker->globalCoverageUpdates = globalCoverageUpdates;
 
 
-	workers[nextID] = worker;
+	workers[nextWorkerID] = worker;
 
-	nextID++;
+	nextWorkerID++;
 	activeCount++;
 
 	return worker->id;
 }
 
-void LoadBalancer::deregisterWorker(int id) {
+void LoadBalancer::deregisterWorker(worker_id_t id) {
 	Worker *worker = workers[id];
 	assert(worker);
 
@@ -70,7 +70,7 @@ void LoadBalancer::deregisterWorker(int id) {
 	// TODO
 }
 
-void LoadBalancer::updateWorkerStatNodes(unsigned id, std::vector<LBTree::Node*> &newNodes) {
+void LoadBalancer::updateWorkerStatNodes(worker_id_t id, std::vector<LBTree::Node*> &newNodes) {
 	Worker *worker = workers[id];
 	assert(worker);
 
@@ -133,7 +133,7 @@ void LoadBalancer::updateWorkerStatNodes(unsigned id, std::vector<LBTree::Node*>
 	worker->nodes = newNodes;
 }
 
-void LoadBalancer::updateWorkerStats(unsigned id, std::vector<int> &stats) {
+void LoadBalancer::updateWorkerStats(worker_id_t id, std::vector<int> &stats) {
 	Worker *worker = workers[id];
 	assert(worker);
 
@@ -157,30 +157,46 @@ void LoadBalancer::updateWorkerStats(unsigned id, std::vector<int> &stats) {
 	}
 }
 
-void LoadBalancer::updateCoverageData(unsigned id, const cov_update_t &data) {
+void LoadBalancer::updateCoverageData(worker_id_t id, const cov_update_t &data) {
 	for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {
-		coverageUpdates[it->first] = true;
-		coverageData[it->first] = it->second;
+		globalCoverageUpdates[it->first] = true;
+		globalCoverageData[it->first] = it->second;
 	}
 
-	for (std::map<unsigned, Worker*>::iterator wIt = workers.begin();
+	for (std::map<worker_id_t, Worker*>::iterator wIt = workers.begin();
 				wIt != workers.end(); wIt++) {
 		if (wIt->first == id || !wIt->second->_wantsUpdates)
 			continue;
 
 		for (cov_update_t::const_iterator it = data.begin(); it != data.end(); it++) {
-			wIt->second->coverageUpdates[it->first] = true;
+			wIt->second->globalCoverageUpdates[it->first] = true;
 		}
 	}
 }
 
-void LoadBalancer::getAndResetCoverageUpdates(int id, cov_update_t &data) {
+void LoadBalancer::updateStrategyPortfolioStats(worker_id_t id, strat_stat_map &stats) {
+  Worker *worker = workers[id];
+  assert(worker);
+
+  for (strat_stat_map::iterator it = stats.begin(); it != stats.end(); it++) {
+	  StrategyStatistic &stat = it->second;
+
+	  worker->localPortfolioStats[it->first] = stat; // Replace it
+
+  }
+}
+
+void LoadBalancer::computeGlobalPortfolioStats(strat_stat_map &portfolioStats) {
+	// TODO Find an aggregation formula, e.g. sum of performances, weighted by allocations
+}
+
+void LoadBalancer::getAndResetCoverageUpdates(worker_id_t id, cov_update_t &data) {
 	Worker *w = workers[id];
 
-	for (unsigned i = 0; i < w->coverageUpdates.size(); i++) {
-		if (w->coverageUpdates[i]) {
-			data.push_back(std::make_pair(i, coverageData[i]));
-			w->coverageUpdates[i] = false;
+	for (unsigned i = 0; i < w->globalCoverageUpdates.size(); i++) {
+		if (w->globalCoverageUpdates[i]) {
+			data.push_back(std::make_pair(i, globalCoverageData[i]));
+			w->globalCoverageUpdates[i] = false;
 		}
 	}
 }
@@ -201,7 +217,7 @@ void LoadBalancer::analyzeBalance() {
 	Worker::LoadCompare comp;
 
 	// TODO: optimize this further
-	for (std::map<unsigned, Worker*>::iterator it = workers.begin();
+	for (std::map<worker_id_t, Worker*>::iterator it = workers.begin();
 			it != workers.end(); it++) {
 		wList.push_back((*it).second);
 	}
@@ -209,8 +225,8 @@ void LoadBalancer::analyzeBalance() {
 	std::sort(wList.begin(), wList.end(), comp);
 
 	// Compute average and deviation
-	int loadAvg = 0;
-	int sqDeviation = 0;
+	unsigned loadAvg = 0;
+	unsigned sqDeviation = 0;
 
 	for (std::vector<Worker*>::iterator it = wList.begin();
 			it != wList.end(); it++) {
@@ -261,7 +277,7 @@ void LoadBalancer::analyzeBalance() {
 
 }
 
-TransferRequest *LoadBalancer::computeTransfer(int fromID, int toID, int count) {
+TransferRequest *LoadBalancer::computeTransfer(worker_id_t fromID, worker_id_t toID, unsigned count) {
 	// XXX Be more intelligent
 	TransferRequest *req = new TransferRequest(fromID, toID);
 

@@ -26,10 +26,18 @@
 #define CLOUD9_STAT_NAME_LOCAL_COVERAGE "LIcov"
 #define CLOUD9_STAT_NAME_GLOBAL_COVERAGE "GIcov"
 
+#define CLOUD9_STRATEGY_PORTFOLIO "SP"
+
+
+
+
+
+
 using namespace boost::asio::ip;
 using namespace cloud9::data;
 
 namespace cloud9 {
+
 
 class ExecutionPath;
 class ExecutionPathSet;
@@ -188,7 +196,7 @@ void parseStatisticUpdate(const cloud9::data::StatisticUpdate &update,
 
 void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
 		cloud9::data::StatisticUpdate &update);
-
+ 
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port, boost::system::error_code &error);
 
