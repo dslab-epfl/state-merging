@@ -1119,7 +1119,29 @@ ssize_t readlink(const char *path, char *buf, size_t bufsize) {
     return r;
   }
 }
-
+ 
+void _FD_CLR(int n, fd_set *p)
+{
+  (p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS));
+}
+ 
+signed char _FD_ISSET(int n, fd_set *p)
+{
+  return ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)));
+}
+ 
+void _FD_SET(int n, fd_set *p)
+{
+  (p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS));
+}
+ 
+int _FD_ZERO(fd_set *p)
+{
+  memset((char *)(p), '\0', sizeof(*(p)));
+  return 0;
+}
+ 
+ 
 #undef FD_SET
 #undef FD_CLR
 #undef FD_ISSET
