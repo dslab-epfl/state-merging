@@ -28,7 +28,7 @@ cl::opt<unsigned int> TimerRate("timer-rate", cl::desc(
     cl::init(1));
 
 cl::opt<unsigned int> WorkerTimeOut("worker-tout",
-    cl::desc("Timeout for worker updates"), cl::init(10));
+    cl::desc("Timeout for worker updates"), cl::init(60));
 }
 
 namespace cloud9 {
@@ -186,12 +186,34 @@ void LoadBalancer::analyze(worker_id_t id) {
   reports.insert(id);
 
   if (reports.size() == workers.size()) {
-    // A full round finished
+    CLOUD9_INFO("Round " << rounds << " finished.");
+    displayStatistics();
+
     reports.clear();
     rounds++;
   }
 
-  analyzeBalance();
+  if (rounds == BalanceRate) {
+    rounds = 0;
+    analyzeBalance();
+  }
+}
+
+void LoadBalancer::displayStatistics() {
+  unsigned int totalJobs = 0;
+
+  CLOUD9_INFO("================================================================");
+  for (std::map<worker_id_t, Worker*>::iterator wIt = workers.begin();
+      wIt != workers.end(); wIt++) {
+    Worker *worker = wIt->second;
+
+    CLOUD9_INFO("[" << worker->getTotalJobs() << "] for worker " << worker->id);
+
+    totalJobs += worker->getTotalJobs();
+  }
+  CLOUD9_INFO("----------------------------------------------------------------");
+  CLOUD9_INFO("[" << totalJobs << "] IN TOTAL");
+  CLOUD9_INFO("================================================================");
 }
 
 void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
@@ -269,11 +291,6 @@ void LoadBalancer::analyzeBalance() {
   if (workers.size() < 2) {
     return;
   }
-
-  if (rounds < BalanceRate)
-    return;
-
-  rounds = 0;
 
   CLOUD9_INFO("Performing load balancing");
 

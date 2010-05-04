@@ -257,7 +257,7 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
   data.insert(data.begin(), nodeDataUpdateMsg.data().begin(),
       nodeDataUpdateMsg.data().end());
 
-  CLOUD9_WRK_DEBUG(worker, "Received data set: " << getASCIIDataSet(data.begin(), data.end()));
+  //CLOUD9_WRK_DEBUG(worker, "Received data set: " << getASCIIDataSet(data.begin(), data.end()));
 
   lb->updateWorkerStats(id, data);
 

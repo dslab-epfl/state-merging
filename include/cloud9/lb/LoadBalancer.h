@@ -81,6 +81,8 @@ private:
 
   void analyzeBalance();
 
+  void displayStatistics();
+
   void periodicCheck(const boost::system::error_code& error);
 
 public:
