@@ -23,19 +23,19 @@ class LoadBalancer;
 
 class LBServer {
 private:
-	tcp::acceptor acceptor;
+  tcp::acceptor acceptor;
 
-	LoadBalancer *lb;
+  LoadBalancer *lb;
 
-	void startAccept();
+  void startAccept();
 
-	void handleAccept(WorkerConnection::pointer conn,
-			const boost::system::error_code &code);
+  void handleAccept(WorkerConnection::pointer conn,
+      const boost::system::error_code &code);
 public:
-	LBServer(LoadBalancer *lb, boost::asio::io_service &io_service, int port);
-	virtual ~LBServer();
+  LBServer(LoadBalancer *lb, boost::asio::io_service &io_service, int port);
+  virtual ~LBServer();
 
-	void run();
+  void run();
 };
 
 }

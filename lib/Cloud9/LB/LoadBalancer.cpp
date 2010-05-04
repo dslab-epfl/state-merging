@@ -7,6 +7,7 @@
 
 #include "cloud9/lb/LoadBalancer.h"
 #include "cloud9/lb/Worker.h"
+#include "cloud9/lb/LBCommon.h"
 
 #include "llvm/Support/CommandLine.h"
 
@@ -166,7 +167,7 @@ void LoadBalancer::updateWorkerStats(worker_id_t id, std::vector<int> &stats) {
   Worker *worker = workers[id];
   assert(worker);
 
-  assert(stats.size() == worker->nodes.size());
+  //assert(stats.size() == worker->nodes.size());
 
   worker->totalJobs = 0;
 

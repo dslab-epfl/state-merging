@@ -29,11 +29,9 @@ PeerConnection::PeerConnection(boost::asio::io_service& service,
 }
 
 void PeerConnection::start() {
-	msgReader.setHandler(boost::bind(&PeerConnection::handleMessageReceived,
-				shared_from_this(), _1, _2));
-
 	// All we do is to read the job transfer request
-	msgReader.recvMessage();
+	msgReader.recvMessage(boost::bind(&PeerConnection::handleMessageReceived,
+        shared_from_this(), _1, _2));
 }
 
 void PeerConnection::handleMessageReceived(std::string &msgString,

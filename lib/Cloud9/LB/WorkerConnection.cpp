@@ -8,6 +8,7 @@
 #include "cloud9/lb/WorkerConnection.h"
 #include "cloud9/lb/LoadBalancer.h"
 #include "cloud9/lb/Worker.h"
+#include "cloud9/lb/LBCommon.h"
 #include "cloud9/Logger.h"
 
 #include <boost/bind.hpp>
@@ -27,9 +28,9 @@ WorkerConnection::WorkerConnection(boost::asio::io_service &service,
 }
 
 WorkerConnection::~WorkerConnection() {
-  CLOUD9_INFO("Connection interrupted");
-
   if (worker) {
+    CLOUD9_WRK_INFO(worker, "Connection interrupted");
+
     lb->deregisterWorker(worker->getID());
 
     if (lb->getWorkerCount() == 0) {
@@ -40,94 +41,93 @@ WorkerConnection::~WorkerConnection() {
 }
 
 void WorkerConnection::start() {
-  msgReader.setHandler(boost::bind(&WorkerConnection::handleMessageReceived,
+  msgReader.recvMessage(boost::bind(&WorkerConnection::handleMessageReceived,
       shared_from_this(), _1, _2));
-  msgWriter.setHandler(boost::bind(&WorkerConnection::handleMessageSent,
-      shared_from_this(), _1));
-
-  msgReader.recvMessage();
 }
 
 void WorkerConnection::handleMessageReceived(std::string &msgString,
     const boost::system::error_code &error) {
-  if (!error) {
-    // Construct the protocol buffer message
-    WorkerReportMessage message;
 
-    bool result = message.ParseFromString(msgString);
-    assert(result);
+  if (error) {
+    CLOUD9_WRK_ERROR(worker, "Error receiving message from worker: " << error.message());
+    return;
+  }
 
-    LBResponseMessage response;
+  // Construct the protocol buffer message
+  WorkerReportMessage message;
 
-    int id = message.id();
+  bool result = message.ParseFromString(msgString);
+  assert(result);
 
-    if (id == 0) {
-      const WorkerReportMessage_Registration &regInfo = message.registration();
+  LBResponseMessage response;
 
-      if (lb->getWorkerCount() == 0) {
-        // The first worker sets the program parameters
-        lb->registerProgramParams(regInfo.prog_name(), regInfo.prog_crc(),
-            regInfo.stat_id_count());
-      } else {
-        // Validate that the worker executes the same thing as the others
-        lb->checkProgramParams(regInfo.prog_name(), regInfo.prog_crc(),
-            regInfo.stat_id_count());
-      }
+  int id = message.id();
 
-      id = lb->registerWorker(regInfo.address(), regInfo.port(),
-          regInfo.wants_updates());
-      worker = lb->getWorker(id);
+  if (id == 0) {
+    const WorkerReportMessage_Registration &regInfo = message.registration();
 
-      response.set_id(id);
-      response.set_more_details(false);
-
-      if (lb->getWorkerCount() == 1) {
-        // Send the seed information
-        LBResponseMessage_JobSeed *jobSeed = response.mutable_jobseed();
-        cloud9::data::ExecutionPathSet *pathSet = jobSeed->mutable_path_set();
-
-        std::vector<LBTree::Node*> nodes;
-        nodes.push_back(lb->getTree()->getRoot());
-
-        ExecutionPathSetPin paths = lb->getTree()->buildPathSet(nodes.begin(),
-            nodes.end());
-
-        serializeExecutionPathSet(paths, *pathSet);
-
-        jobSeed->add_strategies(WEIGHTED_RANDOM_STRATEGY); // XXX maybe start with a different one?
-      }
+    if (lb->getWorkerCount() == 0) {
+      // The first worker sets the program parameters
+      lb->registerProgramParams(regInfo.prog_name(), regInfo.prog_crc(),
+          regInfo.stat_id_count());
     } else {
-      if (lb->getWorker(id) == NULL) { // The worker was timed-out
-        CLOUD9_ERROR("Message received after time-out");
-        return;
-      }
-      //processNodeSetUpdate(message); // XXX We disable this for now, it's useless
-      processNodeDataUpdate(message);
-      processStatisticsUpdates(message);
-      processStrategyPortfolioUpdates(message);
-
-      lb->analyze(id);
-
-      response.set_id(id);
-      response.set_more_details(lb->requestAndResetDetails(id));
-
-      sendJobTransfers(response);
-
-      if (worker->wantsUpdates())
-        sendStatisticsUpdates(response);
-
-      sendStrategyPortfolioUpdates(response);
+      // Validate that the worker executes the same thing as the others
+      lb->checkProgramParams(regInfo.prog_name(), regInfo.prog_crc(),
+          regInfo.stat_id_count());
     }
 
-    std::string respString;
-    result = response.SerializeToString(&respString);
-    assert(result);
+    id = lb->registerWorker(regInfo.address(), regInfo.port(),
+        regInfo.wants_updates());
+    worker = lb->getWorker(id);
 
-    msgWriter.sendMessage(respString);
+    response.set_id(id);
+    response.set_more_details(false);
 
+    if (lb->getWorkerCount() == 1) {
+      // Send the seed information
+      LBResponseMessage_JobSeed *jobSeed = response.mutable_jobseed();
+      cloud9::data::ExecutionPathSet *pathSet = jobSeed->mutable_path_set();
+
+      std::vector<LBTree::Node*> nodes;
+      nodes.push_back(lb->getTree()->getRoot());
+
+      ExecutionPathSetPin paths = lb->getTree()->buildPathSet(nodes.begin(),
+          nodes.end());
+
+      serializeExecutionPathSet(paths, *pathSet);
+
+      jobSeed->add_strategies(WEIGHTED_RANDOM_STRATEGY); // XXX maybe start with a different one?
+    }
   } else {
-    CLOUD9_ERROR("Error receiving message from worker: " << error.message());
+    if (lb->getWorker(id) == NULL) { // The worker was timed-out
+      CLOUD9_WRK_ERROR(worker, "Message received after time-out");
+      return;
+    }
+    //processNodeSetUpdate(message); // XXX We disable this for now, it's useless
+    processNodeDataUpdate(message);
+    processStatisticsUpdates(message);
+    processStrategyPortfolioUpdates(message);
+
+    lb->analyze(id);
+
+    response.set_id(id);
+    response.set_more_details(lb->requestAndResetDetails(id));
+
+    sendJobTransfers(response);
+
+    if (worker->wantsUpdates())
+      sendStatisticsUpdates(response);
+
+    sendStrategyPortfolioUpdates(response);
   }
+
+  std::string respString;
+  result = response.SerializeToString(&respString);
+  assert(result);
+
+  msgWriter.sendMessage(respString, boost::bind(&WorkerConnection::handleMessageSent,
+      shared_from_this(), _1));
+
 }
 
 void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
@@ -193,9 +193,10 @@ void WorkerConnection::sendStrategyPortfolioUpdates(LBResponseMessage &response)
 void WorkerConnection::handleMessageSent(const boost::system::error_code &error) {
   if (!error) {
     // Wait for another message, again
-    msgReader.recvMessage();
+    msgReader.recvMessage(boost::bind(&WorkerConnection::handleMessageReceived,
+        shared_from_this(), _1, _2));
   } else {
-    CLOUD9_ERROR("Could not send reply");
+    CLOUD9_WRK_ERROR(worker, "Could not send reply");
   }
 }
 
@@ -255,7 +256,7 @@ bool WorkerConnection::processNodeDataUpdate(const WorkerReportMessage &message)
   data.insert(data.begin(), nodeDataUpdateMsg.data().begin(),
       nodeDataUpdateMsg.data().end());
 
-  //CLOUD9_DEBUG("Received data set: " << getASCIIDataSet(data.begin(), data.end()));
+  CLOUD9_WRK_DEBUG(worker, "Received data set: " << getASCIIDataSet(data.begin(), data.end()));
 
   lb->updateWorkerStats(id, data);
 
@@ -284,7 +285,7 @@ bool WorkerConnection::processStrategyPortfolioUpdates(
     lb->updateStrategyPortfolioStats(id, portfolioStats);
 
     //TODO - implement proper printing for aggregate data types
-    CLOUD9_DEBUG("Received strategy portfolio update "); // << getASCIIDataSet(data.begin(), data.end()));
+    CLOUD9_WRK_DEBUG(worker, "Received strategy portfolio update "); // << getASCIIDataSet(data.begin(), data.end()));
   }
 
   return true;

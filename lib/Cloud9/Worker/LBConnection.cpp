@@ -102,7 +102,7 @@ void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
     total += *it;
   }
 
-  CLOUD9_DEBUG("Reporting " << total << " jobs to the load balancer");
+  CLOUD9_DEBUG("[" << total << "] jobs reported to the load balancer");
 
   if (paths->count() > 0 || data.size() == 0) {
     assert(paths->count() == data.size());
