@@ -28,7 +28,7 @@ cl::opt<unsigned int> TimerRate("timer-rate", cl::desc(
     cl::init(1));
 
 cl::opt<unsigned int> WorkerTimeOut("worker-tout",
-    cl::desc("Timeout for worker updates"), cl::init(60));
+    cl::desc("Timeout for worker updates"), cl::init(300));
 }
 
 namespace cloud9 {
