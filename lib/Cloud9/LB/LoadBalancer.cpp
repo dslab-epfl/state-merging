@@ -28,7 +28,7 @@ cl::opt<unsigned int> TimerRate("timer-rate", cl::desc(
     cl::init(1));
 
 cl::opt<unsigned int> WorkerTimeOut("worker-tout",
-    cl::desc("Timeout for worker updates"), cl::init(60));
+    cl::desc("Timeout for worker updates"), cl::init(10));
 }
 
 namespace cloud9 {
@@ -181,6 +181,8 @@ void LoadBalancer::updateWorkerStats(worker_id_t id, std::vector<int> &stats) {
 }
 
 void LoadBalancer::analyze(worker_id_t id) {
+  Worker *worker = workers[id];
+  worker->lastReportTime = 0; // Reset the last report time
   reports.insert(id);
 
   if (reports.size() == workers.size()) {
@@ -193,6 +195,24 @@ void LoadBalancer::analyze(worker_id_t id) {
 }
 
 void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
+  std::vector<worker_id_t> timedOut;
+
+  for (std::map<worker_id_t, Worker*>::iterator wIt = workers.begin();
+      wIt != workers.end(); wIt++) {
+    Worker *worker = wIt->second;
+
+    worker->lastReportTime += TimerRate;
+
+    if (worker->lastReportTime > WorkerTimeOut) {
+      CLOUD9_WRK_INFO(worker, "Worker timed out. Destroying");
+      timedOut.push_back(worker->id);
+    }
+  }
+
+  for (unsigned int i = 0; i < timedOut.size(); i++) {
+    deregisterWorker(timedOut[i]);
+  }
+
   timer.expires_at(timer.expires_at() + boost::posix_time::seconds(TimerRate));
 
   timer.async_wait(boost::bind(&LoadBalancer::periodicCheck, this,

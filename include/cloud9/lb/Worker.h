@@ -48,17 +48,16 @@ private:
 
   strat_stat_map localPortfolioStats;
 
-  unsigned totalJobs;
+  unsigned int totalJobs;
 
-  Worker() :
-    nodesRevision(1), totalJobs(0) {
+  unsigned int lastReportTime;
+
+  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0) {
     StrategyStatistic::initPortfolioStat(localPortfolioStats);
   }
-  ;
 public:
   virtual ~Worker() {
   }
-  ;
 
   worker_id_t getID() const {
     return id;

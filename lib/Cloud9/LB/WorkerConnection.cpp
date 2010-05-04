@@ -32,11 +32,11 @@ WorkerConnection::~WorkerConnection() {
     CLOUD9_WRK_INFO(worker, "Connection interrupted");
 
     lb->deregisterWorker(worker->getID());
+  }
 
-    if (lb->getWorkerCount() == 0) {
-      // We should exit the load balancer
-      socket.get_io_service().stop();
-    }
+  if (lb->getWorkerCount() == 0) {
+    // We should exit the load balancer
+    socket.get_io_service().stop();
   }
 }
 
@@ -100,6 +100,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
     }
   } else {
     if (lb->getWorker(id) == NULL) { // The worker was timed-out
+      worker = NULL;
       CLOUD9_WRK_ERROR(worker, "Message received after time-out");
       return;
     }
