@@ -946,7 +946,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
   WorkerTree::Node *crtNode = pathEnd;
 
-  CLOUD9_DEBUG("Replaying path: " << *crtNode);
+  //CLOUD9_DEBUG("Replaying path: " << *crtNode);
 
   while (crtNode != NULL && (**crtNode).symState == NULL) {
     path.push_back(crtNode->getIndex());
