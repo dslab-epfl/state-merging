@@ -77,6 +77,8 @@ private:
   boost::mutex jobsMutex;
   bool terminationRequest;
 
+  unsigned int jobCount;
+
   JobSelectionStrategy *selStrategy;
 
   /*
@@ -209,6 +211,8 @@ public:
 
   void getStatisticsData(std::vector<int> &data, ExecutionPathSetPin &paths,
       bool onlyChanged);
+
+  unsigned int getJobCount() const { return jobCount; }
 
   void setRefineStatistics() {
     refineStats = true;

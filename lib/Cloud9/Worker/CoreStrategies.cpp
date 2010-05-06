@@ -121,6 +121,10 @@ ExecutionJob* KleeStrategy::onNextJobSelection() {
 
 	assert(node->layerExists(WORKER_LAYER_JOBS));
 
+	if ((**node).getJob() != NULL) {
+	  return (**node).getJob();
+	}
+
 	WorkerTree::Node *jobNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, node, theRNG);
 	ExecutionJob *job = (**jobNode).getJob();
 

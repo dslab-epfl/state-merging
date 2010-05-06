@@ -350,7 +350,7 @@ static void externalsAndGlobalsCheck(const llvm::Module *m) {
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
     char **argv, char **envp) :
-  terminationRequest(false), currentJob(NULL), replaying(false) {
+  terminationRequest(false), currentJob(NULL), replaying(false), jobCount(0) {
 
   tree = new WorkerTree();
 
@@ -421,7 +421,7 @@ void JobManager::initStrategy() {
   case CoverageOptimizedSel:
     strategies.push_back(new WeightedRandomStrategy(
         WeightedRandomStrategy::CoveringNew, tree, symbEngine));
-    strategies.push_back(new RandomPathStrategy(tree));
+    strategies.push_back(new RandomStrategy());
     selStrategy = new TimeMultiplexedStrategy(strategies);
     CLOUD9_INFO("Using weighted random job selection strategy");
     break;
@@ -644,6 +644,8 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
     }
   }
 
+  jobCount++;
+
 }
 
 void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
@@ -670,6 +672,8 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
   fireRemovingJob(job);
 
   delete job;
+
+  jobCount--;
 }
 
 void JobManager::selectJobs(WorkerTree::Node *root,
@@ -1174,6 +1178,7 @@ void JobManager::cleanupStatistics() {
   }
 }
 
+#if 0
 void JobManager::getStatisticsData(std::vector<int> &data,
     ExecutionPathSetPin &paths, bool onlyChanged) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
@@ -1204,6 +1209,21 @@ void JobManager::getStatisticsData(std::vector<int> &data,
 
   //CLOUD9_DEBUG("Sent data set: " << getASCIIDataSet(data.begin(), data.end()));
 }
+#else
+void JobManager::getStatisticsData(std::vector<int> &data,
+    ExecutionPathSetPin &paths, bool onlyChanged) {
+  boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+  std::vector<WorkerTree::Node*> dummy;
+  dummy.push_back(tree->getRoot());
+
+  paths = tree->buildPathSet(dummy.begin(), dummy.end());
+
+  data.clear();
+
+  data.push_back(jobCount);
+}
+#endif
 
 /* Coverage Management ********************************************************/
 
