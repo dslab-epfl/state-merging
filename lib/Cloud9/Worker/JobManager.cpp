@@ -417,7 +417,6 @@ JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
   llvm::Function *mainFn = module->getFunction(mainFnName);
 
   collectTraces = DumpStateTraces || DumpInstrTraces;
-  collectProgress = false; // For now - wait to see the strategy used
 
   initialize(module, mainFn, argc, argv, envp);
 }
@@ -1008,7 +1007,7 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
 
     //CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc->info->assemblyLine);
 
-    if (collectProgress) {
+    if (state->collectProgress) {
       state->_instrProgress.push_back(state->getKleeState()->pc);
     }
 
@@ -1096,7 +1095,8 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   if (kState) {
     SymbolicState *state = kState->getCloud9State();
 
-    if (collectProgress) {
+    if (parent->getCloud9State()->collectProgress) {
+      state->collectProgress = true;
       state->_instrProgress = parent->getCloud9State()->_instrProgress;
       state->_instrPos = parent->getCloud9State()->_instrPos;
     }
@@ -1148,7 +1148,7 @@ void JobManager::onBreakpoint(klee::ExecutionState *kState,
   }
 
   if (id == 42) {
-    collectProgress = true; // Enable progress collection in the manager
+    kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
   }
 }
 

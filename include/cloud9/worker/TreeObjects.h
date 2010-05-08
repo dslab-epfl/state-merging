@@ -41,6 +41,8 @@ private:
 	std::vector<klee::KInstruction*> _instrProgress;
 	unsigned int _instrPos;
 
+	bool collectProgress;
+
 	void rebindToNode(WorkerTree::Node *node) {
 		if (nodePin) {
 			(**nodePin).symState = NULL;
@@ -56,7 +58,8 @@ private:
 public:
 	SymbolicState(klee::ExecutionState *state) :
 		kleeState(state), nodePin(WORKER_LAYER_STATES),
-		_active(false), _free(false), _strategy(0), _instrPos(0) {
+		_active(false), _free(false), _strategy(0), _instrPos(0),
+		collectProgress(false) {
       kleeState->setCloud9State(this);
 	}
 

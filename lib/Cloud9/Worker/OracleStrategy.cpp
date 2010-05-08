@@ -9,6 +9,7 @@
 #include "cloud9/worker/TreeObjects.h"
 
 #include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
 
 #include "llvm/Instruction.h"
 
@@ -36,7 +37,7 @@ bool OracleStrategy::checkProgress(SymbolicState *state) {
     if (expected != obtained) {
       CLOUD9_DEBUG("Oracle instruction mismatch. Expected " <<
           expected << " and got " <<
-          obtained << " instead.");
+          obtained << " instead. Instruction: " << state->_instrProgress[i]->info->assemblyLine);
 
       result = false;
       break;

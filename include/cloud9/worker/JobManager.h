@@ -110,7 +110,6 @@ private:
   int traceCounter;
 
   bool collectTraces;
-  bool collectProgress;
 
   void dumpStateTrace(WorkerTree::Node *node);
   void dumpInstructionTrace(WorkerTree::Node *node);
@@ -234,6 +233,8 @@ public:
 
   void requestTermination() {
     terminationRequest = true;
+    // Wake up the manager
+    jobsAvailabe.notify_all();
   }
 
   /*
