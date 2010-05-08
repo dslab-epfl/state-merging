@@ -2715,17 +2715,17 @@ void Executor::callExternalFunction(ExecutionState &state,
       klee_warning_once(function, "%s", os.str().c_str());
   }
   
-  if (function->getNameStr() == "vprintf") {
-    CLOUD9_INFO("Skipping vprintf string: " << (char*)args[1] << " arg size = "
-					    << arguments.size());
-  } else {
+  //if (function->getNameStr() == "vprintf") {
+  //  CLOUD9_INFO("Skipping vprintf string: " << (char*)args[1] << " arg size = "
+//					    << arguments.size());
+ // } else {
     bool success = externalDispatcher->executeCall(function, target->inst, args);
     if (!success) {
       terminateStateOnError(state, "failed external call: " + function->getName(),
 			    "external.err");
       return;
     }
-  }
+  //}
 
   if (!state.addressSpace.copyInConcretes()) {
     terminateStateOnError(state, "external modified read-only object",
@@ -2930,6 +2930,10 @@ void Executor::executeFree(ExecutionState &state,
       }
     }
   }
+}
+
+void Executor::executeBreakpoint(ExecutionState &state, unsigned int id) {
+  fireBreakpoint(&state, id);
 }
 
 void Executor::resolveExact(ExecutionState &state,

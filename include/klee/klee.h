@@ -34,6 +34,8 @@ extern "C" {
   /// output files, etc.
   void klee_make_symbolic(void *addr, uint_klee nbytes, const char *name);
 
+  void klee_breakpoint(unsigned int id);
+
   /// klee_range - Construct a symbolic value in the signed interval
   /// [begin,end).
   ///

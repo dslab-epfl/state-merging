@@ -46,6 +46,8 @@ public:
 			ControlFlowEvent event) = 0;
 	virtual void onDebugInfo(klee::ExecutionState *state,
 			const std::string &message) = 0;
+	virtual void onBreakpoint(klee::ExecutionState *state,
+	    unsigned int id) = 0;
 	virtual void onOutOfResources(klee::ExecutionState *destroyedState) = 0;
 
 };
@@ -54,6 +56,15 @@ class SymbolicEngine {
 private:
 	typedef std::set<StateEventHandler*> handlers_t;
 	handlers_t seHandlers;
+
+	template <class Handler>
+	void fireHandler(Handler handler) {
+	  for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
+        StateEventHandler *h = *it;
+
+        handler(h);
+      }
+	}
 protected:
 	void fireStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index);
@@ -62,7 +73,7 @@ protected:
 			ControlFlowEvent event);
 	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);
 	void fireOutOfResources(klee::ExecutionState *destroyedState);
-
+	void fireBreakpoint(klee::ExecutionState *state, unsigned int id);
 public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};

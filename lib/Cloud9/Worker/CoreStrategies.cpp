@@ -39,6 +39,24 @@ static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
 	return job;
 }
 
+ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
+  WorkerTree::Node *node = state->getNode().get();
+  assert(node->layerExists(WORKER_LAYER_JOBS));
+
+  // Take the easy way first
+  if ((**node).getJob() != NULL) {
+    return (**node).getJob();
+  }
+
+  // OK, so it's an inner state - select one job at random for replay
+  WorkerTree::Node *jobNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, node, theRNG);
+  ExecutionJob *job = (**jobNode).getJob();
+
+  assert(job != NULL);
+
+  return job;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Random Strategy
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,20 +135,8 @@ ExecutionJob* KleeStrategy::onNextJobSelection() {
 
 	klee::ExecutionState &kState = searcher->selectState();
 	SymbolicState *state = kState.getCloud9State();
-	WorkerTree::Node *node = state->getNode().get();
 
-	assert(node->layerExists(WORKER_LAYER_JOBS));
-
-	if ((**node).getJob() != NULL) {
-	  return (**node).getJob();
-	}
-
-	WorkerTree::Node *jobNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, node, theRNG);
-	ExecutionJob *job = (**jobNode).getJob();
-
-	assert(job != NULL);
-
-	return job;
+	return selectJob(tree, state);
 }
 
 

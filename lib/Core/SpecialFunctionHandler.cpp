@@ -17,6 +17,7 @@
 #include "klee/util/ExprPPrinter.h"
 
 #include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KModule.h"
 
 #include "klee/Executor.h"
@@ -68,6 +69,7 @@ HandlerInfo handlerInfo[] = {
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
   add("klee_assume", handleAssume, false),
+  add("klee_breakpoint", handleBreakpoint, false),
   add("klee_check_memory_access", handleCheckMemoryAccess, false),
   add("klee_get_value", handleGetValue, true),
   add("klee_define_fixed_object", handleDefineFixedObject, false),
@@ -673,6 +675,8 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
     assert(success && "FIXME: Unhandled solver failure");
     
     if (res) {
+      //if (state.pc->info->file.find("runtime") == std::string::npos)
+      //    return;
       executor.executeMakeSymbolic(*s, mo);
     } else {      
       executor.terminateStateOnError(*s, 
@@ -680,6 +684,22 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
                                      "user.err");
     }
   }
+}
+
+void SpecialFunctionHandler::handleBreakpoint(ExecutionState &state,
+                                                KInstruction *target,
+                                                std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_breakpoint");
+
+  if (ConstantExpr *id = dyn_cast<ConstantExpr>(arguments[0])) {
+    executor.executeBreakpoint(state, (unsigned int)id->getZExtValue());
+  } else {
+    executor.terminateStateOnError(state,
+                                   "klee_breakpoint requires a constant arg",
+                                   "user.err");
+  }
+
+
 }
 
 void SpecialFunctionHandler::handleMarkGlobal(ExecutionState &state,

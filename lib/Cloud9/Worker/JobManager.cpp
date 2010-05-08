@@ -27,6 +27,7 @@
 #include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/worker/ComplexStrategies.h"
 #include "cloud9/worker/StrategyPortfolio.h"
+#include "cloud9/worker/OracleStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
@@ -79,27 +80,34 @@ extern Statistic globallyUncoveredInstructions;
 
 namespace {
 cl::opt<unsigned> MakeConcreteSymbolic("make-concrete-symbolic", cl::desc(
-    "Rate at which to make concrete reads symbolic (0=off)"), cl::init(0));
+  "Rate at which to make concrete reads symbolic (0=off)"), cl::init(0));
 
 cl::opt<bool> OptimizeModule("optimize", cl::desc("Optimize before execution"));
 
 cl::opt<bool> CheckDivZero("check-div-zero", cl::desc(
-    "Inject checks for division-by-zero"), cl::init(true));
+  "Inject checks for division-by-zero"), cl::init(true));
 
 cl::opt<bool> WarnAllExternals("warn-all-externals", cl::desc(
-    "Give initial warning for all externals."));
+  "Give initial warning for all externals."));
 
 cl::list<unsigned int> CodeBreakpoints("c9-code-bp", cl::desc(
-    "Breakpoints in the LLVM assembly file"));
+  "Breakpoints in the LLVM assembly file"));
 
 cl::opt<bool> BreakOnReplayBroken("c9-bp-on-replaybr", cl::desc(
-    "Break on last valid position if a broken replay occurrs."));
+  "Break on last valid position if a broken replay occurrs."));
 
 cl::opt<bool>
-    DumpStateTraces(
-        "c9-dump-traces",
-        cl::desc(
-            "Dump state traces when a breakpoint or any other relevant event happens during execution"));
+  DumpStateTraces("c9-dump-traces",
+  cl::desc("Dump state traces when a breakpoint or any other relevant event happens during execution"),
+  cl::init(false));
+
+cl::opt<bool>
+  DumpInstrTraces("c9-dump-instr",
+  cl::desc("Dump instruction traces for each finished state. Designed to be used for concrete executions."),
+  cl::init(false));
+
+cl::opt<std::string>
+  OraclePath("c9-oracle-path", cl::desc("The file used by the oracle strategy to get the path."));
 
 }
 
@@ -126,19 +134,71 @@ bool JobManager::isExportableJob(WorkerTree::Node *node) {
   return true;
 }
 
-static void serializeExecutionTrace(std::ostream &os,
-    const WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
-  assert(node->layerExists(WORKER_LAYER_STATES));
+void JobManager::serializeInstructionTrace(std::ostream &s,
+    WorkerTree::Node *node) {
   std::vector<int> path;
-  const WorkerTree::Node *crtNode = node;
 
-  while (crtNode->getParent() != NULL) {
-    path.push_back(crtNode->getIndex());
-    crtNode = crtNode->getParent();
+  tree->buildPath(WORKER_LAYER_STATES, node, tree->getRoot(), path);
+
+  const WorkerTree::Node *crtNode = tree->getRoot();
+  unsigned int count = 0;
+
+  bool enabled = false;
+
+  for (unsigned int i = 0; i <= path.size(); i++) {
+    const ExecutionTrace &trace = (**crtNode).getTrace();
+
+    for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
+        it != trace.getEntries().end(); it++) {
+
+      if (InstructionTraceEntry *instEntry = dynamic_cast<InstructionTraceEntry*>(*it)) {
+        if (enabled) {
+          unsigned int opcode = instEntry->getInstruction()->inst->getOpcode();
+          s.write((char*)&opcode, sizeof(unsigned int));
+        }
+        count++;
+      } else if (BreakpointEntry *brkEntry = dynamic_cast<BreakpointEntry*>(*it)) {
+        if (!enabled && brkEntry->getID() == 42) {
+          CLOUD9_DEBUG("Starting to serialize. Skipped " << count << " instructions.");
+          enabled = true;
+        }
+      }
+    }
+
+    if (i < path.size()) {
+      crtNode = crtNode->getChild(WORKER_LAYER_STATES, path[i]);
+      assert(crtNode);
+    }
   }
 
-  std::reverse(path.begin(), path.end());
+  CLOUD9_DEBUG("Serialized " << count << " instructions.");
+}
 
+void JobManager::parseInstructionTrace(std::istream &s,
+    std::vector<unsigned int> &dest) {
+
+  dest.clear();
+
+  while (!s.eof()) {
+    unsigned int instID;
+
+    s.read((char*)&instID, sizeof(unsigned int));
+
+    if (!s.fail()) {
+      dest.push_back(instID);
+    }
+  }
+
+  CLOUD9_DEBUG("Parsed " << dest.size() << " instructions.");
+}
+
+void JobManager::serializeExecutionTrace(std::ostream &os,
+    WorkerTree::Node *node) { // XXX very slow - read the .ll file and use it instead
+  std::vector<int> path;
+
+  tree->buildPath(WORKER_LAYER_STATES, node, tree->getRoot(), path);
+
+  WorkerTree::Node *crtNode = tree->getRoot();
   const llvm::BasicBlock *crtBasicBlock = NULL;
   const llvm::Function *crtFunction = NULL;
 
@@ -193,8 +253,8 @@ static void serializeExecutionTrace(std::ostream &os,
   }
 }
 
-static void serializeExecutionTrace(std::ostream &os, SymbolicState *state) {
-  const WorkerTree::Node *node = state->getNode().get();
+void JobManager::serializeExecutionTrace(std::ostream &os, SymbolicState *state) {
+  WorkerTree::Node *node = state->getNode().get();
   serializeExecutionTrace(os, node);
 }
 
@@ -350,11 +410,14 @@ static void externalsAndGlobalsCheck(const llvm::Module *m) {
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
     char **argv, char **envp) :
-  terminationRequest(false), currentJob(NULL), replaying(false), jobCount(0) {
+  terminationRequest(false), currentJob(NULL), replaying(false), jobCount(0), traceCounter(0) {
 
   tree = new WorkerTree();
 
   llvm::Function *mainFn = module->getFunction(mainFnName);
+
+  collectTraces = DumpStateTraces || DumpInstrTraces;
+  collectProgress = false; // For now - wait to see the strategy used
 
   initialize(module, mainFn, argc, argv, envp);
 }
@@ -427,13 +490,19 @@ void JobManager::initStrategy() {
     break;
   case PortfolioSel:
     selStrategy = createStrategyPortfolio();
+    CLOUD9_INFO("Using the strategy portfolio");
     break;
+  case OracleSel:
+    selStrategy = createOracleStrategy();
+    CLOUD9_INFO("Using the oracle");
+    break;
+
   default:
     assert(0 && "undefined job selection strategy");
   }
 
   // Wrap this in a batching strategy, to speed up things
-  selStrategy = new BatchingStrategy(selStrategy);
+  //selStrategy = new BatchingStrategy(selStrategy);
 }
 
 StrategyPortfolio *JobManager::createStrategyPortfolio() {
@@ -445,6 +514,20 @@ StrategyPortfolio *JobManager::createStrategyPortfolio() {
   strategies[RANDOM_STRATEGY] = new RandomStrategy();
 
   StrategyPortfolio *result = new StrategyPortfolio(this, strategies);
+
+  return result;
+}
+
+OracleStrategy *JobManager::createOracleStrategy() {
+  std::vector<unsigned int> goalPath;
+
+  std::ifstream ifs(OraclePath);
+
+  assert(!ifs.fail());
+
+  parseInstructionTrace(ifs, goalPath);
+
+  OracleStrategy *result = new OracleStrategy(tree, goalPath);
 
   return result;
 }
@@ -915,7 +998,6 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
 
     SymbolicState *state = (**node).symState;
 
-    //CLOUD9_DEBUG("Stepping in instruction " << state->pc->info->assemblyLine);
     if (!codeBreaks.empty()) {
       if (codeBreaks.find(state->getKleeState()->pc->info->assemblyLine)
           != codeBreaks.end()) {
@@ -924,8 +1006,15 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
       }
     }
 
+    //CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc->info->assemblyLine);
+
+    if (collectProgress) {
+      state->_instrProgress.push_back(state->getKleeState()->pc);
+    }
+
     // Execute the instruction
     lock.unlock();
+
     symbEngine->stepInState(state->getKleeState());
     lock.lock();
 
@@ -1007,9 +1096,16 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   if (kState) {
     SymbolicState *state = kState->getCloud9State();
 
+    if (collectProgress) {
+      state->_instrProgress = parent->getCloud9State()->_instrProgress;
+      state->_instrPos = parent->getCloud9State()->_instrPos;
+    }
+
     if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
       fireActivateState(state);
     }
+
+    CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
   }
 
   SymbolicState *pState = parent->getCloud9State();
@@ -1027,9 +1123,11 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
   assert(kState);
 
-  //CLOUD9_DEBUG("State destroyed: " << kState->getCloud9State()->getNode());
-
   SymbolicState *state = kState->getCloud9State();
+
+  if (DumpInstrTraces) {
+    dumpInstructionTrace(state->getNode().get());
+  }
 
   fireDeactivateState(state);
 
@@ -1041,12 +1139,25 @@ void JobManager::onOutOfResources(klee::ExecutionState *destroyedState) {
   CLOUD9_INFO("Executor ran out of resources. Dropping state.");
 }
 
+void JobManager::onBreakpoint(klee::ExecutionState *kState,
+          unsigned int id) {
+  WorkerTree::Node *node = kState->getCloud9State()->getNode().get();
+
+  if (collectTraces) {
+    (**node).trace.appendEntry(new BreakpointEntry(id));
+  }
+
+  if (id == 42) {
+    collectProgress = true; // Enable progress collection in the manager
+  }
+}
+
 void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
     ControlFlowEvent event) {
   WorkerTree::Node *node = kState->getCloud9State()->getNode().get();
 
   // Add the instruction to the node trace
-  if (DumpStateTraces) {
+  if (collectTraces) {
     switch (event) {
     case STEP:
       (**node).trace.appendEntry(new InstructionTraceEntry(kState->pc));
@@ -1069,7 +1180,7 @@ void JobManager::onDebugInfo(klee::ExecutionState *kState,
     const std::string &message) {
   WorkerTree::Node *node = kState->getCloud9State()->getNode().get();
 
-  if (DumpStateTraces) {
+  if (collectTraces) {
     (**node).trace.appendEntry(new DebugLogEntry(message));
   }
 }
@@ -1267,8 +1378,8 @@ void JobManager::setCodeBreakpoint(int assemblyLine) {
 }
 
 void JobManager::dumpStateTrace(WorkerTree::Node *node) {
-  if (!DumpStateTraces) {
-    // Do nothing
+  if (!collectTraces) {
+    // We have nothing collected, why bother?
     return;
   }
 
@@ -1288,6 +1399,24 @@ void JobManager::dumpStateTrace(WorkerTree::Node *node) {
   assert(state != NULL);
 
   serializeExecutionTrace(*os, state);
+
+  delete os;
+}
+
+void JobManager::dumpInstructionTrace(WorkerTree::Node *node) {
+  if (!collectTraces)
+    return;
+
+  char fileName[256];
+  snprintf(fileName, 256, "instrDump%05d.txt", traceCounter);
+  traceCounter++;
+
+  CLOUD9_INFO("Dumping instruction trace in file " << fileName);
+
+  std::ostream *os = kleeHandler->openOutputFile(fileName);
+  assert(os != NULL);
+
+  serializeInstructionTrace(*os, node);
 
   delete os;
 }

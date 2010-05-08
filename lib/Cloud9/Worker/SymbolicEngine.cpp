@@ -8,6 +8,8 @@
 #include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/instrum/InstrumentationManager.h"
 
+#include <boost/bind.hpp>
+
 namespace cloud9 {
 
 namespace worker {
@@ -25,11 +27,7 @@ void SymbolicEngine::deregisterStateEventHandler(StateEventHandler *handler) {
 void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
     klee::ExecutionState *parent, int index) {
 
-  for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
-    StateEventHandler *h = *it;
-
-    h->onStateBranched(state, parent, index);
-  }
+  fireHandler(boost::bind(&StateEventHandler::onStateBranched, _1, state, parent, index));
 
   if (state) {
     cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalForkedStates);
@@ -73,6 +71,10 @@ void SymbolicEngine::fireOutOfResources(klee::ExecutionState *destroyedState) {
 
 		h->onOutOfResources(destroyedState);
 	}
+}
+
+void SymbolicEngine::fireBreakpoint(klee::ExecutionState *state, unsigned int id) {
+  fireHandler(boost::bind(&StateEventHandler::onBreakpoint, _1, state, id));
 }
 
 

@@ -373,6 +373,10 @@ void klee_make_symbolic(void *addr, uint_klee nbytes, const char *name) {
   }
 }
 
+void klee_breakpoint(unsigned int id) {
+  fprintf(stdout, "KLEE: Breakpoint hit: %u\n", id);
+}
+
 /* Redefined here so that we can check the value read. */
 int klee_range(int min, int max, const char* name) {
   int r;  

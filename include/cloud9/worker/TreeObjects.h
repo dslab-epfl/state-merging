@@ -13,9 +13,15 @@
 
 #include <ostream>
 
+namespace klee {
+class KInstruction;
+}
+
 namespace cloud9 {
 
 namespace worker {
+
+#define TRACE_SIZE  64
 
 /*
  *
@@ -23,6 +29,7 @@ namespace worker {
 class SymbolicState {
 	friend class JobManager;
 	friend class StrategyPortfolio;
+	friend class OracleStrategy;
 private:
 	klee::ExecutionState *kleeState;
 	WorkerTree::NodePin nodePin;
@@ -30,6 +37,9 @@ private:
 	bool _active;
 	bool _free;
 	unsigned int _strategy;
+
+	std::vector<klee::KInstruction*> _instrProgress;
+	unsigned int _instrPos;
 
 	void rebindToNode(WorkerTree::Node *node) {
 		if (nodePin) {
@@ -45,8 +55,9 @@ private:
 	}
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), nodePin(WORKER_LAYER_STATES), _active(false), _free(false), _strategy(0) {
-			kleeState->setCloud9State(this);
+		kleeState(state), nodePin(WORKER_LAYER_STATES),
+		_active(false), _free(false), _strategy(0), _instrPos(0) {
+      kleeState->setCloud9State(this);
 	}
 
 	virtual ~SymbolicState() {

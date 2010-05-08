@@ -435,7 +435,7 @@ static void interrupt_handle() {
 		sys::SetInterruptFunction(interrupt_handle);
 	} else {
 		CLOUD9_INFO("Ctrl+C detected, exiting.");
-		exit(1);
+		exit(1); // XXX Replace this with pthread_exit() or with longjmp
 	}
 	Interrupted = true;
 }

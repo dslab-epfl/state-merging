@@ -31,6 +31,10 @@ static unsigned char rand_byte(void) {
   return x & 0xFF;
 }
 
+void klee_breakpoint(unsigned int id) {
+  fprintf(stdout, "KLEE: Breakpoint hit: %u\n", id);
+}
+
 void klee_make_symbolic(void *array, uint_klee nbytes, const char *name) {
   static int rand_init = -1;
 

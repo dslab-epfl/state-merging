@@ -38,6 +38,7 @@ class SymbolicState;
 class ExecutionJob;
 class KleeHandler;
 class StrategyPortfolio;
+class OracleStrategy;
 
 class JobManager: public StateEventHandler {
 private:
@@ -54,6 +55,7 @@ private:
   void initStrategy();
 
   StrategyPortfolio *createStrategyPortfolio();
+  OracleStrategy *createOracleStrategy();
 
   void initRootState(llvm::Function *f, int argc, char **argv, char **envp);
 
@@ -107,7 +109,17 @@ private:
    */
   int traceCounter;
 
+  bool collectTraces;
+  bool collectProgress;
+
   void dumpStateTrace(WorkerTree::Node *node);
+  void dumpInstructionTrace(WorkerTree::Node *node);
+
+  void serializeInstructionTrace(std::ostream &s, WorkerTree::Node *node);
+  void parseInstructionTrace(std::istream &s, std::vector<unsigned int> &dest);
+
+  void serializeExecutionTrace(std::ostream &os, WorkerTree::Node *node);
+  void serializeExecutionTrace(std::ostream &os, SymbolicState *state);
 
   void fireActivateState(SymbolicState *state);
   void fireDeactivateState(SymbolicState *state);
@@ -204,6 +216,8 @@ public:
   virtual void onDebugInfo(klee::ExecutionState *state,
       const std::string &message);
   virtual void onOutOfResources(klee::ExecutionState *destroyedState);
+  virtual void onBreakpoint(klee::ExecutionState *state,
+          unsigned int id);
 
   /*
    * Statistics methods

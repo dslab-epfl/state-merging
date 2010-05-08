@@ -51,6 +51,7 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(RandomPathSel, "random-path", "Random path selection"),
 				clEnumValN(CoverageOptimizedSel, "coverage-optimized", "Coverage optimized job selection"),
 				clEnumValN(PortfolioSel, "portfolio", "Strategy portfolio"),
+				clEnumValN(OracleSel, "oracle", "Almighty oracle"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 
