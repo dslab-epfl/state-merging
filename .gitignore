@@ -27,3 +27,6 @@ klee-out-*
 
 core
 vgcore.*
+
+*.dot
+*.png
