@@ -29,6 +29,7 @@ CXX.Flags += -DLLVM_23 -fexceptions -std=c++0x
 endif
 CXX.Flags += -I$(PROJ_SRC_ROOT)/stp/include
 CXX.Flags += -DKLEE_DIR=\"$(PROJ_SRC_ROOT)\"
+CXX.Flags += -fno-omit-frame-pointer
 
 PROTOC ?= protoc
 
