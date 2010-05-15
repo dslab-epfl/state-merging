@@ -23,16 +23,20 @@ def main():
     for a in args:
     	skip = False
         for prefix in ('-g', '-W', '-O', '-D', '-f',
-                 '-fnested-functions', '-pthread', '-std', '-Wl,'):
+                 '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib'): #, 'wand/.libs/libMagickWand.so', '/home/sun/imagemagik-llvm/ImageMagick-6.6.1-5-llvm/magick/.libs/libMagickCore.so'):
             if a.startswith(prefix):
             	skip = True
             	break
+        if a == '-shared':
+                linkArgs.append('-r')
+                continue
     	
     	if skip:
     		continue
     	
         linkArgs.append(a)
-    print "Linking with arguments: " + " ".join(linkArgs)
+    #linkArgs.append("-lrrd")
+    print "\n\nLinking with arguments: " + " ".join(linkArgs) + "\n\n"
     
     os.execvp("llvm-ld", ["llvm-ld", "--disable-opt"] + linkArgs)
     return 1
