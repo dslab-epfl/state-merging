@@ -1,8 +1,8 @@
 #!/bin/bash
 
-export SESS_DIR=$(pwd)/profile
+export SESS_DIR=$(pwd)/ls-profile
 export SAMPLING_TIME=60
-export ITERATION=5
+export ITERATION=0
 
 function reset_oprofile () {
 	sudo opcontrol --reset
