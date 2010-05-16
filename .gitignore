@@ -29,4 +29,6 @@ core
 vgcore.*
 
 *.dot
+*.pdf
 *.png
+*.eps
