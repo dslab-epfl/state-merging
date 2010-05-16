@@ -49,6 +49,8 @@ public:
 };
 
 class BasicStrategy : public JobSelectionStrategy {
+protected:
+  ExecutionJob *selectJob(WorkerTree *tree, SymbolicState* state);
 public:
 	BasicStrategy() {};
 	virtual ~BasicStrategy() {};

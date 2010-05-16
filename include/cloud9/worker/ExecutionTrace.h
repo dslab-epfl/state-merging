@@ -41,6 +41,19 @@ public:
 	klee::KInstruction *getInstruction() const { return ki; }
 };
 
+class BreakpointEntry: public ExecutionTraceEntry {
+private:
+  unsigned int id;
+public:
+  BreakpointEntry(unsigned int _id) : id(_id) {
+
+  }
+
+  virtual ~BreakpointEntry() { }
+
+  unsigned int getID() const { return id; }
+};
+
 class ControlFlowEntry: public ExecutionTraceEntry {
 private:
 	bool branch;

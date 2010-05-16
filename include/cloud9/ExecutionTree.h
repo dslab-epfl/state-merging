@@ -582,6 +582,18 @@ public:
 		return ExecutionPathSetPin(set);
 	}
 
+	void buildPath(int layer, Node *node, Node *pathRoot, std::vector<int> &path) {
+	  assert(node->layerExists(layer));
+	  path.clear();
+
+      while (node != pathRoot) {
+        path.push_back(node->getIndex());
+        node = node->getParent();
+      }
+
+      std::reverse(path.begin(), path.end());
+    }
+
 	template<typename NodeCollection>
 	void getNodes(int layer, ExecutionPathSetPin pathSet, NodeCollection &nodes) {
 		nodes.clear();
