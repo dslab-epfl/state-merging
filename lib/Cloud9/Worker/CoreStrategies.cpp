@@ -41,7 +41,7 @@ static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
 }
 
 static SymbolicState *selectRandomPathState(CompressedTree *tree) {
-  CompressedTree::Node *node = tree->selectRandomLeaf(0, tree->getRoot(), theRNG);
+  CompressedTree::Node *node = tree->selectRandomLeaf(COMPRESSED_LAYER_ACTIVE, tree->getRoot(), theRNG);
 
   SymbolicState *state = (**node).getSymbolicState();
 
@@ -106,7 +106,11 @@ ExecutionJob* RandomPathStrategy::onNextJobSelection() {
   if (state == NULL)
     return NULL;
 
-  return selectJob(tree, state);
+  ExecutionJob *job = selectJob(tree, state);
+
+  assert(job != NULL);
+
+  return job;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -875,6 +875,9 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 void JobManager::fireActivateState(SymbolicState *state) {
   if (!state->_active) {
     state->_active = true;
+    state->cActiveNodePin = cTree->getNode(COMPRESSED_LAYER_ACTIVE,
+        state->cNodePin.get())->pin(COMPRESSED_LAYER_ACTIVE);
+
     selStrategy->onStateActivated(state);
     cloud9::instrum::theInstrManager.incStatistic(
         cloud9::instrum::CurrentActiveStateCount);
@@ -884,6 +887,8 @@ void JobManager::fireActivateState(SymbolicState *state) {
 void JobManager::fireDeactivateState(SymbolicState *state) {
   if (state->_active) {
     state->_active = false;
+    state->cActiveNodePin.reset();
+
     selStrategy->onStateDeactivated(state);
     cloud9::instrum::theInstrManager.decStatistic(
         cloud9::instrum::CurrentActiveStateCount);
@@ -1241,10 +1246,10 @@ void JobManager::updateCompressedTreeOnBranch(SymbolicState *state,
 
   CompressedTree::NodePin pNodePin = parent->getCompressedNode();
 
-  CompressedTree::Node *oldNode = cTree->getNode(0, pNodePin.get(),
-      parent->getNode()->getIndex());
-  CompressedTree::Node *newNode = cTree->getNode(0, pNodePin.get(),
-      state->getNode()->getIndex());
+  CompressedTree::Node *oldNode = cTree->getNode(COMPRESSED_LAYER_STATES,
+      pNodePin.get(), parent->getNode()->getIndex());
+  CompressedTree::Node *newNode = cTree->getNode(COMPRESSED_LAYER_STATES,
+      pNodePin.get(), state->getNode()->getIndex());
 
   parent->rebindToCompressedNode(oldNode);
   state->rebindToCompressedNode(newNode);

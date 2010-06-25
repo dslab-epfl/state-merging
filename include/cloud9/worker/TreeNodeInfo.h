@@ -65,7 +65,12 @@ public:
   SymbolicState *getSymbolicState() const { return symState; }
 };
 
-typedef ExecutionTree<CompressedNodeInfo, 1, 2> CompressedTree; // Single layered, complete binary tree
+#define COMPRESSED_LAYER_COUNT      2
+
+#define COMPRESSED_LAYER_STATES     0
+#define COMPRESSED_LAYER_ACTIVE     1
+
+typedef ExecutionTree<CompressedNodeInfo, COMPRESSED_LAYER_COUNT, 2> CompressedTree; // Single layered, complete binary tree
 
 }
 

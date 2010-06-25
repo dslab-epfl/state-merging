@@ -467,8 +467,7 @@ public:
 	  assert(index >= 0);
 
 	  for (int layer = 0; layer < Layers; layer++) {
-	    assert(node->exists[layer]);
-	    assert(node->children[index][layer]);
+	    assert((!node->exists[layer]) || node->children[index][layer]);
 	  }
 
 	  // Perform the pointer manipulation
