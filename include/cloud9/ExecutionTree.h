@@ -291,20 +291,35 @@ class ExecutionTree {
 	template<class NI, int L, int D>
 	friend void node_pin_release(TreeNode<NI, L, D> * p, int layer);
 
-#define BEGIN_DFS_SCAN(layer, root, node) \
+#define BEGIN_LAYERED_DFS_SCAN(layer, root, node) \
 		std::stack<Node*> __dfs_nodes; \
 		__dfs_nodes.push((root)); \
 		while (!__dfs_nodes.empty()) { \
 			Node *node = __dfs_nodes.top(); \
 			__dfs_nodes.pop();
 
-#define END_DFS_SCAN(layer, root, node) \
+#define END_LAYERED_DFS_SCAN(layer, root, node) \
 			for (int __i = 0; __i < Degree; __i++) { \
 				Node *__child = node->getChild((layer), __i); \
 				if (__child) \
 					__dfs_nodes.push(__child); \
 			} \
 		}
+
+#define BEGIN_DFS_SCAN(root, node) \
+        std::stack<Node*> __dfs_nodes; \
+        __dfs_nodes.push((root)); \
+        while (!__dfs_nodes.empty()) { \
+          Node *node = __dfs_nodes.top(); \
+          __dfs_nodes.pop();
+
+#define END_DFS_SCAN(root, node) \
+          for (int __i = 0; __i < Degree; __i++) { \
+            Node *__child = node->childrenNodes[__i]; \
+            if (__child) \
+              __dfs_nodes.push(__child); \
+          } \
+        }
 
 public:
 	typedef TreeNode<NodeInfo, Layers, Degree> Node;
@@ -437,16 +452,51 @@ public:
 		return node;
 	}
 
+	void collapseNode(Node *node) {
+	  int index = -1;
+
+	  // Check that the operation is valid
+	  assert(node->_totalRefCount == 0);
+
+	  for (int i = 0; i < Degree; i++) {
+	    if (node->childrenNodes[i] != NULL) {
+	      assert(index < 0);
+	      index = i;
+	    }
+	  }
+	  assert(index >= 0);
+
+	  for (int layer = 0; layer < Layers; layer++) {
+	    assert(node->exists[layer]);
+	    assert(node->children[index][layer]);
+	  }
+
+	  // Perform the pointer manipulation
+	  Node *parent = node->parent;
+	  Node *child = node->childrenNodes[index];
+
+	  child->parent = parent;
+	  child->index = node->index;
+
+	  BEGIN_DFS_SCAN(child, descendant)
+	  descendant->level = descendant->level - 1;
+	  END_DFS_SCAN(child, descendant)
+
+	  parent->childrenNodes[node->index] = child;
+
+	  delete node;
+	}
+
 	unsigned int countLeaves(int layer, Node *root) {
 		assert(root->exists[layer]);
 		unsigned int result = 0;
 
-		BEGIN_DFS_SCAN(layer, root, node)
+		BEGIN_LAYERED_DFS_SCAN(layer, root, node)
 
 		if (node->isLeaf(layer))
 			result++;
 
-		END_DFS_SCAN(layer, root, node)
+		END_LAYERED_DFS_SCAN(layer, root, node)
 
 		return result;
 	}
@@ -456,12 +506,12 @@ public:
 		assert(root->exists[layer]);
 		unsigned int result = 0;
 
-		BEGIN_DFS_SCAN(layer, root, node)
+		BEGIN_LAYERED_DFS_SCAN(layer, root, node)
 
 		if (node->isLeaf(layer) && pred(node))
 			result++;
 
-		END_DFS_SCAN(layer, root, node)
+		END_LAYERED_DFS_SCAN(layer, root, node)
 
 		return result;
 	}
@@ -470,12 +520,12 @@ public:
 	void getLeaves(int layer, Node *root, NodeCollection &nodes) {
 		assert(root->exists[layer]);
 
-		BEGIN_DFS_SCAN(layer, root, node)
+		BEGIN_LAYERED_DFS_SCAN(layer, root, node)
 
 		if (node->isLeaf(layer))
 			nodes.push_back(node);
 
-		END_DFS_SCAN(layer, root, node)
+		END_LAYERED_DFS_SCAN(layer, root, node)
 	}
 
 	template<typename NodeCollection, typename Predicate>
@@ -483,7 +533,7 @@ public:
 		assert(root->exists[layer]);
 		bool unlimited = (maxCount == 0);
 
-		BEGIN_DFS_SCAN(layer, root, node)
+		BEGIN_LAYERED_DFS_SCAN(layer, root, node)
 
 		if (node->isLeaf(layer) && pred(node)) {
 			if (unlimited || maxCount > 0)
@@ -497,7 +547,7 @@ public:
 			}
 		}
 
-		END_DFS_SCAN(layer, root, node)
+		END_LAYERED_DFS_SCAN(layer, root, node)
 	}
 
 	template<class Generator>
@@ -604,6 +654,9 @@ public:
 			nodes.push_back(crtNode);
 		}
 	}
+
+#undef BEGIN_LAYERED_DFS_SCAN
+#undef END_LAYERED_DFS_SCAN
 
 #undef BEGIN_DFS_SCAN
 #undef END_DFS_SCAN

@@ -25,7 +25,7 @@ class ExecutionTrace;
 class SymbolicState;
 class ExecutionJob;
 
-class TreeNodeInfo {
+class WorkerNodeInfo {
 	friend class JobManager;
 	friend class SymbolicState;
 	friend class ExecutionJob;
@@ -34,9 +34,9 @@ private:
 	ExecutionJob *job;
 	ExecutionTrace trace;
 public:
-	TreeNodeInfo() : symState(NULL), job(NULL) {};
+	WorkerNodeInfo() : symState(NULL), job(NULL) { }
 
-	virtual ~TreeNodeInfo() {};
+	virtual ~WorkerNodeInfo() { }
 
 	SymbolicState* getSymbolicState() const { return symState; }
 	ExecutionJob* getJob() const { return job; }
@@ -51,7 +51,21 @@ public:
 #define WORKER_LAYER_STATISTICS		2
 #define WORKER_LAYER_BREAKPOINTS	3
 
-typedef ExecutionTree<TreeNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Single layered, binary tree
+typedef ExecutionTree<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Four layered, binary tree
+
+
+class CompressedNodeInfo {
+  friend class JobManager;
+  friend class SymbolicState;
+private:
+  SymbolicState *symState;
+public:
+  CompressedNodeInfo() : symState(NULL) { }
+
+  SymbolicState *getSymbolicState() const { return symState; }
+};
+
+typedef ExecutionTree<CompressedNodeInfo, 1, 2> CompressedTree; // Single layered, complete binary tree
 
 }
 

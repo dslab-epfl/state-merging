@@ -31,12 +31,23 @@ namespace cloud9 {
 namespace worker {
 
 static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
-	WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_JOBS, tree->getRoot(), theRNG);
-	ExecutionJob *job = (**node).getJob();
+  WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_JOBS,
+      tree->getRoot(), theRNG);
+  ExecutionJob *job = (**node).getJob();
 
-	assert(job != NULL || node == tree->getRoot());
+  assert(job != NULL || node == tree->getRoot());
 
-	return job;
+  return job;
+}
+
+static SymbolicState *selectRandomPathState(CompressedTree *tree) {
+  CompressedTree::Node *node = tree->selectRandomLeaf(0, tree->getRoot(), theRNG);
+
+  SymbolicState *state = (**node).getSymbolicState();
+
+  assert(state != NULL || node == tree->getRoot());
+
+  return state;
 }
 
 ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
@@ -90,7 +101,12 @@ void RandomStrategy::onRemovingJob(ExecutionJob *job) {
 ////////////////////////////////////////////////////////////////////////////////
 
 ExecutionJob* RandomPathStrategy::onNextJobSelection() {
-	return selectRandomPathJob(tree);
+  SymbolicState *state = selectRandomPathState(cTree);
+
+  if (state == NULL)
+    return NULL;
+
+  return selectJob(tree, state);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -33,6 +33,7 @@ class SymbolicState {
 private:
 	klee::ExecutionState *kleeState;
 	WorkerTree::NodePin nodePin;
+	CompressedTree::NodePin cNodePin;
 
 	bool _active;
 	bool _free;
@@ -55,9 +56,23 @@ private:
 			nodePin.reset();
 		}
 	}
+
+	void rebindToCompressedNode(CompressedTree::Node *node)  {
+	  if (cNodePin) {
+	    (**cNodePin).symState = NULL;
+	  }
+
+	  if (node) {
+	    cNodePin = node->pin(0);
+	    (**node).symState = this;
+	  } else {
+	    cNodePin.reset();
+	  }
+	}
+
 public:
 	SymbolicState(klee::ExecutionState *state) :
-		kleeState(state), nodePin(WORKER_LAYER_STATES),
+		kleeState(state), nodePin(WORKER_LAYER_STATES), cNodePin(0),
 		_active(false), _free(false), _strategy(0), _instrPos(0),
 		collectProgress(false) {
       kleeState->setCloud9State(this);
@@ -65,11 +80,14 @@ public:
 
 	virtual ~SymbolicState() {
 		rebindToNode(NULL);
+		rebindToCompressedNode(NULL);
 	}
 
 	klee::ExecutionState *getKleeState() const { return kleeState; }
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
+
+	CompressedTree::NodePin &getCompressedNode() { return cNodePin; }
 };
 
 /*
