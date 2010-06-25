@@ -63,8 +63,6 @@ ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
   WorkerTree::Node *jobNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, node, theRNG);
   ExecutionJob *job = (**jobNode).getJob();
 
-  assert(job != NULL);
-
   return job;
 }
 
@@ -107,8 +105,6 @@ ExecutionJob* RandomPathStrategy::onNextJobSelection() {
     return NULL;
 
   ExecutionJob *job = selectJob(tree, state);
-
-  assert(job != NULL);
 
   return job;
 }

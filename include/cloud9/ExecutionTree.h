@@ -452,6 +452,7 @@ public:
 		return node;
 	}
 
+	// WARNING: Expensive operation, use it with caution
 	void collapseNode(Node *node) {
 	  int index = -1;
 
@@ -467,7 +468,7 @@ public:
 	  assert(index >= 0);
 
 	  for (int layer = 0; layer < Layers; layer++) {
-	    assert((!node->exists[layer]) || node->children[index][layer]);
+	    assert((!node->parent) || (!node->exists[layer]) || node->children[index][layer]);
 	  }
 
 	  // Perform the pointer manipulation
@@ -481,7 +482,16 @@ public:
 	  descendant->level = descendant->level - 1;
 	  END_DFS_SCAN(child, descendant)
 
-	  parent->childrenNodes[node->index] = child;
+	  if (parent != NULL)
+	    parent->childrenNodes[node->index] = child;
+	  else {
+	    root = child;
+
+	    for (int layer = 0; layer < Layers; layer++) {
+	      if (!root->exists[layer])
+            root->makeNode(layer);
+	    }
+	  }
 
 	  delete node;
 	}

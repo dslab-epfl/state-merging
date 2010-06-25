@@ -413,6 +413,7 @@ JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
   terminationRequest(false), currentJob(NULL), replaying(false), jobCount(0), traceCounter(0) {
 
   tree = new WorkerTree();
+  cTree = new CompressedTree();
 
   llvm::Function *mainFn = module->getFunction(mainFnName);
 
@@ -1250,6 +1251,12 @@ void JobManager::updateCompressedTreeOnBranch(SymbolicState *state,
       pNodePin.get(), parent->getNode()->getIndex());
   CompressedTree::Node *newNode = cTree->getNode(COMPRESSED_LAYER_STATES,
       pNodePin.get(), state->getNode()->getIndex());
+
+  if (parent->_active)
+    oldNode = cTree->getNode(COMPRESSED_LAYER_ACTIVE, oldNode);
+
+  if (state->_active)
+    newNode = cTree->getNode(COMPRESSED_LAYER_ACTIVE, newNode);
 
   parent->rebindToCompressedNode(oldNode);
   state->rebindToCompressedNode(newNode);
