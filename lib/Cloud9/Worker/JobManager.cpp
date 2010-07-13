@@ -109,6 +109,10 @@ cl::opt<bool>
 cl::opt<std::string>
   OraclePath("c9-oracle-path", cl::desc("The file used by the oracle strategy to get the path."));
 
+cl::opt<double>
+  JobQuanta("c9-job-quanta", cl::desc("The maximum quantum of time for a job"),
+  cl::init(1.0));
+
 }
 
 namespace cloud9 {
