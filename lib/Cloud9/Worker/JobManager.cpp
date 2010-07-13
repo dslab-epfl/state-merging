@@ -413,6 +413,7 @@ JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
   terminationRequest(false), currentJob(NULL), replaying(false), jobCount(0), traceCounter(0) {
 
   tree = new WorkerTree();
+  cTree = new CompressedTree();
 
   llvm::Function *mainFn = module->getFunction(mainFnName);
 
@@ -464,6 +465,7 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
   SymbolicState *state = new SymbolicState(kState);
 
   state->rebindToNode(tree->getRoot());
+  state->rebindToCompressedNode(cTree->getRoot());
 
   symbEngine->initRootState(kState, argc, argv, envp);
 }
@@ -477,13 +479,13 @@ void JobManager::initStrategy() {
     CLOUD9_INFO("Using random job selection strategy");
     break;
   case RandomPathSel:
-    selStrategy = new RandomPathStrategy(tree);
+    selStrategy = new RandomPathStrategy(tree, cTree);
     CLOUD9_INFO("Using random path job selection strategy");
     break;
   case CoverageOptimizedSel:
     strategies.push_back(new WeightedRandomStrategy(
         WeightedRandomStrategy::CoveringNew, tree, symbEngine));
-    strategies.push_back(new RandomStrategy());
+    strategies.push_back(new RandomPathStrategy(tree, cTree));
     selStrategy = new TimeMultiplexedStrategy(strategies);
     CLOUD9_INFO("Using weighted random job selection strategy");
     break;
@@ -507,7 +509,7 @@ void JobManager::initStrategy() {
 StrategyPortfolio *JobManager::createStrategyPortfolio() {
   std::map<unsigned int, JobSelectionStrategy*> strategies;
 
-  strategies[RANDOM_PATH_STRATEGY] = new RandomPathStrategy(tree);
+  strategies[RANDOM_PATH_STRATEGY] = new RandomPathStrategy(tree, cTree);
   strategies[WEIGHTED_RANDOM_STRATEGY] = new WeightedRandomStrategy(
       WeightedRandomStrategy::CoveringNew, tree, symbEngine);
   strategies[RANDOM_STRATEGY] = new RandomStrategy();
@@ -874,6 +876,9 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 void JobManager::fireActivateState(SymbolicState *state) {
   if (!state->_active) {
     state->_active = true;
+    state->cActiveNodePin = cTree->getNode(COMPRESSED_LAYER_ACTIVE,
+        state->cNodePin.get())->pin(COMPRESSED_LAYER_ACTIVE);
+
     selStrategy->onStateActivated(state);
     cloud9::instrum::theInstrManager.incStatistic(
         cloud9::instrum::CurrentActiveStateCount);
@@ -883,6 +888,8 @@ void JobManager::fireActivateState(SymbolicState *state) {
 void JobManager::fireDeactivateState(SymbolicState *state) {
   if (state->_active) {
     state->_active = false;
+    state->cActiveNodePin.reset();
+
     selStrategy->onStateDeactivated(state);
     cloud9::instrum::theInstrManager.decStatistic(
         cloud9::instrum::CurrentActiveStateCount);
@@ -1091,6 +1098,8 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   //	CLOUD9_DEBUG("State branched: " << parent->getCloud9State()->getNode());
 
   updateTreeOnBranch(kState, parent, index);
+  updateCompressedTreeOnBranch(kState ? kState->getCloud9State() : NULL,
+      parent->getCloud9State());
 
   if (kState) {
     SymbolicState *state = kState->getCloud9State();
@@ -1131,6 +1140,7 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
   fireDeactivateState(state);
 
+  updateCompressedTreeOnDestroy(kState->getCloud9State());
   updateTreeOnDestroy(kState);
 }
 
@@ -1226,6 +1236,41 @@ void JobManager::updateTreeOnDestroy(klee::ExecutionState *kState) {
 
   kState->setCloud9State(NULL);
   delete state;
+}
+
+void JobManager::updateCompressedTreeOnBranch(SymbolicState *state,
+    SymbolicState *parent) {
+  if (state == NULL) {
+    // Ignore "degenerated" branches
+    return;
+  }
+
+  CompressedTree::NodePin pNodePin = parent->getCompressedNode();
+
+  CompressedTree::Node *oldNode = cTree->getNode(COMPRESSED_LAYER_STATES,
+      pNodePin.get(), parent->getNode()->getIndex());
+  CompressedTree::Node *newNode = cTree->getNode(COMPRESSED_LAYER_STATES,
+      pNodePin.get(), state->getNode()->getIndex());
+
+  if (parent->_active)
+    oldNode = cTree->getNode(COMPRESSED_LAYER_ACTIVE, oldNode);
+
+  if (state->_active)
+    newNode = cTree->getNode(COMPRESSED_LAYER_ACTIVE, newNode);
+
+  parent->rebindToCompressedNode(oldNode);
+  state->rebindToCompressedNode(newNode);
+}
+
+void JobManager::updateCompressedTreeOnDestroy(SymbolicState *state) {
+  CompressedTree::Node *parent = state->getCompressedNode()->getParent();
+
+  state->rebindToCompressedNode(NULL);
+
+  if (parent != NULL) {
+    // The parent now should have a single child
+    cTree->collapseNode(parent);
+  }
 }
 
 /* Statistics Management ******************************************************/

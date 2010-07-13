@@ -31,12 +31,23 @@ namespace cloud9 {
 namespace worker {
 
 static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
-	WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_JOBS, tree->getRoot(), theRNG);
-	ExecutionJob *job = (**node).getJob();
+  WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_JOBS,
+      tree->getRoot(), theRNG);
+  ExecutionJob *job = (**node).getJob();
 
-	assert(job != NULL || node == tree->getRoot());
+  assert(job != NULL || node == tree->getRoot());
 
-	return job;
+  return job;
+}
+
+static SymbolicState *selectRandomPathState(CompressedTree *tree) {
+  CompressedTree::Node *node = tree->selectRandomLeaf(COMPRESSED_LAYER_ACTIVE, tree->getRoot(), theRNG);
+
+  SymbolicState *state = (**node).getSymbolicState();
+
+  assert(state != NULL || node == tree->getRoot());
+
+  return state;
 }
 
 ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
@@ -51,8 +62,6 @@ ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
   // OK, so it's an inner state - select one job at random for replay
   WorkerTree::Node *jobNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, node, theRNG);
   ExecutionJob *job = (**jobNode).getJob();
-
-  assert(job != NULL);
 
   return job;
 }
@@ -90,7 +99,14 @@ void RandomStrategy::onRemovingJob(ExecutionJob *job) {
 ////////////////////////////////////////////////////////////////////////////////
 
 ExecutionJob* RandomPathStrategy::onNextJobSelection() {
-	return selectRandomPathJob(tree);
+  SymbolicState *state = selectRandomPathState(cTree);
+
+  if (state == NULL)
+    return NULL;
+
+  ExecutionJob *job = selectJob(tree, state);
+
+  return job;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

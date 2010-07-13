@@ -74,6 +74,7 @@ private:
    * Symbolic tree
    */
   WorkerTree* tree;
+  CompressedTree *cTree;
 
   boost::condition_variable jobsAvailabe;
   boost::mutex jobsMutex;
@@ -169,6 +170,9 @@ private:
   void updateTreeOnBranch(klee::ExecutionState *state,
       klee::ExecutionState *parent, int index);
   void updateTreeOnDestroy(klee::ExecutionState *state);
+
+  void updateCompressedTreeOnBranch(SymbolicState *state, SymbolicState *parent);
+  void updateCompressedTreeOnDestroy(SymbolicState *state);
 
   void fireBreakpointHit(WorkerTree::Node *node);
 
