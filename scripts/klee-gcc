@@ -1,19 +1,65 @@
 #!/usr/bin/env python
 
 import os, sys
+import subprocess
 
 def isLinkCommand():
+    prev_is_option = False
     # Look for '-Wl,' as a signal that we are calling the linker. What a hack.
     for arg in sys.argv:
         if arg.startswith('-Wl,'):
             return True
         if arg.startswith('-l'):
-        	return True
+     	    return True
+        if arg.endswith('.o'):
+            if not prev_is_option:
+                return True
+        if arg.startswith('-'):
+            prev_is_option = True
+        else:
+            prev_is_option = False
 
 def main():
+    object_name = "a.o"
+    do_linking = False
+    modify_next_param = False
+
+    # HACK for compiling rsync:
+    # In case the user wants all stages of compile stage, we may need to also link the file
+    # but llvm-gcc -emit-llvm does not work with the linker directly, we need to compile in
+    # two stages
     if not isLinkCommand():
-        os.execvp("llvm-gcc", ["llvm-gcc", "-emit-llvm"] + sys.argv[1:])
-        return 1
+	command = " -emit-llvm"
+        is_cpp = False
+
+        for arg in sys.argv[1:]:
+            if arg in ['-Werror']:
+                continue
+
+            if modify_next_param:
+                command += " a.out -c"
+                modify_next_param = False
+            else:
+                command += " " 
+                command += arg
+        
+            if arg.endswith(".C") or arg.endswith(".cpp"):
+                is_cpp = True
+
+            if arg == '-o' and "-c" not in sys.argv[1:]:
+                # We need to link the file
+                do_linking = True
+                modify_next_param = True
+
+        command = ["llvm-gcc","llvm-g++"][is_cpp] + command
+
+	print "Compiling with command:", command
+        proc = subprocess.Popen(command, shell = True)
+        proc.communicate()
+        rproc = proc.returncode
+
+        if not do_linking or proc.returncode != 0:
+            return proc.returncode
 
     # Otherwise, strip out arguments that llvm-ld doesn't understand. I don't
     # want my previous explicit declaration of hackyness to imply that this bit
@@ -22,24 +68,31 @@ def main():
     linkArgs = []
     for a in args:
     	skip = False
-        for prefix in ('-g', '-W', '-O', '-D', '-f',
-                 '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib'): #, 'wand/.libs/libMagickWand.so', '/home/sun/imagemagik-llvm/ImageMagick-6.6.1-5-llvm/magick/.libs/libMagickCore.so'):
+        for prefix in ('-emit-llvm', '-I', '-D', '-g', '-W', '-O', '-D', '-f', '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib', '--disable-optcru'): 
             if a.startswith(prefix):
             	skip = True
-            	break
+                break
+
         if a == '-shared':
                 linkArgs.append('-r')
                 continue
-    	
-    	if skip:
-    		continue
-    	
-        linkArgs.append(a)
+
+	if a.endswith(".c") or a.endswith(".cpp"):
+		continue    	
+	   	
+        if not skip:
+            linkArgs.append(a)
+
+    if do_linking:
+    	linkArgs.append("a.out")
+ 
     #linkArgs.append("-lrrd")
-    print "\n\nLinking with arguments: " + " ".join(linkArgs) + "\n\n"
+    print "Linking with command: llvm-ld --disable-opt " + " ".join(linkArgs)
     
-    os.execvp("llvm-ld", ["llvm-ld", "--disable-opt"] + linkArgs)
-    return 1
+    proc = Subprocess.popen("llvm-ld --disable-opt " + " ".join(linkArgs), shell = True)
+    proc.communicate()
+    
+    return proc.returncode
 
 if __name__ == '__main__':
     main()
