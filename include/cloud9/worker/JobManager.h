@@ -152,6 +152,9 @@ private:
 
   void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job,
       bool spawnNew);
+  void executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
+      ExecutionJob *origJob, bool spawnNew);
+
   void stepInNode(boost::unique_lock<boost::mutex> &lock,
       WorkerTree::Node *node, bool exhaust);
   void replayPath(boost::unique_lock<boost::mutex> &lock,

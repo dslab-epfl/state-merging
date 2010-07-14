@@ -48,6 +48,8 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/System/Time.h"
+#include "klee/Internal/ADT/RNG.h"
 #include "klee/util/ExprPPrinter.h"
 #include "KleeHandler.h"
 
@@ -662,7 +664,7 @@ void JobManager::processLoop(bool allowGrowth, bool blocking,
         break;
     }
 
-    executeJob(lock, job, allowGrowth);
+    executeJobsBatch(lock, job, allowGrowth);
 
     if (refineStats) {
       refineStatistics();
@@ -920,6 +922,40 @@ void JobManager::fireRemovingJob(ExecutionJob *job) {
 
 /* Job Execution Methods ******************************************************/
 
+void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
+      ExecutionJob *origJob, bool spawnNew) {
+  WorkerTree::NodePin nodePin = origJob->getNode();
+
+  if ((**nodePin).getSymbolicState() == NULL) {
+    // Replay job
+    executeJob(lock, origJob, spawnNew);
+    return;
+  }
+
+  double startTime = klee::util::getUserTime();
+  double currentTime = startTime;
+
+  unsigned int count = 0;
+
+  while (currentTime - startTime < JobQuanta) {
+    executeJob(lock, (**nodePin).getJob(), spawnNew);
+    count++;
+
+    if ((**nodePin).getJob() == NULL) {
+      WorkerTree::Node *newNode = tree->selectRandomLeaf(WORKER_LAYER_JOBS, nodePin.get(), theRNG);
+
+      if ((**newNode).getJob() == NULL)
+        break;
+
+      nodePin = (**newNode).getJob()->getNode();
+    }
+
+    currentTime = klee::util::getUserTime();
+  }
+
+  CLOUD9_DEBUG("Batched " << count << " jobs");
+}
+
 void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
     ExecutionJob *job, bool spawnNew) {
   WorkerTree::NodePin nodePin = job->getNode(); // Keep the node around until we finish with it
@@ -1118,7 +1154,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
       fireActivateState(state);
     }
 
-    CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
+    //CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
   }
 
   SymbolicState *pState = parent->getCloud9State();
