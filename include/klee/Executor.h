@@ -17,6 +17,8 @@
 
 #include "klee/ExecutionState.h"
 #include "klee/Interpreter.h"
+#include "klee/Expr.h"
+#include "klee/util/Ref.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
@@ -66,7 +68,8 @@ namespace klee {
   class StatsTracker;
   class TimingSolver;
   class TreeStreamWriter;
-  template<class T> class ref;
+
+  enum ESD_LOCK_TYPE {LOCK, UNLOCK};
 
   /// \todo Add a context object to keep track of data only live
   /// during an instruction step. Should contain addedStates,
@@ -171,7 +174,10 @@ private:
   bool ivcEnabled;
 
   /// The maximum time to allow for a single stp query.
-  double stpTimeout;  
+  double stpTimeout; 
+
+  //total number of thread schedules executed
+  int nrSchedules;
 
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   
@@ -297,12 +303,18 @@ private:
   Cell& getArgumentCell(ExecutionState &state,
                         KFunction *kf,
                         unsigned index) {
-    return state.stack.back().locals[kf->getArgRegister(index)];
+    return state.stack->back().locals[kf->getArgRegister(index)];
+  }
+
+  Cell& getArgumentCell(StackFrame &sf, 
+			KFunction *kf, 
+			unsigned index) {
+    return sf.locals[kf->getArgRegister(index)];
   }
 
   Cell& getDestCell(ExecutionState &state,
                     KInstruction *target) {
-    return state.stack.back().locals[target->dest];
+    return state.stack->back().locals[target->dest];
   }
 
   void bindLocal(KInstruction *target, 
@@ -386,6 +398,128 @@ private:
                      double maxInstTime);
   void resetTimers();
                 
+
+  /// Verbose debug info for thred related functions
+  void printDebug(ExecutionState &state, std::string s, bool line);
+
+  /// Pthread create needs a specific StackFrame instead of the one of the current state
+  void bindArgumentToPthreadCreate(KFunction *kf, unsigned index, 
+				   StackFrame &sf, ref<Expr> value);
+
+  /// Finds the functions coresponding to an address.
+  /// For now, it only support concrete values for the thread and function pointer argument.
+  /// Can be extended easily to take care of symbolic function pointers.
+  /// \param address address of the function pointer
+  KFunction* resolveFunction(ref<Expr> address);
+
+  void initTLS(ExecutionState &state, Thread* t);
+  bool destroyTLS(ExecutionState &state, 
+		  KInstruction* ki, 
+		  Thread* thread);
+
+  //get the backtrace of the current thread
+  std::string backtrace(Thread *t) const;
+
+
+  //pthread handlers
+  void executePthreadCreate(ExecutionState &state,
+			    KInstruction *ki,
+			     ref<Expr>  thread,
+			    ref<Expr> attr, 
+			    ref<Expr>  start_function,
+			    ref<Expr> arg);
+  void executePthreadJoin(ExecutionState &state, 
+			  KInstruction *ki, 
+			  ref<Expr> thread, 
+			  ref<Expr> value_ptr);
+  
+  Thread* getByTid(ExecutionState &state, uint64_t tid);
+  
+  void updateTraceOnDeadlock(ExecutionState &state);
+
+  bool acquireMutex(ExecutionState &state,
+			      KInstruction *ki,
+			      ref<Expr> mutex);
+
+  void executePthreadMutexLock(ExecutionState &state, 
+			       KInstruction *ki, 
+			       ref<Expr> mutex);
+  
+  void releaseMutex(ExecutionState &state, 
+		    ref<Expr> mutex);
+
+  void executePthreadMutexUnlock(ExecutionState &state, 
+			       KInstruction *ki, 
+			       ref<Expr> mutex);
+
+  void executePthreadMutexInit(ExecutionState &state, 
+			       KInstruction *ki, 
+			       ref<Expr> mutex, 
+			       ref<Expr> ignored_attr);
+  void executePthreadMutexDestroy(ExecutionState &state, 
+				  KInstruction *ki, 
+				  ref<Expr> mutex);
+
+  void executeThreadExit(ExecutionState &state, 
+			 KInstruction *ki);
+  
+  void executePthreadExit(ExecutionState &state, 
+			  KInstruction *ki,
+			  ref<Expr> value_ptr);
+  
+  void executePthreadCondWait(ExecutionState &state, 
+			      KInstruction *ki, 
+			      ref<Expr> cond_var, 
+			      ref<Expr> mutex);
+  void executePthreadCondSignal(ExecutionState &state, 
+				KInstruction *ki, 
+				ref<Expr> cond_var);
+  void executePthreadCondBroadcast(ExecutionState &state, 
+				   KInstruction *ki, 
+				   ref<Expr> cond_var);
+  
+  void executePthreadCondInit(ExecutionState &state, 
+			      KInstruction *ki, 
+			      ref<Expr> cond_var,
+			      ref<Expr> ignored);
+  
+  void executePthreadCondDestroy(ExecutionState &state, 
+				 KInstruction *ki, 
+				 ref<Expr> cond_var);
+
+  void executePthreadKeyCreate(ExecutionState &state, 
+			       KInstruction *ki, 
+			       ref<Expr> key, 
+			       ref<Expr> destructor);
+  
+  void executePthreadGetSpecific(ExecutionState &state, 
+				 KInstruction *ki, 
+				 ref<Expr> key);
+
+  void executePthreadSetSpecific(ExecutionState &state, 
+				 KInstruction *ki, 
+				 ref<Expr> key,
+				 ref<Expr> value);
+			       
+  void executePthreadKeyDelete(ExecutionState &state, 
+			       KInstruction *ki, 
+			       ref<Expr> key);
+  
+  /// Choose the next thread to execute next. Can potentially context-switch the current thread.
+  void schedule(ExecutionState &state,
+			  bool terminate);
+
+  /// Choose the next thread to execute next. Can potentially context-switch the current thread.
+  void schedule(ExecutionState &state, 
+			  bool terminate, 
+			  int LockOpType, 
+			  Mutex* mutex);
+  
+  void preemption_schedule(ExecutionState &state, bool terminate);
+
+  
+  void doContextSwitch(ExecutionState &state);
+  
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();
@@ -395,7 +529,7 @@ public:
   }
 
   // XXX should just be moved out to utility module
-  ref<klee::ConstantExpr> evalConstant(llvm::Constant *c);
+  ref<ConstantExpr> evalConstant(llvm::Constant *c);
 
   virtual void setPathWriter(TreeStreamWriter *tsw) {
     pathWriter = tsw;
@@ -418,6 +552,8 @@ public:
 
   virtual const llvm::Module *
   setModule(llvm::Module *module, const ModuleOptions &opts);
+  
+  const KModule* getKModule() const {return kmodule;} 
 
   virtual void useSeeds(const std::vector<struct KTest *> *seeds) { 
     usingSeeds = seeds;

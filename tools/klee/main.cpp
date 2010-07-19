@@ -767,7 +767,8 @@ static const char *modelledExternals[] = {
   "llvm.va_start", 
   "llvm.va_end", 
   "malloc", 
-  "realloc", 
+  "realloc",
+  "valloc",
   "_ZdaPv", 
   "_ZdlPv", 
   "_Znaj", 
@@ -1067,6 +1068,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 
   f = mainModule->getFunction("__ctype_get_mb_cur_max");
   if (f) f->setName("_stdlib_mb_cur_max");
+ 
 
   // Strip of asm prefixes for 64 bit versions because they are not
   // present in uclibc and we want to make sure stuff will get

@@ -37,6 +37,8 @@ namespace {
   DebugLogStateMerge("debug-log-state-merge");
 }
 
+namespace klee {
+
 /***/
 
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
@@ -79,7 +81,12 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     lastCoveredTime(sys::TimeValue::now()),
     forkDisabled(false),
     ptreeNode(0) {
+  deadlock = false;
+  preemptions = 0;
+  stack = new std::vector<StackFrame>();
   pushFrame(0, kf);
+  executedInstructions = 0;
+
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
@@ -92,16 +99,78 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     addressSpace(this),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0) {
+  stack = new std::vector<StackFrame>();
+}
+
+ExecutionState::ExecutionState(const ExecutionState &state)
+  : fnAliases(state.fnAliases), 
+    fakeState(state.fakeState),
+    underConstrained(state.underConstrained), 
+    depth(state.depth), 
+    executor(state.executor),
+    lastCoveredTime(state.lastCoveredTime),
+    pc(state.pc), 
+    prevPC(state.prevPC),
+    constraints(state.constraints), 
+    queryCost(state.queryCost), 
+    weight(state.weight), 
+    addressSpace(state.addressSpace), 
+    pathOS(state.pathOS), 
+    symPathOS(state.symPathOS),
+    instsSinceCovNew(state.instsSinceCovNew),
+    coveredNew(state.coveredNew),
+    forkDisabled(state.forkDisabled),
+    coveredLines(state.coveredLines),
+    ptreeNode(state.ptreeNode), 
+    symbolics(state.symbolics),
+    shadowObjects(state.shadowObjects),
+    incomingBBIndex(state.incomingBBIndex),
+    preemptions(state.preemptions), 
+    trace(state.trace),
+    tls_keys(state.tls_keys),
+    TLSKeyGen(state.TLSKeyGen),
+    deadlock(state.deadlock),
+    backtrackingStates(state.backtrackingStates),
+    executedInstructions(state.executedInstructions)
+{
+  stack = new std::vector<StackFrame>(*(state.stack));
 }
 
 ExecutionState::~ExecutionState() {
-  while (!stack.empty()) popFrame();
+  while (!stack->empty()) popFrame();
 }
 
 ExecutionState *ExecutionState::branch() {
   depth++;
 
   ExecutionState *falseState = new ExecutionState(*this);
+  
+  for (std::vector<Thread*>::iterator it = this->threads.begin();
+       it != this->threads.end(); 
+       it++) {
+    Thread* t = new Thread(*(Thread*)(*it));
+    falseState->threads.push_back(t);
+  }
+  
+  if(falseState->threads. size() > 0 )
+    falseState->crtThread = falseState->threads[0];
+  
+  for(std::map<ref<Expr>, Mutex*>::iterator it = this->mutexes.begin();
+      it != this->mutexes.end(); 
+      it++) {
+    Mutex* mutex = new Mutex(*it->second);
+    ref<Expr> expr = it->first;
+    falseState->mutexes.insert(std::make_pair(expr, mutex));
+  }
+  
+  for(std::map<ref<Expr>, CondVar*>::iterator it = this->cond_vars.begin();
+      it != this->cond_vars.end();
+      it++) {
+    CondVar* cv = new CondVar(*it->second);
+    ref<Expr> expr = it->first;
+    falseState->cond_vars.insert(std::make_pair(expr, cv));
+  }  
+  
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
   falseState->addressSpace.state = falseState;
@@ -114,15 +183,15 @@ ExecutionState *ExecutionState::branch() {
 }
 
 void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack.push_back(StackFrame(caller,kf));
+  stack->push_back(StackFrame(caller,kf));
 }
 
 void ExecutionState::popFrame() {
-  StackFrame &sf = stack.back();
+  StackFrame &sf = stack->back();
   for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
          ie = sf.allocas.end(); it != ie; ++it)
     addressSpace.unbindObject(*it);
-  stack.pop_back();
+  stack->pop_back();
 }
 
 ///
@@ -143,13 +212,12 @@ void ExecutionState::removeFnAlias(std::string fn) {
 }
 
 /**/
-namespace klee {
 namespace c9 {
 
 std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
-	for (ExecutionState::stack_ty::const_iterator it = state.stack.begin();
-			it != state.stack.end(); it++) {
-		if (it != state.stack.begin()) {
+	for (ExecutionState::stack_ty::const_iterator it = state.stack->begin();
+			it != state.stack->end(); it++) {
+		if (it != state.stack->begin()) {
 			os << '(' << it->caller->info->assemblyLine << ',' << it->caller->info->file << ':' << it->caller->info->line << ')';
 			os << "]/[";
 		} else {
@@ -165,7 +233,7 @@ std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
 
 
 std::ostream &printStateConstraints(std::ostream &os, const ExecutionState &state) {
-	klee::ExprPPrinter::printConstraints(os, state.constraints);
+	ExprPPrinter::printConstraints(os, state.constraints);
 
 	return os;
 }
@@ -187,9 +255,8 @@ std::ostream &printStateMemorySummary(std::ostream &os,
 }
 
 }
-}
 
-std::ostream &klee::operator<<(std::ostream &os, const MemoryMap &mm) {
+std::ostream &operator<<(std::ostream &os, const MemoryMap &mm) {
 	os << "{";
 	MemoryMap::iterator it = mm.begin();
 	MemoryMap::iterator ie = mm.end();
@@ -202,7 +269,7 @@ std::ostream &klee::operator<<(std::ostream &os, const MemoryMap &mm) {
 	return os;
 }
 
-std::ostream &klee::operator<<(std::ostream &os, const ExecutionState &state) {
+std::ostream &operator<<(std::ostream &os, const ExecutionState &state) {
 	return klee::c9::printStateStack(os, state);
 }
 
@@ -222,16 +289,16 @@ bool ExecutionState::merge(const ExecutionState &b) {
     return false;
 
   {
-    std::vector<StackFrame>::const_iterator itA = stack.begin();
-    std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-    while (itA!=stack.end() && itB!=b.stack.end()) {
+    std::vector<StackFrame>::const_iterator itA = stack->begin();
+    std::vector<StackFrame>::const_iterator itB = b.stack->begin();
+    while (itA!=stack->end() && itB!=b.stack->end()) {
       // XXX vaargs?
       if (itA->caller!=itB->caller || itA->kf!=itB->kf)
         return false;
       ++itA;
       ++itB;
     }
-    if (itA!=stack.end() || itB!=b.stack.end())
+    if (itA!=stack->end() || itB!=b.stack->end())
       return false;
   }
 
@@ -324,9 +391,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
 
-  std::vector<StackFrame>::iterator itA = stack.begin();
-  std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-  for (; itA!=stack.end(); ++itA, ++itB) {
+  std::vector<StackFrame>::iterator itA = stack->begin();
+  std::vector<StackFrame>::const_iterator itB = b.stack->begin();
+  for (; itA!=stack->end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
     for (unsigned i=0; i<af.kf->numRegisters; i++) {
@@ -367,11 +434,80 @@ bool ExecutionState::merge(const ExecutionState &b) {
   return true;
 }
 
+/***/
+
+
+
+void ExecutionState::updateTraceInfo(Mutex* m, Thread* thread) {
+  
+  //update Lamport clock
+  m->traceInfo.lclock = 
+    ((m->traceInfo.lclock > thread->traceInfo.lclock) ? 
+     m->traceInfo.lclock:
+     thread->traceInfo.lclock) 
+    + 1;
+  thread->traceInfo.lclock = m->traceInfo.lclock;
+ 
+  addTraceItem(m->traceInfo, thread->traceInfo, thread->tid);
+  
+  m->traceInfo.lastThread = thread->tid;
+  m->traceInfo.lastOp = thread->traceInfo.op;
+  //XXX: should update the instruction too?
+}
+
+
+void ExecutionState::updateTraceInfo(CondVar *cv, Thread* thread) {
+
+  cv->traceInfo.lclock = 
+    ((cv->traceInfo.lclock > thread->traceInfo.lclock) ? 
+     cv->traceInfo.lclock:
+     thread->traceInfo.lclock) 
+    + 1;
+  thread->traceInfo.lclock = cv->traceInfo.lclock;
+
+  addTraceItem(cv->traceInfo, thread->traceInfo, thread->tid);
+  
+  //set thread:op that woke up a call to pthread_cond_wait
+  cv->traceInfo.lastThread = thread->tid; 
+  cv->traceInfo.lastOp = thread->traceInfo.op;
+}
+
+void ExecutionState::addPthreadCreateTraceItem(int tid) {
+  TraceItem *ti = new TraceItem(tid); //create event
+  trace.push_back(*ti);
+}
+
+
+
+/// Add a schedule trace item. On entry assume Lamport clock is updated already.
+void ExecutionState::addTraceItem(SchedSyncTraceInfo mtrace, 
+				  SchedThreadTraceInfo ttrace,
+				  uint64_t tid) {
+  TraceItem *ti;
+  ti = new TraceItem(mtrace.lastThread, 
+		     mtrace.lastOp, 
+		     tid,
+		     ttrace.op);
+  // should only add a new trace item only if it is not redundant
+  trace.push_back(*ti);
+}
+
+
+ref<Expr> ExecutionState::nextTLSKey() {
+  Expr::Width WordSize = Context::get().getPointerWidth();
+  if (WordSize == Expr::Int32)
+    return ConstantExpr::create(TLSKeyGen++, Expr::Int32);
+  if(WordSize == Expr::Int64)
+    return ConstantExpr::create(TLSKeyGen++, Expr::Int64);
+  assert(false && "unsupported pthread_key_t size");
+}
+
+
 void ExecutionState::dumpStack(std::ostream &out) const {
   unsigned idx = 0;
   const KInstruction *target = prevPC;
   for (ExecutionState::stack_ty::const_reverse_iterator
-         it = stack.rbegin(), ie = stack.rend();
+         it = stack->rbegin(), ie = stack->rend();
        it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.kf->function;
@@ -397,4 +533,6 @@ void ExecutionState::dumpStack(std::ostream &out) const {
     out << "\n";
     target = sf.caller;
   }
+}
+
 }

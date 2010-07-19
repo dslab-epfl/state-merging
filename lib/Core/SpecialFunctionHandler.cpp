@@ -94,6 +94,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_alias_function", handleAliasFunction, false),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
+  add("valloc", handleValloc, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -111,6 +112,26 @@ HandlerInfo handlerInfo[] = {
   add("_Znam", handleNewArray, true),
   // operator new(unsigned long)
   add("_Znwm", handleNew, true),
+
+
+  //pthreads functions
+  add("pthread_create", handlePthreadCreate, true),
+  add("pthread_join", handlePthreadJoin, true),
+  add("pthread_mutex_lock", handlePthreadMutexLock, true),
+  add("pthread_mutex_unlock", handlePthreadMutexUnlock, true),
+  add("pthread_mutex_init", handlePthreadMutexInit, true),
+  add("pthread_mutex_destroy", handlePthreadMutexDestroy, true),
+  add("pthread_exit", handlePthreadExit, true),
+  add("pthread_cond_wait", handlePthreadCondWait, true),
+  add("pthread_cond_signal", handlePthreadCondSignal, true),
+  add("pthread_cond_broadcast", handlePthreadCondBroadcast, true),
+  add("pthread_cond_init", handlePthreadCondInit, true),
+  add("pthread_cond_destroy", handlePthreadCondDestroy, true),
+  add("pthread_key_create", handlePthreadKeyCreate, true),
+  add("pthread_getspecific", handlePthreadGetSpecific, true),
+  add("pthread_setspecific", handlePthreadSetSpecific, true),
+  add("pthread_key_delete", handlePthreadKeyDelete, true),
+
 
 #undef addDNR
 #undef add  
@@ -360,6 +381,18 @@ void SpecialFunctionHandler::handleMalloc(ExecutionState &state,
   executor.executeAlloc(state, arguments[0], false, target);
 }
 
+
+void SpecialFunctionHandler::handleValloc(ExecutionState &state, 
+					  KInstruction *target, 
+					  std::vector<ref<Expr> > &arguments) {
+  
+  // XXX ignoring for now the "multiple of page size " requirement 
+  //- executing the regular alloc
+  // XXX should type check args
+  assert(arguments.size() == 1 && "invalid number of arguments to valloc");
+  executor.executeAlloc(state, arguments[0], false, target);
+}
+
 void SpecialFunctionHandler::handleAssume(ExecutionState &state,
                             KInstruction *target,
                             std::vector<ref<Expr> > &arguments) {
@@ -367,8 +400,6 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
   
   ref<Expr> e = arguments[0];
   
-  //CLOUD9_DEBUG("Checking expression for assumption: " << e << " of width: " << e->getWidth());
-
   if (e->getWidth() != Expr::Bool)
     e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
   
@@ -451,7 +482,7 @@ void SpecialFunctionHandler::handleWarning(ExecutionState &state,
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning");
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning("%s: %s", state.stack.back().kf->function->getName().data(), 
+  klee_warning("%s: %s", state.stack->back().kf->function->getName().data(), 
                msg_str.c_str());
 }
 
@@ -462,7 +493,7 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
          "invalid number of arguments to klee_warning_once");
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning_once(0, "%s: %s", state.stack.back().kf->function->getName().data(),
+  klee_warning_once(0, "%s: %s", state.stack->back().kf->function->getName().data(),
                     msg_str.c_str());
 }
 
@@ -521,6 +552,169 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
                      ConstantExpr::create(errno, Expr::Int32));
 }
 
+// pthreads handlers
+
+void SpecialFunctionHandler::handlePthreadCreate(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments) 
+{
+  assert(arguments.size() == 4 &&
+	 "invalid number of arguments to pthread_create");
+  
+  //for now we ignore the attribute arguments to pthread_create
+  executor.executePthreadCreate(state, target, arguments[0], arguments[1], arguments[2], arguments[3]);
+}
+
+void SpecialFunctionHandler::handlePthreadJoin(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==2 &&
+	 "invalid number of arguments to pthread_join");
+  
+  executor.executePthreadJoin(state, target, arguments[0], arguments[1]);  
+}
+
+void SpecialFunctionHandler::handlePthreadMutexLock(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 && 
+	 "invalid number of arguments to pthread_mutex_lock");
+  
+  executor.executePthreadMutexLock(state, target, arguments[0]);  
+}
+
+void SpecialFunctionHandler::handlePthreadMutexUnlock(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+	 "invalid number of arguments to pthread_mutex_unlock");
+  
+  executor.executePthreadMutexUnlock(state, target, arguments[0]);  
+}
+
+void SpecialFunctionHandler::handlePthreadMutexInit(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==2 &&
+	 "invalid number of arguments to pthread_mutex_init");
+  
+  executor.executePthreadMutexInit(state, target, arguments[0], arguments[1]);  
+}
+
+void SpecialFunctionHandler::handlePthreadMutexDestroy(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+	 "invalid number of arguments to pthread_mutex_destroy");
+  
+  executor.executePthreadMutexDestroy(state, target, arguments[0]);  
+}
+
+
+void SpecialFunctionHandler::handlePthreadExit(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+	 "invalid number of arguments to pthread_exit");
+  
+  executor.executePthreadExit(state, target, arguments[0]);  
+}
+
+void SpecialFunctionHandler::handlePthreadCondWait(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==2 && 
+	 "invalid number of arguments to pthread_cond_wait");
+  
+  executor.executePthreadCondWait(state, target, arguments[0], arguments[1]);  
+}
+
+void SpecialFunctionHandler::handlePthreadCondSignal(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+	 "invalid number of arguments to pthread_signal");
+  
+  executor.executePthreadCondSignal(state, target, arguments[0]);  
+}
+
+void SpecialFunctionHandler::handlePthreadCondBroadcast(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+	 "invalid number of arguments to pthread_broadcast");
+  
+  executor.executePthreadCondBroadcast(state, target, arguments[0]);  
+}
+
+void SpecialFunctionHandler::handlePthreadCondInit(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==2 &&
+	 "invalid number of arguments to pthread_cond_init");
+  
+  executor.executePthreadCondInit(state, target, arguments[0], arguments[1]);  
+}
+
+void SpecialFunctionHandler::handlePthreadCondDestroy(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+	 "invalid number of arguments to pthread_cond_destroy");
+  
+  executor.executePthreadCondDestroy(state, target, arguments[0]);  
+}
+
+
+
+void SpecialFunctionHandler::handlePthreadKeyCreate(ExecutionState &state, 
+						    KInstruction *target, 
+						    std::vector <ref<Expr> > &arguments)
+{
+  assert(arguments.size() == 2 &&
+	 "invalid number of arguments to pthread_key_create");
+  executor.executePthreadKeyCreate(state, target, arguments[0], arguments[1]);
+}
+
+
+void SpecialFunctionHandler::handlePthreadGetSpecific(ExecutionState &state, 
+						    KInstruction *target, 
+						    std::vector <ref<Expr> > &arguments)
+{
+  assert(arguments.size() == 1 &&
+	 "invalid number of arguments to pthread_getspecific");
+  executor.executePthreadGetSpecific(state, target, arguments[0]);
+}
+
+void SpecialFunctionHandler::handlePthreadSetSpecific(ExecutionState &state, 
+						    KInstruction *target, 
+						    std::vector <ref<Expr> > &arguments)
+{
+  assert(arguments.size() == 2 &&
+	 "invalid number of arguments to pthread_setspecific");
+  executor.executePthreadSetSpecific(state, target, arguments[0], arguments[1]);
+}
+
+void SpecialFunctionHandler::handlePthreadKeyDelete(ExecutionState &state, 
+						    KInstruction *target, 
+						    std::vector <ref<Expr> > &arguments)
+{
+  assert(arguments.size() == 1 &&
+	 "invalid number of arguments to pthread_key_delete");
+  executor.executePthreadKeyDelete(state, target, arguments[0]);
+}
+
 void SpecialFunctionHandler::handleCalloc(ExecutionState &state,
                             KInstruction *target,
                             std::vector<ref<Expr> > &arguments) {
@@ -542,7 +736,6 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   ref<Expr> address = arguments[0];
   ref<Expr> size = arguments[1];
 
-  //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
   Executor::StatePair zeroSize = executor.fork(state, 
                                                Expr::createIsZero(size), 
                                                true);
@@ -551,7 +744,6 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
     executor.executeFree(*zeroSize.first, address, target);   
   }
   if (zeroSize.second) { // size != 0
-	  //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     Executor::StatePair zeroPointer = executor.fork(*zeroSize.second, 
                                                     Expr::createIsZero(address), 
                                                     true);
@@ -687,8 +879,6 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
     assert(success && "FIXME: Unhandled solver failure");
     
     if (res) {
-      //if (state.pc->info->file.find("runtime") == std::string::npos)
-      //    return;
       executor.executeMakeSymbolic(*s, mo);
     } else {      
       executor.terminateStateOnError(*s, 

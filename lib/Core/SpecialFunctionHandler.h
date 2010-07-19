@@ -83,6 +83,7 @@ namespace klee {
     HANDLER(handleIsSymbolic);
     HANDLER(handleMakeSymbolic);
     HANDLER(handleMalloc);
+    HANDLER(handleValloc);
     HANDLER(handleMarkGlobal);
     HANDLER(handleMerge);
     HANDLER(handleNew);
@@ -100,6 +101,22 @@ namespace klee {
     HANDLER(handleUnderConstrained);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);
+    HANDLER(handlePthreadCreate);
+    HANDLER(handlePthreadJoin);
+    HANDLER(handlePthreadMutexLock);
+    HANDLER(handlePthreadMutexUnlock);
+    HANDLER(handlePthreadMutexInit);
+    HANDLER(handlePthreadMutexDestroy);
+    HANDLER(handlePthreadExit);
+    HANDLER(handlePthreadCondWait);
+    HANDLER(handlePthreadCondSignal);
+    HANDLER(handlePthreadCondBroadcast);
+    HANDLER(handlePthreadCondInit);
+    HANDLER(handlePthreadCondDestroy);
+    HANDLER(handlePthreadKeyCreate);
+    HANDLER(handlePthreadGetSpecific);
+    HANDLER(handlePthreadSetSpecific);
+    HANDLER(handlePthreadKeyDelete);
 #undef HANDLER
   };
 } // End klee namespace

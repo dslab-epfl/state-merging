@@ -20,6 +20,10 @@
 
 #include "llvm/System/TimeValue.h"
 
+#include "klee/Thread.h"
+#include "klee/Mutex.h"
+#include "klee/CondVar.h"
+
 #include <map>
 #include <set>
 #include <vector>
@@ -55,35 +59,9 @@ std::ostream &operator<<(std::ostream &os, const ExecutionState &state); // XXX 
 std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
 
-struct StackFrame {
-  KInstIterator caller;
-  KFunction *kf;
-  CallPathNode *callPathNode;
-
-  std::vector<const MemoryObject*> allocas;
-  Cell *locals;
-
-  /// Minimum distance to an uncovered instruction once the function
-  /// returns. This is not a good place for this but is used to
-  /// quickly compute the context sensitive minimum distance to an
-  /// uncovered instruction. This value is updated by the StatsTracker
-  /// periodically.
-  unsigned minDistToUncoveredOnReturn;
-
-  // For vararg functions: arguments not passed via parameter are
-  // stored (packed tightly) in a local (alloca) memory object. This
-  // is setup to match the way the front-end generates vaarg code (it
-  // does not pass vaarg through as expected). VACopy is lowered inside
-  // of intrinsic lowering.
-  MemoryObject *varargs;
-
-  StackFrame(KInstIterator caller, KFunction *kf);
-  StackFrame(const StackFrame &s);
-  ~StackFrame();
-};
-
 class ExecutionState {
 	friend class ObjectState;
+
 public:
   typedef std::vector<StackFrame> stack_ty;
 
@@ -105,7 +83,7 @@ public:
   
   // pc - pointer to current instruction stream
   KInstIterator pc, prevPC;
-  stack_ty stack;
+  stack_ty *stack;
   ConstraintManager constraints;
   mutable double queryCost;
   double weight;
@@ -138,10 +116,38 @@ public:
 
   unsigned incomingBBIndex;
 
+  // For a multi threded ExecutionState
+  std::vector<Thread*> threads;
+  Thread* crtThread;
+  std::map<ref<Expr>, Mutex*> mutexes;
+  std::map<ref<Expr>, CondVar*> cond_vars;
+  unsigned int preemptions;
+  std::vector<TraceItem> trace;
+  std::map< ref<Expr> , KFunction*> tls_keys;
+  uint64_t TLSKeyGen;
+  ref<Expr> nextTLSKey(); 
+  bool deadlock;
+  std::map<Mutex*, ExecutionState*> backtrackingStates;
+
+  int executedInstructions;
+
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
   
+  //Thread schedule trace management
+  
+  /// Add a trace item to the trace
+  void addTraceItem(SchedSyncTraceInfo mtrace,
+		    SchedThreadTraceInfo ttrace,
+		    uint64_t tid);
+  /// Mutex operations
+  void updateTraceInfo(Mutex *m, Thread *t);
+  /// Condition variable operations
+  void updateTraceInfo(CondVar *cv, Thread *t);
+  /// Thread create operations
+  void addPthreadCreateTraceItem(int tid);
+
 private:
   ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor),
   fakeState(false), underConstrained(0), addressSpace(this),
@@ -153,6 +159,8 @@ public:
   // XXX total hack, just used to make a state so solver can
   // use on structure
   ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions);
+
+  ExecutionState(const ExecutionState &state);
 
   ~ExecutionState();
   

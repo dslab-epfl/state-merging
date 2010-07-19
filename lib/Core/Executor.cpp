@@ -77,7 +77,7 @@
 #include <errno.h>
 #include <cxxabi.h>
 
-using namespace llvm;
+//using namespace llvm;
 using namespace klee;
 
 namespace {
@@ -252,6 +252,32 @@ namespace {
   STPOptimizeDivides("stp-optimize-divides", 
                  cl::desc("Optimize constant divides into add/shift/multiplies before passing to STP"),
                  cl::init(true));
+
+  cl::opt<unsigned int>
+  MaxPreemptions("scheduler-preemption-bound",
+		 cl::desc("scheduler preemption bound (default=0)"),
+		 cl::init(0));
+  
+  cl::opt<bool>
+  ForkOnSchedule("fork-on-schedule", 
+		 cl::desc("fork when various schedules are possible (defaul=disabled)"),
+		 cl::init(false));
+  
+  cl::opt<bool>
+  BacktrackingScheduler("with-backtracking-scheduler", 
+			cl::desc("backtracking scheduler (defaul=disabled)"),
+			cl::init(false));
+  
+  cl::opt<bool>
+  RoundRobin("round-robin-policy", 
+	     cl::desc("round robin scheduling policy (defaul=disabled)"),
+	     cl::init(false));
+  
+  cl::opt<bool>
+  printThreadDebug("print-thread-debug",
+		   cl::desc("print thread debug (default = disable)"), 
+		   cl::init(false));
+
 }
 
 
@@ -295,6 +321,8 @@ Solver *constructSolverChain(STPSolver *stpSolver,
   return solver;
 }
 
+//namespace klee {
+
 Executor::Executor(const InterpreterOptions &opts,
                    InterpreterHandler *ih) 
   : Interpreter(opts),
@@ -315,8 +343,9 @@ Executor::Executor(const InterpreterOptions &opts,
     haltExecution(false),
     ivcEnabled(false),
     stpTimeout(MaxSTPTime != 0 && MaxInstructionTime != 0
-      ? std::min(MaxSTPTime,MaxInstructionTime)
-      : std::max(MaxSTPTime,MaxInstructionTime)) {
+	       ? std::min(MaxSTPTime,MaxInstructionTime)
+	       : std::max(MaxSTPTime,MaxInstructionTime)),
+    nrSchedules(0) {
   STPSolver *stpSolver = new STPSolver(UseForkedSTP, STPOptimizeDivides);
   Solver *solver = 
     constructSolverChain(stpSolver,
@@ -328,6 +357,7 @@ Executor::Executor(const InterpreterOptions &opts,
   this->solver = new TimingSolver(solver, stpSolver);
 
   memory = new MemoryManager();
+
 }
 
 
@@ -561,6 +591,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       if (!mo)
         mo = memory->allocate(size, false, true, &*i);
+      if(!mo)
+	klee_message("cannot allocate memory for global %s", i->getNameStr().c_str());
       assert(mo && "out of memory");
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(i, mo));
@@ -685,7 +717,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
       statsTracker->elapsed() > 60.) {
     StatisticManager &sm = *theStatisticManager;
-    CallPathNode *cpn = current.stack.back().callPathNode;
+    CallPathNode *cpn = current.stack->back().callPathNode;
     if ((MaxStaticForkPct<1. &&
          sm.getIndexedValue(stats::forks, sm.getIndex()) > 
          stats::forks*MaxStaticForkPct) ||
@@ -949,7 +981,7 @@ ref<klee::ConstantExpr> Executor::evalConstant(Constant *c) {
   } else {
     if (const ConstantInt *ci = dyn_cast<ConstantInt>(c)) {
       return ConstantExpr::alloc(ci->getValue());
-    } else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c)) {      
+    } else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c)) {
       return ConstantExpr::alloc(cf->getValueAPF().bitcastToAPInt());
     } else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
       return globalAddresses.find(gv)->second;
@@ -978,7 +1010,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    StackFrame &sf = state.stack.back();
+    StackFrame &sf = state.stack->back();
     return sf.locals[index];
   }
 }
@@ -991,6 +1023,12 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state,
 void Executor::bindArgument(KFunction *kf, unsigned index, 
                             ExecutionState &state, ref<Expr> value) {
   getArgumentCell(state, kf, index).value = value;
+}
+
+
+void Executor::bindArgumentToPthreadCreate(KFunction *kf, unsigned index, 
+					   StackFrame &sf, ref<Expr> value) {
+  getArgumentCell(sf, kf, index).value = value;
 }
 
 ref<Expr> Executor::toUnique(const ExecutionState &state, 
@@ -1107,6 +1145,43 @@ void Executor::stepInstruction(ExecutionState &state) {
     haltExecution = true;
 }
 
+
+std::string Executor::backtrace(Thread *t) const
+{
+  std::stringstream str;
+  llvm::Function *prev_f = 0, *f = 0;
+  std::vector<std::string> items;
+  items.reserve(t->stack->size());
+  for(std::vector<StackFrame>::iterator sf = t->stack->begin();
+      sf != t->stack->end();
+	sf++)
+    {
+      KFunction *kf = (*sf).kf;
+      f = kf->function;
+      KInstIterator caller = (*sf).caller;
+      if(caller && prev_f)
+	{
+	  InstructionInfo ii = *caller->info;
+	  std::stringstream s;
+	  s << prev_f->getName().str() << " " << ii.file << " " << ii.line << std::endl;
+	  items.push_back(s.str());
+	}
+      prev_f = f;
+    }
+  
+  //XXX: need to obtain the lineno and file for the top frame
+  std::stringstream s;  
+  s << prev_f->getName().str() << " " << t->_file << " " << t->_line << std::endl;
+  items.push_back(s.str());
+  
+  for(std::vector<std::string>::reverse_iterator it = items.rbegin(); 
+      it != items.rend(); 
+      it++)
+    str << (*it);
+  
+  return str.str();
+}
+
 void Executor::executeCall(ExecutionState &state, 
                            KInstruction *ki,
                            Function *f,
@@ -1124,7 +1199,7 @@ void Executor::executeCall(ExecutionState &state,
       // va_arg is handled by caller and intrinsic lowering, see comment for
       // ExecutionState::varargs
     case Intrinsic::vastart:  {
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = state.stack->back();
       assert(sf.varargs && 
              "vastart called in function with no vararg object");
 
@@ -1185,7 +1260,7 @@ void Executor::executeCall(ExecutionState &state,
     state.pc = kf->instructions;
         
     if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
+      statsTracker->framePushed(state, &(*state.stack)[state.stack->size()-2]); //XXX TODO fix this ugly stuff
  
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -1208,7 +1283,7 @@ void Executor::executeCall(ExecutionState &state,
         return;
       }
             
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = state.stack->back();
       unsigned size = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
         // FIXME: This is really specific to the architecture, not the pointer
@@ -1267,7 +1342,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // instructions know which argument to eval, set the pc, and continue.
   
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack.back().kf;
+  KFunction *kf = state.stack->back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
   state.pc = &kf->instructions[entry];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
@@ -1346,7 +1421,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Control flow
   case Instruction::Ret: {
     ReturnInst *ri = cast<ReturnInst>(i);
-    KInstIterator kcaller = state.stack.back().caller;
+    KInstIterator kcaller = state.stack->back().caller;
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
@@ -1357,9 +1432,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       result = eval(ki, 0, state).value;
     }
     
-    if (state.stack.size() <= 1) {
+    if (state.stack->size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      terminateStateOnExit(state);
+      
+      if(state.threads.size() == 1) {
+	//main exit
+	terminateStateOnExit(state);
+      } else {
+	//non main thread exit
+	executeThreadExit(state, ki);
+      }
     } else {
       state.popFrame();
 
@@ -1407,13 +1489,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
   case Instruction::Unwind: {
     for (;;) {
-      KInstruction *kcaller = state.stack.back().caller;
+      KInstruction *kcaller = state.stack->back().caller;
       state.popFrame();
 
       if (statsTracker)
         statsTracker->framePopped(state);
 
-      if (state.stack.empty()) {
+      if (state.stack->empty()) {
         terminateStateOnExecError(state, "unwind from initial stack frame");
         break;
       } else {
@@ -1450,7 +1532,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned
       // up with convenient instruction specific data.
-      if (statsTracker && state.stack.back().kf->trackCoverage)
+      if (statsTracker && state.stack->back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
       if (branches.first)
@@ -1733,7 +1815,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::Or: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
-    //CLOUD9_DEBUG("Instruction Or: " << state);
     ref<Expr> result = OrExpr::create(left, right);
     bindLocal(ki, state, result);
     break;
@@ -2444,7 +2525,7 @@ void Executor::run(ExecutionState &initialState) {
     double lastTime, startTime = lastTime = util::getWallTime();
     ExecutionState *lastState = 0;
     while (!seedMap.empty()) {
-      if (haltExecution) return;
+      if (haltExecution) goto dump;
 
       std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it = 
         seedMap.upper_bound(lastState);
@@ -2494,7 +2575,7 @@ void Executor::run(ExecutionState &initialState) {
     }
 
     if (OnlySeed)
-      return;
+      goto dump;
   }
 
   searcher = initSearcher(NULL);
@@ -2509,7 +2590,19 @@ void Executor::run(ExecutionState &initialState) {
 
   delete searcher;
   searcher = 0;
-
+  
+ dump:
+  if (DumpStatesOnHalt && !states.empty()) {
+    std::cerr << "KLEE: halting execution, dumping remaining states\n";
+    for (std::set<ExecutionState*>::iterator
+           it = states.begin(), ie = states.end();
+         it != ie; ++it) {
+      ExecutionState &state = **it;
+      stepInstruction(state); // keep stats rolling
+      terminateStateEarly(state, "execution halting");
+    }
+    updateStates(0);
+  }
 }
 
 std::string Executor::getAddressInfo(ExecutionState &state, 
@@ -2683,7 +2776,6 @@ void Executor::callExternalFunction(ExecutionState &state,
       ce->toMemory(&args[wordIndex]);
       wordIndex += (ce->getWidth()+63)/64;
     } else {
-    	//CLOUD9_DEBUG("Trying to concretize expression " << *ai);
       ref<Expr> arg = toUnique(state, *ai);
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
         // XXX kick toMemory functions from here
@@ -2716,17 +2808,12 @@ void Executor::callExternalFunction(ExecutionState &state,
       klee_warning_once(function, "%s", os.str().c_str());
   }
   
-  //if (function->getNameStr() == "vprintf") {
-  //  CLOUD9_INFO("Skipping vprintf string: " << (char*)args[1] << " arg size = "
-//					    << arguments.size());
- // } else {
-    bool success = externalDispatcher->executeCall(function, target->inst, args);
-    if (!success) {
-      terminateStateOnError(state, "failed external call: " + function->getName(),
-			    "external.err");
-      return;
-    }
-  //}
+  bool success = externalDispatcher->executeCall(function, target->inst, args);
+  if (!success) {
+    terminateStateOnError(state, "failed external call: " + function->getName(),
+                          "external.err");
+    return;
+  }
 
   if (!state.addressSpace.copyInConcretes()) {
     terminateStateOnError(state, "external modified read-only object",
@@ -2782,7 +2869,7 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // matter because all we use this list for is to unbind the object
   // on function return.
   if (isLocal)
-    state.stack.back().allocas.push_back(mo);
+    state.stack->back().allocas.push_back(mo);
 
   return os;
 }
@@ -2846,7 +2933,6 @@ void Executor::executeAlloc(ExecutionState &state,
       example = tmp;
     }
 
-    //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     StatePair fixedSize = fork(state, EqExpr::create(example, size), true);
     
     if (fixedSize.second) { 
@@ -2867,7 +2953,6 @@ void Executor::executeAlloc(ExecutionState &state,
       } else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
-    	//C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
         StatePair hugeSize = 
           fork(*fixedSize.second, 
                UltExpr::create(ConstantExpr::alloc(1<<31, W), size), 
@@ -2900,7 +2985,6 @@ void Executor::executeAlloc(ExecutionState &state,
 void Executor::executeFree(ExecutionState &state,
                            ref<Expr> address,
                            KInstruction *target) {
-	//C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
   StatePair zeroPointer = fork(state, Expr::createIsZero(address), true);
   if (zeroPointer.first) {
     if (target)
@@ -2949,7 +3033,6 @@ void Executor::resolveExact(ExecutionState &state,
        it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
     
-    //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     StatePair branches = fork(*unbound, inBounds, true);
     
     if (branches.first)
@@ -2967,6 +3050,914 @@ void Executor::resolveExact(ExecutionState &state,
                           getAddressInfo(*unbound, p));
   }
 }
+
+KFunction* Executor::resolveFunction(ref<Expr> address)
+{
+  for (std::vector<KFunction*>::iterator fi = kmodule->functions.begin();
+	 fi != kmodule->functions.end(); fi++) {
+    KFunction* f = (*fi);      
+    ref<Expr> addr = Expr::createPointer((uint64_t) (void*) f->function);
+    if(addr == address)
+      return f;
+  }
+  return NULL;
+}
+
+void Executor::printDebug(ExecutionState &state, std::string s, bool line)
+{
+  if(printThreadDebug) {
+    std::cerr << "ESD: #################################################################" << std::endl;
+    if(line) 
+      {
+	printFileLine(state, state.pc);
+	std::cerr << std::endl;
+      }
+    std::cerr << " state " << &state;
+    std::cerr << " thread " << state.crtThread->tid << std::endl;
+    std::cerr << s << std::endl;
+  }
+}
+
+
+//pthread handlers
+void  Executor::executePthreadCreate(ExecutionState &state,
+				     KInstruction *target,
+				     ref<Expr>  thread,
+				     ref<Expr> attr, 
+				     ref<Expr>  start_function,
+				     ref<Expr> arg)
+{
+  //XXX: sanity check arg
+  std::stringstream msg;
+  msg << "pthreadCreate thread " << thread;
+  printDebug(state, msg.str(), true);
+
+  thread = toUnique(state, thread);
+
+  assert(isa<ConstantExpr>(thread) &&
+	 "pthread_t thread variable is not constant - unsupported yet"); 
+  
+  ConstantExpr *thread_address = dyn_cast<ConstantExpr>(thread);
+
+  ObjectPair op;
+  state.addressSpace.resolveOne(thread_address, op);
+  const MemoryObject *mo = op.first;
+  ref<Expr> offset = mo->getOffsetExpr(thread);
+
+  Expr::Width W = thread->getWidth();
+  ref<Expr> value = op.second->read(offset, W);
+
+  KFunction *kf = resolveFunction(start_function);
+  assert(kf && "cannot resolve thread start function");
+  
+  Thread* t = new Thread (thread, value, kf);
+  state.threads.push_back(t);
+ 
+  bindArgumentToPthreadCreate(kf, 0, t->stack->back(), arg);
+  
+  std::stringstream dmesg;
+  dmesg << "created thread " << t->tid;
+  printDebug(state, dmesg.str(), true);
+  
+  //tracing the call
+  state.addPthreadCreateTraceItem(t->tid);
+
+  initTLS(state, t);
+
+  // XXX: Fault Injection - great oportunity to return all kinds of errors
+  // The pthread_create() function shall fail if
+  // EAGAIN 
+  // The system lacked the necessary resources to create another thread, 
+  // or the system-imposed limit on the total number of threads in a 
+  // process {PTHREAD_THREADS_MAX} would be exceeded.
+  // EINVAL 
+  // The value specified by attr is invalid.
+  // EPERM  
+  // The caller does not have appropriate permission to set the required
+  // scheduling parameters or scheduling policy.
+
+  //return 0 from pthread_create
+  int returnValue = 0;
+  bindLocal(target, state, ConstantExpr::create(returnValue, 
+						getWidthForLLVMType(target->inst->getType())));
+}
+
+void Executor::initTLS(ExecutionState &state, Thread* t)
+{
+  for (std::map< ref<Expr> , KFunction*>::iterator it = 
+	 state.tls_keys.begin();
+       it != state.tls_keys.end(); it++)
+    {
+      ref<Expr> key = (*it).first;
+      t->tls[key] = Expr::createPointer(0);
+    }
+}
+
+//XXX: currently assuming no pthread_lock/unlock can be 
+//called while the thread is executing the destructor, 
+//though it might work
+
+/// Returns true if there are any destructors to call
+bool Executor::destroyTLS(ExecutionState &state, 
+			  KInstruction* ki,
+			  Thread* thread)
+{
+
+  // XXX: We currently  this part of the specification:
+  // If, after all the destructors have been called for all non-NULL 
+  // values with associated destructors, there are still some non-NULL 
+  // values with  associated  destructors,  then  the  process  is
+  // repeated.  If, after at least {PTHREAD_DESTRUCTOR_ITERATIONS} iterations 
+  // of destructor calls for outstanding non-NULL values, there are still some 
+  // non-NULL values with associated destructors, 
+  // even though this might result in an infinite loop.
+  
+  bool res = false;
+  for(std::map< ref<Expr> , KFunction*>::iterator it =  state.tls_keys.begin();
+      it != state.tls_keys.end(); it++)
+    {
+      ref<Expr> key = (*it).first;
+      KFunction* kf = (*it).second;
+      ref<Expr> previous = thread->tls[key];
+      thread->tls[key] = 0;
+      if(kf) 
+	{
+	  //build arguments
+	  std::vector <ref<Expr> > arguments;
+	  arguments.push_back(previous);
+	  res = true;
+	  //call the destructor
+    	  executeCall(state, ki, kf->function, arguments);
+	}	
+    }
+  return res;
+}
+
+
+
+void  Executor::executePthreadJoin(ExecutionState &state, 
+				   KInstruction *ki, 
+				   ref<Expr> thread, 
+				   ref<Expr> value_ptr) {
+  thread = toUnique(state, thread);
+  assert(isa<ConstantExpr>(thread) &&
+	 "pthread_t thread variable is not constant");
+  
+  bool running = false;
+  uint64_t toJoin = 0;
+  for (std::vector<Thread*>::iterator it = state.threads.begin();
+       it != state.threads.end(); it++) {
+    if((*it) != state.crtThread) {
+      if(thread == (*it)->value) {
+	toJoin = (*it)->tid;
+	running = true;
+	break;
+      }
+    }
+  }
+  
+  //if toJoin == 0 => the thread to join already exited
+    
+  // set the return value to the current stack ... 
+  // if we want to enable FI we need to find a better solution
+  // such as binding the return value using bindObjectInState(....
+  // from the joining thread
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+  
+  // Fault Injection - can set ERRNO to these values
+  // The pthread_join() function SHALL fail if:
+  // EINVAL 
+  // The implementation has detected that the value specified by thread does not refer to a joinable thread.
+  // ESRCH  
+  // No thread could be found corresponding to that specified by the given thread ID.
+  // The pthread_join() function MAY fail if:
+  //  EDEADLK
+  // A deadlock was detected or the value of thread specifies the calling thread.
+  
+  // the thread to join is still running
+  if(running)
+    {
+      state.crtThread->joinState = true;
+      state.crtThread->joining = toJoin;
+      state.crtThread->enabled = false;
+      schedule(state, false);
+    }
+  // Simply return from pthread_join. This thread will be scheduled back after it was joined.
+}
+
+
+Thread* Executor::getByTid(ExecutionState &state, uint64_t tid)
+{
+  for(std::vector<Thread*>::iterator it = state.threads.begin();
+      it != state.threads.end();
+      it++) {
+    Thread* thr = (*it);
+    if (thr->tid == tid)
+      return thr;
+  }
+  return NULL;
+}
+
+void Executor::updateTraceOnDeadlock(ExecutionState &state)
+{
+  for(std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.begin();
+      it != state.mutexes.end();
+      it++) {
+    Mutex *m = it->second;
+    if (m->waiting.size() > 0) {
+      uint64_t tid  = *m->waiting.begin(); // next thread to get this lock
+      
+      //XXX optimize this using a map from tids to Threads
+      Thread* t = getByTid(state, tid);
+      
+      //adding a trace item for the enabled thread
+      //TODO: check if this will still hold for rw_lock
+      state.updateTraceInfo(m, t);
+    }
+  }
+}
+
+
+// returns false in case the mutex is not defined 
+// or a deadlock happened
+bool Executor::acquireMutex(ExecutionState &state,
+			    KInstruction *ki,
+			    ref<Expr> mutex)
+{
+  std::stringstream dmesg;
+  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  Mutex * m;
+
+  if(it == state.mutexes.end())
+    {
+      //this must be a mutex initialized with PTHREAD_MUTEX_INITALIZER
+      //XXX: should better check that the pthread_mutex_t at this addr is zeroed
+      mutex = toUnique(state, mutex);
+      assert(isa<ConstantExpr>(mutex) && "mutex address");
+      m = new Mutex(mutex);
+      state.mutexes.insert(std::make_pair(mutex, m));
+    }
+  else
+    m = it->second;
+  
+  //XXX: should update this to work for trylock type of synchronization
+  state.crtThread->traceInfo.op++;
+  
+  //line info for obtaining a propper top frame in the backtrace
+  state.crtThread->_file = ki->info->file;
+  state.crtThread->_line = ki->info->line;
+
+  if(!m->taken)
+    {
+      dmesg << "mutex 0x" << std::hex << mutex << " was free";
+      printDebug(state, dmesg.str(), true);
+	  
+      m->thread = state.crtThread->tid;  // set the mutex owner
+      m->taken = true; // acquire the mutex
+      state.crtThread->enabled = true;
+
+      state.updateTraceInfo(m, state.crtThread);
+    }
+  else
+    {
+      dmesg << "mutex 0x" << std::hex << mutex << " is taken by "<< m->thread<< " ... sleeping";
+      printDebug(state, dmesg.str(), true);
+	  
+      state.crtThread->enabled = false;
+      // enqueue this thread in the mutex waiting queue
+      m->waiting.push_back(state.crtThread->tid);
+    }
+
+  return true;
+    
+  //else
+  //terminateStateOnError(state, "mutex not defined?", "user.err");
+  //return false;
+}
+  
+
+void  Executor::executePthreadMutexLock(ExecutionState &state, 
+					KInstruction *ki, 
+					ref<Expr> mutex)
+{
+  mutex = toUnique(state, mutex);
+  assert(isa<ConstantExpr>(mutex) &&  "unhandled: mutex address is not constant");
+  assert(state.crtThread->enabled && "cannot execute a thread that is not in an enabled state");
+  if(!acquireMutex(state, ki, mutex))
+    return;
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+  
+  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  assert(it != state.mutexes.end() && 
+	 "inconsitency in mutex management detected during mutex lock");
+  schedule(state, false, LOCK, it->second);
+
+  //fault injection could try returning something else
+  // [EDEADLK]          
+  // A deadlock would occur if the thread blocked waiting for mutex.
+  // [EINVAL]           
+  // The value specified by mutex is invalid.
+}
+
+
+void Executor::releaseMutex(ExecutionState &state, 
+		       ref<Expr> mutex)
+{
+  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  if(it != state.mutexes.end())  {
+    Mutex *m = it->second;
+    
+    uint64_t tid = state.crtThread->tid;
+    
+    state.crtThread->traceInfo.op++;
+    state.updateTraceInfo(m, state.crtThread);
+    
+    if(m->waiting.size() != 0) {
+      // the current code simply enables the next thread in the mutex queue
+      // this is equivalent with the next thread acquiring the lock but 
+      // this is done before the next thread actually starts executing
+      // perhaps there is a better way to do this
+      // we could at least call acquire with the next thread as param 
+      // so we can have a common point for placing hooks into acquire, 
+      // such as the deadlock detection one
+      
+      tid  = *m->waiting.begin(); // next thread to get this lock
+      
+      //XXX:zamf optimize this using a map from tids to Threads
+      Thread* t = getByTid(state, tid);
+      
+      //adding a trace item for the enabled thread
+      //TODO: check if this will still hold for rw_lock
+      state.updateTraceInfo(m, t); 
+      
+      //TODO: could also help the scheduler a bit by puting this thread
+      //in front of the scheduling queue
+      t->enabled = true;
+      m->waiting.erase(m->waiting.begin());
+      
+      // TODO: do we need the owner?
+      m->thread = t->tid;  // replace the owner
+    }
+    m->taken = false;
+
+#ifdef DataRaceSearch    
+    if(DataRaceSearch)
+      dataRaceDetector->release(state, m_addr);
+#endif
+
+  }
+  else
+    terminateStateOnError(state, "mutex not defined?", "user.err");
+}
+
+void  Executor::executePthreadMutexUnlock(ExecutionState &state, 
+					  KInstruction *ki, 
+					  ref<Expr> mutex)
+{
+  assert(state.crtThread->enabled 
+	 && "cannot execute a thread that is not in an enabled state");
+  
+#ifdef  ESD_ERROR_CHECK 
+  if(!state.crtThread->enabled) {
+    terminateStateOnError(state, 
+			  "current thread most likely stuck on unlock: SELF_DEADLOCK ", 
+			  "user.err");
+    return;
+  }
+#endif
+  
+  mutex = toUnique(state, mutex);
+  assert(isa<ConstantExpr>(mutex) && "mutex address");
+  
+  releaseMutex(state, mutex);
+  
+  std::stringstream dmesg;
+  dmesg << " released mutex 0x" << std::hex << mutex;
+  printDebug(state, dmesg.str(), true);
+  
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  assert(it != state.mutexes.end() &&  "error realeasing mutex");
+  schedule(state, false, UNLOCK, it->second);
+  //XXX: should handle this, it could find some programming errors
+  // EPERM
+  // The current thread does not own the mutex.
+}
+
+void  Executor::executePthreadMutexInit(ExecutionState &state, 
+					KInstruction *ki, 
+					ref<Expr> mutex, 
+					ref<Expr> ignored_attr) {
+  // mutex = toUnique(state, mutex);
+  assert(isa<ConstantExpr>(mutex) &&
+	 "symbolic mutex address currently not supported");
+  Mutex *m = new Mutex(mutex);
+  state.mutexes.insert(std::make_pair(mutex, m));
+  
+  //set the return value to 0, ignoring the possible errors
+  //EINVAL is the most important, the rest can be used for fault 
+  //injection
+  //[EAGAIN]           
+  //The system temporarily lacks the resources to create another mutex.
+  //[EINVAL]
+  //The value specified by attr is invalid.
+  //[ENOMEM]           
+  //The process cannot allocate enough memory to create another mutex.
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+
+void  Executor::executePthreadMutexDestroy(ExecutionState &state, 
+					   KInstruction *ki, 
+					   ref<Expr> mutex) {
+  mutex = toUnique(state, mutex);
+  assert (isa<ConstantExpr>(mutex) && 
+	  "symbolic mutex address currently not supported");
+
+  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  if(it != state.mutexes.end())
+    {
+      Mutex *m = (*it).second;
+      state.mutexes.erase(it);
+      delete  m;
+    } 
+  else
+    klee_warning( "pthread_mutex_destroy: non-initialized mutex");
+
+  // Fault Injection - could set errno to one of these values
+  // pthread_mutex_destroy() will fail if:
+  // [EBUSY]            
+  // Mutex is locked by another thread.
+  // [EINVAL]          
+  // The value specified by mutex is invalid.
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue,
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+
+void  Executor::executeThreadExit(ExecutionState &state, 
+				  KInstruction *ki) {
+
+  printDebug(state, "executing thread exit", false);
+  bool destructors = destroyTLS(state, ki, state.crtThread);
+  if(!destructors) {
+    for (std::vector<Thread*>::iterator it = state.threads.begin();
+	 it != state.threads.end(); it++) {
+      if(state.crtThread->tid == (*it)->joining) {
+	Thread *t = (*it);
+	t->joinState = false;
+	t->enabled = true;
+	t->joining = 0xFFFFFFFF;
+	
+	std::stringstream msg;
+	msg << "on exit enabled thread " << t->tid;
+	printDebug(state, msg.str(), false);
+	break;
+      }
+    }
+    //terminate this thread and schedule another one
+    state.crtThread->enabled = false;
+    schedule(state, true);
+  }
+  else
+    schedule(state, false);
+}
+
+void Executor::executePthreadExit(ExecutionState &state, 
+				  KInstruction *ki,
+				  ref<Expr> value_ptr) {
+  executeThreadExit(state, ki);
+}
+  
+void  Executor::executePthreadCondWait(ExecutionState &state, 
+				       KInstruction *ki, 
+				       ref<Expr> cond_var, 
+				       ref<Expr> mutex)
+{
+  Thread *crt = state.crtThread;
+  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  if(it != state.cond_vars.end()) {
+    CondVar* cv = it->second;
+    state.crtThread->traceInfo.op++;
+    cv->threads.push_back(crt->tid);
+    state.crtThread->enabled=false;
+  }
+}
+
+void Executor::executePthreadCondSignal(ExecutionState &state, 
+					KInstruction *ki, 
+					ref<Expr> cond_var)
+{
+
+  // TODO would not hurt to check we own the mutex
+  // this can help discover concurency bugs that lead to races or deadlocks
+  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  if(it != state.cond_vars.end()) {
+      CondVar *cv = it->second;
+      state.crtThread->traceInfo.op++;
+      state.updateTraceInfo(cv, state.crtThread);
+      
+      // remove the first in the queue, if any 
+      if(cv->threads.size() > 0) {
+	Thread *next = getByTid(state, *cv->threads.begin());
+	assert(next!=NULL && "error getting the mapping from tid to Thread*");
+	next->enabled = true;
+	state.updateTraceInfo(cv, next);
+	cv->threads.erase(cv->threads.begin());
+      }
+    } 
+}
+
+void Executor::executePthreadCondBroadcast(ExecutionState &state, 
+					   KInstruction *ki, 
+					   ref<Expr> cond_var)
+{
+  //XXX  same as for signal, check that the mutex has been acquired
+  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  if(it != state.cond_vars.end()) {
+    CondVar *cv = it->second;
+    state.updateTraceInfo(cv, state.crtThread);
+    for(std::vector<uint64_t>::iterator it = cv->threads.begin();
+	it != cv->threads.end();
+	it++) {
+      Thread *next = getByTid(state, *(it));
+      next->enabled = true;
+      state.updateTraceInfo(cv, next);
+      cv->threads.erase(it);
+    }
+  }
+}
+
+void Executor::executePthreadCondInit(ExecutionState &state, 
+				      KInstruction *ki, 
+				      ref<Expr> cond_var,
+				      ref<Expr> ignored) {
+  cond_var = toUnique(state, cond_var);
+  assert(isa<ConstantExpr>(cond_var) && 
+	 "cond_var address is not constant");
+  
+  CondVar* cv = new CondVar(cond_var);
+  state.cond_vars.insert(std::make_pair(cond_var, cv));
+  
+  //XXX: possible other errors for FI
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+  
+void Executor::executePthreadCondDestroy(ExecutionState &state, 
+					 KInstruction *ki, 
+					 ref<Expr> cond_var) {
+  cond_var = toUnique(state, cond_var);
+  assert(isa<ConstantExpr>(cond_var) && 
+	 "cond_var address is not constant");
+  
+  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  if(it != state.cond_vars.end())
+    state.cond_vars.erase(it);
+  else
+    klee_warning("destroy un initialized condvar");
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue,
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+
+void Executor::executePthreadKeyCreate(ExecutionState &state, 
+				       KInstruction *ki, 
+				       ref<Expr> key, 
+				       ref<Expr> destructor) {
+  key = toUnique(state, key);
+  assert(isa<ConstantExpr>(key) &&
+	 "pthread_key_create address is not constant");
+  
+  ConstantExpr *key_const_expr = dyn_cast<ConstantExpr>(key);
+  ObjectPair op;
+  state.addressSpace.resolveOne(key_const_expr, op);
+  const MemoryObject *mo = op.first;
+  ref<Expr> offset = mo->getOffsetExpr(key);
+  ObjectState *wos = state.addressSpace.getWriteable(mo, op.second);
+  ref<Expr> new_key = state.nextTLSKey();
+  wos->write(offset, new_key);
+  key = new_key;
+  
+  KFunction *kf = resolveFunction(destructor);
+  state.tls_keys[key] = kf;
+
+  //set the key to NULL in all threads
+  for(std::vector<Thread*>::iterator thread = state.threads.begin();
+      thread != state.threads.end(); thread++) {
+    (*thread)->tls[key] = Expr::createPointer(0);
+  }
+  
+  // set return value
+  // for fault injection
+  // The pthread_key_create() function shall fail if  
+  // EAGAIN 
+  // The  system  lacked  the necessary resources to create another 
+  // thread-specific data key, or the system-imposed limit on 
+  // the total number of keys per process {PTHREAD_KEYS_MAX} has been
+  // ENOMEM Insufficient memory exists to create the key.
+  
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+  
+void Executor::executePthreadGetSpecific(ExecutionState &state, 
+					 KInstruction *ki, 
+					 ref<Expr> key) {
+  key = toUnique(state, key);
+  assert(isa<ConstantExpr>(key) && 
+	 "pthread_getspecific key address is not constant");
+  ref<Expr> addr;
+  std::map< ref<Expr>, ref<Expr> >::iterator it = state.crtThread->tls.find(key);
+  if(it != state.crtThread->tls.end())
+    addr  = state.crtThread->tls[key];
+  else
+    //XXX: should also set errno to EINVAL
+    addr = Expr::createPointer(0);
+  
+  //set return value
+  bindLocal(ki, state, addr);
+}
+
+void Executor::executePthreadSetSpecific(ExecutionState &state, 
+					 KInstruction *ki, 
+					 ref<Expr> key,
+					 ref<Expr> value) {
+  key = toUnique(state, key);
+  assert(isa<ConstantExpr>(key) && "pthread_setspecific key address is not constant");
+  
+  state.crtThread->tls[key] = value;
+
+  //Fault Injection options
+  //The pthread_setspecific() function shall fail if:
+  // ENOMEM 
+  // Insufficient memory exists to associate the value with the key.
+  // The pthread_setspecific() function may fail if:
+  // EINVAL The key value is invalid.
+  int returnValue = 0;
+  bindLocal(ki, state, ConstantExpr::create(returnValue, 
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+
+void Executor::executePthreadKeyDelete(ExecutionState &state, 
+				       KInstruction *ki, 
+				       ref<Expr> key) {
+  int ret = 0;
+  key = toUnique(state, key);
+  assert(isa<ConstantExpr>(key) && "pthread_key_delete address is not constant");
+  
+  std::map< ref<Expr> , KFunction*>::iterator it =  state.tls_keys.find(key);
+  if(it != state.tls_keys.end())
+    state.tls_keys.erase(it);
+  else {
+    //Fault Injection options
+    //The pthread_key_delete() function may fail if:
+    //EINVAL The key value is invalid.
+    ret = 1;
+    ObjectPair op;
+    //XXX : hack - errno should be thread local, not global
+    int* errno_addr = __errno_location();
+    ref<ConstantExpr> addr = Expr::createPointer((uint64_t) errno_addr);
+    state.addressSpace.resolveOne(addr, op);
+    const MemoryObject *mo = op.first;
+    ref<Expr> offset = mo->getOffsetExpr(addr);
+    ObjectState *wos = state.addressSpace.getWriteable(mo, op.second);
+    wos->write(offset, ConstantExpr::create(EINVAL, 
+					    getWidthForLLVMType(ki->inst->getType())));
+  }  
+  bindLocal(ki, state, ConstantExpr::create(ret, 
+					    getWidthForLLVMType(ki->inst->getType())));
+}
+
+
+void Executor::schedule(ExecutionState &state, 
+			bool terminate) 			
+{
+  schedule(state, terminate, 0, NULL);
+}
+
+
+void Executor::schedule(ExecutionState &state, 
+			bool terminate, 
+			int LockOpType, 
+			Mutex* mutex) {
+  preemption_schedule(state, terminate);
+  
+}
+
+// switches to the next enabled thread
+void Executor::doContextSwitch(ExecutionState &state)
+{
+  for(unsigned int i = 1; i < state.threads.size(); i++)
+    {
+      Thread* thr = state.threads[i];
+      if(thr->enabled)
+	{
+	  ExecutionState *newState = &state;
+	  //the first thread becomes last : round robin
+	  newState->threads.push_back(newState->threads[0]);
+	  
+	  //threads[i] is removed from the list and copied over the first thread
+	  Thread* toSwap =newState->threads[i];
+	  newState->threads.erase(newState->threads.begin()+i);
+	  newState->threads[0] = toSwap;
+	  
+	  newState->crtThread = newState->threads[0];
+	  newState->stack = newState->crtThread->stack;
+	  newState->pc = newState->crtThread->pc;
+	  newState->prevPC = newState->crtThread->prevPC;
+	  break;
+	}
+    }
+}
+
+
+void Executor::preemption_schedule(ExecutionState &state, bool terminate)
+{
+
+  //std::cout << "entering schedule " << state.crtThread->tid << " state " << &state <<  " node " << state.ptreeNode<< std::endl;
+
+  printDebug(state, "entering schedule", !terminate);
+  
+  // if we are scheduling because a thread terminates, we do not add it 
+  // to the list of live threads
+  if(terminate)
+    state.threads.erase(state.threads.begin());
+  
+  if(state.threads.size() == 0)
+    {
+      klee_message("terminating state");
+      terminateState(state);
+      return;
+    }
+  
+  // XXX: perhaps these should be already set here and thus removed
+  state.crtThread->stack = state.stack;
+  state.crtThread->pc = state.pc;
+  state.crtThread->prevPC = state.prevPC;
+  
+  //obtain the list of enabled threads
+  std::stringstream dmesg;
+  dmesg << "enabled threads: ";
+  std::vector<Thread*> enabled;
+  bool no_deadlock = false;
+  for(std::vector<Thread*>::iterator it = state.threads.begin(); 
+      it != state.threads.end();  it++) {
+    if((*it)->enabled)
+      {
+	enabled.push_back(*it);
+	dmesg << (*it)->tid << " ";
+	no_deadlock = true;
+	//should break unless debugging
+	break;
+      }
+  }
+  
+  printDebug(state, dmesg.str(), !terminate);
+  
+  if (!no_deadlock)
+    {
+      printDebug(state, "deadlock: no enabled transitions", !terminate);
+      klee_message("terminating state");
+      return terminateStateOnError(state, " ******** deadlock", "user.err");
+    }
+
+  Thread* next;
+  unsigned int index = 0;
+  ExecutionState *lastState = &state;
+  bool one = false;
+  
+  if(state.crtThread->enabled) {
+      if(state.preemptions < MaxPreemptions) {
+	// all enabled threads except the current thread
+	for(unsigned int i = 1; i < state.threads.size(); i++) {
+	  Thread* thr = state.threads[i];
+	  if(thr->enabled) {
+	    //at least one possible schedule already exists, for the rest 
+	    //we need to fork execution
+	    
+	    ExecutionState *cState = lastState;
+	    ExecutionState *newState = cState->branch();
+	    nrSchedules++;
+	    
+	    newState->preemptions = state.preemptions + 1;
+	    
+	    std::stringstream dmesg1;
+	    dmesg1 << "created state " << 
+	      newState << " tid " << 
+	      newState->threads[i]->tid;
+	    
+	    printDebug(state, dmesg1.str(), !terminate);
+	    
+	    addedStates.insert(newState);
+	    
+	    lastState->ptreeNode->data = 0;
+	    std::pair<PTree::Node*,PTree::Node*> res = 
+	      processTree->split(lastState->ptreeNode, newState, lastState);
+	    newState->ptreeNode = res.first;
+	    lastState->ptreeNode = res.second;
+	    
+	    
+	    //the first thread becomes last : round robin
+	    newState->threads.push_back(newState->threads[0]);
+	    
+	    //threads[i] is removed from the list and copied over the first thread
+	    Thread* toSwap =newState->threads[i];
+	    newState->threads.erase(newState->threads.begin()+i);
+	    newState->threads[0] = toSwap;
+	    
+	    newState->crtThread = newState->threads[0];
+	    newState->stack = newState->crtThread->stack;
+	    newState->pc = newState->crtThread->pc;
+	    newState->prevPC = newState->crtThread->prevPC;
+	    
+	    lastState =  newState;		      
+	  }
+	}
+      }
+  }
+  else {
+    //the current thread is not enabled, need to schedule another one
+    for(unsigned int i = 1; i < state.threads.size(); i++) {
+      Thread* thr = state.threads[i];
+      if(thr->enabled) {
+	if(!one) {
+	  one = true;
+	  index = i;
+	}
+	else {
+	  //at least one possible schedule already exists, for the rest 
+	  //we need to fork execution
+	  if(ForkOnSchedule) {
+	    ExecutionState *cState = lastState;
+	    ExecutionState *newState = cState->branch();
+	    nrSchedules++;
+	    
+	    std::stringstream dmesg1;
+	    dmesg1 << "created state " << 
+	      newState << " tid " << 
+	      newState->threads[i]->tid;
+	    
+	    printDebug(state, dmesg1.str(), !terminate);
+	    
+	    addedStates.insert(newState);
+	    
+	    lastState->ptreeNode->data = 0;
+	    
+	    std::pair<PTree::Node*,PTree::Node*> res = 
+	      processTree->split(lastState->ptreeNode, newState, lastState);
+	    newState->ptreeNode = res.first;
+	    lastState->ptreeNode = res.second;
+	    
+	    //the first thread becomes the last : round robin
+	    newState->threads.push_back(newState->threads[0]);
+	    
+	    //threads[i] is removed from the list and copied over the first thread
+	    Thread* toSwap =newState->threads[i];
+	    newState->threads.erase(newState->threads.begin()+i);
+	    newState->threads[0] = toSwap;
+	    
+	    newState->crtThread = newState->threads[0];
+	    newState->stack = newState->crtThread->stack;
+	    newState->pc = newState->crtThread->pc;
+	    newState->prevPC = newState->crtThread->prevPC;
+	    
+	    lastState =  newState;		      
+	  }
+	}
+      }
+    }
+  }
+  
+  assert(index < state.threads.size() && "index out of bounds");
+  next = state.threads[index];
+  state.threads.erase(state.threads.begin() + index);
+  state.threads.insert(state.threads.begin(), next);
+
+  std::stringstream dmesg2;
+  dmesg2 << "finished scheduling thread " << 
+    next->tid << " index = " << index;
+  
+  printDebug(state, dmesg2.str(), !terminate);
+
+  state.crtThread = next;
+
+  assert(state.crtThread != NULL && "error on setting up the next thread");
+
+  state.stack = state.crtThread->stack;
+  state.pc = state.crtThread->pc;
+  state.prevPC = state.crtThread->prevPC;
+}
+
 
 void Executor::executeMemoryOperation(ExecutionState &state,
                                       bool isWrite,
@@ -3024,19 +4015,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 "readonly.err");
         } else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
-          if (isa<ConstantExpr>(offset)) {
-        	  uint64_t _off = cast<ConstantExpr>(offset)->getZExtValue();
-        	  if (_off < 32) {
-        		  //CLOUD9_DEBUG("Writing in memory object " << mo->address <<
-        			//	  " at GC offset " << _off << " the value " << value <<
-        			//	  " from instruction " << state.prevPC->info->assemblyLine << " in " << state.prevPC->info->file << ":" << state.prevPC->info->line);
-        	  }
-          }
           wos->write(offset, value);
-        }          
+
+	}          
       } else {
-        ref<Expr> result = os->read(offset, type);
-        
+	ref<Expr> result = os->read(offset, type);
+
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
         
@@ -3064,7 +4048,6 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     
-    //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
     StatePair branches = fork(*unbound, inBounds, true);
     ExecutionState *bound = branches.first;
 
@@ -3095,7 +4078,6 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     if (incomplete) {
       terminateStateEarly(*unbound, "query timed out (resolve)");
     } else {
-    	//unbound->addressSpace._testAddressSpace();
       terminateStateOnError(*unbound,
                             "memory error: out of bound pointer",
                             "ptr.err",
@@ -3186,7 +4168,7 @@ ExecutionState *Executor::createRootState(llvm::Function *f) {
 
 void Executor::initRootState(ExecutionState *state,
 		int argc, char **argv, char **envp) {
-	llvm::Function *f = state->stack.back().kf->function;
+	llvm::Function *f = state->stack->back().kf->function;
 
 	std::vector<ref<Expr> > arguments;
 
@@ -3228,6 +4210,12 @@ void Executor::initRootState(ExecutionState *state,
 			}
 		}
 	}
+
+    //initialize the main thread
+    Thread *mainThread = new Thread(state->pc, state->stack);
+    assert(mainThread->stack && "main thread stack is null");
+    state->threads.push_back(mainThread);
+    state->crtThread = mainThread;
 
 	if (pathWriter)
 		state->pathOS = pathWriter->open();
@@ -3451,3 +4439,6 @@ Interpreter *Interpreter::create(const InterpreterOptions &opts,
                                  InterpreterHandler *ih) {
   return new Executor(opts, ih);
 }
+
+//}
+
