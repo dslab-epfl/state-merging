@@ -5,19 +5,23 @@ import subprocess
 
 def isLinkCommand():
     prev_is_option = False
+    is_linking = False
     # Look for '-Wl,' as a signal that we are calling the linker. What a hack.
     for arg in sys.argv:
         if arg.startswith('-Wl,'):
-            return True
+            is_linking = True
         if arg.startswith('-l'):
-     	    return True
+     	    is_linking = True
         if arg.endswith('.o'):
             if not prev_is_option:
-                return True
+                is_linking = True
         if arg.startswith('-'):
             prev_is_option = True
         else:
             prev_is_option = False
+        if not prev_is_option and (arg.endswith(".C") or arg.endswith(".cpp") or arg.endswith(".cc") or arg.endswith(".CC")):
+            return False
+    return is_linking
 
 def main():
     object_name = "a.o"
@@ -43,7 +47,7 @@ def main():
                 command += " " 
                 command += arg
         
-            if arg.endswith(".C") or arg.endswith(".cpp"):
+            if arg.endswith(".C") or arg.endswith(".cpp") or arg.endswith(".cc") or arg.endswith(".CC"):
                 is_cpp = True
 
             if arg == '-o' and "-c" not in sys.argv[1:]:
@@ -54,7 +58,7 @@ def main():
         command = ["llvm-gcc","llvm-g++"][is_cpp] + command
 
 	print "Compiling with command:", command
-        proc = subprocess.Popen(command, shell = True)
+        proc = subprocess.Popen(command, shell = True, stdout = None, stderr = None)
         proc.communicate()
         rproc = proc.returncode
 
@@ -68,7 +72,7 @@ def main():
     linkArgs = []
     for a in args:
     	skip = False
-        for prefix in ('-emit-llvm', '-I', '-D', '-g', '-W', '-O', '-D', '-f', '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib', '--disable-optcru'): 
+        for prefix in ('-emit-llvm', '-I', '-D', '-g', '-W', '-O', '-D', '-f', '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib', '--disable-optcru', "-rdynamic"): 
             if a.startswith(prefix):
             	skip = True
                 break
@@ -77,7 +81,7 @@ def main():
                 linkArgs.append('-r')
                 continue
 
-	if a.endswith(".c") or a.endswith(".cpp"):
+	if a.endswith(".c") or a.endswith(".cpp") or a.endswith(".cc") or a.endswith(".CC"):
 		continue    	
 	   	
         if not skip:
@@ -89,7 +93,7 @@ def main():
     #linkArgs.append("-lrrd")
     print "Linking with command: llvm-ld --disable-opt " + " ".join(linkArgs)
     
-    proc = Subprocess.popen("llvm-ld --disable-opt " + " ".join(linkArgs), shell = True)
+    proc = subprocess.Popen("llvm-ld --disable-opt " + " ".join(linkArgs), shell = True, stdout = None, stderr = None)
     proc.communicate()
     
     return proc.returncode
