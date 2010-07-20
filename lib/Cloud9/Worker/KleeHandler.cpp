@@ -32,9 +32,6 @@
 
 using namespace llvm;
 
-
-extern bool WriteTraces;
-
 namespace {
 
 cl::opt<std::string>
@@ -331,16 +328,6 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 				   it->second.end(); it2 != ie; ++it2)
 			      *f << *it->first << ":" << *it2 << "\n";
 			  }
-			  delete f;
-			} else {
-			  klee_warning("unable to write output test case");
-			}
-		}
-
-		if (WriteTraces) {
-			std::ostream *f = openTestFile("trace", id);
-			if(f) {
-			  state.exeTraceMgr.printAllEvents(*f);
 			  delete f;
 			} else {
 			  klee_warning("unable to write output test case");

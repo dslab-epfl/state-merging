@@ -26,7 +26,6 @@
 
 namespace llvm {
   class Type;
-  class TargetData;
 }
 
 namespace klee {
@@ -149,15 +148,15 @@ public:
     
     // Compare
     Eq,
-    Ne,  /// Not used in canonical form
+    Ne,  ///< Not used in canonical form
     Ult,
     Ule,
-    Ugt, /// Not used in canonical form
-    Uge, /// Not used in canonical form
+    Ugt, ///< Not used in canonical form
+    Uge, ///< Not used in canonical form
     Slt,
     Sle,
-    Sgt, /// Not used in canonical form
-    Sge, /// Not used in canonical form
+    Sgt, ///< Not used in canonical form
+    Sge, ///< Not used in canonical form
 
     LastKind=Sge,
 
@@ -219,7 +218,6 @@ public:
 
   static void printKind(std::ostream &os, Kind k);
   static void printWidth(std::ostream &os, Expr::Width w);
-  static Width getWidthForLLVMType(const llvm::TargetData* td, const llvm::Type *type);
 
   /// returns the smallest number of bytes in which the given width fits
   static inline unsigned getMinBytesForWidth(Width w) {
@@ -310,7 +308,7 @@ private:
   ConstantExpr(const llvm::APInt &v) : value(v) {}
 
 public:
-  ~ConstantExpr() {};
+  ~ConstantExpr() {}
   
   Width getWidth() const { return value.getBitWidth(); }
   Kind getKind() const { return Constant; }

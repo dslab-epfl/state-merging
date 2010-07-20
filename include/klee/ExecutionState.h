@@ -35,13 +35,12 @@ class SymbolicState;
 namespace klee {
   class Array;
   class CallPathNode;
-  class Cell;
-  class KFunction;
-  class KInstruction;
+  struct Cell;
+  struct KFunction;
+  struct KInstruction;
   class MemoryObject;
   class PTreeNode;
-  class InstructionInfo;
-  class ExecutionTraceEvent;
+  struct InstructionInfo;
   class Executor;
 
   class ExecutionState;
@@ -83,32 +82,6 @@ struct StackFrame {
   ~StackFrame();
 };
 
-// FIXME: Redo execution trace stuff to use a TreeStream, there is no
-// need to keep this stuff in memory as far as I can tell.
-
-// each state should have only one of these guys ...
-class ExecutionTraceManager {
-public:
-  ExecutionTraceManager() : hasSeenUserMain(false) {}
-
-  void addEvent(ExecutionTraceEvent* evt);
-  void printAllEvents(std::ostream &os) const;
-
-private:
-  // have we seen a call to __user_main() yet?
-  // don't bother tracing anything until we see this,
-  // or else we'll get junky prologue shit
-  bool hasSeenUserMain;
-
-  // ugh C++ only supports polymorphic calls thru pointers
-  //
-  // WARNING: these are NEVER FREED, because they are shared
-  // across different states (when states fork), so we have 
-  // an *intentional* memory leak, but oh wellz ;)
-  std::vector<ExecutionTraceEvent*> events;
-};
-
-
 class ExecutionState {
 	friend class ObjectState;
 public:
@@ -148,9 +121,6 @@ public:
 	  lastCoveredTime = sys::TimeValue::now();
   }
 
-  // for printing execution traces when this state terminates
-  ExecutionTraceManager exeTraceMgr;
-
   /// Disables forking, set by user code.
   bool forkDisabled;
 
@@ -175,7 +145,7 @@ public:
 private:
   ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor),
   fakeState(false), underConstrained(0), addressSpace(this),
-  lastCoveredTime(sys::TimeValue::now()), ptreeNode(0) {};
+  lastCoveredTime(sys::TimeValue::now()), ptreeNode(0) {}
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);
@@ -200,85 +170,10 @@ public:
 
   bool merge(const ExecutionState &b);
 
-
-
   cloud9::worker::SymbolicState *getCloud9State() const { return c9State; }
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
-};
 
-
-// for producing abbreviated execution traces to help visualize
-// paths and diagnose bugs
-
-class ExecutionTraceEvent {
-public:
-  // the location of the instruction:
-  std::string file;
-  unsigned line;
-  std::string funcName;
-  unsigned stackDepth;
-
-  unsigned consecutiveCount; // init to 1, increase for CONSECUTIVE
-                             // repetitions of the SAME event
-
-  ExecutionTraceEvent()
-    : file("global"), line(0), funcName("global_def"),
-      consecutiveCount(1) {}
-
-  ExecutionTraceEvent(ExecutionState& state, KInstruction* ki);
-
-  virtual ~ExecutionTraceEvent() {}
-
-  void print(std::ostream &os) const;
-
-  // return true if it shouldn't be added to ExecutionTraceManager
-  //
-  virtual bool ignoreMe() const;
-
-private:
-  virtual void printDetails(std::ostream &os) const = 0;
-};
-
-
-class FunctionCallTraceEvent : public ExecutionTraceEvent {
-public:
-  std::string calleeFuncName;
-
-  FunctionCallTraceEvent(ExecutionState& state, KInstruction* ki,
-                         const std::string& _calleeFuncName)
-    : ExecutionTraceEvent(state, ki), calleeFuncName(_calleeFuncName) {}
-
-private:
-  virtual void printDetails(std::ostream &os) const {
-    os << "CALL " << calleeFuncName;
-  }
-
-};
-
-class FunctionReturnTraceEvent : public ExecutionTraceEvent {
-public:
-  FunctionReturnTraceEvent(ExecutionState& state, KInstruction* ki)
-    : ExecutionTraceEvent(state, ki) {}
-
-private:
-  virtual void printDetails(std::ostream &os) const {
-    os << "RETURN";
-  }
-};
-
-class BranchTraceEvent : public ExecutionTraceEvent {
-public:
-  bool trueTaken;         // which side taken?
-  bool canForkGoBothWays;
-
-  BranchTraceEvent(ExecutionState& state, KInstruction* ki,
-                   bool _trueTaken, bool _isTwoWay)
-    : ExecutionTraceEvent(state, ki),
-      trueTaken(_trueTaken),
-      canForkGoBothWays(_isTwoWay) {}
-
-private:
-  virtual void printDetails(std::ostream &os) const;
+  void dumpStack(std::ostream &out) const;
 };
 
 }

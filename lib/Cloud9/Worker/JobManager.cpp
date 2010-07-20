@@ -282,6 +282,7 @@ static const char *modelledExternals[] = {
     "_assert", "__assert_fail", "__assert_rtn", "calloc", "_exit", "exit",
     "free", "abort", "klee_abort", "klee_assume", "klee_check_memory_access",
     "klee_define_fixed_object", "klee_get_errno", "klee_get_value",
+    "klee_breakpoint", "klee_stack_trace",
     "klee_get_obj_size", "klee_is_symbolic", "klee_make_symbolic",
     "klee_mark_global", "klee_merge", "klee_prefer_cex", "klee_print_expr",
     "klee_print_range", "klee_report_error", "klee_set_forking",
@@ -363,7 +364,7 @@ static void externalsAndGlobalsCheck(const llvm::Module *m) {
     for (Function::const_iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); bbIt
         != bb_ie; ++bbIt) {
       for (BasicBlock::const_iterator it = bbIt->begin(), ie = bbIt->end(); it
-          != it; ++it) {
+          != ie; ++it) {
         if (const CallInst *ci = dyn_cast<CallInst>(it)) {
           if (isa<InlineAsm> (ci->getCalledValue())) {
             klee_warning_once(&*fnIt, "function \"%s\" has inline asm",

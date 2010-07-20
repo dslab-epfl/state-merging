@@ -22,7 +22,7 @@ namespace klee {
   class Executor;
   class Expr;
   class ExecutionState;
-  class KInstruction;
+  struct KInstruction;
   template<typename T> class ref;
   
   class SpecialFunctionHandler {
@@ -96,6 +96,7 @@ namespace klee {
     HANDLER(handleRevirtObjects);
     HANDLER(handleSetForking);
     HANDLER(handleSilentExit);
+    HANDLER(handleStackTrace);
     HANDLER(handleUnderConstrained);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);

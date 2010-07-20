@@ -45,10 +45,10 @@ public:
 
   /// size in bytes
   unsigned size;
-  std::string name;
+  mutable std::string name;
 
   bool isLocal;
-  bool isGlobal;
+  mutable bool isGlobal;
   bool isFixed;
 
   /// true if created by us.
@@ -120,7 +120,7 @@ public:
 
   void getAllocInfo(std::string &result) const;
 
-  void setName(std::string name) {
+  void setName(std::string name) const {
     this->name = name;
   }
 

@@ -35,7 +35,7 @@ void klee_breakpoint(unsigned int id) {
   fprintf(stdout, "KLEE: Breakpoint hit: %u\n", id);
 }
 
-void klee_make_symbolic(void *array, uint_klee nbytes, const char *name) {
+void klee_make_symbolic(void *array, size_t nbytes, const char *name) {
   static int rand_init = -1;
 
   if (rand_init == -1) {
@@ -56,7 +56,7 @@ void klee_make_symbolic(void *array, uint_klee nbytes, const char *name) {
       *v = rand() % 69;
     } else {
       char *c = array;
-      uint_klee i;
+      size_t i;
       for (i=0; i<nbytes; i++)
         c[i] = rand_byte();
     }
@@ -102,8 +102,8 @@ void klee_silent_exit(int x) {
   exit(x);
 }
 
-uint_klee klee_choose(uint_klee n) {
-  uint_klee x;
+uintptr_t klee_choose(uintptr_t n) {
+  uintptr_t x;
   klee_make_symbolic(&x, sizeof x, "klee_choose");
   if(x >= n)
     fprintf(stderr, "ERROR: max = %ld, got = %ld\n", n, x);
@@ -111,15 +111,25 @@ uint_klee klee_choose(uint_klee n) {
   return x;
 }
 
-void klee_assume(uint_klee x) {
+void klee_assume(uintptr_t x) {
   if (!x) {
     fprintf(stderr, "ERROR: invalid klee_assume\n");
   }
 }
 
-uint_klee klee_get_value(uint_klee x) {
-  return x;
-}
+#define KLEE_GET_VALUE_STUB(suffix, type)	\
+	type klee_get_value##suffix(type x) { \
+		return x; \
+	}
+
+KLEE_GET_VALUE_STUB(f, float)
+KLEE_GET_VALUE_STUB(d, double)
+KLEE_GET_VALUE_STUB(l, long)
+KLEE_GET_VALUE_STUB(ll, long long)
+KLEE_GET_VALUE_STUB(_i32, int32_t)
+KLEE_GET_VALUE_STUB(_i64, int64_t)
+
+#undef KLEE_GET_VALUE_STUB
 
 int klee_range(int begin, int end, const char* name) {
   int x;

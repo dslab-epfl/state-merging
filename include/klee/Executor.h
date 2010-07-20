@@ -46,13 +46,13 @@ namespace llvm {
 
 namespace klee {  
   class Array;
-  class Cell;
+  struct Cell;
   class ExecutionState;
   class ExternalDispatcher;
   class Expr;
   class InstructionInfoTable;
-  class KFunction;
-  class KInstruction;
+  struct KFunction;
+  struct KInstruction;
   class KInstIterator;
   class KModule;
   class MemoryManager;
@@ -62,7 +62,7 @@ namespace klee {
   class Searcher;
   class SeedInfo;
   class SpecialFunctionHandler;
-  class StackFrame;
+  struct StackFrame;
   class StatsTracker;
   class TimingSolver;
   class TreeStreamWriter;
@@ -360,6 +360,9 @@ private:
   /// bindModuleConstants - Initialize the module constant table.
   void bindModuleConstants();
 
+  template <typename TypeIt>
+  void computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie);
+
   /// bindInstructionConstants - Initialize any necessary per instruction
   /// constant values.
   void bindInstructionConstants(KInstruction *KI);
@@ -454,6 +457,7 @@ public:
   virtual void getCoveredLines(const ExecutionState &state,
                                std::map<const std::string*, std::set<unsigned> > &res);
 
+  Expr::Width getWidthForLLVMType(const llvm::Type *type) const;
 
   /*** Cloud9 symbolic execution engine methods ***/
 
@@ -471,6 +475,7 @@ public:
   virtual klee::KModule *getModule() {
 	  return kmodule;
   }
+
 };
   
 } // End klee namespace

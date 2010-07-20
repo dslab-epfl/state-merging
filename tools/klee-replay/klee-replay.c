@@ -15,14 +15,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <errno.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
-
-typedef unsigned long uint_klee;
 
 static void __emit_error(const char *msg);
 
@@ -329,22 +328,22 @@ void klee_warning_once(char *name) {
   fprintf(stderr, "WARNING: %s\n", name);
 }
 
-unsigned klee_assume(uint_klee x) {
+unsigned klee_assume(uintptr_t x) {
   if (!x) {
     fprintf(stderr, "WARNING: klee_assume(0)!\n");
   }
   return 0;
 }
 
-unsigned klee_is_symbolic(uint_klee x) {
+unsigned klee_is_symbolic(uintptr_t x) {
   return 0;
 }
 
-void klee_prefer_cex(void *buffer, uint_klee condition) {
+void klee_prefer_cex(void *buffer, uintptr_t condition) {
   ;
 }
 
-void klee_make_symbolic(void *addr, uint_klee nbytes, const char *name) {
+void klee_make_symbolic(void *addr, size_t nbytes, const char *name) {
   /* XXX remove model version code once new tests gen'd */
   if (obj_index >= input->numObjects) {
     if (strcmp("model_version", name) == 0) {
@@ -378,16 +377,27 @@ void klee_breakpoint(unsigned int id) {
 }
 
 /* Redefined here so that we can check the value read. */
-int klee_range(int min, int max, const char* name) {
-  int r;  
-  klee_make_symbolic(&r, sizeof r, name); 
+int klee_range(int start, int end, const char* name) {
+  int r;
 
-  if (r < min || r >= max) {
-    fprintf(stderr, "klee_range(%d, %d, %s) returned invalid result: %d\n", 
-	    min, max, name, r);
+  if (start >= end) {
+    fprintf(stderr, "klee_range: invalid range\n");
     exit(1);
-  }  
-  return r;
+  }
+
+  if (start+1 == end)
+    return start;
+  else {
+    klee_make_symbolic(&r, sizeof r, name); 
+
+    if (r < start || r >= end) {
+      fprintf(stderr, "klee_range(%d, %d, %s) returned invalid result: %d\n", 
+	      start, end, name, r);
+      exit(1);
+    }
+    
+    return r;
+  }
 }
 
 void klee_report_error(const char *file, int line, 

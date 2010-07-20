@@ -71,7 +71,12 @@ HandlerInfo handlerInfo[] = {
   add("klee_assume", handleAssume, false),
   add("klee_breakpoint", handleBreakpoint, false),
   add("klee_check_memory_access", handleCheckMemoryAccess, false),
-  add("klee_get_value", handleGetValue, true),
+  add("klee_get_valuef", handleGetValue, true),
+  add("klee_get_valued", handleGetValue, true),
+  add("klee_get_valuel", handleGetValue, true),
+  add("klee_get_valuell", handleGetValue, true),
+  add("klee_get_value_i32", handleGetValue, true),
+  add("klee_get_value_i64", handleGetValue, true),
   add("klee_define_fixed_object", handleDefineFixedObject, false),
   add("klee_get_obj_size", handleGetObjSize, true),
   add("klee_get_errno", handleGetErrno, true),
@@ -83,6 +88,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_print_expr", handlePrintExpr, false),
   add("klee_print_range", handlePrintRange, false),
   add("klee_set_forking", handleSetForking, false),
+  add("klee_stack_trace", handleStackTrace, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
@@ -433,6 +439,12 @@ void SpecialFunctionHandler::handleSetForking(ExecutionState &state,
   }
 }
 
+void SpecialFunctionHandler::handleStackTrace(ExecutionState &state,
+                                              KInstruction *target,
+                                              std::vector<ref<Expr> > &arguments) {
+  state.dumpStack(std::cout);
+}
+
 void SpecialFunctionHandler::handleWarning(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments) {
@@ -651,7 +663,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
   
   for (Executor::ExactResolutionList::iterator it = rl.begin(), 
          ie = rl.end(); it != ie; ++it) {
-    MemoryObject *mo = (MemoryObject*) it->first.first;
+    const MemoryObject *mo = it->first.first;
     mo->setName(name);
     
     const ObjectState *old = it->first.second;
@@ -713,7 +725,7 @@ void SpecialFunctionHandler::handleMarkGlobal(ExecutionState &state,
   
   for (Executor::ExactResolutionList::iterator it = rl.begin(), 
          ie = rl.end(); it != ie; ++it) {
-    MemoryObject *mo = (MemoryObject*) it->first.first;
+    const MemoryObject *mo = it->first.first;
     assert(!mo->isLocal);
     mo->isGlobal = true;
   }

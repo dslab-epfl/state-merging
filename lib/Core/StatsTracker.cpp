@@ -271,7 +271,9 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 					stats::locallyCoveredInstructions, ii.id)) {
 				// Checking for actual stoppoints avoids inconsistencies due
 				// to line number propogation.
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 				if (isa<DbgStopPointInst> (inst))
+#endif
 					es.coveredLines[&ii.file].insert(ii.line);
 				es.setCoveredNew();
 				es.instsSinceCovNew = 1;
