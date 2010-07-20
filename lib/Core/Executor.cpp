@@ -3754,32 +3754,6 @@ void Executor::schedule(ExecutionState &state,
   
 }
 
-// switches to the next enabled thread
-void Executor::doContextSwitch(ExecutionState &state)
-{
-  for(unsigned int i = 1; i < state.threads.size(); i++)
-    {
-      Thread* thr = state.threads[i];
-      if(thr->enabled)
-	{
-	  ExecutionState *newState = &state;
-	  //the first thread becomes last : round robin
-	  newState->threads.push_back(newState->threads[0]);
-	  
-	  //threads[i] is removed from the list and copied over the first thread
-	  Thread* toSwap =newState->threads[i];
-	  newState->threads.erase(newState->threads.begin()+i);
-	  newState->threads[0] = toSwap;
-	  
-	  newState->crtThread = newState->threads[0];
-	  newState->stack = *(newState->crtThread->stack);
-	  newState->pc = newState->crtThread->pc;
-	  newState->prevPC = newState->crtThread->prevPC;
-	  break;
-	}
-    }
-}
-
 
 void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 {

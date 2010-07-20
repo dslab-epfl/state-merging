@@ -516,9 +516,6 @@ private:
 			  Mutex* mutex);
   
   void preemption_schedule(ExecutionState &state, bool terminate);
-
-  
-  void doContextSwitch(ExecutionState &state);
   
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
