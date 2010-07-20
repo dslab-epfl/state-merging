@@ -83,7 +83,6 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     ptreeNode(0) {
   deadlock = false;
   preemptions = 0;
-  stack = new std::vector<StackFrame>();
   pushFrame(0, kf);
   executedInstructions = 0;
 
@@ -99,45 +98,10 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     addressSpace(this),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0) {
-  stack = new std::vector<StackFrame>();
-}
-
-ExecutionState::ExecutionState(const ExecutionState &state)
-  : fnAliases(state.fnAliases), 
-    fakeState(state.fakeState),
-    underConstrained(state.underConstrained), 
-    depth(state.depth), 
-    executor(state.executor),
-    lastCoveredTime(state.lastCoveredTime),
-    pc(state.pc), 
-    prevPC(state.prevPC),
-    constraints(state.constraints), 
-    queryCost(state.queryCost), 
-    weight(state.weight), 
-    addressSpace(state.addressSpace), 
-    pathOS(state.pathOS), 
-    symPathOS(state.symPathOS),
-    instsSinceCovNew(state.instsSinceCovNew),
-    coveredNew(state.coveredNew),
-    forkDisabled(state.forkDisabled),
-    coveredLines(state.coveredLines),
-    ptreeNode(state.ptreeNode), 
-    symbolics(state.symbolics),
-    shadowObjects(state.shadowObjects),
-    incomingBBIndex(state.incomingBBIndex),
-    preemptions(state.preemptions), 
-    trace(state.trace),
-    tls_keys(state.tls_keys),
-    TLSKeyGen(state.TLSKeyGen),
-    deadlock(state.deadlock),
-    backtrackingStates(state.backtrackingStates),
-    executedInstructions(state.executedInstructions)
-{
-  stack = new std::vector<StackFrame>(*(state.stack));
 }
 
 ExecutionState::~ExecutionState() {
-  while (!stack->empty()) popFrame();
+  while (!stack.empty()) popFrame();
 }
 
 ExecutionState *ExecutionState::branch() {
@@ -183,15 +147,15 @@ ExecutionState *ExecutionState::branch() {
 }
 
 void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack->push_back(StackFrame(caller,kf));
+  stack.push_back(StackFrame(caller,kf));
 }
 
 void ExecutionState::popFrame() {
-  StackFrame &sf = stack->back();
+  StackFrame &sf = stack.back();
   for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
          ie = sf.allocas.end(); it != ie; ++it)
     addressSpace.unbindObject(*it);
-  stack->pop_back();
+  stack.pop_back();
 }
 
 ///
@@ -215,9 +179,9 @@ void ExecutionState::removeFnAlias(std::string fn) {
 namespace c9 {
 
 std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
-	for (ExecutionState::stack_ty::const_iterator it = state.stack->begin();
-			it != state.stack->end(); it++) {
-		if (it != state.stack->begin()) {
+	for (ExecutionState::stack_ty::const_iterator it = state.stack.begin();
+			it != state.stack.end(); it++) {
+		if (it != state.stack.begin()) {
 			os << '(' << it->caller->info->assemblyLine << ',' << it->caller->info->file << ':' << it->caller->info->line << ')';
 			os << "]/[";
 		} else {
@@ -289,16 +253,16 @@ bool ExecutionState::merge(const ExecutionState &b) {
     return false;
 
   {
-    std::vector<StackFrame>::const_iterator itA = stack->begin();
-    std::vector<StackFrame>::const_iterator itB = b.stack->begin();
-    while (itA!=stack->end() && itB!=b.stack->end()) {
+    std::vector<StackFrame>::const_iterator itA = stack.begin();
+    std::vector<StackFrame>::const_iterator itB = b.stack.begin();
+    while (itA!=stack.end() && itB!=b.stack.end()) {
       // XXX vaargs?
       if (itA->caller!=itB->caller || itA->kf!=itB->kf)
         return false;
       ++itA;
       ++itB;
     }
-    if (itA!=stack->end() || itB!=b.stack->end())
+    if (itA!=stack.end() || itB!=b.stack.end())
       return false;
   }
 
@@ -391,9 +355,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
 
-  std::vector<StackFrame>::iterator itA = stack->begin();
-  std::vector<StackFrame>::const_iterator itB = b.stack->begin();
-  for (; itA!=stack->end(); ++itA, ++itB) {
+  std::vector<StackFrame>::iterator itA = stack.begin();
+  std::vector<StackFrame>::const_iterator itB = b.stack.begin();
+  for (; itA!=stack.end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
     for (unsigned i=0; i<af.kf->numRegisters; i++) {
@@ -507,7 +471,7 @@ void ExecutionState::dumpStack(std::ostream &out) const {
   unsigned idx = 0;
   const KInstruction *target = prevPC;
   for (ExecutionState::stack_ty::const_reverse_iterator
-         it = stack->rbegin(), ie = stack->rend();
+         it = stack.rbegin(), ie = stack.rend();
        it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.kf->function;

@@ -717,7 +717,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
       statsTracker->elapsed() > 60.) {
     StatisticManager &sm = *theStatisticManager;
-    CallPathNode *cpn = current.stack->back().callPathNode;
+    CallPathNode *cpn = current.stack.back().callPathNode;
     if ((MaxStaticForkPct<1. &&
          sm.getIndexedValue(stats::forks, sm.getIndex()) > 
          stats::forks*MaxStaticForkPct) ||
@@ -1010,7 +1010,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    StackFrame &sf = state.stack->back();
+    StackFrame &sf = state.stack.back();
     return sf.locals[index];
   }
 }
@@ -1199,7 +1199,7 @@ void Executor::executeCall(ExecutionState &state,
       // va_arg is handled by caller and intrinsic lowering, see comment for
       // ExecutionState::varargs
     case Intrinsic::vastart:  {
-      StackFrame &sf = state.stack->back();
+      StackFrame &sf = state.stack.back();
       assert(sf.varargs && 
              "vastart called in function with no vararg object");
 
@@ -1260,7 +1260,7 @@ void Executor::executeCall(ExecutionState &state,
     state.pc = kf->instructions;
         
     if (statsTracker)
-      statsTracker->framePushed(state, &(*state.stack)[state.stack->size()-2]); //XXX TODO fix this ugly stuff
+      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]); //XXX TODO fix this ugly stuff
  
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -1283,7 +1283,7 @@ void Executor::executeCall(ExecutionState &state,
         return;
       }
             
-      StackFrame &sf = state.stack->back();
+      StackFrame &sf = state.stack.back();
       unsigned size = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
         // FIXME: This is really specific to the architecture, not the pointer
@@ -1342,7 +1342,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // instructions know which argument to eval, set the pc, and continue.
   
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack->back().kf;
+  KFunction *kf = state.stack.back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
   state.pc = &kf->instructions[entry];
   if (state.pc->inst->getOpcode() == Instruction::PHI) {
@@ -1421,7 +1421,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Control flow
   case Instruction::Ret: {
     ReturnInst *ri = cast<ReturnInst>(i);
-    KInstIterator kcaller = state.stack->back().caller;
+    KInstIterator kcaller = state.stack.back().caller;
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
@@ -1432,7 +1432,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       result = eval(ki, 0, state).value;
     }
     
-    if (state.stack->size() <= 1) {
+    if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       
       if(state.threads.size() == 1) {
@@ -1489,13 +1489,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
   case Instruction::Unwind: {
     for (;;) {
-      KInstruction *kcaller = state.stack->back().caller;
+      KInstruction *kcaller = state.stack.back().caller;
       state.popFrame();
 
       if (statsTracker)
         statsTracker->framePopped(state);
 
-      if (state.stack->empty()) {
+      if (state.stack.empty()) {
         terminateStateOnExecError(state, "unwind from initial stack frame");
         break;
       } else {
@@ -1532,7 +1532,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned
       // up with convenient instruction specific data.
-      if (statsTracker && state.stack->back().kf->trackCoverage)
+      if (statsTracker && state.stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
       if (branches.first)
@@ -2869,7 +2869,7 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // matter because all we use this list for is to unbind the object
   // on function return.
   if (isLocal)
-    state.stack->back().allocas.push_back(mo);
+    state.stack.back().allocas.push_back(mo);
 
   return os;
 }
@@ -3772,7 +3772,7 @@ void Executor::doContextSwitch(ExecutionState &state)
 	  newState->threads[0] = toSwap;
 	  
 	  newState->crtThread = newState->threads[0];
-	  newState->stack = newState->crtThread->stack;
+	  newState->stack = *(newState->crtThread->stack);
 	  newState->pc = newState->crtThread->pc;
 	  newState->prevPC = newState->crtThread->prevPC;
 	  break;
@@ -3801,7 +3801,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
     }
   
   // XXX: perhaps these should be already set here and thus removed
-  state.crtThread->stack = state.stack;
+  state.crtThread->stack = &state.stack;
   state.crtThread->pc = state.pc;
   state.crtThread->prevPC = state.prevPC;
   
@@ -3876,7 +3876,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    newState->threads[0] = toSwap;
 	    
 	    newState->crtThread = newState->threads[0];
-	    newState->stack = newState->crtThread->stack;
+	    newState->stack = *(newState->crtThread->stack);
 	    newState->pc = newState->crtThread->pc;
 	    newState->prevPC = newState->crtThread->prevPC;
 	    
@@ -3927,7 +3927,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    newState->threads[0] = toSwap;
 	    
 	    newState->crtThread = newState->threads[0];
-	    newState->stack = newState->crtThread->stack;
+	    newState->stack = *(newState->crtThread->stack);
 	    newState->pc = newState->crtThread->pc;
 	    newState->prevPC = newState->crtThread->prevPC;
 	    
@@ -3953,7 +3953,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 
   assert(state.crtThread != NULL && "error on setting up the next thread");
 
-  state.stack = state.crtThread->stack;
+  state.stack = *(state.crtThread->stack);
   state.pc = state.crtThread->pc;
   state.prevPC = state.crtThread->prevPC;
 }
@@ -4168,7 +4168,7 @@ ExecutionState *Executor::createRootState(llvm::Function *f) {
 
 void Executor::initRootState(ExecutionState *state,
 		int argc, char **argv, char **envp) {
-	llvm::Function *f = state->stack->back().kf->function;
+	llvm::Function *f = state->stack.back().kf->function;
 
 	std::vector<ref<Expr> > arguments;
 
@@ -4212,7 +4212,7 @@ void Executor::initRootState(ExecutionState *state,
 	}
 
     //initialize the main thread
-    Thread *mainThread = new Thread(state->pc, state->stack);
+    Thread *mainThread = new Thread(state->pc, &state->stack);
     assert(mainThread->stack && "main thread stack is null");
     state->threads.push_back(mainThread);
     state->crtThread = mainThread;

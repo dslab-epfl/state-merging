@@ -11,6 +11,7 @@
 #define KLEE_STATISTICS_H
 
 #include "Statistic.h"
+#include "cloud9/Logger.h"
 
 #include <vector>
 #include <string>
@@ -96,8 +97,10 @@ namespace klee {
         indexedStats[index*stats.size() + s.id] += addend;
         recordChange(s.id, index);
 
-        if (contextStats)
+        if (contextStats) {
+          //CLOUD9_DEBUG("Size: " << theStatisticManager->getNumStatistics() << " offset: " << s.id);
           contextStats->data[s.id] += addend;
+        }
       }
     }
   }

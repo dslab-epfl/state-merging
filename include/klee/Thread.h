@@ -3,7 +3,6 @@
 #define KLEE_THREAD_H
 
 #include "klee/Expr.h"
-#include "klee/StackFrame.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/ScheduleTrace.h"
 #include <map>
@@ -12,6 +11,7 @@ namespace klee {
   class KFunction;
   class KInstruction;
   class ExecutionState;
+  class StackFrame;
 
 typedef std::vector<uint64_t> LockList;
 

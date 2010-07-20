@@ -156,12 +156,12 @@ void Executor::processTimers(ExecutionState *current,
           ExecutionState *es = *it;
           *os << "(" << es << ",";
           *os << "[";
-          ExecutionState::stack_ty::iterator next = es->stack->begin();
+          ExecutionState::stack_ty::iterator next = es->stack.begin();
           ++next;
-          for (ExecutionState::stack_ty::iterator sfIt = es->stack->begin(),
-                 sf_ie = es->stack->end(); sfIt != sf_ie; ++sfIt) {
+          for (ExecutionState::stack_ty::iterator sfIt = es->stack.begin(),
+                 sf_ie = es->stack.end(); sfIt != sf_ie; ++sfIt) {
             *os << "('" << sfIt->kf->function->getNameStr() << "',";
-            if (next == es->stack->end()) {
+            if (next == es->stack.end()) {
               *os << es->prevPC->info->line << "), ";
             } else {
               *os << next->caller->info->line << "), ";
@@ -170,7 +170,7 @@ void Executor::processTimers(ExecutionState *current,
           }
           *os << "], ";
 
-          StackFrame &sf = es->stack->back();
+          StackFrame &sf = es->stack.back();
           uint64_t md2u = computeMinDistToUncovered(es->pc,
                                                     sf.minDistToUncoveredOnReturn);
           uint64_t icnt = theStatisticManager->getIndexedValue(stats::instructions,

@@ -1,6 +1,7 @@
 #include "klee/Thread.h"
 #include "klee/Expr.h"
 #include "klee/ScheduleTrace.h"
+#include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
