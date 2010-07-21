@@ -15,6 +15,7 @@ class CondVar
   friend class Thread;
 public:
   CondVar(ref<Expr> address);
+  CondVar() { }
 private:
   ref<Expr> address;
   std::vector<uint64_t> threads;

@@ -15,6 +15,7 @@ class Mutex
   friend class Thread;
 public:
   Mutex(ref<Expr> address);
+  Mutex() { }
 private:
   ref<Expr> address;
   bool taken;

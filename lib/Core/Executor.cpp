@@ -2629,9 +2629,10 @@ bool Executor::terminateState(ExecutionState &state) {
 
 	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
 	if (it == addedStates.end()) {
-		state.pc() = state.prevPC();
+	  assert(state.crtThread != NULL);
+	  state.pc() = state.prevPC();
 
-		removedStates.insert(&state);
+	  removedStates.insert(&state);
 	} else {
 		// never reached searcher, just delete immediately
 		std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it3 =
@@ -3028,7 +3029,7 @@ KFunction* Executor::resolveFunction(ref<Expr> address)
 
 void Executor::printDebug(ExecutionState &state, std::string s, bool line)
 {
-  if(printThreadDebug) {
+  //if(printThreadDebug) {
     std::cerr << "ESD: #################################################################" << std::endl;
     if(line) 
       {
@@ -3038,7 +3039,7 @@ void Executor::printDebug(ExecutionState &state, std::string s, bool line)
     std::cerr << " state " << &state;
     std::cerr << " thread " << state.crtThread->tid << std::endl;
     std::cerr << s << std::endl;
-  }
+  //}
 }
 
 
@@ -3561,8 +3562,7 @@ void Executor::executePthreadCondInit(ExecutionState &state,
   assert(isa<ConstantExpr>(cond_var) && 
 	 "cond_var address is not constant");
   
-  CondVar* cv = new CondVar(cond_var);
-  state.cond_vars.insert(std::make_pair(cond_var, cv));
+  state.cond_vars.insert(std::make_pair(cond_var, CondVar(cond_var)));
   
   //XXX: possible other errors for FI
   int returnValue = 0;
@@ -3577,7 +3577,7 @@ void Executor::executePthreadCondDestroy(ExecutionState &state,
   assert(isa<ConstantExpr>(cond_var) && 
 	 "cond_var address is not constant");
   
-  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end())
     state.cond_vars.erase(it);
   else
@@ -3609,9 +3609,9 @@ void Executor::executePthreadKeyCreate(ExecutionState &state,
   state.tls_keys[key] = kf;
 
   //set the key to NULL in all threads
-  for(std::vector<Thread*>::iterator thread = state.threads.begin();
+  for(std::vector<Thread>::iterator thread = state.threads.begin();
       thread != state.threads.end(); thread++) {
-    (*thread)->tls[key] = Expr::createPointer(0);
+    thread->tls[key] = Expr::createPointer(0);
   }
   
   // set return value
@@ -3715,43 +3715,37 @@ void Executor::schedule(ExecutionState &state,
 
 void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 {
-
   //std::cout << "entering schedule " << state.crtThread->tid << " state " << &state <<  " node " << state.ptreeNode<< std::endl;
 
   printDebug(state, "entering schedule", !terminate);
   
   // if we are scheduling because a thread terminates, we do not add it 
   // to the list of live threads
-  if(terminate)
-    state.threads.erase(state.threads.begin());
-  
-  if(state.threads.size() == 0)
-    {
+  if (terminate) {
+    if (state.threads.size() == 1) {
       klee_message("terminating state");
       terminateState(state);
       return;
+    } else {
+      assert(state.threads.size() > 1);
+      state.threads.erase(state.threads.begin());
     }
-  
-  // XXX: perhaps these should be already set here and thus removed
-  state.crtThread->stack = &state.stack;
-  state.crtThread->pc = state.pc;
-  state.crtThread->prevPC = state.prevPC;
+  }
   
   //obtain the list of enabled threads
   std::stringstream dmesg;
   dmesg << "enabled threads: ";
   std::vector<Thread*> enabled;
   bool no_deadlock = false;
-  for(std::vector<Thread*>::iterator it = state.threads.begin(); 
+  for(std::vector<Thread>::iterator it = state.threads.begin();
       it != state.threads.end();  it++) {
-    if((*it)->enabled)
-      {
-	enabled.push_back(*it);
-	dmesg << (*it)->tid << " ";
-	no_deadlock = true;
-	//should break unless debugging
-	break;
-      }
+    if(it->enabled) {
+      enabled.push_back(&(*it));
+      dmesg << it->tid << " ";
+      no_deadlock = true;
+      //should break unless debugging
+      break;
+    }
   }
   
   printDebug(state, dmesg.str(), !terminate);
@@ -3763,7 +3757,6 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
       return terminateStateOnError(state, " ******** deadlock", "user.err");
     }
 
-  Thread* next;
   unsigned int index = 0;
   ExecutionState *lastState = &state;
   bool one = false;
@@ -3772,8 +3765,8 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
       if(state.preemptions < MaxPreemptions) {
 	// all enabled threads except the current thread
 	for(unsigned int i = 1; i < state.threads.size(); i++) {
-	  Thread* thr = state.threads[i];
-	  if(thr->enabled) {
+	  Thread &thr = state.threads[i];
+	  if(thr.enabled) {
 	    //at least one possible schedule already exists, for the rest 
 	    //we need to fork execution
 	    
@@ -3786,7 +3779,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    std::stringstream dmesg1;
 	    dmesg1 << "created state " << 
 	      newState << " tid " << 
-	      newState->threads[i]->tid;
+	      newState->threads[i].tid;
 	    
 	    printDebug(state, dmesg1.str(), !terminate);
 	    
@@ -3798,19 +3791,11 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    newState->ptreeNode = res.first;
 	    lastState->ptreeNode = res.second;
 	    
-	    
 	    //the first thread becomes last : round robin
-	    newState->threads.push_back(newState->threads[0]);
-	    
-	    //threads[i] is removed from the list and copied over the first thread
-	    Thread* toSwap =newState->threads[i];
-	    newState->threads.erase(newState->threads.begin()+i);
-	    newState->threads[0] = toSwap;
-	    
-	    newState->crtThread = newState->threads[0];
-	    newState->stack = *(newState->crtThread->stack);
-	    newState->pc = newState->crtThread->pc;
-	    newState->prevPC = newState->crtThread->prevPC;
+	    newState->threads.push_back(newState->threads.front());
+	    newState->threads.erase(newState->threads.begin());
+
+	    newState->crtThread = &newState->threads.front();
 	    
 	    lastState =  newState;		      
 	  }
@@ -3820,8 +3805,8 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
   else {
     //the current thread is not enabled, need to schedule another one
     for(unsigned int i = 1; i < state.threads.size(); i++) {
-      Thread* thr = state.threads[i];
-      if(thr->enabled) {
+      Thread &thr = state.threads[i];
+      if(thr.enabled) {
 	if(!one) {
 	  one = true;
 	  index = i;
@@ -3837,7 +3822,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    std::stringstream dmesg1;
 	    dmesg1 << "created state " << 
 	      newState << " tid " << 
-	      newState->threads[i]->tid;
+	      newState->threads[i].tid;
 	    
 	    printDebug(state, dmesg1.str(), !terminate);
 	    
@@ -3851,17 +3836,11 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    lastState->ptreeNode = res.second;
 	    
 	    //the first thread becomes the last : round robin
-	    newState->threads.push_back(newState->threads[0]);
-	    
-	    //threads[i] is removed from the list and copied over the first thread
-	    Thread* toSwap =newState->threads[i];
+	    newState->threads.push_back(newState->threads.front());
+	    std::swap(newState->threads.front(), newState->threads[i]);
 	    newState->threads.erase(newState->threads.begin()+i);
-	    newState->threads[0] = toSwap;
 	    
-	    newState->crtThread = newState->threads[0];
-	    newState->stack = *(newState->crtThread->stack);
-	    newState->pc = newState->crtThread->pc;
-	    newState->prevPC = newState->crtThread->prevPC;
+	    newState->crtThread = &newState->threads.front();
 	    
 	    lastState =  newState;		      
 	  }
@@ -3871,23 +3850,20 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
   }
   
   assert(index < state.threads.size() && "index out of bounds");
-  next = state.threads[index];
+  Thread next = state.threads[index];
+
   state.threads.erase(state.threads.begin() + index);
   state.threads.insert(state.threads.begin(), next);
 
   std::stringstream dmesg2;
   dmesg2 << "finished scheduling thread " << 
-    next->tid << " index = " << index;
+    next.tid << " index = " << index;
   
   printDebug(state, dmesg2.str(), !terminate);
 
-  state.crtThread = next;
+  state.crtThread = &state.threads.front();
 
   assert(state.crtThread != NULL && "error on setting up the next thread");
-
-  state.stack = *(state.crtThread->stack);
-  state.pc = state.crtThread->pc;
-  state.prevPC = state.crtThread->prevPC;
 }
 
 
@@ -3933,7 +3909,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       inBounds);
     solver->setTimeout(0);
     if (!success) {
-      state.pc = state.prevPC;
+      state.pc() = state.prevPC();
       terminateStateEarly(state, "query timed out");
       return;
     }
@@ -4167,7 +4143,7 @@ void Executor::initRootState(ExecutionState *state,
 				char *s = i < argc ? argv[i] : envp[i - (argc + 1)];
 				int j, len = strlen(s);
 
-				arg = memory->allocate(len + 1, false, true, state->pc->inst);
+				arg = memory->allocate(len + 1, false, true, state->pc()->inst);
 				ObjectState *os = bindObjectInState(*state, arg, false);
 				for (j = 0; j < len + 1; j++)
 					os->write8(j, s[j]);

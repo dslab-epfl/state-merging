@@ -1046,17 +1046,17 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     SymbolicState *state = (**node).symState;
 
     if (!codeBreaks.empty()) {
-      if (codeBreaks.find(state->getKleeState()->pc->info->assemblyLine)
+      if (codeBreaks.find(state->getKleeState()->pc()->info->assemblyLine)
           != codeBreaks.end()) {
         // We hit a breakpoint
         fireBreakpointHit(node);
       }
     }
 
-    CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc->info->assemblyLine);
+    CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc()->info->assemblyLine);
 
     if (state->collectProgress) {
-      state->_instrProgress.push_back(state->getKleeState()->pc);
+      state->_instrProgress.push_back(state->getKleeState()->pc());
     }
 
     // Execute the instruction
@@ -1211,7 +1211,7 @@ void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
   if (collectTraces) {
     switch (event) {
     case STEP:
-      (**node).trace.appendEntry(new InstructionTraceEntry(kState->pc));
+      (**node).trace.appendEntry(new InstructionTraceEntry(kState->pc()));
       break;
     case BRANCH_FALSE:
     case BRANCH_TRUE:
