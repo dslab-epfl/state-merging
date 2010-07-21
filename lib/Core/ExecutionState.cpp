@@ -71,8 +71,6 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     fakeState(false),
     underConstrained(false),
     depth(0),
-    pc(kf->instructions),
-    prevPC(pc),
     queryCost(0.), 
     weight(1),
     addressSpace(this),
@@ -81,11 +79,10 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     lastCoveredTime(sys::TimeValue::now()),
     forkDisabled(false),
     ptreeNode(0) {
-  deadlock = false;
   preemptions = 0;
-  pushFrame(0, kf);
-  executedInstructions = 0;
 
+  threads.push_back(Thread(0, 0, kf));
+  crtThread = &threads.back();
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
@@ -101,7 +98,7 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
 }
 
 ExecutionState::~ExecutionState() {
-  while (!stack.empty()) popFrame();
+  while (!stack().empty()) popFrame();
 }
 
 ExecutionState *ExecutionState::branch() {
@@ -109,31 +106,8 @@ ExecutionState *ExecutionState::branch() {
 
   ExecutionState *falseState = new ExecutionState(*this);
   
-  for (std::vector<Thread*>::iterator it = this->threads.begin();
-       it != this->threads.end(); 
-       it++) {
-    Thread* t = new Thread(*(Thread*)(*it));
-    falseState->threads.push_back(t);
-  }
-  
-  if(falseState->threads. size() > 0 )
-    falseState->crtThread = falseState->threads[0];
-  
-  for(std::map<ref<Expr>, Mutex*>::iterator it = this->mutexes.begin();
-      it != this->mutexes.end(); 
-      it++) {
-    Mutex* mutex = new Mutex(*it->second);
-    ref<Expr> expr = it->first;
-    falseState->mutexes.insert(std::make_pair(expr, mutex));
-  }
-  
-  for(std::map<ref<Expr>, CondVar*>::iterator it = this->cond_vars.begin();
-      it != this->cond_vars.end();
-      it++) {
-    CondVar* cv = new CondVar(*it->second);
-    ref<Expr> expr = it->first;
-    falseState->cond_vars.insert(std::make_pair(expr, cv));
-  }  
+  assert(falseState->threads.size() > 0);
+  falseState->crtThread = &falseState->threads[0];
   
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
@@ -147,15 +121,15 @@ ExecutionState *ExecutionState::branch() {
 }
 
 void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack.push_back(StackFrame(caller,kf));
+  stack().push_back(StackFrame(caller,kf));
 }
 
 void ExecutionState::popFrame() {
-  StackFrame &sf = stack.back();
+  StackFrame &sf = stack().back();
   for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
          ie = sf.allocas.end(); it != ie; ++it)
     addressSpace.unbindObject(*it);
-  stack.pop_back();
+  stack().pop_back();
 }
 
 ///
@@ -179,9 +153,9 @@ void ExecutionState::removeFnAlias(std::string fn) {
 namespace c9 {
 
 std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
-	for (ExecutionState::stack_ty::const_iterator it = state.stack.begin();
-			it != state.stack.end(); it++) {
-		if (it != state.stack.begin()) {
+	for (ExecutionState::stack_ty::const_iterator it = state.stack().begin();
+			it != state.stack().end(); it++) {
+		if (it != state.stack().begin()) {
 			os << '(' << it->caller->info->assemblyLine << ',' << it->caller->info->file << ':' << it->caller->info->line << ')';
 			os << "]/[";
 		} else {
@@ -189,7 +163,7 @@ std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
 		}
 		os << it->kf->function->getName().str();
 	}
-	os << '(' << state.pc->info->assemblyLine << ',' << state.pc->info->file << ':' << state.pc->info->line << ')';
+	os << '(' << state.pc()->info->assemblyLine << ',' << state.pc()->info->file << ':' << state.pc()->info->line << ')';
 	os << "]";
 
 	return os;
@@ -244,7 +218,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     std::cerr << "-- attempting merge of A:" 
                << this << " with B:" << &b << "--\n";
-  if (pc != b.pc)
+  if (pc() != b.pc())
     return false;
 
   // XXX is it even possible for these to differ? does it matter? probably
@@ -253,16 +227,16 @@ bool ExecutionState::merge(const ExecutionState &b) {
     return false;
 
   {
-    std::vector<StackFrame>::const_iterator itA = stack.begin();
-    std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-    while (itA!=stack.end() && itB!=b.stack.end()) {
+    std::vector<StackFrame>::const_iterator itA = stack().begin();
+    std::vector<StackFrame>::const_iterator itB = b.stack().begin();
+    while (itA!=stack().end() && itB!=b.stack().end()) {
       // XXX vaargs?
       if (itA->caller!=itB->caller || itA->kf!=itB->kf)
         return false;
       ++itA;
       ++itB;
     }
-    if (itA!=stack.end() || itB!=b.stack.end())
+    if (itA!=stack().end() || itB!=b.stack().end())
       return false;
   }
 
@@ -355,9 +329,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
 
-  std::vector<StackFrame>::iterator itA = stack.begin();
-  std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-  for (; itA!=stack.end(); ++itA, ++itB) {
+  std::vector<StackFrame>::iterator itA = stack().begin();
+  std::vector<StackFrame>::const_iterator itB = b.stack().begin();
+  for (; itA!=stack().end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
     for (unsigned i=0; i<af.kf->numRegisters; i++) {
@@ -469,9 +443,9 @@ ref<Expr> ExecutionState::nextTLSKey() {
 
 void ExecutionState::dumpStack(std::ostream &out) const {
   unsigned idx = 0;
-  const KInstruction *target = prevPC;
+  const KInstruction *target = prevPC();
   for (ExecutionState::stack_ty::const_reverse_iterator
-         it = stack.rbegin(), ie = stack.rend();
+         it = stack().rbegin(), ie = stack().rend();
        it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.kf->function;

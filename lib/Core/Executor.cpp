@@ -717,7 +717,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
       statsTracker->elapsed() > 60.) {
     StatisticManager &sm = *theStatisticManager;
-    CallPathNode *cpn = current.stack.back().callPathNode;
+    CallPathNode *cpn = current.stack().back().callPathNode;
     if ((MaxStaticForkPct<1. &&
          sm.getIndexedValue(stats::forks, sm.getIndex()) > 
          stats::forks*MaxStaticForkPct) ||
@@ -746,7 +746,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
   if (!success) {
-    current.pc = current.prevPC;
+    current.pc() = current.prevPC();
     terminateStateEarly(current, "query timed out");
     return StatePair((klee::ExecutionState*)NULL, (klee::ExecutionState*)NULL);
   }
@@ -1010,7 +1010,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    StackFrame &sf = state.stack.back();
+    StackFrame &sf = state.stack().back();
     return sf.locals[index];
   }
 }
@@ -1069,7 +1069,7 @@ Executor::toConstant(ExecutionState &state,
   std::ostringstream os;
   os << "silently concretizing (reason: " << reason << ") expression " << e 
      << " to value " << value 
-     << " (" << (*(state.pc)).info->file << ":" << (*(state.pc)).info->line << ")";
+     << " (" << (*(state.pc())).info->file << ":" << (*(state.pc())).info->line << ")";
       
   if (AllExternalWarnings)
     klee_warning(reason, os.str().c_str());
@@ -1129,57 +1129,20 @@ void Executor::executeGetValue(ExecutionState &state,
 
 void Executor::stepInstruction(ExecutionState &state) {
   if (DebugPrintInstructions) {
-    printFileLine(state, state.pc);
+    printFileLine(state, state.pc());
     std::cerr << std::setw(10) << stats::instructions << " ";
-    llvm::errs() << *(state.pc->inst);
+    llvm::errs() << *(state.pc()->inst);
   }
 
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
   ++stats::instructions;
-  state.prevPC = state.pc;
-  ++state.pc;
+  state.prevPC() = state.pc();
+  ++state.pc();
 
   if (stats::instructions==StopAfterNInstructions)
     haltExecution = true;
-}
-
-
-std::string Executor::backtrace(Thread *t) const
-{
-  std::stringstream str;
-  llvm::Function *prev_f = 0, *f = 0;
-  std::vector<std::string> items;
-  items.reserve(t->stack->size());
-  for(std::vector<StackFrame>::iterator sf = t->stack->begin();
-      sf != t->stack->end();
-	sf++)
-    {
-      KFunction *kf = (*sf).kf;
-      f = kf->function;
-      KInstIterator caller = (*sf).caller;
-      if(caller && prev_f)
-	{
-	  InstructionInfo ii = *caller->info;
-	  std::stringstream s;
-	  s << prev_f->getName().str() << " " << ii.file << " " << ii.line << std::endl;
-	  items.push_back(s.str());
-	}
-      prev_f = f;
-    }
-  
-  //XXX: need to obtain the lineno and file for the top frame
-  std::stringstream s;  
-  s << prev_f->getName().str() << " " << t->_file << " " << t->_line << std::endl;
-  items.push_back(s.str());
-  
-  for(std::vector<std::string>::reverse_iterator it = items.rbegin(); 
-      it != items.rend(); 
-      it++)
-    str << (*it);
-  
-  return str.str();
 }
 
 void Executor::executeCall(ExecutionState &state, 
@@ -1199,7 +1162,7 @@ void Executor::executeCall(ExecutionState &state,
       // va_arg is handled by caller and intrinsic lowering, see comment for
       // ExecutionState::varargs
     case Intrinsic::vastart:  {
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = state.stack().back();
       assert(sf.varargs && 
              "vastart called in function with no vararg object");
 
@@ -1256,11 +1219,11 @@ void Executor::executeCall(ExecutionState &state,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
-    state.pushFrame(state.prevPC, kf);
-    state.pc = kf->instructions;
+    state.pushFrame(state.prevPC(), kf);
+    state.pc() = kf->instructions;
         
     if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]); //XXX TODO fix this ugly stuff
+      statsTracker->framePushed(state, &state.stack()[state.stack().size()-2]); //XXX TODO fix this ugly stuff
  
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -1283,7 +1246,7 @@ void Executor::executeCall(ExecutionState &state,
         return;
       }
             
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = state.stack().back();
       unsigned size = 0;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
         // FIXME: This is really specific to the architecture, not the pointer
@@ -1298,7 +1261,7 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       MemoryObject *mo = sf.varargs = memory->allocate(size, true, false, 
-                                                       state.prevPC->inst);
+                                                       state.prevPC()->inst);
       if (!mo) {
         terminateStateOnExecError(state, "out of memory (varargs)");
         return;
@@ -1342,11 +1305,11 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // instructions know which argument to eval, set the pc, and continue.
   
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack.back().kf;
+  KFunction *kf = state.stack().back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
-  state.pc = &kf->instructions[entry];
-  if (state.pc->inst->getOpcode() == Instruction::PHI) {
-    PHINode *first = static_cast<PHINode*>(state.pc->inst);
+  state.pc() = &kf->instructions[entry];
+  if (state.pc()->inst->getOpcode() == Instruction::PHI) {
+    PHINode *first = static_cast<PHINode*>(state.pc()->inst);
     state.incomingBBIndex = first->getBasicBlockIndex(src);
   }
 }
@@ -1421,7 +1384,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Control flow
   case Instruction::Ret: {
     ReturnInst *ri = cast<ReturnInst>(i);
-    KInstIterator kcaller = state.stack.back().caller;
+    KInstIterator kcaller = state.stack().back().caller;
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
@@ -1432,7 +1395,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       result = eval(ki, 0, state).value;
     }
     
-    if (state.stack.size() <= 1) {
+    if (state.stack().size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       
       if(state.threads.size() == 1) {
@@ -1451,8 +1414,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
-        state.pc = kcaller;
-        ++state.pc;
+        state.pc() = kcaller;
+        ++state.pc();
       }
 
       if (!isVoidReturn) {
@@ -1489,13 +1452,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
   case Instruction::Unwind: {
     for (;;) {
-      KInstruction *kcaller = state.stack.back().caller;
+      KInstruction *kcaller = state.stack().back().caller;
       state.popFrame();
 
       if (statsTracker)
         statsTracker->framePopped(state);
 
-      if (state.stack.empty()) {
+      if (state.stack().empty()) {
         terminateStateOnExecError(state, "unwind from initial stack frame");
         break;
       } else {
@@ -1532,7 +1495,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned
       // up with convenient instruction specific data.
-      if (statsTracker && state.stack.back().kf->trackCoverage)
+      if (statsTracker && state.stack().back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
       if (branches.first)
@@ -2462,7 +2425,7 @@ void Executor::bindModuleConstants() {
 void Executor::stepInState(ExecutionState *state) {
 	fireControlFlowEvent(state, ::cloud9::worker::STEP);
 
-	KInstruction *ki = state->pc;
+	KInstruction *ki = state->pc();
 	stepInstruction(*state);
 
 	resetTimers();
@@ -2534,7 +2497,7 @@ void Executor::run(ExecutionState &initialState) {
       lastState = it->first;
       unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
-      KInstruction *ki = state.pc;
+      KInstruction *ki = state.pc();
       stepInstruction(state);
 
       executeInstruction(state, ki);
@@ -2666,7 +2629,7 @@ bool Executor::terminateState(ExecutionState &state) {
 
 	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
 	if (it == addedStates.end()) {
-		state.pc = state.prevPC;
+		state.pc() = state.prevPC();
 
 		removedStates.insert(&state);
 	} else {
@@ -2705,10 +2668,10 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &info) {
   std::string message = messaget.str();
   static std::set< std::pair<Instruction*, std::string> > emittedErrors;
-  const InstructionInfo &ii = *state.prevPC->info;
+  const InstructionInfo &ii = *state.prevPC()->info;
   
   if (EmitAllErrors ||
-      emittedErrors.insert(std::make_pair(state.prevPC->inst, message)).second) {
+      emittedErrors.insert(std::make_pair(state.prevPC()->inst, message)).second) {
     if (ii.file != "") {
       klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
     } else {
@@ -2869,7 +2832,7 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // matter because all we use this list for is to unbind the object
   // on function return.
   if (isLocal)
-    state.stack.back().allocas.push_back(mo);
+    state.stack().back().allocas.push_back(mo);
 
   return os;
 }
@@ -2883,7 +2846,7 @@ void Executor::executeAlloc(ExecutionState &state,
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
     MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, 
-                                        state.prevPC->inst);
+                                        state.prevPC()->inst);
     if (!mo) {
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -3069,7 +3032,7 @@ void Executor::printDebug(ExecutionState &state, std::string s, bool line)
     std::cerr << "ESD: #################################################################" << std::endl;
     if(line) 
       {
-	printFileLine(state, state.pc);
+	printFileLine(state, state.pc());
 	std::cerr << std::endl;
       }
     std::cerr << " state " << &state;
@@ -3110,19 +3073,22 @@ void  Executor::executePthreadCreate(ExecutionState &state,
   KFunction *kf = resolveFunction(start_function);
   assert(kf && "cannot resolve thread start function");
   
-  Thread* t = new Thread (thread, value, kf);
-  state.threads.push_back(t);
+  state.threads.push_back(Thread(thread, value, kf));
+  Thread &t = state.threads.back();
  
-  bindArgumentToPthreadCreate(kf, 0, t->stack->back(), arg);
+  bindArgumentToPthreadCreate(kf, 0, t.stack.back(), arg);
   
   std::stringstream dmesg;
-  dmesg << "created thread " << t->tid;
+  dmesg << "created thread " << t.tid;
   printDebug(state, dmesg.str(), true);
   
   //tracing the call
-  state.addPthreadCreateTraceItem(t->tid);
+  state.addPthreadCreateTraceItem(t.tid);
 
-  initTLS(state, t);
+  initTLS(state, &t);
+
+  if (statsTracker)
+    statsTracker->framePushed(&t.stack.back(), 0);
 
   // XXX: Fault Injection - great oportunity to return all kinds of errors
   // The pthread_create() function shall fail if
@@ -3205,11 +3171,11 @@ void  Executor::executePthreadJoin(ExecutionState &state,
   
   bool running = false;
   uint64_t toJoin = 0;
-  for (std::vector<Thread*>::iterator it = state.threads.begin();
+  for (std::vector<Thread>::iterator it = state.threads.begin();
        it != state.threads.end(); it++) {
-    if((*it) != state.crtThread) {
-      if(thread == (*it)->value) {
-	toJoin = (*it)->tid;
+    if(&(*it) != state.crtThread) {
+      if(thread == it->value) {
+	toJoin = it->tid;
 	running = true;
 	break;
       }
@@ -3250,31 +3216,30 @@ void  Executor::executePthreadJoin(ExecutionState &state,
 
 Thread* Executor::getByTid(ExecutionState &state, uint64_t tid)
 {
-  for(std::vector<Thread*>::iterator it = state.threads.begin();
+  for(std::vector<Thread>::iterator it = state.threads.begin();
       it != state.threads.end();
       it++) {
-    Thread* thr = (*it);
-    if (thr->tid == tid)
-      return thr;
+    if (it->tid == tid)
+      return &(*it);
   }
   return NULL;
 }
 
 void Executor::updateTraceOnDeadlock(ExecutionState &state)
 {
-  for(std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.begin();
+  for(std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.begin();
       it != state.mutexes.end();
       it++) {
-    Mutex *m = it->second;
-    if (m->waiting.size() > 0) {
-      uint64_t tid  = *m->waiting.begin(); // next thread to get this lock
+    Mutex &m = it->second;
+    if (m.waiting.size() > 0) {
+      uint64_t tid  = m.waiting.front(); // next thread to get this lock
       
       //XXX optimize this using a map from tids to Threads
       Thread* t = getByTid(state, tid);
       
       //adding a trace item for the enabled thread
       //TODO: check if this will still hold for rw_lock
-      state.updateTraceInfo(m, t);
+      state.updateTraceInfo(&m, t);
     }
   }
 }
@@ -3287,8 +3252,8 @@ bool Executor::acquireMutex(ExecutionState &state,
 			    ref<Expr> mutex)
 {
   std::stringstream dmesg;
-  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
-  Mutex * m;
+  std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.find(mutex);
+  Mutex *m;
 
   if(it == state.mutexes.end())
     {
@@ -3297,10 +3262,11 @@ bool Executor::acquireMutex(ExecutionState &state,
       mutex = toUnique(state, mutex);
       assert(isa<ConstantExpr>(mutex) && "mutex address");
       m = new Mutex(mutex);
-      state.mutexes.insert(std::make_pair(mutex, m));
+      state.mutexes.insert(std::make_pair(mutex, Mutex(mutex)));
+      m = &state.mutexes[mutex];
     }
   else
-    m = it->second;
+    m = &it->second;
   
   //XXX: should update this to work for trylock type of synchronization
   state.crtThread->traceInfo.op++;
@@ -3351,10 +3317,10 @@ void  Executor::executePthreadMutexLock(ExecutionState &state,
   bindLocal(ki, state, ConstantExpr::create(returnValue, 
 					    getWidthForLLVMType(ki->inst->getType())));
   
-  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.find(mutex);
   assert(it != state.mutexes.end() && 
 	 "inconsitency in mutex management detected during mutex lock");
-  schedule(state, false, LOCK, it->second);
+  schedule(state, false, LOCK, &it->second);
 
   //fault injection could try returning something else
   // [EDEADLK]          
@@ -3367,16 +3333,16 @@ void  Executor::executePthreadMutexLock(ExecutionState &state,
 void Executor::releaseMutex(ExecutionState &state, 
 		       ref<Expr> mutex)
 {
-  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.find(mutex);
   if(it != state.mutexes.end())  {
-    Mutex *m = it->second;
+    Mutex &m = it->second;
     
     uint64_t tid = state.crtThread->tid;
     
     state.crtThread->traceInfo.op++;
-    state.updateTraceInfo(m, state.crtThread);
+    state.updateTraceInfo(&m, state.crtThread);
     
-    if(m->waiting.size() != 0) {
+    if(m.waiting.size() != 0) {
       // the current code simply enables the next thread in the mutex queue
       // this is equivalent with the next thread acquiring the lock but 
       // this is done before the next thread actually starts executing
@@ -3385,29 +3351,24 @@ void Executor::releaseMutex(ExecutionState &state,
       // so we can have a common point for placing hooks into acquire, 
       // such as the deadlock detection one
       
-      tid  = *m->waiting.begin(); // next thread to get this lock
+      tid  = m.waiting.front(); // next thread to get this lock
       
       //XXX:zamf optimize this using a map from tids to Threads
       Thread* t = getByTid(state, tid);
       
       //adding a trace item for the enabled thread
       //TODO: check if this will still hold for rw_lock
-      state.updateTraceInfo(m, t); 
+      state.updateTraceInfo(&m, t);
       
       //TODO: could also help the scheduler a bit by puting this thread
       //in front of the scheduling queue
       t->enabled = true;
-      m->waiting.erase(m->waiting.begin());
+      m.waiting.erase(m.waiting.begin());
       
       // TODO: do we need the owner?
-      m->thread = t->tid;  // replace the owner
+      m.thread = t->tid;  // replace the owner
     }
-    m->taken = false;
-
-#ifdef DataRaceSearch    
-    if(DataRaceSearch)
-      dataRaceDetector->release(state, m_addr);
-#endif
+    m.taken = false;
 
   }
   else
@@ -3442,9 +3403,9 @@ void  Executor::executePthreadMutexUnlock(ExecutionState &state,
   int returnValue = 0;
   bindLocal(ki, state, ConstantExpr::create(returnValue, 
 					    getWidthForLLVMType(ki->inst->getType())));
-  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.find(mutex);
   assert(it != state.mutexes.end() &&  "error realeasing mutex");
-  schedule(state, false, UNLOCK, it->second);
+  schedule(state, false, UNLOCK, &it->second);
   //XXX: should handle this, it could find some programming errors
   // EPERM
   // The current thread does not own the mutex.
@@ -3457,8 +3418,7 @@ void  Executor::executePthreadMutexInit(ExecutionState &state,
   // mutex = toUnique(state, mutex);
   assert(isa<ConstantExpr>(mutex) &&
 	 "symbolic mutex address currently not supported");
-  Mutex *m = new Mutex(mutex);
-  state.mutexes.insert(std::make_pair(mutex, m));
+  state.mutexes.insert(std::make_pair(mutex, Mutex(mutex)));
   
   //set the return value to 0, ignoring the possible errors
   //EINVAL is the most important, the rest can be used for fault 
@@ -3481,12 +3441,10 @@ void  Executor::executePthreadMutexDestroy(ExecutionState &state,
   assert (isa<ConstantExpr>(mutex) && 
 	  "symbolic mutex address currently not supported");
 
-  std::map<ref<Expr>, Mutex*>::iterator it = state.mutexes.find(mutex);
+  std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.find(mutex);
   if(it != state.mutexes.end())
     {
-      Mutex *m = (*it).second;
       state.mutexes.erase(it);
-      delete  m;
     } 
   else
     klee_warning( "pthread_mutex_destroy: non-initialized mutex");
@@ -3508,16 +3466,16 @@ void  Executor::executeThreadExit(ExecutionState &state,
   printDebug(state, "executing thread exit", false);
   bool destructors = destroyTLS(state, ki, state.crtThread);
   if(!destructors) {
-    for (std::vector<Thread*>::iterator it = state.threads.begin();
+    for (std::vector<Thread>::iterator it = state.threads.begin();
 	 it != state.threads.end(); it++) {
-      if(state.crtThread->tid == (*it)->joining) {
-	Thread *t = (*it);
-	t->joinState = false;
-	t->enabled = true;
-	t->joining = 0xFFFFFFFF;
+      if(state.crtThread->tid == it->joining) {
+	Thread &t = *it;
+	t.joinState = false;
+	t.enabled = true;
+	t.joining = 0xFFFFFFFF;
 	
 	std::stringstream msg;
-	msg << "on exit enabled thread " << t->tid;
+	msg << "on exit enabled thread " << t.tid;
 	printDebug(state, msg.str(), false);
 	break;
       }
@@ -3542,11 +3500,11 @@ void  Executor::executePthreadCondWait(ExecutionState &state,
 				       ref<Expr> mutex)
 {
   Thread *crt = state.crtThread;
-  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
-    CondVar* cv = it->second;
+    CondVar& cv = it->second;
     state.crtThread->traceInfo.op++;
-    cv->threads.push_back(crt->tid);
+    cv.threads.push_back(crt->tid);
     state.crtThread->enabled=false;
   }
 }
@@ -3558,19 +3516,19 @@ void Executor::executePthreadCondSignal(ExecutionState &state,
 
   // TODO would not hurt to check we own the mutex
   // this can help discover concurency bugs that lead to races or deadlocks
-  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
-      CondVar *cv = it->second;
+      CondVar &cv = it->second;
       state.crtThread->traceInfo.op++;
-      state.updateTraceInfo(cv, state.crtThread);
+      state.updateTraceInfo(&cv, state.crtThread);
       
       // remove the first in the queue, if any 
-      if(cv->threads.size() > 0) {
-	Thread *next = getByTid(state, *cv->threads.begin());
+      if(cv.threads.size() > 0) {
+	Thread *next = getByTid(state, cv.threads.front());
 	assert(next!=NULL && "error getting the mapping from tid to Thread*");
 	next->enabled = true;
-	state.updateTraceInfo(cv, next);
-	cv->threads.erase(cv->threads.begin());
+	state.updateTraceInfo(&cv, next);
+	cv.threads.erase(cv.threads.begin());
       }
     } 
 }
@@ -3580,17 +3538,17 @@ void Executor::executePthreadCondBroadcast(ExecutionState &state,
 					   ref<Expr> cond_var)
 {
   //XXX  same as for signal, check that the mutex has been acquired
-  std::map<ref<Expr>, CondVar*>::iterator it = state.cond_vars.find(cond_var);
+  std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
-    CondVar *cv = it->second;
-    state.updateTraceInfo(cv, state.crtThread);
-    for(std::vector<uint64_t>::iterator it = cv->threads.begin();
-	it != cv->threads.end();
+    CondVar &cv = it->second;
+    state.updateTraceInfo(&cv, state.crtThread);
+    for(std::vector<uint64_t>::iterator it = cv.threads.begin();
+	it != cv.threads.end();
 	it++) {
-      Thread *next = getByTid(state, *(it));
+      Thread *next = getByTid(state, *it);
       next->enabled = true;
-      state.updateTraceInfo(cv, next);
-      cv->threads.erase(it);
+      state.updateTraceInfo(&cv, next);
+      cv.threads.erase(it);
     }
   }
 }
@@ -4142,7 +4100,7 @@ ExecutionState *Executor::createRootState(llvm::Function *f) {
 
 void Executor::initRootState(ExecutionState *state,
 		int argc, char **argv, char **envp) {
-	llvm::Function *f = state->stack.back().kf->function;
+	llvm::Function *f = state->stack().back().kf->function;
 
 	std::vector<ref<Expr> > arguments;
 
@@ -4184,12 +4142,6 @@ void Executor::initRootState(ExecutionState *state,
 			}
 		}
 	}
-
-    //initialize the main thread
-    Thread *mainThread = new Thread(state->pc, &state->stack);
-    assert(mainThread->stack && "main thread stack is null");
-    state->threads.push_back(mainThread);
-    state->crtThread = mainThread;
 
 	if (pathWriter)
 		state->pathOS = pathWriter->open();

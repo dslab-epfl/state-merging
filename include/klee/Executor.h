@@ -303,7 +303,7 @@ private:
   Cell& getArgumentCell(ExecutionState &state,
                         KFunction *kf,
                         unsigned index) {
-    return state.stack.back().locals[kf->getArgRegister(index)];
+    return state.stack().back().locals[kf->getArgRegister(index)];
   }
 
   Cell& getArgumentCell(StackFrame &sf, 
@@ -314,7 +314,7 @@ private:
 
   Cell& getDestCell(ExecutionState &state,
                     KInstruction *target) {
-    return state.stack.back().locals[target->dest];
+    return state.stack().back().locals[target->dest];
   }
 
   void bindLocal(KInstruction *target, 
@@ -416,9 +416,6 @@ private:
   bool destroyTLS(ExecutionState &state, 
 		  KInstruction* ki, 
 		  Thread* thread);
-
-  //get the backtrace of the current thread
-  std::string backtrace(Thread *t) const;
 
 
   //pthread handlers

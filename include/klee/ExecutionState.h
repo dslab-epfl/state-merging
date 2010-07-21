@@ -107,10 +107,7 @@ public:
   // objects.
   unsigned underConstrained;
   unsigned depth;
-  
-  // pc - pointer to current instruction stream
-  KInstIterator pc, prevPC;
-  stack_ty stack;
+
   ConstraintManager constraints;
   mutable double queryCost;
   double weight;
@@ -137,26 +134,29 @@ public:
   // FIXME: Move to a shared list structure (not critical).
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
 
-  // Used by the checkpoint/rollback methods for fake objects.
-  // FIXME: not freeing things on branch deletion.
-  MemoryMap shadowObjects;
-
   unsigned incomingBBIndex;
 
   // For a multi threded ExecutionState
-  std::vector<Thread*> threads;
+  std::vector<Thread> threads;
   Thread* crtThread;
-  std::map<ref<Expr>, Mutex*> mutexes;
-  std::map<ref<Expr>, CondVar*> cond_vars;
+
+  std::map<ref<Expr>, Mutex> mutexes;
+  std::map<ref<Expr>, CondVar> cond_vars;
   unsigned int preemptions;
   std::vector<TraceItem> trace;
   std::map< ref<Expr> , KFunction*> tls_keys;
   uint64_t TLSKeyGen;
   ref<Expr> nextTLSKey(); 
-  bool deadlock;
-  std::map<Mutex*, ExecutionState*> backtrackingStates;
 
-  int executedInstructions;
+  // pc - pointer to current instruction stream
+   KInstIterator& pc() { return crtThread->pc; }
+   KInstIterator& pc() const { return crtThread->pc; }
+
+   KInstIterator& prevPC() { return crtThread->prevPC; }
+   KInstIterator& prevPC() const { return crtThread->prevPC; }
+
+   stack_ty& stack() { return crtThread->stack; }
+   stack_ty& stack() const { return crtThread->stack; }
 
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
