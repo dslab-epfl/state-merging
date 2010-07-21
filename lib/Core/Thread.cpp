@@ -12,18 +12,12 @@ using namespace klee;
 
 uint64_t  Thread::tids = 0;
 
-Thread::Thread(ref<Expr> _address, ref<Expr> _value, KFunction * kf):
+Thread::Thread(ref<Expr> _address, KFunction * kf):
   enabled(true),
   joinState(false), 
   joining(0xFFFFFFFF)    
 {
   thread_ptr = _address;
-  value = _value;
-
-  if (!value.isNull())
-    CLOUD9_DEBUG("New thread with value: " << value);
-  else
-    CLOUD9_DEBUG("New thread with value NULL");
 
   pushFrame(0, kf);
 

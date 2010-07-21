@@ -2629,7 +2629,6 @@ bool Executor::terminateState(ExecutionState &state) {
 
 	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
 	if (it == addedStates.end()) {
-	  assert(state.crtThread != NULL);
 	  state.pc() = state.prevPC();
 
 	  removedStates.insert(&state);
@@ -3029,7 +3028,7 @@ KFunction* Executor::resolveFunction(ref<Expr> address)
 
 void Executor::printDebug(ExecutionState &state, std::string s, bool line)
 {
-  //if(printThreadDebug) {
+  if(printThreadDebug) {
     std::cerr << "ESD: #################################################################" << std::endl;
     if(line) 
       {
@@ -3037,9 +3036,9 @@ void Executor::printDebug(ExecutionState &state, std::string s, bool line)
 	std::cerr << std::endl;
       }
     std::cerr << " state " << &state;
-    std::cerr << " thread " << state.crtThread->tid << std::endl;
+    std::cerr << " thread " << state.crtThread().tid << std::endl;
     std::cerr << s << std::endl;
-  //}
+  }
 }
 
 
@@ -3068,14 +3067,16 @@ void  Executor::executePthreadCreate(ExecutionState &state,
   const MemoryObject *mo = op.first;
   ref<Expr> offset = mo->getOffsetExpr(thread);
 
-  Expr::Width W = thread->getWidth();
-  ref<Expr> value = op.second->read(offset, W);
-
   KFunction *kf = resolveFunction(start_function);
   assert(kf && "cannot resolve thread start function");
-  
-  state.threads.push_back(Thread(thread, value, kf));
+
+  state.threads.push_back(Thread(thread, kf));
   Thread &t = state.threads.back();
+
+  Expr::Width W = thread->getWidth();
+  ref<Expr> value = ConstantExpr::create(t.tid, W);
+  ObjectState *os = state.addressSpace.getWriteable(mo, op.second);
+  os->write(offset, value);
  
   bindArgumentToPthreadCreate(kf, 0, t.stack.back(), arg);
   
@@ -3169,17 +3170,20 @@ void  Executor::executePthreadJoin(ExecutionState &state,
   thread = toUnique(state, thread);
   assert(isa<ConstantExpr>(thread) &&
 	 "pthread_t thread variable is not constant");
+  uint64_t tid = cast<ConstantExpr>(thread)->getZExtValue();
   
   bool running = false;
   uint64_t toJoin = 0;
-  for (std::vector<Thread>::iterator it = state.threads.begin();
-       it != state.threads.end(); it++) {
-    if(&(*it) != state.crtThread) {
-      if(thread == it->value) {
-	toJoin = it->tid;
-	running = true;
-	break;
+  for (std::vector<Thread>::iterator it = state.threads.begin(); it
+      != state.threads.end(); it++) {
+    if (it != state.threads.begin()) {
+      if (tid == it->tid) {
+        toJoin = it->tid;
+        running = true;
+        break;
       }
+    } else {
+      assert(tid != it->tid);
     }
   }
   
@@ -3206,9 +3210,9 @@ void  Executor::executePthreadJoin(ExecutionState &state,
   // the thread to join is still running
   if(running)
     {
-      state.crtThread->joinState = true;
-      state.crtThread->joining = toJoin;
-      state.crtThread->enabled = false;
+      state.crtThread().joinState = true;
+      state.crtThread().joining = toJoin;
+      state.crtThread().enabled = false;
       schedule(state, false);
     }
   // Simply return from pthread_join. This thread will be scheduled back after it was joined.
@@ -3270,31 +3274,31 @@ bool Executor::acquireMutex(ExecutionState &state,
     m = &it->second;
   
   //XXX: should update this to work for trylock type of synchronization
-  state.crtThread->traceInfo.op++;
+  state.crtThread().traceInfo.op++;
   
   //line info for obtaining a propper top frame in the backtrace
-  state.crtThread->_file = ki->info->file;
-  state.crtThread->_line = ki->info->line;
+  state.crtThread()._file = ki->info->file;
+  state.crtThread()._line = ki->info->line;
 
   if(!m->taken)
     {
       dmesg << "mutex 0x" << std::hex << mutex << " was free";
       printDebug(state, dmesg.str(), true);
 	  
-      m->thread = state.crtThread->tid;  // set the mutex owner
+      m->thread = state.crtThread().tid;  // set the mutex owner
       m->taken = true; // acquire the mutex
-      state.crtThread->enabled = true;
+      state.crtThread().enabled = true;
 
-      state.updateTraceInfo(m, state.crtThread);
+      state.updateTraceInfo(m, &state.crtThread());
     }
   else
     {
       dmesg << "mutex 0x" << std::hex << mutex << " is taken by "<< m->thread<< " ... sleeping";
       printDebug(state, dmesg.str(), true);
 	  
-      state.crtThread->enabled = false;
+      state.crtThread().enabled = false;
       // enqueue this thread in the mutex waiting queue
-      m->waiting.push_back(state.crtThread->tid);
+      m->waiting.push_back(state.crtThread().tid);
     }
 
   return true;
@@ -3311,7 +3315,7 @@ void  Executor::executePthreadMutexLock(ExecutionState &state,
 {
   mutex = toUnique(state, mutex);
   assert(isa<ConstantExpr>(mutex) &&  "unhandled: mutex address is not constant");
-  assert(state.crtThread->enabled && "cannot execute a thread that is not in an enabled state");
+  assert(state.crtThread().enabled && "cannot execute a thread that is not in an enabled state");
   if(!acquireMutex(state, ki, mutex))
     return;
   int returnValue = 0;
@@ -3338,10 +3342,10 @@ void Executor::releaseMutex(ExecutionState &state,
   if(it != state.mutexes.end())  {
     Mutex &m = it->second;
     
-    uint64_t tid = state.crtThread->tid;
+    uint64_t tid = state.crtThread().tid;
     
-    state.crtThread->traceInfo.op++;
-    state.updateTraceInfo(&m, state.crtThread);
+    state.crtThread().traceInfo.op++;
+    state.updateTraceInfo(&m, &state.crtThread());
     
     if(m.waiting.size() != 0) {
       // the current code simply enables the next thread in the mutex queue
@@ -3380,7 +3384,7 @@ void  Executor::executePthreadMutexUnlock(ExecutionState &state,
 					  KInstruction *ki, 
 					  ref<Expr> mutex)
 {
-  assert(state.crtThread->enabled 
+  assert(state.crtThread().enabled
 	 && "cannot execute a thread that is not in an enabled state");
   
 #ifdef  ESD_ERROR_CHECK 
@@ -3465,11 +3469,11 @@ void  Executor::executeThreadExit(ExecutionState &state,
 				  KInstruction *ki) {
 
   printDebug(state, "executing thread exit", false);
-  bool destructors = destroyTLS(state, ki, state.crtThread);
+  bool destructors = destroyTLS(state, ki, &state.crtThread());
   if(!destructors) {
     for (std::vector<Thread>::iterator it = state.threads.begin();
 	 it != state.threads.end(); it++) {
-      if(state.crtThread->tid == it->joining) {
+      if(state.crtThread().tid == it->joining) {
 	Thread &t = *it;
 	t.joinState = false;
 	t.enabled = true;
@@ -3482,7 +3486,7 @@ void  Executor::executeThreadExit(ExecutionState &state,
       }
     }
     //terminate this thread and schedule another one
-    state.crtThread->enabled = false;
+    state.crtThread().enabled = false;
     schedule(state, true);
   }
   else
@@ -3500,13 +3504,13 @@ void  Executor::executePthreadCondWait(ExecutionState &state,
 				       ref<Expr> cond_var, 
 				       ref<Expr> mutex)
 {
-  Thread *crt = state.crtThread;
+  Thread *crt = &state.crtThread();
   std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
     CondVar& cv = it->second;
-    state.crtThread->traceInfo.op++;
+    state.crtThread().traceInfo.op++;
     cv.threads.push_back(crt->tid);
-    state.crtThread->enabled=false;
+    state.crtThread().enabled=false;
   }
 }
 
@@ -3520,8 +3524,8 @@ void Executor::executePthreadCondSignal(ExecutionState &state,
   std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
       CondVar &cv = it->second;
-      state.crtThread->traceInfo.op++;
-      state.updateTraceInfo(&cv, state.crtThread);
+      state.crtThread().traceInfo.op++;
+      state.updateTraceInfo(&cv, &state.crtThread());
       
       // remove the first in the queue, if any 
       if(cv.threads.size() > 0) {
@@ -3542,7 +3546,7 @@ void Executor::executePthreadCondBroadcast(ExecutionState &state,
   std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
     CondVar &cv = it->second;
-    state.updateTraceInfo(&cv, state.crtThread);
+    state.updateTraceInfo(&cv, &state.crtThread());
     for(std::vector<uint64_t>::iterator it = cv.threads.begin();
 	it != cv.threads.end();
 	it++) {
@@ -3635,9 +3639,9 @@ void Executor::executePthreadGetSpecific(ExecutionState &state,
   assert(isa<ConstantExpr>(key) && 
 	 "pthread_getspecific key address is not constant");
   ref<Expr> addr;
-  std::map< ref<Expr>, ref<Expr> >::iterator it = state.crtThread->tls.find(key);
-  if(it != state.crtThread->tls.end())
-    addr  = state.crtThread->tls[key];
+  std::map< ref<Expr>, ref<Expr> >::iterator it = state.crtThread().tls.find(key);
+  if(it != state.crtThread().tls.end())
+    addr  = state.crtThread().tls[key];
   else
     //XXX: should also set errno to EINVAL
     addr = Expr::createPointer(0);
@@ -3653,7 +3657,7 @@ void Executor::executePthreadSetSpecific(ExecutionState &state,
   key = toUnique(state, key);
   assert(isa<ConstantExpr>(key) && "pthread_setspecific key address is not constant");
   
-  state.crtThread->tls[key] = value;
+  state.crtThread().tls[key] = value;
 
   //Fault Injection options
   //The pthread_setspecific() function shall fail if:
@@ -3761,7 +3765,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
   ExecutionState *lastState = &state;
   bool one = false;
   
-  if(state.crtThread->enabled) {
+  if(state.crtThread().enabled) {
       if(state.preemptions < MaxPreemptions) {
 	// all enabled threads except the current thread
 	for(unsigned int i = 1; i < state.threads.size(); i++) {
@@ -3794,8 +3798,6 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    //the first thread becomes last : round robin
 	    newState->threads.push_back(newState->threads.front());
 	    newState->threads.erase(newState->threads.begin());
-
-	    newState->crtThread = &newState->threads.front();
 	    
 	    lastState =  newState;		      
 	  }
@@ -3840,9 +3842,7 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
 	    std::swap(newState->threads.front(), newState->threads[i]);
 	    newState->threads.erase(newState->threads.begin()+i);
 	    
-	    newState->crtThread = &newState->threads.front();
-	    
-	    lastState =  newState;		      
+	    lastState = newState;
 	  }
 	}
       }
@@ -3860,10 +3860,6 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
     next.tid << " index = " << index;
   
   printDebug(state, dmesg2.str(), !terminate);
-
-  state.crtThread = &state.threads.front();
-
-  assert(state.crtThread != NULL && "error on setting up the next thread");
 }
 
 

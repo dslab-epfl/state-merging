@@ -5,6 +5,8 @@
 #include "klee/Expr.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/ScheduleTrace.h"
+#include "cloud9/Logger.h"
+
 #include <map>
 
 namespace klee {
@@ -25,10 +27,10 @@ class Thread
   friend class DeadlockSearcher;
 public:
   //Thread();
-  Thread(ref<Expr> _address, ref<Expr> value, KFunction *start_function);
+  Thread(ref<Expr> _address, KFunction *start_function);
 
   static uint64_t tids;
-  // ~Thread(); //XXX should really implement this at some point
+
   LockList lockSet;
 
   uint64_t getTID() { return  tid;}
@@ -40,7 +42,6 @@ private:
   // the thread we are joining
   uint64_t joining;
   ref<Expr> thread_ptr; //address of the thread variable
-  ref<Expr> value;  //value of the pthread_t thread identifier located at thread_ptr
   uint64_t tid;
   KInstIterator pc, prevPC;
   SchedThreadTraceInfo traceInfo;

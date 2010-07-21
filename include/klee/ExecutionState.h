@@ -83,6 +83,8 @@ struct StackFrame {
 
   StackFrame(KInstIterator caller, KFunction *kf);
   StackFrame(const StackFrame &s);
+
+  StackFrame& operator=(const StackFrame &sf);
   ~StackFrame();
 };
 
@@ -138,7 +140,10 @@ public:
 
   // For a multi threded ExecutionState
   std::vector<Thread> threads;
-  Thread* crtThread;
+
+  Thread &crtThread() { return threads.front(); }
+  const Thread &crtThread() const { return threads.front(); }
+
 
   std::map<ref<Expr>, Mutex> mutexes;
   std::map<ref<Expr>, CondVar> cond_vars;
@@ -149,14 +154,14 @@ public:
   ref<Expr> nextTLSKey(); 
 
   // pc - pointer to current instruction stream
-   KInstIterator& pc() { return crtThread->pc; }
-   KInstIterator& pc() const { return crtThread->pc; }
+   KInstIterator& pc() { return crtThread().pc; }
+   const KInstIterator& pc() const { return crtThread().pc; }
 
-   KInstIterator& prevPC() { return crtThread->prevPC; }
-   KInstIterator& prevPC() const { return crtThread->prevPC; }
+   KInstIterator& prevPC() { return crtThread().prevPC; }
+   const KInstIterator& prevPC() const { return crtThread().prevPC; }
 
-   stack_ty& stack() { return crtThread->stack; }
-   stack_ty& stack() const { return crtThread->stack; }
+   stack_ty& stack() { return crtThread().stack; }
+   const stack_ty& stack() const { return crtThread().stack; }
 
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
@@ -176,9 +181,9 @@ public:
   void addPthreadCreateTraceItem(int tid);
 
 private:
-  ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor),
+  /*ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor),
   fakeState(false), underConstrained(0), addressSpace(this),
-  lastCoveredTime(sys::TimeValue::now()), ptreeNode(0) {}
+  lastCoveredTime(sys::TimeValue::now()), ptreeNode(0) {}*/
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);

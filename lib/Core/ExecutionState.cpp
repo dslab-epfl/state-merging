@@ -14,6 +14,7 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
+#include "cloud9/Logger.h"
 
 #include "klee/Expr.h"
 
@@ -59,6 +60,26 @@ StackFrame::StackFrame(const StackFrame &s)
     locals[i] = s.locals[i];
 }
 
+StackFrame& StackFrame::operator=(const StackFrame &s) {
+  if (this != &s) {
+    caller = s.caller;
+    kf = s.kf;
+    callPathNode = s.callPathNode;
+    allocas = s.allocas;
+    minDistToUncoveredOnReturn = s.minDistToUncoveredOnReturn;
+    varargs = s.varargs;
+
+    if (locals)
+      delete []locals;
+
+    locals = new Cell[s.kf->numRegisters];
+    for (unsigned i=0; i<s.kf->numRegisters; i++)
+        locals[i] = s.locals[i];
+  }
+
+  return *this;
+}
+
 StackFrame::~StackFrame() { 
   delete[] locals; 
 }
@@ -81,8 +102,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     ptreeNode(0) {
   preemptions = 0;
 
-  threads.push_back(Thread(0, 0, kf));
-  crtThread = &threads.back();
+  threads.push_back(Thread(0, kf));
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
@@ -105,9 +125,6 @@ ExecutionState *ExecutionState::branch() {
   depth++;
 
   ExecutionState *falseState = new ExecutionState(*this);
-  
-  assert(falseState->threads.size() > 0);
-  falseState->crtThread = &falseState->threads[0];
   
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
