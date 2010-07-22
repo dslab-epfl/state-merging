@@ -100,12 +100,12 @@ private:
   cloud9::worker::SymbolicState *c9State;
 
 public:
+  /* System-level parameters */
   Executor *executor;
 
   bool fakeState;
   // Are we currently underconstrained?  Hack: value is size to make fake
   // objects.
-  unsigned underConstrained;
   unsigned depth;
 
   ConstraintManager constraints;
