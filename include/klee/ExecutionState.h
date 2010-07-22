@@ -21,6 +21,7 @@
 #include "llvm/System/TimeValue.h"
 
 #include "klee/Threading.h"
+#include "klee/MultiProcess.h"
 
 #include <map>
 #include <set>
@@ -56,36 +57,6 @@ std::ostream &printStateMemorySummary(std::ostream &os, const ExecutionState &st
 std::ostream &operator<<(std::ostream &os, const ExecutionState &state); // XXX Cloud9 hack
 std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
-
-struct StackFrame {
-  KInstIterator caller;
-  KFunction *kf;
-  CallPathNode *callPathNode;
-
-  std::vector<const MemoryObject*> allocas;
-  Cell *locals;
-
-  /// Minimum distance to an uncovered instruction once the function
-  /// returns. This is not a good place for this but is used to
-  /// quickly compute the context sensitive minimum distance to an
-  /// uncovered instruction. This value is updated by the StatsTracker
-  /// periodically.
-  unsigned minDistToUncoveredOnReturn;
-
-  // For vararg functions: arguments not passed via parameter are
-  // stored (packed tightly) in a local (alloca) memory object. This
-  // is setup to match the way the front-end generates vaarg code (it
-  // does not pass vaarg through as expected). VACopy is lowered inside
-  // of intrinsic lowering.
-  MemoryObject *varargs;
-
-  StackFrame(KInstIterator caller, KFunction *kf);
-  StackFrame(const StackFrame &s);
-
-  StackFrame& operator=(const StackFrame &sf);
-  ~StackFrame();
-};
-
 class ExecutionState {
 	friend class ObjectState;
 
@@ -108,10 +79,13 @@ public:
   // objects.
   unsigned depth;
 
-  ConstraintManager constraints;
+  /// Disables forking, set by user code.
+  bool forkDisabled;
+
+
   mutable double queryCost;
   double weight;
-  AddressSpace addressSpace;
+
   TreeOStream pathOS, symPathOS;
   unsigned instsSinceCovNew;
 
@@ -123,10 +97,8 @@ public:
 	  lastCoveredTime = sys::TimeValue::now();
   }
 
-  /// Disables forking, set by user code.
-  bool forkDisabled;
-
   std::map<const std::string*, std::set<unsigned> > coveredLines;
+
   PTreeNode *ptreeNode;
 
   /// ordered list of symbolics: used to generate test cases. 
@@ -134,21 +106,18 @@ public:
   // FIXME: Move to a shared list structure (not critical).
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
 
-  unsigned incomingBBIndex;
 
   // For a multi threded ExecutionState
-  std::vector<Thread> threads;
+  std::vector<Thread*> threads;
+  std::vector<Process*> processes;
 
-  Thread &crtThread() { return threads.front(); }
-  const Thread &crtThread() const { return threads.front(); }
-
-
-  std::map<ref<Expr>, Mutex> mutexes;
-  std::map<ref<Expr>, CondVar> cond_vars;
   unsigned int preemptions;
-  std::map< ref<Expr> , KFunction*> tls_keys;
-  uint64_t TLSKeyGen;
-  ref<Expr> nextTLSKey(); 
+
+
+  /* Shortcut methods */
+
+  Thread &crtThread() { return *threads.front(); }
+  const Thread &crtThread() const { return *threads.front(); }
 
   // pc - pointer to current instruction stream
    KInstIterator& pc() { return crtThread().pc; }
@@ -175,8 +144,12 @@ public:
   
   ExecutionState *branch();
 
-  void pushFrame(KInstIterator caller, KFunction *kf);
-  void popFrame();
+  void pushFrame(KInstIterator caller, KFunction *kf) {
+    crtThread().pushFrame(caller, kf);
+  }
+  void popFrame() {
+    crtThread().popFrame();
+  }
 
   void addSymbolic(const MemoryObject *mo, const Array *array) { 
     symbolics.push_back(std::make_pair(mo, array));

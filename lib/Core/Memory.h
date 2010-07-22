@@ -184,8 +184,6 @@ private:
   // mutable because we may need flush during read of const
   mutable UpdateList updates;
 
-  void fireDebugMessage(std::string &message);
-
 public:
   unsigned size;
 

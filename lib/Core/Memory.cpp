@@ -159,13 +159,6 @@ ObjectState::~ObjectState() {
   delete[] concreteStore;
 }
 
-void ObjectState::fireDebugMessage(std::string &message) {
-	ExecutionState *state = owner->state;
-	Executor *executor = state->executor;
-
-	executor->fireDebugInfo(state, message);
-}
-
 /***/
 
 const UpdateList &ObjectState::getUpdates() const {

@@ -42,47 +42,7 @@ namespace klee {
 
 /***/
 
-StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
-  : caller(_caller), kf(_kf), callPathNode(0), 
-    minDistToUncoveredOnReturn(0), varargs(0) {
-  locals = new Cell[kf->numRegisters];
-}
 
-StackFrame::StackFrame(const StackFrame &s) 
-  : caller(s.caller),
-    kf(s.kf),
-    callPathNode(s.callPathNode),
-    allocas(s.allocas),
-    minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
-    varargs(s.varargs) {
-  locals = new Cell[s.kf->numRegisters];
-  for (unsigned i=0; i<s.kf->numRegisters; i++)
-    locals[i] = s.locals[i];
-}
-
-StackFrame& StackFrame::operator=(const StackFrame &s) {
-  if (this != &s) {
-    caller = s.caller;
-    kf = s.kf;
-    callPathNode = s.callPathNode;
-    allocas = s.allocas;
-    minDistToUncoveredOnReturn = s.minDistToUncoveredOnReturn;
-    varargs = s.varargs;
-
-    if (locals)
-      delete []locals;
-
-    locals = new Cell[s.kf->numRegisters];
-    for (unsigned i=0; i<s.kf->numRegisters; i++)
-        locals[i] = s.locals[i];
-  }
-
-  return *this;
-}
-
-StackFrame::~StackFrame() { 
-  delete[] locals; 
-}
 
 /***/
 
@@ -126,25 +86,20 @@ ExecutionState *ExecutionState::branch() {
   
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
-  falseState->addressSpace.state = falseState;
   falseState->c9State = NULL;
+
+  falseState->processes.clear();
+  falseState->threads.clear();
+  for (std::vector<Process*>::iterator it = processes.begin(); it != processes.end(); it++) {
+    Process *newProc = new Process(*it);
+    newProc->threads.clear();
+    // TODO
+  }
 
   weight *= .5;
   falseState->weight -= weight;
 
   return falseState;
-}
-
-void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack().push_back(StackFrame(caller,kf));
-}
-
-void ExecutionState::popFrame() {
-  StackFrame &sf = stack().back();
-  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
-         ie = sf.allocas.end(); it != ie; ++it)
-    addressSpace.unbindObject(*it);
-  stack().pop_back();
 }
 
 ///
@@ -388,16 +343,6 @@ bool ExecutionState::merge(const ExecutionState &b) {
 }
 
 /***/
-
-
-ref<Expr> ExecutionState::nextTLSKey() {
-  Expr::Width WordSize = Context::get().getPointerWidth();
-  if (WordSize == Expr::Int32)
-    return ConstantExpr::create(TLSKeyGen++, Expr::Int32);
-  if(WordSize == Expr::Int64)
-    return ConstantExpr::create(TLSKeyGen++, Expr::Int64);
-  assert(false && "unsupported pthread_key_t size");
-}
 
 
 void ExecutionState::dumpStack(std::ostream &out) const {

@@ -3659,6 +3659,15 @@ void Executor::executePthreadKeyDelete(ExecutionState &state,
 					    getWidthForLLVMType(ki->inst->getType())));
 }
 
+void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki) {
+  int ret = -1; // Unsupported
+
+  CLOUD9_DEBUG("Fork not yet supported");
+
+  bindLocal(ki, state, ConstantExpr::create(ret,
+      getWidthForLLVMType(ki->inst->getType())));
+}
+
 
 void Executor::schedule(ExecutionState &state, 
 			bool terminate) 			

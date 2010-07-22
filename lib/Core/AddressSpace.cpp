@@ -22,7 +22,6 @@ using namespace klee;
 void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner==0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
-  os->owner = this;
   objects = objects.replace(std::make_pair(mo, os));
 }
 
@@ -45,7 +44,6 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
   } else {
     ObjectState *n = new ObjectState(*os);
     n->copyOnWriteOwner = cowKey;
-    n->owner = this;
     objects = objects.replace(std::make_pair(mo, n));
     return n;    
   }

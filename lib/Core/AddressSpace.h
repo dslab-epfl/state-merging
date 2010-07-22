@@ -40,9 +40,6 @@ namespace klee {
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
 
-    // State owning this address space
-    ExecutionState *state;
-
     /// Unsupported, use copy constructor
     AddressSpace &operator=(const AddressSpace&); 
     
@@ -57,8 +54,8 @@ namespace klee {
     MemoryMap objects;
     
   public:
-    AddressSpace(ExecutionState *_state) : cowKey(1), state(_state) {}
-    AddressSpace(const AddressSpace &b) : cowKey(++b.cowKey), state(NULL), objects(b.objects)  { }
+    AddressSpace() : cowKey(1) {}
+    AddressSpace(const AddressSpace &b) : cowKey(++b.cowKey), objects(b.objects)  { }
     ~AddressSpace() {}
 
     /// Resolve address to an ObjectPair in result.

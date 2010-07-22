@@ -132,6 +132,9 @@ HandlerInfo handlerInfo[] = {
   add("pthread_setspecific", handlePthreadSetSpecific, true),
   add("pthread_key_delete", handlePthreadKeyDelete, true),
 
+  //multiprocess functions
+  add("fork", handleFork, true),
+
 
 #undef addDNR
 #undef add  
@@ -878,6 +881,11 @@ void SpecialFunctionHandler::handleBreakpoint(ExecutionState &state,
                                    "klee_breakpoint requires a constant arg",
                                    "user.err");
   }
+}
+
+void SpecialFunctionHandler::handleFork(ExecutionState &state,
+    KInstruction *target, std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "fork does not take any arguments");
 
 
 }

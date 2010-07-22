@@ -65,6 +65,7 @@ namespace klee {
                                 KInstruction *target, \
                                 std::vector< ref<Expr> > &arguments)
     HANDLER(handleAbort);
+    HANDLER(handleAliasFunction);
     HANDLER(handleAssert);
     HANDLER(handleAssertFail);
     HANDLER(handleAssume);
@@ -75,7 +76,7 @@ namespace klee {
     HANDLER(handleDelete);    
     HANDLER(handleDeleteArray);
     HANDLER(handleExit);
-    HANDLER(handleAliasFunction);
+    HANDLER(handleFork);
     HANDLER(handleFree);
     HANDLER(handleGetErrno);
     HANDLER(handleGetObjSize);
@@ -83,7 +84,6 @@ namespace klee {
     HANDLER(handleIsSymbolic);
     HANDLER(handleMakeSymbolic);
     HANDLER(handleMalloc);
-    HANDLER(handleValloc);
     HANDLER(handleMarkGlobal);
     HANDLER(handleMerge);
     HANDLER(handleNew);
@@ -99,6 +99,7 @@ namespace klee {
     HANDLER(handleSilentExit);
     HANDLER(handleStackTrace);
     HANDLER(handleUnderConstrained);
+    HANDLER(handleValloc);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);
     HANDLER(handlePthreadCreate);

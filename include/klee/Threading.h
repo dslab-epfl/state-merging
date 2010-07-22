@@ -20,6 +20,7 @@ class KFunction;
 class KInstruction;
 class ExecutionState;
 class StackFrame;
+class Process;
 
 class Mutex {
   friend class Executor;
@@ -37,9 +38,9 @@ public:
   Mutex(ref<Expr> _address) :
     address(_address), taken(false), thread(0) {
   }
-  //Mutex() { }
-
 };
+
+
 
 class CondVar {
   friend class Executor;
@@ -49,48 +50,72 @@ public:
   CondVar(ref<Expr> _address) :
     address(_address) {
   }
-  //CondVar() { }
+
 private:
   ref<Expr> address;
   std::vector<uint64_t> threads;
 };
 
+struct StackFrame {
+  KInstIterator caller;
+  KFunction *kf;
+  CallPathNode *callPathNode;
+
+  std::vector<const MemoryObject*> allocas;
+  Cell *locals;
+
+  /// Minimum distance to an uncovered instruction once the function
+  /// returns. This is not a good place for this but is used to
+  /// quickly compute the context sensitive minimum distance to an
+  /// uncovered instruction. This value is updated by the StatsTracker
+  /// periodically.
+  unsigned minDistToUncoveredOnReturn;
+
+  // For vararg functions: arguments not passed via parameter are
+  // stored (packed tightly) in a local (alloca) memory object. This
+  // is setup to match the way the front-end generates vaarg code (it
+  // does not pass vaarg through as expected). VACopy is lowered inside
+  // of intrinsic lowering.
+  MemoryObject *varargs;
+
+  StackFrame(KInstIterator caller, KFunction *kf);
+  StackFrame(const StackFrame &s);
+
+  StackFrame& operator=(const StackFrame &sf);
+  ~StackFrame();
+};
+
+
 class Thread {
   friend class Executor;
   friend class ExecutionState;
-  friend class Mutex;
-  friend class CondVar;
+  friend class Process;
 private:
+  static uint64_t tidCounter;
+
   bool enabled;
   bool joinState;
   // the thread we are joining
   uint64_t joining;
   ref<Expr> thread_ptr; //address of the thread variable
   uint64_t tid;
+
   KInstIterator pc, prevPC;
+  unsigned incomingBBIndex;
 
   std::vector<StackFrame> stack;
 
   std::map<ref<Expr> , ref<Expr> > tls;
-  std::string _file; //XXX hack to store the top frame info for bktrace
-  unsigned _line;
 
-  void pushFrame(KInstIterator caller, KFunction *kf);
-  bool isInJoin() {
-    return joinState;
-  }
+  Process *process;
 
 public:
-  Thread(ref<Expr> _address, KFunction *start_function);
+  Thread(KFunction *start_function);
 
-  static uint64_t tids;
+  ~Thread();
 
-  uint64_t getTID() {
-    return tid;
-  }
-  KInstIterator getPC() {
-    return pc;
-  }
+  void pushFrame(KInstIterator caller, KFunction *kf);
+  void popFrame();
 
 };
 

@@ -500,6 +500,8 @@ private:
 			       KInstruction *ki, 
 			       ref<Expr> key);
   
+  void executeProcessFork(ExecutionState &state, KInstruction *ki);
+
   /// Choose the next thread to execute next. Can potentially context-switch the current thread.
   void schedule(ExecutionState &state,
 			  bool terminate);
