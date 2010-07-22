@@ -3246,7 +3246,7 @@ bool Executor::acquireMutex(ExecutionState &state,
       assert(isa<ConstantExpr>(mutex) && "mutex address");
       m = new Mutex(mutex);
       state.mutexes.insert(std::make_pair(mutex, Mutex(mutex)));
-      m = &state.mutexes[mutex];
+      m = &(state.mutexes.find(mutex)->second);
     }
   else
     m = &it->second;

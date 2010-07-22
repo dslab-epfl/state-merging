@@ -20,9 +20,7 @@
 
 #include "llvm/System/TimeValue.h"
 
-#include "klee/Thread.h"
-#include "klee/Mutex.h"
-#include "klee/CondVar.h"
+#include "klee/Threading.h"
 
 #include <map>
 #include <set>
