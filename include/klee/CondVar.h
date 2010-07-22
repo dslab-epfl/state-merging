@@ -2,7 +2,6 @@
 #ifndef KLEE_CONDVAR_H
 #define KLEE_CONDVAR_H
 
-#include "ScheduleTrace.h"
 #include "klee/Expr.h"
 #include <vector>
 
@@ -19,7 +18,6 @@ public:
 private:
   ref<Expr> address;
   std::vector<uint64_t> threads;
-  SchedSyncTraceInfo traceInfo;
 };
 }
 #endif

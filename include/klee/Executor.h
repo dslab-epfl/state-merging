@@ -431,8 +431,6 @@ private:
 			  ref<Expr> value_ptr);
   
   Thread* getByTid(ExecutionState &state, uint64_t tid);
-  
-  void updateTraceOnDeadlock(ExecutionState &state);
 
   bool acquireMutex(ExecutionState &state,
 			      KInstruction *ki,

@@ -392,62 +392,6 @@ bool ExecutionState::merge(const ExecutionState &b) {
 /***/
 
 
-
-void ExecutionState::updateTraceInfo(Mutex* m, Thread* thread) {
-  
-  //update Lamport clock
-  m->traceInfo.lclock = 
-    ((m->traceInfo.lclock > thread->traceInfo.lclock) ? 
-     m->traceInfo.lclock:
-     thread->traceInfo.lclock) 
-    + 1;
-  thread->traceInfo.lclock = m->traceInfo.lclock;
- 
-  addTraceItem(m->traceInfo, thread->traceInfo, thread->tid);
-  
-  m->traceInfo.lastThread = thread->tid;
-  m->traceInfo.lastOp = thread->traceInfo.op;
-  //XXX: should update the instruction too?
-}
-
-
-void ExecutionState::updateTraceInfo(CondVar *cv, Thread* thread) {
-
-  cv->traceInfo.lclock = 
-    ((cv->traceInfo.lclock > thread->traceInfo.lclock) ? 
-     cv->traceInfo.lclock:
-     thread->traceInfo.lclock) 
-    + 1;
-  thread->traceInfo.lclock = cv->traceInfo.lclock;
-
-  addTraceItem(cv->traceInfo, thread->traceInfo, thread->tid);
-  
-  //set thread:op that woke up a call to pthread_cond_wait
-  cv->traceInfo.lastThread = thread->tid; 
-  cv->traceInfo.lastOp = thread->traceInfo.op;
-}
-
-void ExecutionState::addPthreadCreateTraceItem(int tid) {
-  TraceItem *ti = new TraceItem(tid); //create event
-  trace.push_back(*ti);
-}
-
-
-
-/// Add a schedule trace item. On entry assume Lamport clock is updated already.
-void ExecutionState::addTraceItem(SchedSyncTraceInfo mtrace, 
-				  SchedThreadTraceInfo ttrace,
-				  uint64_t tid) {
-  TraceItem *ti;
-  ti = new TraceItem(mtrace.lastThread, 
-		     mtrace.lastOp, 
-		     tid,
-		     ttrace.op);
-  // should only add a new trace item only if it is not redundant
-  trace.push_back(*ti);
-}
-
-
 ref<Expr> ExecutionState::nextTLSKey() {
   Expr::Width WordSize = Context::get().getPointerWidth();
   if (WordSize == Expr::Int32)

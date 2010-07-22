@@ -3083,9 +3083,6 @@ void  Executor::executePthreadCreate(ExecutionState &state,
   std::stringstream dmesg;
   dmesg << "created thread " << t.tid;
   printDebug(state, dmesg.str(), true);
-  
-  //tracing the call
-  state.addPthreadCreateTraceItem(t.tid);
 
   initTLS(state, &t);
 
@@ -3230,25 +3227,6 @@ Thread* Executor::getByTid(ExecutionState &state, uint64_t tid)
   return NULL;
 }
 
-void Executor::updateTraceOnDeadlock(ExecutionState &state)
-{
-  for(std::map<ref<Expr>, Mutex>::iterator it = state.mutexes.begin();
-      it != state.mutexes.end();
-      it++) {
-    Mutex &m = it->second;
-    if (m.waiting.size() > 0) {
-      uint64_t tid  = m.waiting.front(); // next thread to get this lock
-      
-      //XXX optimize this using a map from tids to Threads
-      Thread* t = getByTid(state, tid);
-      
-      //adding a trace item for the enabled thread
-      //TODO: check if this will still hold for rw_lock
-      state.updateTraceInfo(&m, t);
-    }
-  }
-}
-
 
 // returns false in case the mutex is not defined 
 // or a deadlock happened
@@ -3273,9 +3251,6 @@ bool Executor::acquireMutex(ExecutionState &state,
   else
     m = &it->second;
   
-  //XXX: should update this to work for trylock type of synchronization
-  state.crtThread().traceInfo.op++;
-  
   //line info for obtaining a propper top frame in the backtrace
   state.crtThread()._file = ki->info->file;
   state.crtThread()._line = ki->info->line;
@@ -3288,8 +3263,6 @@ bool Executor::acquireMutex(ExecutionState &state,
       m->thread = state.crtThread().tid;  // set the mutex owner
       m->taken = true; // acquire the mutex
       state.crtThread().enabled = true;
-
-      state.updateTraceInfo(m, &state.crtThread());
     }
   else
     {
@@ -3302,10 +3275,6 @@ bool Executor::acquireMutex(ExecutionState &state,
     }
 
   return true;
-    
-  //else
-  //terminateStateOnError(state, "mutex not defined?", "user.err");
-  //return false;
 }
   
 
@@ -3344,9 +3313,6 @@ void Executor::releaseMutex(ExecutionState &state,
     
     uint64_t tid = state.crtThread().tid;
     
-    state.crtThread().traceInfo.op++;
-    state.updateTraceInfo(&m, &state.crtThread());
-    
     if(m.waiting.size() != 0) {
       // the current code simply enables the next thread in the mutex queue
       // this is equivalent with the next thread acquiring the lock but 
@@ -3360,10 +3326,6 @@ void Executor::releaseMutex(ExecutionState &state,
       
       //XXX:zamf optimize this using a map from tids to Threads
       Thread* t = getByTid(state, tid);
-      
-      //adding a trace item for the enabled thread
-      //TODO: check if this will still hold for rw_lock
-      state.updateTraceInfo(&m, t);
       
       //TODO: could also help the scheduler a bit by puting this thread
       //in front of the scheduling queue
@@ -3508,7 +3470,6 @@ void  Executor::executePthreadCondWait(ExecutionState &state,
   std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
     CondVar& cv = it->second;
-    state.crtThread().traceInfo.op++;
     cv.threads.push_back(crt->tid);
     state.crtThread().enabled=false;
   }
@@ -3524,15 +3485,13 @@ void Executor::executePthreadCondSignal(ExecutionState &state,
   std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
       CondVar &cv = it->second;
-      state.crtThread().traceInfo.op++;
-      state.updateTraceInfo(&cv, &state.crtThread());
       
       // remove the first in the queue, if any 
       if(cv.threads.size() > 0) {
 	Thread *next = getByTid(state, cv.threads.front());
 	assert(next!=NULL && "error getting the mapping from tid to Thread*");
 	next->enabled = true;
-	state.updateTraceInfo(&cv, next);
+
 	cv.threads.erase(cv.threads.begin());
       }
     } 
@@ -3546,13 +3505,13 @@ void Executor::executePthreadCondBroadcast(ExecutionState &state,
   std::map<ref<Expr>, CondVar>::iterator it = state.cond_vars.find(cond_var);
   if(it != state.cond_vars.end()) {
     CondVar &cv = it->second;
-    state.updateTraceInfo(&cv, &state.crtThread());
+
     for(std::vector<uint64_t>::iterator it = cv.threads.begin();
 	it != cv.threads.end();
 	it++) {
       Thread *next = getByTid(state, *it);
       next->enabled = true;
-      state.updateTraceInfo(&cv, next);
+
       cv.threads.erase(it);
     }
   }

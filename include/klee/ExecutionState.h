@@ -148,7 +148,6 @@ public:
   std::map<ref<Expr>, Mutex> mutexes;
   std::map<ref<Expr>, CondVar> cond_vars;
   unsigned int preemptions;
-  std::vector<TraceItem> trace;
   std::map< ref<Expr> , KFunction*> tls_keys;
   uint64_t TLSKeyGen;
   ref<Expr> nextTLSKey(); 
@@ -166,24 +165,6 @@ public:
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
-  
-  //Thread schedule trace management
-  
-  /// Add a trace item to the trace
-  void addTraceItem(SchedSyncTraceInfo mtrace,
-		    SchedThreadTraceInfo ttrace,
-		    uint64_t tid);
-  /// Mutex operations
-  void updateTraceInfo(Mutex *m, Thread *t);
-  /// Condition variable operations
-  void updateTraceInfo(CondVar *cv, Thread *t);
-  /// Thread create operations
-  void addPthreadCreateTraceItem(int tid);
-
-private:
-  /*ExecutionState(Executor *_executor) : c9State(NULL), executor(_executor),
-  fakeState(false), underConstrained(0), addressSpace(this),
-  lastCoveredTime(sys::TimeValue::now()), ptreeNode(0) {}*/
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);

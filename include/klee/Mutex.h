@@ -2,7 +2,6 @@
 #ifndef KLEE_MUTEX_H
 #define KLEE_MUTEX_H
 
-#include "ScheduleTrace.h"
 #include "Expr.h"
 #include <vector>
 
@@ -23,7 +22,6 @@ private:
   // the thread that holds this lock
   uint64_t thread;
   std::vector<uint64_t> waiting;
-  SchedSyncTraceInfo traceInfo;
 };
 
 }
