@@ -1398,12 +1398,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (state.stack().size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       
-      if(state.threads.size() == 1) {
-	//main exit
-	terminateStateOnExit(state);
+      if (state.threads.size() == 1) {
+        //main exit
+        terminateStateOnExit(state);
+      } else if (state.crtProcess().threads.size() == 1){
+        executeProcessExit(state, ki);
       } else {
-	//non main thread exit
-	executeThreadExit(state, ki);
+        executeThreadExit(state, ki);
       }
     } else {
       state.popFrame();
@@ -3414,6 +3415,21 @@ void Executor::executeThreadExit(ExecutionState &state, KInstruction *ki) {
     schedule(state, false);
 }
 
+void Executor::executeProcessExit(ExecutionState &state,
+             KInstruction *ki) {
+  for (std::set<thread_id_t>::iterator it = state.crtProcess().threads.begin();
+      it != state.crtProcess().threads.end(); it++) {
+    if (*it == state.crtThread().tid)
+      continue;
+
+    ExecutionState::threads_ty::iterator it2 = state.threads.find(*it);
+    state.terminateThread(it2);
+  }
+
+  state.crtThread().enabled = false;
+  schedule(state, true);
+}
+
 void Executor::executePthreadExit(ExecutionState &state, 
 				  KInstruction *ki,
 				  ref<Expr> value_ptr) {
@@ -3616,11 +3632,23 @@ void Executor::executePthreadKeyDelete(ExecutionState &state,
 }
 
 void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki) {
-  int ret = -1; // Unsupported
 
-  CLOUD9_DEBUG("Fork not yet supported");
+  CLOUD9_DEBUG("Forking...");
 
-  bindLocal(ki, state, ConstantExpr::create(ret,
+  Thread &pThread = state.crtThread();
+
+  Process &child = state.forkProcess();
+
+  Thread &cThread = state.threads.find(*child.threads.begin())->second;
+
+  // Set return value in the child
+  state.scheduleNext(state.threads.find(cThread.tid));
+  bindLocal(ki, state, ConstantExpr::create(0,
+      getWidthForLLVMType(ki->inst->getType())));
+
+  // Set return value in the parent
+  state.scheduleNext(state.threads.find(pThread.tid));
+  bindLocal(ki, state, ConstantExpr::create(child.pid,
       getWidthForLLVMType(ki->inst->getType())));
 }
 

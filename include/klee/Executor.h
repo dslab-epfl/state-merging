@@ -453,6 +453,9 @@ private:
   void executeThreadExit(ExecutionState &state, 
 			 KInstruction *ki);
   
+  void executeProcessExit(ExecutionState &state,
+             KInstruction *ki);
+
   void executePthreadExit(ExecutionState &state, 
 			  KInstruction *ki,
 			  ref<Expr> value_ptr);

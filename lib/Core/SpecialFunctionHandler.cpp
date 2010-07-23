@@ -255,14 +255,22 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
                            KInstruction *target,
                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
-  executor.terminateStateOnExit(state);
+
+  if (state.processes.size() == 1)
+    executor.terminateStateOnExit(state);
+  else
+    executor.executeProcessExit(state, target);
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
                                               KInstruction *target,
                                               std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
-  executor.terminateState(state);
+
+  if (state.processes.size() == 1)
+    executor.terminateState(state);
+  else
+    executor.executeProcessExit(state, target);
 }
 
 void SpecialFunctionHandler::handleAliasFunction(ExecutionState &state,
@@ -887,7 +895,7 @@ void SpecialFunctionHandler::handleFork(ExecutionState &state,
     KInstruction *target, std::vector<ref<Expr> > &arguments) {
   assert(arguments.empty() && "fork does not take any arguments");
 
-
+  executor.executeProcessFork(state, target);
 }
 
 void SpecialFunctionHandler::handleMarkGlobal(ExecutionState &state,

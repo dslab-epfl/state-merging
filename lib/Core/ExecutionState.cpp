@@ -139,6 +139,20 @@ void ExecutionState::terminateThread() {
   threads.erase(oldIt);
 }
 
+void ExecutionState::terminateThread(threads_ty::iterator it) {
+  if (it == crtThreadIt)
+    terminateThread();
+  else {
+    Process &proc = processes.find(it->second.pid)->second;
+    if (proc.threads.size() == 1)
+      processes.erase(proc.pid);
+    else
+      proc.threads.erase(it->second.tid);
+
+    threads.erase(it);
+  }
+}
+
 ExecutionState::~ExecutionState() {
   for (threads_ty::iterator it = threads.begin(); it != threads.end(); it++) {
     Thread &t = it->second;

@@ -117,6 +117,7 @@ public:
   Thread& createThread(KFunction *kf);
   Process& forkProcess();
   void terminateThread();
+  void terminateThread(threads_ty::iterator it);
 
   threads_ty::iterator nextThread(threads_ty::iterator it) {
     it++;
