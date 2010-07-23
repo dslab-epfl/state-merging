@@ -62,6 +62,8 @@ class ExecutionState {
 
 public:
   typedef std::vector<StackFrame> stack_ty;
+  typedef std::map<thread_id_t, Thread> threads_ty;
+  typedef std::map<process_id_t, Process> processes_ty;
 
 private:
   // unsupported, use copy constructor
@@ -107,17 +109,19 @@ public:
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
 
 
-  // For a multi threded ExecutionState
-  std::vector<Thread*> threads;
-  std::vector<Process*> processes;
+  // For a multi threaded ExecutionState
+  threads_ty threads;
+  processes_ty processes;
+
+  threads_ty::iterator crtThreadIt;
 
   unsigned int preemptions;
 
 
   /* Shortcut methods */
 
-  Thread &crtThread() { return *threads.front(); }
-  const Thread &crtThread() const { return *threads.front(); }
+  Thread &crtThread() { return crtThreadIt->second; }
+  const Thread &crtThread() const { return crtThreadIt->second; }
 
   // pc - pointer to current instruction stream
    KInstIterator& pc() { return crtThread().pc; }

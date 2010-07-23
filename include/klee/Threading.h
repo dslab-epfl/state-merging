@@ -22,6 +22,10 @@ class ExecutionState;
 class StackFrame;
 class Process;
 
+typedef uint64_t thread_id_t;
+
+#define INVALID_THREAD_ID   ((uint64_t)(-1))
+
 class Mutex {
   friend class Executor;
   friend class ExecutionState;
@@ -31,12 +35,12 @@ private:
   bool taken;
   int type;
   // the thread that holds this lock
-  uint64_t thread;
-  std::vector<uint64_t> waiting;
+  thread_id_t tid;
+  std::vector<thread_id_t> waiting;
 
 public:
   Mutex(ref<Expr> _address) :
-    address(_address), taken(false), thread(0) {
+    address(_address), taken(false), tid(0) {
   }
 };
 
@@ -53,7 +57,7 @@ public:
 
 private:
   ref<Expr> address;
-  std::vector<uint64_t> threads;
+  std::vector<thread_id_t> threads;
 };
 
 struct StackFrame {
@@ -91,14 +95,14 @@ class Thread {
   friend class ExecutionState;
   friend class Process;
 private:
-  static uint64_t tidCounter;
+  static thread_id_t tidCounter;
 
   bool enabled;
   bool joinState;
-  // the thread we are joining
-  uint64_t joining;
+
+  thread_id_t joining; // the thread we are joining
   ref<Expr> thread_ptr; //address of the thread variable
-  uint64_t tid;
+  thread_id_t tid;
 
   KInstIterator pc, prevPC;
   unsigned incomingBBIndex;
@@ -107,7 +111,7 @@ private:
 
   std::map<ref<Expr> , ref<Expr> > tls;
 
-  Process *process;
+  process_id_t pid;
 
 public:
   Thread(KFunction *start_function);

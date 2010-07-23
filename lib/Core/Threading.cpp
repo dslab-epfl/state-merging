@@ -11,7 +11,9 @@
 
 namespace klee {
 
-uint64_t Thread::tidCounter = 0;
+thread_id_t Thread::tidCounter = 2;
+
+/* StackFrame Methods */
 
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0),
@@ -55,13 +57,17 @@ StackFrame::~StackFrame() {
   delete[] locals;
 }
 
+/* Thread class methods */
+
 Thread::Thread(KFunction * kf) :
-  enabled(true), joinState(false), joining(0xFFFFFFFF) {
+  enabled(true), joinState(false), joining(INVALID_THREAD_ID) {
 
-  pushFrame(caller, kf);
+  if (kf) {
+    pushFrame(caller, kf);
 
-  pc = kf->instructions;
-  prevPC = pc;
+    pc = kf->instructions;
+    prevPC = pc;
+  }
 
   tid = tidCounter++;
 }

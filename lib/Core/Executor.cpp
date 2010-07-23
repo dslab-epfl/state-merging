@@ -3260,13 +3260,13 @@ bool Executor::acquireMutex(ExecutionState &state,
       dmesg << "mutex 0x" << std::hex << mutex << " was free";
       printDebug(state, dmesg.str(), true);
 	  
-      m->thread = state.crtThread().tid;  // set the mutex owner
+      m->tid = state.crtThread().tid;  // set the mutex owner
       m->taken = true; // acquire the mutex
       state.crtThread().enabled = true;
     }
   else
     {
-      dmesg << "mutex 0x" << std::hex << mutex << " is taken by "<< m->thread<< " ... sleeping";
+      dmesg << "mutex 0x" << std::hex << mutex << " is taken by "<< m->tid<< " ... sleeping";
       printDebug(state, dmesg.str(), true);
 	  
       state.crtThread().enabled = false;
@@ -3333,7 +3333,7 @@ void Executor::releaseMutex(ExecutionState &state,
       m.waiting.erase(m.waiting.begin());
       
       // TODO: do we need the owner?
-      m.thread = t->tid;  // replace the owner
+      m.tid = t->tid;  // replace the owner
     }
     m.taken = false;
 
@@ -3439,7 +3439,7 @@ void  Executor::executeThreadExit(ExecutionState &state,
 	Thread &t = *it;
 	t.joinState = false;
 	t.enabled = true;
-	t.joining = 0xFFFFFFFF;
+	t.joining = INVALID_THREAD_ID;
 	
 	std::stringstream msg;
 	msg << "on exit enabled thread " << t.tid;

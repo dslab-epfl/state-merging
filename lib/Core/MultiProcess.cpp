@@ -9,8 +9,10 @@
 
 namespace klee {
 
-Process::Process() : tlsKeyCounter(0) {
+process_id_t Process::pidCounter = 2;
 
+Process::Process() : tlsKeyCounter(0) {
+  pid = pidCounter++;
 }
 
 }

@@ -53,26 +53,36 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     depth(0),
     queryCost(0.), 
     weight(1),
-    addressSpace(this),
     instsSinceCovNew(0),
     coveredNew(false),
     lastCoveredTime(sys::TimeValue::now()),
     forkDisabled(false),
-    ptreeNode(0) {
-  preemptions = 0;
+    ptreeNode(0),
+    preemptions(0) {
 
-  threads.push_back(Thread(0, kf));
+  Process mainProc = Process();
+  Thread mainThread = Thread(kf);
+
+  mainThread.pid = mainProc.pid;
+  mainProc.threads.insert(mainThread.tid);
+
+  threads.insert(std::pair(mainThread.tid, mainThread));
+  processes.insert(std::pair(mainProc.pid, mainProc));
+
+  crtThreadIt = threads.begin();
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
   : c9State(NULL),
     executor(_executor),
     fakeState(true),
-    constraints(assumptions),
+    //constraints(assumptions),
     queryCost(0.),
-    addressSpace(this),
+    //addressSpace(this),
     lastCoveredTime(sys::TimeValue::now()),
-    ptreeNode(0) {
+    ptreeNode(0),
+    preemptions(0) {
+
 }
 
 ExecutionState::~ExecutionState() {
@@ -88,13 +98,7 @@ ExecutionState *ExecutionState::branch() {
   falseState->coveredLines.clear();
   falseState->c9State = NULL;
 
-  falseState->processes.clear();
-  falseState->threads.clear();
-  for (std::vector<Process*>::iterator it = processes.begin(); it != processes.end(); it++) {
-    Process *newProc = new Process(*it);
-    newProc->threads.clear();
-    // TODO
-  }
+  falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tid);
 
   weight *= .5;
   falseState->weight -= weight;
