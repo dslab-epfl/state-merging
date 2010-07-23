@@ -16,12 +16,14 @@ class ExecutionState;
 class Thread;
 
 typedef uint64_t process_id_t;
+typedef uint64_t thread_id_t;
 
 #define INVALID_PROCESS_ID ((uint64_t)(-1))
 
 class Process {
   friend class Thread;
   friend class ExecutionState;
+  friend class Executor;
 private:
   process_id_t pid;
 

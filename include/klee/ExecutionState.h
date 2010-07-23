@@ -72,6 +72,7 @@ private:
 
   cloud9::worker::SymbolicState *c9State;
 
+  void setupMain(KFunction *kf);
 public:
   /* System-level parameters */
   Executor *executor;
@@ -113,7 +114,11 @@ public:
   threads_ty threads;
   processes_ty processes;
 
+  Thread& createThread(KFunction *kf);
+  Process& forkProcess();
+
   threads_ty::iterator crtThreadIt;
+  processes_ty::iterator crtProcessIt;
 
   unsigned int preemptions;
 
@@ -123,15 +128,23 @@ public:
   Thread &crtThread() { return crtThreadIt->second; }
   const Thread &crtThread() const { return crtThreadIt->second; }
 
-  // pc - pointer to current instruction stream
-   KInstIterator& pc() { return crtThread().pc; }
-   const KInstIterator& pc() const { return crtThread().pc; }
+  Process &crtProcess() { return crtProcessIt->second; }
+  const Process &crtProcess() const { return crtProcessIt->second; }
 
-   KInstIterator& prevPC() { return crtThread().prevPC; }
-   const KInstIterator& prevPC() const { return crtThread().prevPC; }
+  ConstraintManager &constraints() { return crtProcess().constraints; }
+  const ConstraintManager &constraints() const { return crtProcess().constraints; }
 
-   stack_ty& stack() { return crtThread().stack; }
-   const stack_ty& stack() const { return crtThread().stack; }
+  AddressSpace &addressSpace() { return crtProcess().addressSpace; }
+  const AddressSpace &addressSpace() const { return crtProcess().addressSpace; }
+
+  KInstIterator& pc() { return crtThread().pc; }
+  const KInstIterator& pc() const { return crtThread().pc; }
+
+  KInstIterator& prevPC() { return crtThread().prevPC; }
+  const KInstIterator& prevPC() const { return crtThread().prevPC; }
+
+  stack_ty& stack() { return crtThread().stack; }
+  const stack_ty& stack() const { return crtThread().stack; }
 
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
@@ -159,7 +172,7 @@ public:
     symbolics.push_back(std::make_pair(mo, array));
   }
   void addConstraint(ref<Expr> e) { 
-    constraints.addConstraint(e); 
+    constraints().addConstraint(e);
   }
 
   bool merge(const ExecutionState &b);

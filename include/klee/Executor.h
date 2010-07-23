@@ -429,8 +429,6 @@ private:
 			  KInstruction *ki, 
 			  ref<Expr> thread, 
 			  ref<Expr> value_ptr);
-  
-  Thread* getByTid(ExecutionState &state, uint64_t tid);
 
   bool acquireMutex(ExecutionState &state,
 			      KInstruction *ki,

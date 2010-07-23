@@ -19,10 +19,12 @@ namespace klee {
 class KFunction;
 class KInstruction;
 class ExecutionState;
-class StackFrame;
 class Process;
+class CallPathNode;
+struct Cell;
 
 typedef uint64_t thread_id_t;
+typedef uint64_t process_id_t;
 
 #define INVALID_THREAD_ID   ((uint64_t)(-1))
 
@@ -101,7 +103,6 @@ private:
   bool joinState;
 
   thread_id_t joining; // the thread we are joining
-  ref<Expr> thread_ptr; //address of the thread variable
   thread_id_t tid;
 
   KInstIterator pc, prevPC;

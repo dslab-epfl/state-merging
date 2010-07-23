@@ -60,16 +60,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     ptreeNode(0),
     preemptions(0) {
 
-  Process mainProc = Process();
-  Thread mainThread = Thread(kf);
-
-  mainThread.pid = mainProc.pid;
-  mainProc.threads.insert(mainThread.tid);
-
-  threads.insert(std::pair(mainThread.tid, mainThread));
-  processes.insert(std::pair(mainProc.pid, mainProc));
-
-  crtThreadIt = threads.begin();
+  setupMain(kf);
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
@@ -83,10 +74,58 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     ptreeNode(0),
     preemptions(0) {
 
+  setupMain(NULL);
+
+
+}
+
+void ExecutionState::setupMain(KFunction *kf) {
+  Process mainProc = Process();
+  Thread mainThread = Thread(kf);
+
+  mainThread.pid = mainProc.pid;
+  mainProc.threads.insert(mainThread.tid);
+
+  threads.insert(std::make_pair(mainThread.tid, mainThread));
+  processes.insert(std::make_pair(mainProc.pid, mainProc));
+
+  crtThreadIt = threads.begin();
+  crtProcessIt = processes.find(crtThreadIt->second.pid);
+}
+
+Thread& ExecutionState::createThread(KFunction *kf) {
+  Thread newThread = Thread(kf);
+  newThread.pid = crtProcess().pid;
+  crtProcess().threads.insert(newThread.tid);
+
+  threads.insert(std::make_pair(newThread.tid, newThread));
+
+  return threads.find(newThread.tid)->second;
+}
+
+Process& ExecutionState::forkProcess() {
+  Process forked = Process(crtProcess());
+
+  forked.pid = Process::pidCounter++;
+  forked.threads.clear();
+
+  forked.forkPath.push_back(1); // Child
+  crtProcess().forkPath.push_back(0); // Parent
+
+  Thread forkedThread = Thread(crtThread());
+  forkedThread.pid = forked.pid;
+  forkedThread.tid = Thread::tidCounter++;
+
+  forked.threads.insert(forkedThread.tid);
+
+  threads.insert(std::make_pair(forkedThread.tid, forkedThread));
+  processes.insert(std::make_pair(forked.pid, forked));
+
+  return processes.find(forked.pid)->second;
 }
 
 ExecutionState::~ExecutionState() {
-  while (!stack().empty()) popFrame();
+
 }
 
 ExecutionState *ExecutionState::branch() {
@@ -99,6 +138,7 @@ ExecutionState *ExecutionState::branch() {
   falseState->c9State = NULL;
 
   falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tid);
+  falseState->crtProcessIt = falseState->processes.find(crtProcessIt->second.pid);
 
   weight *= .5;
   falseState->weight -= weight;
@@ -145,14 +185,14 @@ std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
 
 
 std::ostream &printStateConstraints(std::ostream &os, const ExecutionState &state) {
-	ExprPPrinter::printConstraints(os, state.constraints);
+	ExprPPrinter::printConstraints(os, state.constraints());
 
 	return os;
 }
 
 std::ostream &printStateMemorySummary(std::ostream &os,
 		const ExecutionState &state) {
-	const MemoryMap &mm = state.addressSpace.objects;
+	const MemoryMap &mm = state.addressSpace().objects;
 
 	os << "{";
 	MemoryMap::iterator it = mm.begin();
@@ -214,9 +254,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
       return false;
   }
 
-  std::set< ref<Expr> > aConstraints(constraints.begin(), constraints.end());
-  std::set< ref<Expr> > bConstraints(b.constraints.begin(), 
-                                     b.constraints.end());
+  std::set< ref<Expr> > aConstraints(constraints().begin(), constraints().end());
+  std::set< ref<Expr> > bConstraints(b.constraints().begin(),
+                                     b.constraints().end());
   std::set< ref<Expr> > commonConstraints, aSuffix, bSuffix;
   std::set_intersection(aConstraints.begin(), aConstraints.end(),
                         bConstraints.begin(), bConstraints.end(),
@@ -256,15 +296,15 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
   if (DebugLogStateMerge) {
     std::cerr << "\tchecking object states\n";
-    std::cerr << "A: " << addressSpace.objects << "\n";
-    std::cerr << "B: " << b.addressSpace.objects << "\n";
+    std::cerr << "A: " << addressSpace().objects << "\n";
+    std::cerr << "B: " << b.addressSpace().objects << "\n";
   }
     
   std::set<const MemoryObject*> mutated;
-  MemoryMap::iterator ai = addressSpace.objects.begin();
-  MemoryMap::iterator bi = b.addressSpace.objects.begin();
-  MemoryMap::iterator ae = addressSpace.objects.end();
-  MemoryMap::iterator be = b.addressSpace.objects.end();
+  MemoryMap::iterator ai = addressSpace().objects.begin();
+  MemoryMap::iterator bi = b.addressSpace().objects.begin();
+  MemoryMap::iterator ae = addressSpace().objects.end();
+  MemoryMap::iterator be = b.addressSpace().objects.end();
   for (; ai!=ae && bi!=be; ++ai, ++bi) {
     if (ai->first != bi->first) {
       if (DebugLogStateMerge) {
@@ -323,13 +363,13 @@ bool ExecutionState::merge(const ExecutionState &b) {
   for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
          ie = mutated.end(); it != ie; ++it) {
     const MemoryObject *mo = *it;
-    const ObjectState *os = addressSpace.findObject(mo);
-    const ObjectState *otherOS = b.addressSpace.findObject(mo);
+    const ObjectState *os = addressSpace().findObject(mo);
+    const ObjectState *otherOS = b.addressSpace().findObject(mo);
     assert(os && !os->readOnly && 
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
-    ObjectState *wos = addressSpace.getWriteable(mo, os);
+    ObjectState *wos = addressSpace().getWriteable(mo, os);
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
       ref<Expr> bv = otherOS->read8(i);
@@ -337,11 +377,11 @@ bool ExecutionState::merge(const ExecutionState &b) {
     }
   }
 
-  constraints = ConstraintManager();
+  constraints() = ConstraintManager();
   for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
          ie = commonConstraints.end(); it != ie; ++it)
-    constraints.addConstraint(*it);
-  constraints.addConstraint(OrExpr::create(inA, inB));
+    constraints().addConstraint(*it);
+  constraints().addConstraint(OrExpr::create(inA, inB));
 
   return true;
 }
