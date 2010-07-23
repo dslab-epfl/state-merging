@@ -124,8 +124,27 @@ Process& ExecutionState::forkProcess() {
   return processes.find(forked.pid)->second;
 }
 
-ExecutionState::~ExecutionState() {
+void ExecutionState::terminateThread() {
+  assert(threads.size() > 1);
 
+  if (crtProcess().threads.size() == 1)
+    processes.erase(crtProcess().pid);
+  else
+    crtProcess().threads.erase(crtThread().tid);
+
+  threads_ty::iterator oldIt = crtThreadIt;
+
+  scheduleNext(nextThread(crtThreadIt));
+
+  threads.erase(oldIt);
+}
+
+ExecutionState::~ExecutionState() {
+  for (threads_ty::iterator it = threads.begin(); it != threads.end(); it++) {
+    Thread &t = it->second;
+    while (!t.stack.empty())
+      popFrame(t);
+  }
 }
 
 ExecutionState *ExecutionState::branch() {

@@ -176,9 +176,6 @@ private:
   /// The maximum time to allow for a single stp query.
   double stpTimeout; 
 
-  //total number of thread schedules executed
-  int nrSchedules;
-
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   
   void executeInstruction(ExecutionState &state, KInstruction *ki);

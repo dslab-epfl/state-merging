@@ -8,8 +8,14 @@
 #ifndef MULTIPROCESS_H_
 #define MULTIPROCESS_H_
 
+#include "klee/Constraints.h"
+#include "../../lib/Core/AddressSpace.h"
+#include "klee/Threading.h"
+
 #include <vector>
 #include <set>
+#include <cstdint>
+#include <map>
 
 namespace klee {
 class ExecutionState;

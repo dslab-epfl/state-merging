@@ -1245,7 +1245,7 @@ void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
   if (state) {
     CLOUD9_DEBUG("State stack trace: " << *state);
     klee::ExprPPrinter::printConstraints(std::cerr,
-        state->getKleeState()->constraints);
+        state->getKleeState()->constraints());
     dumpStateTrace(node);
   }
 

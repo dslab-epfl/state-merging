@@ -116,6 +116,22 @@ public:
 
   Thread& createThread(KFunction *kf);
   Process& forkProcess();
+  void terminateThread();
+
+  threads_ty::iterator nextThread(threads_ty::iterator it) {
+    it++;
+    if (it == threads.end())
+      it = threads.begin();
+
+    return it;
+
+    crtProcessIt = processes.find(crtThreadIt->second.pid);
+  }
+
+  void scheduleNext(threads_ty::iterator it) {
+    crtThreadIt = it;
+    crtProcessIt = processes.find(crtThreadIt->second.pid);
+  }
 
   threads_ty::iterator crtThreadIt;
   processes_ty::iterator crtProcessIt;
@@ -161,11 +177,22 @@ public:
   
   ExecutionState *branch();
 
+  void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
+    t.stack.push_back(StackFrame(caller,kf));
+  }
   void pushFrame(KInstIterator caller, KFunction *kf) {
-    crtThread().pushFrame(caller, kf);
+    pushFrame(crtThread(), caller, kf);
+  }
+
+  void popFrame(Thread &t) {
+    StackFrame &sf = t.stack.back();
+    for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
+           ie = sf.allocas.end(); it != ie; ++it)
+      processes.find(t.pid)->second.addressSpace.unbindObject(*it);
+    t.stack.pop_back();
   }
   void popFrame() {
-    crtThread().popFrame();
+    popFrame(crtThread());
   }
 
   void addSymbolic(const MemoryObject *mo, const Array *array) { 

@@ -10,6 +10,7 @@
 
 #include "klee/Expr.h"
 #include "klee/Internal/Module/KInstIterator.h"
+#include "../../lib/Core/AddressSpace.h"
 #include "cloud9/Logger.h"
 
 #include <map>
@@ -116,11 +117,6 @@ private:
 
 public:
   Thread(KFunction *start_function);
-
-  ~Thread();
-
-  void pushFrame(KInstIterator caller, KFunction *kf);
-  void popFrame();
 
 };
 

@@ -344,8 +344,8 @@ Executor::Executor(const InterpreterOptions &opts,
     ivcEnabled(false),
     stpTimeout(MaxSTPTime != 0 && MaxInstructionTime != 0
 	       ? std::min(MaxSTPTime,MaxInstructionTime)
-	       : std::max(MaxSTPTime,MaxInstructionTime)),
-    nrSchedules(0) {
+	       : std::max(MaxSTPTime,MaxInstructionTime)) {
+
   STPSolver *stpSolver = new STPSolver(UseForkedSTP, STPOptimizeDivides);
   Solver *solver = 
     constructSolverChain(stpSolver,
@@ -3656,20 +3656,19 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
       return;
     } else {
       assert(state.threads.size() > 1);
-      state.threads.erase(state.threads.begin());
+      state.terminateThread();
     }
   }
   
   //obtain the list of enabled threads
   std::stringstream dmesg;
   dmesg << "enabled threads: ";
-  std::vector<Thread*> enabled;
+
   bool no_deadlock = false;
-  for(std::vector<Thread>::iterator it = state.threads.begin();
+  for(ExecutionState::threads_ty::iterator it = state.threads.begin();
       it != state.threads.end();  it++) {
-    if(it->enabled) {
-      enabled.push_back(&(*it));
-      dmesg << it->tid << " ";
+    if(it->second.enabled) {
+      dmesg << it->second.tid << " ";
       no_deadlock = true;
       //should break unless debugging
       break;
@@ -3684,106 +3683,57 @@ void Executor::preemption_schedule(ExecutionState &state, bool terminate)
       klee_message("terminating state");
       return terminateStateOnError(state, " ******** deadlock", "user.err");
     }
-
-  unsigned int index = 0;
-  ExecutionState *lastState = &state;
-  bool one = false;
   
-  if(state.crtThread().enabled) {
-      if(state.preemptions < MaxPreemptions) {
-	// all enabled threads except the current thread
-	for(unsigned int i = 1; i < state.threads.size(); i++) {
-	  Thread &thr = state.threads[i];
-	  if(thr.enabled) {
-	    //at least one possible schedule already exists, for the rest 
-	    //we need to fork execution
-	    
-	    ExecutionState *cState = lastState;
-	    ExecutionState *newState = cState->branch();
-	    nrSchedules++;
-	    
-	    newState->preemptions = state.preemptions + 1;
-	    
-	    std::stringstream dmesg1;
-	    dmesg1 << "created state " << 
-	      newState << " tid " << 
-	      newState->threads[i].tid;
-	    
-	    printDebug(state, dmesg1.str(), !terminate);
-	    
-	    addedStates.insert(newState);
-	    
-	    lastState->ptreeNode->data = 0;
-	    std::pair<PTree::Node*,PTree::Node*> res = 
-	      processTree->split(lastState->ptreeNode, newState, lastState);
-	    newState->ptreeNode = res.first;
-	    lastState->ptreeNode = res.second;
-	    
-	    //the first thread becomes last : round robin
-	    newState->threads.push_back(newState->threads.front());
-	    newState->threads.erase(newState->threads.begin());
-	    
-	    lastState =  newState;		      
-	  }
-	}
-      }
-  }
-  else {
-    //the current thread is not enabled, need to schedule another one
-    for(unsigned int i = 1; i < state.threads.size(); i++) {
-      Thread &thr = state.threads[i];
-      if(thr.enabled) {
-	if(!one) {
-	  one = true;
-	  index = i;
-	}
-	else {
-	  //at least one possible schedule already exists, for the rest 
-	  //we need to fork execution
-	  if(ForkOnSchedule) {
-	    ExecutionState *cState = lastState;
-	    ExecutionState *newState = cState->branch();
-	    nrSchedules++;
-	    
-	    std::stringstream dmesg1;
-	    dmesg1 << "created state " << 
-	      newState << " tid " << 
-	      newState->threads[i].tid;
-	    
-	    printDebug(state, dmesg1.str(), !terminate);
-	    
-	    addedStates.insert(newState);
-	    
-	    lastState->ptreeNode->data = 0;
-	    
-	    std::pair<PTree::Node*,PTree::Node*> res = 
-	      processTree->split(lastState->ptreeNode, newState, lastState);
-	    newState->ptreeNode = res.first;
-	    lastState->ptreeNode = res.second;
-	    
-	    //the first thread becomes the last : round robin
-	    newState->threads.push_back(newState->threads.front());
-	    std::swap(newState->threads.front(), newState->threads[i]);
-	    newState->threads.erase(newState->threads.begin()+i);
-	    
-	    lastState = newState;
-	  }
-	}
-      }
+  bool forkSchedule = false;
+  bool incPreemptions = false;
+
+  if(!state.crtThread().enabled) {
+    ExecutionState::threads_ty::iterator it = state.nextThread(state.crtThreadIt);
+
+    while (!it->second.enabled)
+      it = state.nextThread(it);
+
+    state.scheduleNext(it);
+
+    if (ForkOnSchedule)
+      forkSchedule = true;
+  } else {
+    if (state.preemptions < MaxPreemptions) {
+      forkSchedule = true;
+      incPreemptions = true;
     }
   }
-  
-  assert(index < state.threads.size() && "index out of bounds");
-  Thread next = state.threads[index];
 
-  state.threads.erase(state.threads.begin() + index);
-  state.threads.insert(state.threads.begin(), next);
+  if (forkSchedule) {
+    ExecutionState::threads_ty::iterator finalIt = state.crtThreadIt;
+    ExecutionState::threads_ty::iterator it = state.nextThread(finalIt);
+    ExecutionState *lastState = &state;
 
-  std::stringstream dmesg2;
-  dmesg2 << "finished scheduling thread " << 
-    next.tid << " index = " << index;
-  
-  printDebug(state, dmesg2.str(), !terminate);
+    while (it != finalIt) {
+      if (it->second.enabled) {
+
+        ExecutionState *cState = lastState;
+        ExecutionState *newState = cState->branch();
+
+        if (incPreemptions)
+          newState->preemptions = state.preemptions + 1;
+
+        addedStates.insert(newState);
+
+        lastState->ptreeNode->data = 0;
+        std::pair<PTree::Node*,PTree::Node*> res =
+          processTree->split(lastState->ptreeNode, newState, lastState);
+        newState->ptreeNode = res.first;
+        lastState->ptreeNode = res.second;
+
+        newState->scheduleNext(newState->threads.find(it->second.tid));
+
+        lastState =  newState;
+      }
+
+      it = state.nextThread(it);
+    }
+  }
 }
 
 
@@ -3798,18 +3748,18 @@ void Executor::executeMemoryOperation(ExecutionState &state,
 
   if (SimplifySymIndices) {
     if (!isa<ConstantExpr>(address))
-      address = state.constraints.simplifyExpr(address);
+      address = state.constraints().simplifyExpr(address);
     if (isWrite && !isa<ConstantExpr>(value))
-      value = state.constraints.simplifyExpr(value);
+      value = state.constraints().simplifyExpr(value);
   }
 
   // fast path: single in-bounds resolution
   ObjectPair op;
   bool success;
   solver->setTimeout(stpTimeout);
-  if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
+  if (!state.addressSpace().resolveOne(state, solver, address, op, success)) {
     address = toConstant(state, address, "resolveOne failure");
-    success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
+    success = state.addressSpace().resolveOne(cast<ConstantExpr>(address), op);
   }
   solver->setTimeout(0);
 
@@ -3842,7 +3792,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 "memory error: object read only",
                                 "readonly.err");
         } else {
-          ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+          ObjectState *wos = state.addressSpace().getWriteable(mo, os);
           wos->write(offset, value);
 
 	}          
@@ -3864,7 +3814,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   
   ResolutionList rl;  
   solver->setTimeout(stpTimeout);
-  bool incomplete = state.addressSpace.resolve(state, solver, address, rl,
+  bool incomplete = state.addressSpace().resolve(state, solver, address, rl,
                                                0, stpTimeout);
   solver->setTimeout(0);
   
@@ -3887,7 +3837,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 "memory error: object read only",
                                 "readonly.err");
         } else {
-          ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+          ObjectState *wos = bound->addressSpace().getWriteable(mo, os);
           wos->write(mo->getOffsetExpr(address), value);
         }
       } else {
@@ -4158,13 +4108,13 @@ void Executor::getConstraintLog(const ExecutionState &state,
                                 std::string &res,
                                 bool asCVC) {
   if (asCVC) {
-    Query query(state.constraints, ConstantExpr::alloc(0, Expr::Bool));
+    Query query(state.constraints(), ConstantExpr::alloc(0, Expr::Bool));
     char *log = solver->stpSolver->getConstraintLog(query);
     res = std::string(log);
     free(log);
   } else {
     std::ostringstream info;
-    ExprPPrinter::printConstraints(info, state.constraints);
+    ExprPPrinter::printConstraints(info, state.constraints());
     res = info.str();    
   }
 }
@@ -4202,7 +4152,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(std::cerr,
-                             state.constraints, 
+                             state.constraints(),
                              ConstantExpr::alloc(0, Expr::Bool));
     return false;
   }
@@ -4235,7 +4185,7 @@ void Executor::doImpliedValueConcretization(ExecutionState &state,
       // FIXME: This is the sole remaining usage of the Array object
       // variable. Kill me.
       const MemoryObject *mo = 0; //re->updates.root->object;
-      const ObjectState *os = state.addressSpace.findObject(mo);
+      const ObjectState *os = state.addressSpace().findObject(mo);
 
       if (!os) {
         // object has been free'd, no need to concretize (although as
@@ -4244,7 +4194,7 @@ void Executor::doImpliedValueConcretization(ExecutionState &state,
       } else {
         assert(!os->readOnly && 
                "not possible? read only object with static read?");
-        ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+        ObjectState *wos = state.addressSpace().getWriteable(mo, os);
         wos->write(CE, it->second);
       }
     }

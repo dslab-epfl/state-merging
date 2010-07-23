@@ -8,6 +8,7 @@
 #include "klee/Threading.h"
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/Module/Cell.h"
 
 namespace klee {
 
@@ -63,30 +64,13 @@ Thread::Thread(KFunction * kf) :
   enabled(true), joinState(false), joining(INVALID_THREAD_ID) {
 
   if (kf) {
-    pushFrame(caller, kf);
+    stack.push_back(StackFrame(0, kf));
 
     pc = kf->instructions;
     prevPC = pc;
   }
 
   tid = tidCounter++;
-}
-
-Thread::~Thread() {
-  while (!stack.empty())
-    popFrame();
-}
-
-void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack.push_back(StackFrame(caller,kf));
-}
-
-void Thread::popFrame() {
-  StackFrame &sf = stack.back();
-  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
-         ie = sf.allocas.end(); it != ie; ++it)
-    process->addressSpace.unbindObject(*it);
-  stack.pop_back();
 }
 
 }
