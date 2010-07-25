@@ -52,9 +52,7 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
   if (cowKey != os->copyOnWriteOwner)
     doCOW = true;
   else {
-    if (mo->isShared)
-      doCOW = true;
-    else if (pid != os->pidOwner)
+    if (pid != os->pidOwner && !mo->isShared)
       doCOW = true;
   }
 

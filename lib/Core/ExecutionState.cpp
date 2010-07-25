@@ -108,7 +108,6 @@ Process& ExecutionState::forkProcess() {
 
   forked.pid = Process::pidCounter++;
   forked.threads.clear();
-  forked.addressSpace.cowKey = crtProcess().addressSpace.cowKey;
   forked.addressSpace.pid = forked.pid;
 
   forked.forkPath.push_back(1); // Child
@@ -174,6 +173,11 @@ ExecutionState *ExecutionState::branch() {
 
   falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tid);
   falseState->crtProcessIt = falseState->processes.find(crtProcessIt->second.pid);
+
+  for (processes_ty::iterator it = falseState->processes.begin();
+      it != falseState->processes.end(); it++) {
+    it->second.addressSpace.cowKey++;
+  }
 
   weight *= .5;
   falseState->weight -= weight;
