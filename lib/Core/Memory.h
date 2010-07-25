@@ -51,8 +51,6 @@ public:
   mutable bool isGlobal;
   bool isFixed;
 
-  mutable bool isShared; // The object is shared among addr. spaces within the same state
-
   /// true if created by us.
   bool fake_object;
   bool isUserSpecified;
@@ -81,7 +79,6 @@ public:
       address(_address),
       size(0),
       isFixed(true),
-      isShared(false),
       allocSite(0) {
   }
 
@@ -96,7 +93,6 @@ public:
       isLocal(_isLocal),
       isGlobal(_isGlobal),
       isFixed(_isFixed),
-      isShared(false),
       fake_object(false),
       isUserSpecified(false),
       allocSite(_allocSite) {
@@ -194,6 +190,8 @@ public:
   unsigned size;
 
   bool readOnly;
+
+  bool isShared; // The object is shared among addr. spaces within the same state
 
 public:
   /// Create a new object state for the given memory object with concrete

@@ -830,7 +830,7 @@ void SpecialFunctionHandler::handleBindShared(ExecutionState &state,
     if (!it->second.addressSpace.resolveOne(cast<ConstantExpr>(address), op))
       continue;
 
-    if (!op.first->isShared) {
+    if (!op.second->isShared) {
       executor.terminateStateOnError(state, "klee_bind_shared requires shared object",
           "user.err");
       return;
@@ -870,6 +870,7 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
   for (resolutions_ty::iterator it = resList.begin(); it != resList.end();
       it++) {
     const MemoryObject *mo = it->first.first;
+    const ObjectState *os = it->first.second;
     ExecutionState *s = it->second;
 
     if (mo->isLocal) {
@@ -892,7 +893,8 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
       continue;
     }
 
-    mo->isShared = true;
+    ObjectState *newOS = state.addressSpace().getWriteable(mo, os);
+    newOS->isShared = true;
   }
 }
 

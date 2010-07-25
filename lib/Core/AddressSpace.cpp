@@ -27,7 +27,7 @@ void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
 }
 
 void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
-  assert(mo->isShared);
+  assert(os->isShared);
   assert(os->copyOnWriteOwner > 0 && os->pidOwner > 0);
 
   objects = objects.insert(std::make_pair(mo, os));
@@ -52,7 +52,7 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
   if (cowKey != os->copyOnWriteOwner)
     doCOW = true;
   else {
-    if (pid != os->pidOwner && !mo->isShared)
+    if (pid != os->pidOwner && !os->isShared)
       doCOW = true;
   }
 
