@@ -109,6 +109,8 @@ public:
   // FIXME: Move to a shared list structure (not critical).
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
 
+  ConstraintManager globalConstraints;
+
 
   // For a multi threaded ExecutionState
   threads_ty threads;
@@ -148,8 +150,8 @@ public:
   Process &crtProcess() { return crtProcessIt->second; }
   const Process &crtProcess() const { return crtProcessIt->second; }
 
-  ConstraintManager &constraints() { return crtProcess().constraints; }
-  const ConstraintManager &constraints() const { return crtProcess().constraints; }
+  ConstraintManager &constraints() { return globalConstraints; }
+  const ConstraintManager &constraints() const { return globalConstraints; }
 
   AddressSpace &addressSpace() { return crtProcess().addressSpace; }
   const AddressSpace &addressSpace() const { return crtProcess().addressSpace; }

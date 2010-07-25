@@ -67,9 +67,8 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
   : c9State(NULL),
     executor(_executor),
     fakeState(true),
-    //constraints(assumptions),
+    globalConstraints(assumptions),
     queryCost(0.),
-    //addressSpace(this),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0),
     preemptions(0) {

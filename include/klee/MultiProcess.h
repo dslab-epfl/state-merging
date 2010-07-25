@@ -48,7 +48,6 @@ public:
 
   process_id_t pid;
 
-  ConstraintManager constraints;
   AddressSpace addressSpace;
 
   std::set<thread_id_t> threads;
