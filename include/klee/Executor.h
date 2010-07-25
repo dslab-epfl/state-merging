@@ -268,7 +268,8 @@ private:
                               ref<Expr> value /* undef if read */,
                               KInstruction *target /* undef if write */);
 
-  void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo);
+  void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo,
+      bool shared=false);
 
   void executeBreakpoint(ExecutionState &state, unsigned int id);
 

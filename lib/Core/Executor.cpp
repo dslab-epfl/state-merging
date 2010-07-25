@@ -3893,13 +3893,15 @@ void Executor::executeMemoryOperation(ExecutionState &state,
 }
 
 void Executor::executeMakeSymbolic(ExecutionState &state, 
-                                   const MemoryObject *mo) {
+                                   const MemoryObject *mo, bool shared) {
   // Create a new object state for the memory object (instead of a copy).
   if (!replayOut) {
     static unsigned id = 0;
     const Array *array = new Array("arr" + llvm::utostr(++id),
                                    mo->size);
-    bindObjectInState(state, mo, false, array);
+    ObjectState *os = bindObjectInState(state, mo, false, array);
+    os->isShared = shared;
+
     state.addSymbolic(mo, array);
     
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 

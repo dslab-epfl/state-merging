@@ -372,6 +372,15 @@ void klee_make_symbolic(void *addr, size_t nbytes, const char *name) {
   }
 }
 
+void klee_make_shared(void *addr, size_t nbytes) {
+  fprintf(stderr, "klee_make_shared\n");
+}
+
+
+void klee_bind_shared(void *addr, size_t nbytes) {
+  fprintf(stderr, "klee_bind_shared\n");
+}
+
 void klee_breakpoint(unsigned int id) {
   fprintf(stdout, "KLEE: Breakpoint hit: %u\n", id);
 }

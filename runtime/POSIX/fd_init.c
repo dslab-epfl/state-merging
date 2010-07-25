@@ -57,8 +57,10 @@ static void __create_new_dfile(exe_disk_file_t *dfile, unsigned size,
   dfile->size = size;
   dfile->contents = malloc(dfile->size);
   klee_make_symbolic(dfile->contents, dfile->size, name);
+  klee_make_shared(dfile->contents, dfile->size);
   
   klee_make_symbolic(s, sizeof(*s), sname);
+  klee_make_shared(s, sizeof(*s));
 
   /* For broken tests */
   if (!klee_is_symbolic(s->st_ino) && 
@@ -116,8 +118,12 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 
   stat64(".", &s);
 
+  klee_make_shared(&__exe_fs, sizeof(__exe_fs));
+
   __exe_fs.n_sym_files = n_files;
   __exe_fs.sym_files = malloc(sizeof(*__exe_fs.sym_files) * n_files);
+  klee_make_shared(__exe_fs.sym_files, sizeof(*__exe_fs.sym_files) * n_files);
+
   for (k=0; k < n_files; k++) {
     name[0] = 'A' + k;
     __create_new_dfile(&__exe_fs.sym_files[k], file_length, name, &s);
@@ -126,6 +132,8 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
   /* setting symbolic stdin */
   if (file_length) {
     __exe_fs.sym_stdin = malloc(sizeof(*__exe_fs.sym_stdin));
+    klee_make_shared(__exe_fs.sym_stdin, sizeof(*__exe_fs.sym_stdin));
+
     __create_new_dfile(__exe_fs.sym_stdin, file_length, "stdin", &s);
     __exe_env.fds[0].dfile = __exe_fs.sym_stdin;
   }
@@ -144,11 +152,19 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
     klee_make_symbolic(__exe_fs.close_fail, sizeof(*__exe_fs.close_fail), "close_fail");
     klee_make_symbolic(__exe_fs.ftruncate_fail, sizeof(*__exe_fs.ftruncate_fail), "ftruncate_fail");
     klee_make_symbolic(__exe_fs.getcwd_fail, sizeof(*__exe_fs.getcwd_fail), "getcwd_fail");
+
+    klee_make_shared(__exe_fs.read_fail, sizeof(*__exe_fs.read_fail));
+    klee_make_shared(__exe_fs.write_fail, sizeof(*__exe_fs.write_fail));
+    klee_make_shared(__exe_fs.close_fail, sizeof(*__exe_fs.close_fail));
+    klee_make_shared(__exe_fs.ftruncate_fail, sizeof(*__exe_fs.ftruncate_fail));
+    klee_make_shared(__exe_fs.getcwd_fail, sizeof(*__exe_fs.getcwd_fail));
   }
 
   /* setting symbolic stdout */
   if (sym_stdout_flag) {
     __exe_fs.sym_stdout = malloc(sizeof(*__exe_fs.sym_stdout));
+    klee_make_shared(__exe_fs.sym_stdout, sizeof(*__exe_fs.sym_stdout));
+
     __create_new_dfile(__exe_fs.sym_stdout, 1024, "stdout", &s);
     __exe_env.fds[1].dfile = __exe_fs.sym_stdout;
     __exe_fs.stdout_writes = 0;
