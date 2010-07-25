@@ -33,6 +33,8 @@ namespace klee {
                                                       &arguments);
     typedef std::map<const llvm::Function*, 
                      std::pair<Handler,bool> > handlers_ty;
+    typedef std::vector< std::pair<std::pair<const MemoryObject*, const ObjectState*>,
+        ExecutionState*> > resolutions_ty;
 
     handlers_ty handlers;
     class Executor &executor;
@@ -57,6 +59,10 @@ namespace klee {
 
     /* Convenience routines */
 
+    void processMemoryLocation(ExecutionState &state,
+        ref<Expr> address, ref<Expr> size,
+        const std::string &name, resolutions_ty &resList);
+
     std::string readStringAtAddress(ExecutionState &state, ref<Expr> address);
     
     /* Handlers */
@@ -69,6 +75,7 @@ namespace klee {
     HANDLER(handleAssert);
     HANDLER(handleAssertFail);
     HANDLER(handleAssume);
+    HANDLER(handleBindShared);
     HANDLER(handleBreakpoint);
     HANDLER(handleCalloc);
     HANDLER(handleCheckMemoryAccess);
@@ -82,6 +89,7 @@ namespace klee {
     HANDLER(handleGetObjSize);
     HANDLER(handleGetValue);
     HANDLER(handleIsSymbolic);
+    HANDLER(handleMakeShared);
     HANDLER(handleMakeSymbolic);
     HANDLER(handleMalloc);
     HANDLER(handleMarkGlobal);

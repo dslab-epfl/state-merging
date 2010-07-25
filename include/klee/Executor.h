@@ -218,6 +218,7 @@ private:
   /// beginning of.
   typedef std::vector< std::pair<std::pair<const MemoryObject*, const ObjectState*>, 
                                  ExecutionState*> > ExactResolutionList;
+
   void resolveExact(ExecutionState &state,
                     ref<Expr> p,
                     ExactResolutionList &results,

@@ -39,6 +39,7 @@ namespace klee {
   private:
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
+    mutable uint64_t pid;
 
     /// Unsupported, use copy constructor
     AddressSpace &operator=(const AddressSpace&); 
@@ -54,8 +55,8 @@ namespace klee {
     MemoryMap objects;
     
   public:
-    AddressSpace() : cowKey(1) {}
-    AddressSpace(const AddressSpace &b) : cowKey(++b.cowKey), objects(b.objects)  { }
+    AddressSpace() : cowKey(1), pid(0) {}
+    AddressSpace(const AddressSpace &b) : cowKey(++b.cowKey), pid(b.pid), objects(b.objects)  { }
     ~AddressSpace() {}
 
     /// Resolve address to an ObjectPair in result.
@@ -97,6 +98,8 @@ namespace klee {
 
     /// Add a binding to the address space.
     void bindObject(const MemoryObject *mo, ObjectState *os);
+
+    void bindSharedObject(const MemoryObject *mo, ObjectState *os);
 
     /// Remove a binding from the address space.
     void unbindObject(const MemoryObject *mo);

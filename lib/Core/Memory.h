@@ -51,6 +51,8 @@ public:
   mutable bool isGlobal;
   bool isFixed;
 
+  mutable bool isShared; // The object is shared among addr. spaces within the same state
+
   /// true if created by us.
   bool fake_object;
   bool isUserSpecified;
@@ -71,6 +73,7 @@ public:
   MemoryObject &operator=(const MemoryObject &b);
 
 public:
+
   // XXX this is just a temp hack, should be removed
   explicit
   MemoryObject(uint64_t _address) 
@@ -78,8 +81,10 @@ public:
       address(_address),
       size(0),
       isFixed(true),
+      isShared(false),
       allocSite(0) {
   }
+
 
   MemoryObject(uint64_t _address, unsigned _size, 
                bool _isLocal, bool _isGlobal, bool _isFixed,
@@ -91,6 +96,7 @@ public:
       isLocal(_isLocal),
       isGlobal(_isGlobal),
       isFixed(_isFixed),
+      isShared(false),
       fake_object(false),
       isUserSpecified(false),
       allocSite(_allocSite) {
@@ -165,7 +171,7 @@ class ObjectState {
 private:
   friend class AddressSpace;
   unsigned copyOnWriteOwner; // exclusively for AddressSpace
-  AddressSpace *owner;
+  uint64_t pidOwner;
 
   friend class ObjectHolder;
   unsigned refCount;

@@ -144,6 +144,15 @@ extern "C" {
   /* Print stack trace. */
   void klee_stack_trace(void);
 
+  /* Marks a private memory object shareable between processes */
+  void klee_make_shared(void *addr, size_t nbytes);
+
+  /* Binds a previously shared object into the current process address space.
+   * Note that this operation is done automatically during fork(), via
+   * standard Klee mechanisms.
+   */
+  void klee_bind_shared(void *addr, size_t nbytes);
+
 #ifdef __cplusplus
 }
 #endif

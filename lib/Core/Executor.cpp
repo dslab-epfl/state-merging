@@ -2986,7 +2986,7 @@ void Executor::executeBreakpoint(ExecutionState &state, unsigned int id) {
 
 void Executor::resolveExact(ExecutionState &state,
                             ref<Expr> p,
-                            ExactResolutionList &results, 
+                            ExactResolutionList &results,
                             const std::string &name) {
   // XXX we may want to be capping this?
   ResolutionList rl;

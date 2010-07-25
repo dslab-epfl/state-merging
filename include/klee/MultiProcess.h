@@ -31,16 +31,10 @@ class Process {
   friend class ExecutionState;
   friend class Executor;
 private:
-  process_id_t pid;
 
   static process_id_t pidCounter;
 
   std::vector<unsigned int> forkPath; // 0 - parent, 1 - child
-
-  ConstraintManager constraints;
-  AddressSpace addressSpace;
-
-  std::set<thread_id_t> threads;
 
   /* Thread syncrhonization objects */
   std::map<ref<Expr>, Mutex> mutexes;
@@ -51,6 +45,13 @@ private:
 
 public:
   Process();
+
+  process_id_t pid;
+
+  ConstraintManager constraints;
+  AddressSpace addressSpace;
+
+  std::set<thread_id_t> threads;
 
   uint64_t nextTLSKey() { return tlsKeyCounter++; }
 };

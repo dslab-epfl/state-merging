@@ -22,7 +22,15 @@ using namespace klee;
 void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner==0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
+  os->pidOwner = pid;
   objects = objects.replace(std::make_pair(mo, os));
+}
+
+void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
+  assert(mo->isShared);
+  assert(os->copyOnWriteOwner > 0 && os->pidOwner > 0);
+
+  objects = objects.insert(std::make_pair(mo, os));
 }
 
 void AddressSpace::unbindObject(const MemoryObject *mo) {
@@ -39,11 +47,23 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
                                         const ObjectState *os) {
   assert(!os->readOnly);
 
-  if (cowKey==os->copyOnWriteOwner) {
+  bool doCOW = false;
+
+  if (cowKey != os->copyOnWriteOwner)
+    doCOW = true;
+  else {
+    if (mo->isShared)
+      doCOW = true;
+    else if (pid != os->pidOwner)
+      doCOW = true;
+  }
+
+  if (!doCOW) {
     return const_cast<ObjectState*>(os);
   } else {
     ObjectState *n = new ObjectState(*os);
     n->copyOnWriteOwner = cowKey;
+    n->pidOwner = pid;
     objects = objects.replace(std::make_pair(mo, n));
     return n;    
   }

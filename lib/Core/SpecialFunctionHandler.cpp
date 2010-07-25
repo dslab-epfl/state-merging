@@ -89,6 +89,8 @@ HandlerInfo handlerInfo[] = {
   add("klee_print_range", handlePrintRange, false),
   add("klee_set_forking", handleSetForking, false),
   add("klee_stack_trace", handleStackTrace, false),
+  add("klee_make_shared", handleMakeShared, false),
+  add("klee_bind_shared", handleBindShared, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
@@ -199,6 +201,38 @@ bool SpecialFunctionHandler::handle(ExecutionState &state,
     return true;
   } else {
     return false;
+  }
+}
+
+void SpecialFunctionHandler::processMemoryLocation(ExecutionState &state,
+    ref<Expr> address, ref<Expr> size,
+    const std::string &name, resolutions_ty &resList) {
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, address, rl, name);
+
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
+         ie = rl.end(); it != ie; ++it) {
+    const MemoryObject *mo = it->first.first;
+    const ObjectState *os = it->first.second;
+    ExecutionState *s = it->second;
+
+    // FIXME: Type coercion should be done consistently somewhere.
+    bool res;
+    bool success =
+      executor.solver->mustBeTrue(*s,
+                                  EqExpr::create(ZExtExpr::create(size,
+                                                                  Context::get().getPointerWidth()),
+                                                 mo->getSizeExpr()),
+                                  res);
+    assert(success && "FIXME: Unhandled solver failure");
+
+    if (res) {
+      resList.push_back(std::make_pair(std::make_pair(mo, os), s));
+    } else {
+      executor.terminateStateOnError(*s,
+                                     "wrong size given to memory operation",
+                                     "user.err");
+    }
   }
 }
 
@@ -762,6 +796,106 @@ void SpecialFunctionHandler::handleFree(ExecutionState &state,
   executor.executeFree(state, arguments[0]);
 }
 
+void SpecialFunctionHandler::handleBindShared(ExecutionState &state,
+                          KInstruction *target,
+                          std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 2 &&
+      "invalid number of arguments to klee_bind_shared");
+
+  ref<Expr> address = executor.toUnique(state, arguments[0]);
+  ref<Expr> size = executor.toUnique(state, arguments[1]);
+
+  if (!isa<ConstantExpr>(address) || !isa<ConstantExpr>(size)) {
+    executor.terminateStateOnError(state,
+                                   "klee_bind_shared requires constant args",
+                                   "user.err");
+    return;
+  }
+
+  ObjectPair referenceOp;
+
+  if (state.addressSpace().resolveOne(cast<ConstantExpr>(address), referenceOp)) {
+    executor.terminateStateOnError(state, "klee_bind_shared attempted on bound object",
+        "user.err");
+    return;
+  }
+
+  for (ExecutionState::processes_ty::iterator it = state.processes.begin();
+      it != state.processes.end(); it++) {
+    if (it == state.crtProcessIt)
+      continue;
+
+    ObjectPair op;
+
+    if (!it->second.addressSpace.resolveOne(cast<ConstantExpr>(address), op))
+      continue;
+
+    if (!op.first->isShared) {
+      executor.terminateStateOnError(state, "klee_bind_shared requires shared object",
+          "user.err");
+      return;
+    }
+
+    if (!referenceOp.first)
+      referenceOp = op;
+    else {
+      if (op != referenceOp) {
+        executor.terminateStateOnError(state, "inconsistent shared memory state",
+            "user.err");
+        return;
+      }
+    }
+  }
+
+  if (!referenceOp.first) {
+    executor.terminateStateOnError(state, "invalid address for klee_bind_shared",
+        "user.err");
+    return;
+  }
+
+  state.addressSpace().bindSharedObject(referenceOp.first,
+      const_cast<ObjectState*>(referenceOp.second));
+}
+
+void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
+                          KInstruction *target,
+                          std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 2 &&
+        "invalid number of arguments to klee_make_shared");
+
+  resolutions_ty resList;
+
+  processMemoryLocation(state, arguments[0], arguments[1], "make_shared", resList);
+
+  for (resolutions_ty::iterator it = resList.begin(); it != resList.end();
+      it++) {
+    const MemoryObject *mo = it->first.first;
+    ExecutionState *s = it->second;
+
+    if (mo->isLocal) {
+      executor.terminateStateOnError(*s,
+                                     "cannot share local object",
+                                     "user.err");
+      continue;
+    }
+
+    unsigned int bindCount = 0;
+    for (ExecutionState::processes_ty::iterator pit = s->processes.begin();
+        pit != s->processes.end(); pit++) {
+      if (pit->second.addressSpace.findObject(mo) != NULL)
+        bindCount++;
+    }
+
+    if (bindCount != 1) {
+      executor.terminateStateOnError(*s, "cannot shared already forked object",
+           "user.err");
+      continue;
+    }
+
+    mo->isShared = true;
+  }
+}
+
 void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state,
                                                      KInstruction *target,
                                                      std::vector<ref<Expr> > 
@@ -839,40 +973,24 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
     name = readStringAtAddress(state, arguments[2]);
   }
 
-  Executor::ExactResolutionList rl;
-  executor.resolveExact(state, arguments[0], rl, "make_symbolic");
-  
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), 
-         ie = rl.end(); it != ie; ++it) {
-    const MemoryObject *mo = it->first.first;
-    mo->setName(name);
-    
-    const ObjectState *old = it->first.second;
-    ExecutionState *s = it->second;
-    
-    if (old->readOnly) {
-      executor.terminateStateOnError(*s, 
-                                     "cannot make readonly object symbolic", 
-                                     "user.err");
-      return;
-    } 
+  resolutions_ty resList;
 
-    // FIXME: Type coercion should be done consistently somewhere.
-    bool res;
-    bool success =
-      executor.solver->mustBeTrue(*s, 
-                                  EqExpr::create(ZExtExpr::create(arguments[1],
-                                                                  Context::get().getPointerWidth()),
-                                                 mo->getSizeExpr()),
-                                  res);
-    assert(success && "FIXME: Unhandled solver failure");
-    
-    if (res) {
-      executor.executeMakeSymbolic(*s, mo);
-    } else {      
-      executor.terminateStateOnError(*s, 
-                                     "wrong size given to klee_make_symbolic[_name]", 
+  processMemoryLocation(state, arguments[0], arguments[1], "make_symbolic", resList);
+
+  for (resolutions_ty::iterator it = resList.begin(); it != resList.end();
+      it++) {
+    const MemoryObject *mo = it->first.first;
+    const ObjectState *os = it->first.second;
+    ExecutionState *s = it->second;
+
+    mo->setName(name);
+
+    if (os->readOnly) {
+      executor.terminateStateOnError(*s,
+                                     "cannot make readonly object symbolic",
                                      "user.err");
+    } else {
+      executor.executeMakeSymbolic(*s, mo);
     }
   }
 }
