@@ -84,7 +84,6 @@ void ExecutionState::setupMain(KFunction *kf) {
 
   mainThread.pid = mainProc.pid;
   mainProc.threads.insert(mainThread.tid);
-  mainProc.addressSpace.pid = mainProc.pid;
 
   threads.insert(std::make_pair(mainThread.tid, mainThread));
   processes.insert(std::make_pair(mainProc.pid, mainProc));
@@ -108,11 +107,14 @@ Thread& ExecutionState::createThread(KFunction *kf) {
 }
 
 Process& ExecutionState::forkProcess() {
+  for (processes_ty::iterator it = processes.begin(); it != processes.end(); it++) {
+    it->second.addressSpace.cowKey++;
+  }
+
   Process forked = Process(crtProcess());
 
   forked.pid = Process::pidCounter++;
   forked.threads.clear();
-  forked.addressSpace.pid = forked.pid;
 
   forked.forkPath.push_back(1); // Child
   crtProcess().forkPath.push_back(0); // Parent
@@ -182,6 +184,10 @@ ExecutionState::~ExecutionState() {
 ExecutionState *ExecutionState::branch() {
   depth++;
 
+  for (processes_ty::iterator it = processes.begin(); it != processes.end(); it++) {
+    it->second.addressSpace.cowKey++;
+  }
+
   ExecutionState *falseState = new ExecutionState(*this);
   
   falseState->coveredNew = false;
@@ -198,7 +204,6 @@ ExecutionState *ExecutionState::branch() {
   for (processes_ty::iterator it = falseState->processes.begin();
       it != falseState->processes.end(); it++) {
     falseState->cowDomain.push_back(&it->second.addressSpace);
-    it->second.addressSpace.cowKey++;
   }
 
   for (processes_ty::iterator it = falseState->processes.begin();

@@ -3900,8 +3900,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     const Array *array = new Array("arr" + llvm::utostr(++id),
                                    mo->size);
     ObjectState *os = bindObjectInState(state, mo, false, array);
-    if (shared)
-      os->setShared();
+    os->isShared = shared;
 
     state.addSymbolic(mo, array);
     

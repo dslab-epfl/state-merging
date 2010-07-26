@@ -22,13 +22,13 @@ using namespace klee;
 void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner==0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
-  os->pidOwner = pid;
+
   objects = objects.replace(std::make_pair(mo, os));
 }
 
 void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->isShared);
-  assert(os->copyOnWriteOwner > 0 && os->pidOwner == 0);
+  assert(os->copyOnWriteOwner > 0);
 
   objects = objects.insert(std::make_pair(mo, os));
 }
@@ -47,22 +47,10 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
                                         const ObjectState *os) {
   assert(!os->readOnly);
 
-  bool doCOW = false;
-
-  if (cowKey != os->copyOnWriteOwner)
-    doCOW = true;
-  else {
-    if (!os->isShared && pid != os->pidOwner)
-      doCOW = true;
-  }
-
-  if (!doCOW) {
-    return const_cast<ObjectState*>(os);
-  } else {
+  if (cowKey != os->copyOnWriteOwner) {
     if (os->isShared) {
       ObjectState *n = new ObjectState(*os);
       n->copyOnWriteOwner = cowKey;
-      n->pidOwner = 0;
 
       for (cow_domain_t::iterator it = cowDomain->begin(); it != cowDomain->end();
           it++) {
@@ -76,10 +64,12 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
     } else {
       ObjectState *n = new ObjectState(*os);
       n->copyOnWriteOwner = cowKey;
-      n->pidOwner = pid;
+
       objects = objects.replace(std::make_pair(mo, n));
       return n;
     }
+  } else {
+    return const_cast<ObjectState*>(os);
   }
 }
 

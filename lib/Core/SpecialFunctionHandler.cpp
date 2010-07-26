@@ -860,6 +860,7 @@ void SpecialFunctionHandler::handleBindShared(ExecutionState &state,
 void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
                           KInstruction *target,
                           std::vector<ref<Expr> > &arguments) {
+
   assert(arguments.size() == 2 &&
         "invalid number of arguments to klee_make_shared");
 
@@ -894,7 +895,7 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
     }
 
     ObjectState *newOS = state.addressSpace().getWriteable(mo, os);
-    newOS->setShared();
+    newOS->isShared = true;
   }
 }
 

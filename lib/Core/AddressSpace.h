@@ -41,7 +41,6 @@ namespace klee {
 
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
-    mutable uint64_t pid;
 
     mutable cow_domain_t *cowDomain;
 
@@ -59,8 +58,8 @@ namespace klee {
     MemoryMap objects;
     
   public:
-    AddressSpace() : cowKey(1), pid(0), cowDomain(NULL) {}
-    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), pid(b.pid), cowDomain(NULL), objects(b.objects)  { }
+    AddressSpace() : cowKey(1), cowDomain(NULL) {}
+    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL), objects(b.objects)  { }
     ~AddressSpace() {}
 
     /// Resolve address to an ObjectPair in result.

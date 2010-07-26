@@ -98,7 +98,6 @@ void MemoryObject::getAllocInfo(std::string &result) const {
 
 ObjectState::ObjectState(const MemoryObject *mo)
   : copyOnWriteOwner(0),
-    pidOwner(0),
     refCount(0),
     object(mo),
     concreteStore(new uint8_t[mo->size]),
@@ -120,7 +119,6 @@ ObjectState::ObjectState(const MemoryObject *mo)
 
 ObjectState::ObjectState(const MemoryObject *mo, const Array *array)
   : copyOnWriteOwner(0),
-    pidOwner(0),
     refCount(0),
     object(mo),
     concreteStore(new uint8_t[mo->size]),
@@ -136,7 +134,6 @@ ObjectState::ObjectState(const MemoryObject *mo, const Array *array)
 
 ObjectState::ObjectState(const ObjectState &os) 
   : copyOnWriteOwner(0),
-    pidOwner(0),
     refCount(0),
     object(os.object),
     concreteStore(new uint8_t[os.size]),
@@ -146,7 +143,7 @@ ObjectState::ObjectState(const ObjectState &os)
     updates(os.updates),
     size(os.size),
     readOnly(false),
-    isShared(false) {
+    isShared(os.isShared) {
   assert(!os.readOnly && "no need to copy read only object?");
 
   if (os.knownSymbolics) {

@@ -167,7 +167,6 @@ class ObjectState {
 private:
   friend class AddressSpace;
   unsigned copyOnWriteOwner; // exclusively for AddressSpace
-  uint64_t pidOwner;
 
   friend class ObjectHolder;
   unsigned refCount;
@@ -209,7 +208,6 @@ public:
   const MemoryObject *getObject() const { return object; }
 
   void setReadOnly(bool ro) { readOnly = ro; }
-  void setShared() { isShared = true; pidOwner = 0; }
 
   // make contents all concrete and zero
   void initializeToZero();

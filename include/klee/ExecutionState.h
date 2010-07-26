@@ -133,6 +133,7 @@ public:
   }
 
   void scheduleNext(threads_ty::iterator it) {
+    //CLOUD9_DEBUG("New thread scheduled: " << it->second.tid << " (pid: " << it->second.pid << ")");
     crtThreadIt = it;
     crtProcessIt = processes.find(crtThreadIt->second.pid);
   }
