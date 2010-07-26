@@ -84,6 +84,7 @@ void ExecutionState::setupMain(KFunction *kf) {
 
   mainThread.pid = mainProc.pid;
   mainProc.threads.insert(mainThread.tid);
+  mainProc.ppid = 1;
 
   threads.insert(std::make_pair(mainThread.tid, mainThread));
   processes.insert(std::make_pair(mainProc.pid, mainProc));
@@ -114,6 +115,7 @@ Process& ExecutionState::forkProcess() {
   Process forked = Process(crtProcess());
 
   forked.pid = Process::pidCounter++;
+  forked.ppid = crtProcess().pid;
   forked.threads.clear();
 
   forked.forkPath.push_back(1); // Child

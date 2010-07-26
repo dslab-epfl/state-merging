@@ -47,6 +47,7 @@ public:
   Process();
 
   process_id_t pid;
+  process_id_t ppid;
 
   AddressSpace addressSpace;
 
