@@ -115,6 +115,7 @@ public:
   // For a multi threaded ExecutionState
   threads_ty threads;
   processes_ty processes;
+  AddressSpace::cow_domain_t cowDomain;
 
   Thread& createThread(KFunction *kf);
   Process& forkProcess();

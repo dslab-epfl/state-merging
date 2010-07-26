@@ -894,7 +894,7 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
     }
 
     ObjectState *newOS = state.addressSpace().getWriteable(mo, os);
-    newOS->isShared = true;
+    newOS->setShared();
   }
 }
 

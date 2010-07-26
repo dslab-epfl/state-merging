@@ -209,6 +209,7 @@ public:
   const MemoryObject *getObject() const { return object; }
 
   void setReadOnly(bool ro) { readOnly = ro; }
+  void setShared() { isShared = true; pidOwner = 0; }
 
   // make contents all concrete and zero
   void initializeToZero();

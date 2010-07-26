@@ -91,6 +91,10 @@ void ExecutionState::setupMain(KFunction *kf) {
 
   crtThreadIt = threads.begin();
   crtProcessIt = processes.find(crtThreadIt->second.pid);
+
+  cowDomain.push_back(&crtProcessIt->second.addressSpace);
+
+  crtProcessIt->second.addressSpace.cowDomain = &cowDomain;
 }
 
 Thread& ExecutionState::createThread(KFunction *kf) {
@@ -122,15 +126,23 @@ Process& ExecutionState::forkProcess() {
   threads.insert(std::make_pair(forkedThread.tid, forkedThread));
   processes.insert(std::make_pair(forked.pid, forked));
 
+  cowDomain.push_back(&processes.find(forked.pid)->second.addressSpace);
+  processes.find(forked.pid)->second.addressSpace.cowDomain = &cowDomain;
+
   return processes.find(forked.pid)->second;
 }
 
 void ExecutionState::terminateThread() {
   assert(threads.size() > 1);
 
-  if (crtProcess().threads.size() == 1)
+  if (crtProcess().threads.size() == 1) {
+    AddressSpace::cow_domain_t::iterator it =
+        std::find(cowDomain.begin(), cowDomain.end(), &crtProcess().addressSpace);
+    assert(it != cowDomain.end());
+    cowDomain.erase(it);
+
     processes.erase(crtProcess().pid);
-  else
+  } else
     crtProcess().threads.erase(crtThread().tid);
 
   threads_ty::iterator oldIt = crtThreadIt;
@@ -140,17 +152,22 @@ void ExecutionState::terminateThread() {
   threads.erase(oldIt);
 }
 
-void ExecutionState::terminateThread(threads_ty::iterator it) {
-  if (it == crtThreadIt)
+void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
+  if (thrIt == crtThreadIt)
     terminateThread();
   else {
-    Process &proc = processes.find(it->second.pid)->second;
-    if (proc.threads.size() == 1)
-      processes.erase(proc.pid);
-    else
-      proc.threads.erase(it->second.tid);
+    Process &proc = processes.find(thrIt->second.pid)->second;
+    if (proc.threads.size() == 1) {
+      AddressSpace::cow_domain_t::iterator it =
+          std::find(cowDomain.begin(), cowDomain.end(), &proc.addressSpace);
+      assert(it != cowDomain.end());
+      cowDomain.erase(it);
 
-    threads.erase(it);
+      processes.erase(proc.pid);
+    } else
+      proc.threads.erase(thrIt->second.tid);
+
+    threads.erase(thrIt);
   }
 }
 
@@ -174,9 +191,19 @@ ExecutionState *ExecutionState::branch() {
   falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tid);
   falseState->crtProcessIt = falseState->processes.find(crtProcessIt->second.pid);
 
+  falseState->cowDomain.clear();
+
+  // Rebuilding the COW domain...
+
   for (processes_ty::iterator it = falseState->processes.begin();
       it != falseState->processes.end(); it++) {
+    falseState->cowDomain.push_back(&it->second.addressSpace);
     it->second.addressSpace.cowKey++;
+  }
+
+  for (processes_ty::iterator it = falseState->processes.begin();
+      it != falseState->processes.end(); it++) {
+    it->second.addressSpace.cowDomain = &falseState->cowDomain;
   }
 
   weight *= .5;

@@ -37,9 +37,13 @@ namespace klee {
 	  friend class ObjectState;
 	  friend class ExecutionState;
   private:
+	  typedef std::vector<AddressSpace*> cow_domain_t;
+
     /// Epoch counter used to control ownership of objects.
     mutable unsigned cowKey;
     mutable uint64_t pid;
+
+    mutable cow_domain_t *cowDomain;
 
     /// Unsupported, use copy constructor
     AddressSpace &operator=(const AddressSpace&); 
@@ -55,8 +59,8 @@ namespace klee {
     MemoryMap objects;
     
   public:
-    AddressSpace() : cowKey(1), pid(0) {}
-    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), pid(b.pid), objects(b.objects)  { }
+    AddressSpace() : cowKey(1), pid(0), cowDomain(NULL) {}
+    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), pid(b.pid), cowDomain(NULL), objects(b.objects)  { }
     ~AddressSpace() {}
 
     /// Resolve address to an ObjectPair in result.
