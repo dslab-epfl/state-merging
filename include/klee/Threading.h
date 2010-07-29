@@ -26,6 +26,7 @@ struct Cell;
 
 typedef uint64_t thread_id_t;
 typedef uint64_t process_id_t;
+typedef uint64_t wlist_id_t;
 
 #define INVALID_THREAD_ID   ((uint64_t)(-1))
 
@@ -99,8 +100,6 @@ class Thread {
   friend class Process;
 private:
   static thread_id_t tidCounter;
-
-  bool enabled;
   bool joinState;
 
   thread_id_t joining; // the thread we are joining
@@ -109,6 +108,9 @@ private:
   unsigned incomingBBIndex;
 
   std::vector<StackFrame> stack;
+
+  bool enabled;
+  wlist_id_t waitingList;
 
   std::map<ref<Expr> , ref<Expr> > tls;
 

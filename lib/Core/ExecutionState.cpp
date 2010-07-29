@@ -58,6 +58,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     lastCoveredTime(sys::TimeValue::now()),
     forkDisabled(false),
     ptreeNode(0),
+    wlistCounter(1),
     preemptions(0) {
 
   setupMain(kf);
@@ -71,6 +72,7 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     queryCost(0.),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0),
+    wlistCounter(1),
     preemptions(0) {
 
   setupMain(NULL);
@@ -83,7 +85,8 @@ void ExecutionState::setupMain(KFunction *kf) {
   Thread mainThread = Thread(kf);
 
   mainThread.pid = mainProc.pid;
-  mainProc.threads.insert(mainThread.tid);
+  mainProc.threads.insert(std::make_pair(mainThread.tid, getWaitingList()));
+  mainProc.anyChild = getWaitingList();
   mainProc.ppid = 1;
 
   threads.insert(std::make_pair(mainThread.tid, mainThread));
@@ -100,7 +103,7 @@ void ExecutionState::setupMain(KFunction *kf) {
 Thread& ExecutionState::createThread(KFunction *kf) {
   Thread newThread = Thread(kf);
   newThread.pid = crtProcess().pid;
-  crtProcess().threads.insert(newThread.tid);
+  crtProcess().threads.insert(std::make_pair(newThread.tid, getWaitingList()));
 
   threads.insert(std::make_pair(newThread.tid, newThread));
 
@@ -125,7 +128,9 @@ Process& ExecutionState::forkProcess() {
   forkedThread.pid = forked.pid;
   forkedThread.tid = Thread::tidCounter++;
 
-  forked.threads.insert(forkedThread.tid);
+  forked.threads.insert(std::make_pair(forkedThread.tid, getWaitingList()));
+  forked.anyChild = getWaitingList();
+  crtProcess().children.insert(std::make_pair(forked.pid, getWaitingList()));
 
   threads.insert(std::make_pair(forkedThread.tid, forkedThread));
   processes.insert(std::make_pair(forked.pid, forked));
@@ -136,43 +141,79 @@ Process& ExecutionState::forkProcess() {
   return processes.find(forked.pid)->second;
 }
 
-void ExecutionState::terminateThread() {
+void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
   assert(threads.size() > 1);
 
-  if (crtProcess().threads.size() == 1) {
+  Process &proc = processes.find(thrIt->second.pid)->second;
+
+  notifyAll(proc.threads[thrIt->second.tid]);
+
+  if (proc.threads.size() == 1) {
+    if (proc.ppid != 1) {
+      Process &parent = processes.find(proc.ppid)->second;
+      notifyAll(parent.children[proc.pid]);
+      notifyAll(parent.anyChild);
+
+      parent.children.erase(proc.pid);
+    }
+
     AddressSpace::cow_domain_t::iterator it =
-        std::find(cowDomain.begin(), cowDomain.end(), &crtProcess().addressSpace);
+        std::find(cowDomain.begin(), cowDomain.end(), &proc.addressSpace);
     assert(it != cowDomain.end());
     cowDomain.erase(it);
 
-    processes.erase(crtProcess().pid);
+    processes.erase(proc.pid);
   } else
-    crtProcess().threads.erase(crtThread().tid);
+    proc.threads.erase(thrIt->second.tid);
 
-  threads_ty::iterator oldIt = crtThreadIt;
+  if (thrIt == crtThreadIt) {
+    scheduleNext(nextThread(crtThreadIt));
+  }
 
-  scheduleNext(nextThread(crtThreadIt));
+  threads.erase(thrIt);
 
-  threads.erase(oldIt);
 }
 
-void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
-  if (thrIt == crtThreadIt)
-    terminateThread();
-  else {
-    Process &proc = processes.find(thrIt->second.pid)->second;
-    if (proc.threads.size() == 1) {
-      AddressSpace::cow_domain_t::iterator it =
-          std::find(cowDomain.begin(), cowDomain.end(), &proc.addressSpace);
-      assert(it != cowDomain.end());
-      cowDomain.erase(it);
+void ExecutionState::sleepThread(wlist_id_t wlist) {
+  assert(crtThread().enabled);
 
-      processes.erase(proc.pid);
-    } else
-      proc.threads.erase(thrIt->second.tid);
+  crtThread().enabled = false;
+  crtThread().waitingList = wlist;
 
-    threads.erase(thrIt);
+  waitingLists[wlist].insert(crtThread().tid);
+}
+
+void ExecutionState::notifyOne(wlist_id_t wlist) {
+  std::set<thread_id_t> &wl = waitingLists[wlist];
+
+  if (wl.size() > 0) {
+    thread_id_t tid = *wl.begin();
+
+    wl.erase(wl.begin());
+
+    Thread &thread = threads.find(tid)->second;
+    thread.enabled = true;
+    thread.waitingList = 0;
   }
+
+  if (wl.size() == 0)
+    waitingLists.erase(wlist);
+}
+
+void ExecutionState::notifyAll(wlist_id_t wlist) {
+  std::set<thread_id_t> &wl = waitingLists[wlist];
+
+  if (wl.size() > 0) {
+    for (std::set<thread_id_t>::iterator it = wl.begin(); it != wl.end(); it++) {
+      Thread &thread = threads.find(*it)->second;
+      thread.enabled = true;
+      thread.waitingList = 0;
+    }
+
+    wl.clear();
+  }
+
+  waitingLists.erase(wlist);
 }
 
 ExecutionState::~ExecutionState() {

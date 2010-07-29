@@ -23,6 +23,7 @@ class Thread;
 
 typedef uint64_t process_id_t;
 typedef uint64_t thread_id_t;
+typedef uint64_t wlist_id_t;
 
 #define INVALID_PROCESS_ID ((uint64_t)(-1))
 
@@ -49,9 +50,12 @@ public:
   process_id_t pid;
   process_id_t ppid;
 
-  AddressSpace addressSpace;
+  std::map<process_id_t, wlist_id_t> children;
+  wlist_id_t anyChild;
 
-  std::set<thread_id_t> threads;
+  std::map<thread_id_t, wlist_id_t> threads;
+
+  AddressSpace addressSpace;
 
   uint64_t nextTLSKey() { return tlsKeyCounter++; }
 };

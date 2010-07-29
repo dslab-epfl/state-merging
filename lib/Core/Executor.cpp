@@ -3417,12 +3417,12 @@ void Executor::executeThreadExit(ExecutionState &state, KInstruction *ki) {
 
 void Executor::executeProcessExit(ExecutionState &state,
              KInstruction *ki) {
-  for (std::set<thread_id_t>::iterator it = state.crtProcess().threads.begin();
+  for (std::map<thread_id_t, wlist_id_t>::iterator it = state.crtProcess().threads.begin();
       it != state.crtProcess().threads.end(); it++) {
-    if (*it == state.crtThread().tid)
+    if (it->first == state.crtThread().tid)
       continue;
 
-    ExecutionState::threads_ty::iterator it2 = state.threads.find(*it);
+    ExecutionState::threads_ty::iterator it2 = state.threads.find(it->first);
     state.terminateThread(it2);
   }
 
@@ -3544,9 +3544,9 @@ void Executor::executePthreadKeyCreate(ExecutionState &state,
   state.crtProcess().tls_keys[key] = kf;
 
   //set the key to NULL in all threads
-  for (std::set<thread_id_t>::iterator it = state.crtProcess().threads.begin();
+  for (std::map<thread_id_t, wlist_id_t>::iterator it = state.crtProcess().threads.begin();
       it != state.crtProcess().threads.end(); it++) {
-    state.threads.find(*it)->second.tls[key] = Expr::createPointer(0);
+    state.threads.find(it->first)->second.tls[key] = Expr::createPointer(0);
   }
   
   // set return value
@@ -3639,7 +3639,7 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki) {
 
   Process &child = state.forkProcess();
 
-  Thread &cThread = state.threads.find(*child.threads.begin())->second;
+  Thread &cThread = state.threads.find(child.threads.begin()->first)->second;
 
   // Set return value in the child
   state.scheduleNext(state.threads.find(cThread.tid));

@@ -57,6 +57,8 @@ std::ostream &printStateMemorySummary(std::ostream &os, const ExecutionState &st
 std::ostream &operator<<(std::ostream &os, const ExecutionState &state); // XXX Cloud9 hack
 std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
+typedef uint64_t wlist_id_t;
+
 class ExecutionState {
 	friend class ObjectState;
 
@@ -64,6 +66,7 @@ public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<thread_id_t, Thread> threads_ty;
   typedef std::map<process_id_t, Process> processes_ty;
+  typedef std::map<wlist_id_t, std::set<thread_id_t> > wlists_ty;
 
 private:
   // unsupported, use copy constructor
@@ -115,11 +118,16 @@ public:
   // For a multi threaded ExecutionState
   threads_ty threads;
   processes_ty processes;
+
+  wlists_ty waitingLists;
+  wlist_id_t wlistCounter;
+
+
   AddressSpace::cow_domain_t cowDomain;
 
   Thread& createThread(KFunction *kf);
   Process& forkProcess();
-  void terminateThread();
+  void terminateThread() { terminateThread(crtThreadIt); }
   void terminateThread(threads_ty::iterator it);
 
   threads_ty::iterator nextThread(threads_ty::iterator it) {
@@ -137,6 +145,11 @@ public:
     crtThreadIt = it;
     crtProcessIt = processes.find(crtThreadIt->second.pid);
   }
+
+  wlist_id_t getWaitingList() { return wlistCounter++; }
+  void sleepThread(wlist_id_t wlist);
+  void notifyOne(wlist_id_t wlist);
+  void notifyAll(wlist_id_t wlist);
 
   threads_ty::iterator crtThreadIt;
   processes_ty::iterator crtProcessIt;
