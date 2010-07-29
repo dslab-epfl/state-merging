@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
+#include <pthread.h>
 
 static void __emit_error(const char *msg);
 
@@ -379,6 +380,14 @@ void klee_make_shared(void *addr, size_t nbytes) {
 
 void klee_bind_shared(void *addr, size_t nbytes) {
   fprintf(stderr, "klee_bind_shared\n");
+}
+
+void klee_get_thread_info(uint64_t *tid, int32_t *pid) {
+  if (pid)
+    *pid = getpid();
+
+  if (tid)
+    *tid = pthread_self();
 }
 
 void klee_breakpoint(unsigned int id) {

@@ -25,6 +25,8 @@
 
 #include "llvm/Module.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Type.h"
+#include "llvm/DerivedTypes.h"
 
 #include <errno.h>
 
@@ -91,6 +93,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_make_shared", handleMakeShared, false),
   add("klee_bind_shared", handleBindShared, false),
+  add("klee_get_thread_info", handleGetThreadInfo, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
@@ -585,7 +588,8 @@ void SpecialFunctionHandler::handlePthreadCreate(ExecutionState &state,
 	 "invalid number of arguments to pthread_create");
   
   //for now we ignore the attribute arguments to pthread_create
-  executor.executePthreadCreate(state, target, arguments[0], arguments[1], arguments[2], arguments[3]);
+  executor.executePthreadCreate(state, target, arguments[0], arguments[1],
+      arguments[2], arguments[3]);
 }
 
 void SpecialFunctionHandler::handlePthreadJoin(ExecutionState &state,
@@ -897,6 +901,49 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
     ObjectState *newOS = state.addressSpace().getWriteable(mo, os);
     newOS->isShared = true;
   }
+}
+
+void SpecialFunctionHandler::handleGetThreadInfo(ExecutionState &state,
+                          KInstruction *target,
+                          std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 2 &&
+      "invalid number of arguments to klee_get_thread_info");
+
+  ref<Expr> tidAddr = executor.toUnique(state, arguments[0]);
+  ref<Expr> pidAddr = executor.toUnique(state, arguments[1]);
+
+  if (!isa<ConstantExpr>(tidAddr) || !isa<ConstantExpr>(pidAddr)) {
+    executor.terminateStateOnError(state,
+                                   "klee_get_thread_info requires constant args",
+                                   "user.err");
+    return;
+  }
+
+  if (!tidAddr->isZero()) {
+    ObjectPair op;
+    if (!state.addressSpace().resolveOne(cast<ConstantExpr>(tidAddr), op)) {
+      executor.terminateStateOnError(state, "invalid tid pointer passed to klee_get_thread_info", "user.err");
+      return;
+    }
+
+    ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
+
+    os->write(op.first->getOffsetExpr(tidAddr), ConstantExpr::create(state.crtThread().tid,
+        executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))));
+  }
+
+  if (!pidAddr->isZero()) {
+    ObjectPair op;
+    if (!state.addressSpace().resolveOne(cast<ConstantExpr>(pidAddr), op)) {
+      executor.terminateStateOnError(state, "invalid pid pointer passed to klee_get_thread_info", "user.err");
+      return;
+    }
+
+    ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
+    os->write(op.first->getOffsetExpr(pidAddr), ConstantExpr::create(state.crtProcess().pid,
+        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))));
+  }
+
 }
 
 void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state,

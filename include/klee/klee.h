@@ -10,8 +10,8 @@
 #ifndef __KLEE_H__
 #define __KLEE_H__
 
-#include "stdint.h"
-#include "stddef.h"
+#include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -152,6 +152,8 @@ extern "C" {
    * standard Klee mechanisms.
    */
   void klee_bind_shared(void *addr, size_t nbytes);
+
+  void klee_get_thread_info(uint64_t *tid, int32_t *pid);
 
 #ifdef __cplusplus
 }

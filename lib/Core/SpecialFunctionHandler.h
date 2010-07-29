@@ -87,6 +87,7 @@ namespace klee {
     HANDLER(handleFree);
     HANDLER(handleGetErrno);
     HANDLER(handleGetObjSize);
+    HANDLER(handleGetThreadInfo);
     HANDLER(handleGetValue);
     HANDLER(handleIsSymbolic);
     HANDLER(handleMakeShared);

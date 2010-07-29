@@ -104,7 +104,6 @@ private:
   bool joinState;
 
   thread_id_t joining; // the thread we are joining
-  thread_id_t tid;
 
   KInstIterator pc, prevPC;
   unsigned incomingBBIndex;
@@ -118,6 +117,7 @@ private:
 public:
   Thread(KFunction *start_function);
 
+  thread_id_t tid;
 };
 
 }
