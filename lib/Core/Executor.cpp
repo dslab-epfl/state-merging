@@ -3515,7 +3515,7 @@ void Executor::schedule(ExecutionState &state)
   bool forkSchedule = false;
   bool incPreemptions = false;
 
-  if(!state.crtThread().enabled) {
+  if(state.crtThreadIt == state.threads.end()) {
     ExecutionState::threads_ty::iterator it = state.nextThread(state.crtThreadIt);
 
     while (!it->second.enabled)
@@ -3556,7 +3556,7 @@ void Executor::schedule(ExecutionState &state)
 
         newState->scheduleNext(newState->threads.find(it->second.tid));
 
-        lastState =  newState;
+        lastState = newState;
       }
 
       it = state.nextThread(it);

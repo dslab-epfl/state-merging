@@ -167,7 +167,7 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
     proc.threads.erase(thrIt->second.tid);
 
   if (thrIt == crtThreadIt) {
-    scheduleNext(nextThread(crtThreadIt));
+    scheduleNext(threads.end());
   }
 
   threads.erase(thrIt);
@@ -181,6 +181,8 @@ void ExecutionState::sleepThread(wlist_id_t wlist) {
   crtThread().waitingList = wlist;
 
   waitingLists[wlist].insert(crtThread().tid);
+
+  scheduleNext(threads.end());
 }
 
 void ExecutionState::notifyOne(wlist_id_t wlist) {

@@ -131,19 +131,28 @@ public:
   void terminateThread(threads_ty::iterator it);
 
   threads_ty::iterator nextThread(threads_ty::iterator it) {
-    it++;
     if (it == threads.end())
       it = threads.begin();
-
-    return it;
+    else {
+      it++;
+      if (it == threads.end())
+        it = threads.begin();
+    }
 
     crtProcessIt = processes.find(crtThreadIt->second.pid);
+
+    return it;
   }
 
   void scheduleNext(threads_ty::iterator it) {
     //CLOUD9_DEBUG("New thread scheduled: " << it->second.tid << " (pid: " << it->second.pid << ")");
-    crtThreadIt = it;
-    crtProcessIt = processes.find(crtThreadIt->second.pid);
+    if (it == threads.end()) {
+      crtThreadIt = threads.end();
+      crtProcessIt = processes.end();
+    } else {
+      crtThreadIt = it;
+      crtProcessIt = processes.find(crtThreadIt->second.pid);
+    }
   }
 
   wlist_id_t getWaitingList() { return wlistCounter++; }

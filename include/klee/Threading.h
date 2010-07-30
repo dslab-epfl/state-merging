@@ -114,12 +114,11 @@ private:
 
   std::map<ref<Expr> , ref<Expr> > tls;
 
-  process_id_t pid;
-
 public:
   Thread(KFunction *start_function);
 
   thread_id_t tid;
+  process_id_t pid;
 };
 
 }

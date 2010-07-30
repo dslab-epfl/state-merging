@@ -157,7 +157,7 @@ extern "C" {
 
   int klee_get_thread_info(uint64_t tid, uint64_t *wlist);
 
-  int klee_get_process_info(uint64_t pid, uint64_t *plist, uint64_t *clist);
+  int klee_get_process_info(int32_t pid, uint64_t *plist, uint64_t *clist);
 
   uint64_t klee_get_wlist(void);
 
