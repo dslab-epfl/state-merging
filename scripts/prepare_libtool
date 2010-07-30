@@ -2,6 +2,10 @@
 #
 # Transform libtool to compile to LLVM
 #
+echo
+echo "WARNING: This is an older version of the script. Use \"${0/prepare_libtool/prepare}\" for quicker results. :)"
+echo
+
 export KLEE_GCC="/home/sun/esd-work/git/cloud9/scripts/klee-gcc" 
 if [ -f libtool ]
 then

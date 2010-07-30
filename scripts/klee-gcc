@@ -70,19 +70,29 @@ def main():
     # of code here is not also a complete and total hack, it is.
     args = sys.argv[1:]
     linkArgs = []
+    skipNext = False
     for a in args:
+
+        if skipNext:
+            skipNext = False
+            continue
+
     	skip = False
-        for prefix in ('-emit-llvm', '-I', '-D', '-g', '-W', '-O', '-D', '-f', '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib', '--disable-optcru', "-rdynamic"): 
+        for prefix in ('-emit-llvm', '-I', '-D', '-g', '-W', '-O', '-D', '-f', '-fnested-functions', '-pthread', '-std', '-Wl,', '-pedantic', '-nostdlib', '--disable-optcru', "-rdynamic", "-static"): 
             if a.startswith(prefix):
             	skip = True
                 break
 
+	if a == '--param':
+            skipNext = True
+            continue
+
         if a == '-shared':
-                linkArgs.append('-r')
-                continue
+            linkArgs.append('-r')
+            continue
 
 	if a.endswith(".c") or a.endswith(".cpp") or a.endswith(".cc") or a.endswith(".CC"):
-		continue    	
+	    continue    	
 	   	
         if not skip:
             linkArgs.append(a)
