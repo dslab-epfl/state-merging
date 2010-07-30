@@ -11,7 +11,14 @@
 
 pid_t getpid(void) {
   pid_t result;
-  klee_get_thread_info(0, &result);
+  klee_get_context(0, &result, 0);
+
+  return result;
+}
+
+pid_t getppid(void) {
+  pid_t result;
+  klee_get_context(0, 0, &result);
 
   return result;
 }

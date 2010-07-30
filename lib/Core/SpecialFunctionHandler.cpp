@@ -93,7 +93,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_make_shared", handleMakeShared, false),
   add("klee_bind_shared", handleBindShared, false),
-  add("klee_get_thread_info", handleGetThreadInfo, false),
+  add("klee_get_context", handleGetContext, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
@@ -903,16 +903,18 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
   }
 }
 
-void SpecialFunctionHandler::handleGetThreadInfo(ExecutionState &state,
+void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
                           KInstruction *target,
                           std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 2 &&
+  assert(arguments.size() == 3 &&
       "invalid number of arguments to klee_get_thread_info");
 
   ref<Expr> tidAddr = executor.toUnique(state, arguments[0]);
   ref<Expr> pidAddr = executor.toUnique(state, arguments[1]);
+  ref<Expr> ppidAddr = executor.toUnique(state, arguments[2]);
 
-  if (!isa<ConstantExpr>(tidAddr) || !isa<ConstantExpr>(pidAddr)) {
+  if (!isa<ConstantExpr>(tidAddr) || !isa<ConstantExpr>(pidAddr) ||
+      !isa<ConstantExpr>(ppidAddr)) {
     executor.terminateStateOnError(state,
                                    "klee_get_thread_info requires constant args",
                                    "user.err");
@@ -941,6 +943,18 @@ void SpecialFunctionHandler::handleGetThreadInfo(ExecutionState &state,
 
     ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
     os->write(op.first->getOffsetExpr(pidAddr), ConstantExpr::create(state.crtProcess().pid,
+        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))));
+  }
+
+  if (!ppidAddr->isZero()) {
+    ObjectPair op;
+    if (!state.addressSpace().resolveOne(cast<ConstantExpr>(ppidAddr), op)) {
+      executor.terminateStateOnError(state, "invalid ppid pointer passed to klee_get_thread_info", "user.err");
+      return;
+    }
+
+    ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
+    os->write(op.first->getOffsetExpr(ppidAddr), ConstantExpr::create(state.crtProcess().ppid,
         executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))));
   }
 

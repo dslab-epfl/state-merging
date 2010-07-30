@@ -382,12 +382,15 @@ void klee_bind_shared(void *addr, size_t nbytes) {
   fprintf(stderr, "klee_bind_shared\n");
 }
 
-void klee_get_thread_info(uint64_t *tid, int32_t *pid) {
+void klee_get_context(uint64_t *tid, int32_t *pid, int32_t *ppid) {
+  if (tid)
+    *tid = pthread_self();
+
   if (pid)
     *pid = getpid();
 
-  if (tid)
-    *tid = pthread_self();
+  if (ppid)
+    *ppid = getppid();
 }
 
 void klee_breakpoint(unsigned int id) {

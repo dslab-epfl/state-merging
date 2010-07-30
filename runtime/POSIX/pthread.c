@@ -12,7 +12,7 @@
 pthread_t pthread_self(void) {
   pthread_t result;
 
-  klee_get_thread_info(&result, 0);
+  klee_get_context(&result, 0, 0);
 
   return result;
 }
