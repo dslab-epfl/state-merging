@@ -3084,8 +3084,6 @@ void  Executor::executePthreadCreate(ExecutionState &state,
   dmesg << "created thread " << t.tid;
   printDebug(state, dmesg.str(), true);
 
-  initTLS(state, &t);
-
   if (statsTracker)
     statsTracker->framePushed(&t.stack.back(), 0);
 
@@ -3106,58 +3104,6 @@ void  Executor::executePthreadCreate(ExecutionState &state,
   bindLocal(target, state, ConstantExpr::create(returnValue, 
 						getWidthForLLVMType(target->inst->getType())));
 }
-
-void Executor::initTLS(ExecutionState &state, Thread* t)
-{
-  for (std::map< ref<Expr> , KFunction*>::iterator it = 
-	 state.crtProcess().tls_keys.begin();
-       it != state.crtProcess().tls_keys.end(); it++)
-    {
-      ref<Expr> key = (*it).first;
-      t->tls[key] = Expr::createPointer(0);
-    }
-}
-
-//XXX: currently assuming no pthread_lock/unlock can be 
-//called while the thread is executing the destructor, 
-//though it might work
-
-/// Returns true if there are any destructors to call
-bool Executor::destroyTLS(ExecutionState &state, 
-			  KInstruction* ki,
-			  Thread* thread)
-{
-
-  // XXX: We currently  this part of the specification:
-  // If, after all the destructors have been called for all non-NULL 
-  // values with associated destructors, there are still some non-NULL 
-  // values with  associated  destructors,  then  the  process  is
-  // repeated.  If, after at least {PTHREAD_DESTRUCTOR_ITERATIONS} iterations 
-  // of destructor calls for outstanding non-NULL values, there are still some 
-  // non-NULL values with associated destructors, 
-  // even though this might result in an infinite loop.
-  
-  bool res = false;
-  for(std::map< ref<Expr> , KFunction*>::iterator it =  state.crtProcess().tls_keys.begin();
-      it != state.crtProcess().tls_keys.end(); it++)
-    {
-      ref<Expr> key = (*it).first;
-      KFunction* kf = (*it).second;
-      ref<Expr> previous = thread->tls[key];
-      thread->tls[key] = 0;
-      if(kf) 
-	{
-	  //build arguments
-	  std::vector <ref<Expr> > arguments;
-	  arguments.push_back(previous);
-	  res = true;
-	  //call the destructor
-    	  executeCall(state, ki, kf->function, arguments);
-	}	
-    }
-  return res;
-}
-
 
 
 void  Executor::executePthreadJoin(ExecutionState &state, 
@@ -3194,7 +3140,7 @@ void  Executor::executePthreadJoin(ExecutionState &state,
       state.crtThread().joinState = true;
       state.crtThread().joining = tid;
       state.crtThread().enabled = false;
-      schedule(state, false);
+      schedule(state);
   }
   // Simply return from pthread_join. This thread will be scheduled back after it was joined.
 }
@@ -3261,7 +3207,7 @@ void  Executor::executePthreadMutexLock(ExecutionState &state,
   std::map<ref<Expr>, Mutex>::iterator it = state.crtProcess().mutexes.find(mutex);
   assert(it != state.crtProcess().mutexes.end() &&
 	 "inconsitency in mutex management detected during mutex lock");
-  schedule(state, false, LOCK, &it->second);
+  schedule(state);
 
   //fault injection could try returning something else
   // [EDEADLK]          
@@ -3332,7 +3278,7 @@ void  Executor::executePthreadMutexUnlock(ExecutionState &state,
 					    getWidthForLLVMType(ki->inst->getType())));
   std::map<ref<Expr>, Mutex>::iterator it = state.crtProcess().mutexes.find(mutex);
   assert(it != state.crtProcess().mutexes.end() &&  "error realeasing mutex");
-  schedule(state, false, UNLOCK, &it->second);
+  schedule(state);
   //XXX: should handle this, it could find some programming errors
   // EPERM
   // The current thread does not own the mutex.
@@ -3390,44 +3336,53 @@ void  Executor::executePthreadMutexDestroy(ExecutionState &state,
 void Executor::executeThreadExit(ExecutionState &state, KInstruction *ki) {
 
   printDebug(state, "executing thread exit", false);
-  bool destructors = destroyTLS(state, ki, &state.crtThread());
-  if (!destructors) {
-    for (ExecutionState::threads_ty::iterator it = state.threads.begin(); it
-        != state.threads.end(); it++) {
-      if (state.crtThread().tid == it->second.joining) {
-        Thread &t = it->second;
-        t.joinState = false;
-        t.enabled = true;
-        t.joining = INVALID_THREAD_ID;
 
-        std::stringstream msg;
-        msg << "on exit enabled thread " << t.tid;
-        printDebug(state, msg.str(), false);
-        break;
-      }
+  for (ExecutionState::threads_ty::iterator it = state.threads.begin(); it
+      != state.threads.end(); it++) {
+    if (state.crtThread().tid == it->second.joining) {
+      Thread &t = it->second;
+      t.joinState = false;
+      t.enabled = true;
+      t.joining = INVALID_THREAD_ID;
+
+      std::stringstream msg;
+      msg << "on exit enabled thread " << t.tid;
+      printDebug(state, msg.str(), false);
+      break;
     }
+  }
 
-    //terminate this thread and schedule another one
-    state.crtThread().enabled = false;
-    schedule(state, true);
-  } else
-    // XXX What happens when joining a thread with destructors
-    schedule(state, false);
+  //terminate this thread and schedule another one
+  state.crtThread().enabled = false;
+  if (state.threads.size() == 1) {
+    klee_message("terminating state");
+    terminateStateOnExit(state);
+    return;
+  } else {
+    assert(state.threads.size() > 1);
+    state.terminateThread();
+  }
+  schedule(state);
+
 }
 
 void Executor::executeProcessExit(ExecutionState &state,
              KInstruction *ki) {
+  if (state.processes.size() == 1) {
+    terminateState(state);
+    return;
+  }
+
+  state.crtThread().enabled = false;
+
   for (std::map<thread_id_t, wlist_id_t>::iterator it = state.crtProcess().threads.begin();
       it != state.crtProcess().threads.end(); it++) {
-    if (it->first == state.crtThread().tid)
-      continue;
 
     ExecutionState::threads_ty::iterator it2 = state.threads.find(it->first);
     state.terminateThread(it2);
   }
 
-  state.crtThread().enabled = false;
-  schedule(state, true);
+  schedule(state);
 }
 
 void Executor::executePthreadExit(ExecutionState &state, 
@@ -3520,121 +3475,7 @@ void Executor::executePthreadCondDestroy(ExecutionState &state,
 					    getWidthForLLVMType(ki->inst->getType())));
 }
 
-void Executor::executePthreadKeyCreate(ExecutionState &state, 
-				       KInstruction *ki, 
-				       ref<Expr> key, 
-				       ref<Expr> destructor) {
-  key = toUnique(state, key);
-  assert(isa<ConstantExpr>(key) &&
-	 "pthread_key_create address is not constant");
-  
-  ConstantExpr *key_const_expr = dyn_cast<ConstantExpr>(key);
-  ObjectPair op;
-  state.addressSpace().resolveOne(key_const_expr, op);
-  const MemoryObject *mo = op.first;
-  ref<Expr> offset = mo->getOffsetExpr(key);
-  ObjectState *wos = state.addressSpace().getWriteable(mo, op.second);
-  ref<Expr> new_key = ConstantExpr::create(state.crtProcess().nextTLSKey(),
-      key->getWidth());
-
-  wos->write(offset, new_key);
-  key = new_key;
-  
-  KFunction *kf = resolveFunction(destructor);
-  state.crtProcess().tls_keys[key] = kf;
-
-  //set the key to NULL in all threads
-  for (std::map<thread_id_t, wlist_id_t>::iterator it = state.crtProcess().threads.begin();
-      it != state.crtProcess().threads.end(); it++) {
-    state.threads.find(it->first)->second.tls[key] = Expr::createPointer(0);
-  }
-  
-  // set return value
-  // for fault injection
-  // The pthread_key_create() function shall fail if  
-  // EAGAIN 
-  // The  system  lacked  the necessary resources to create another 
-  // thread-specific data key, or the system-imposed limit on 
-  // the total number of keys per process {PTHREAD_KEYS_MAX} has been
-  // ENOMEM Insufficient memory exists to create the key.
-  
-  int returnValue = 0;
-  bindLocal(ki, state, ConstantExpr::create(returnValue, 
-					    getWidthForLLVMType(ki->inst->getType())));
-}
-  
-void Executor::executePthreadGetSpecific(ExecutionState &state, 
-					 KInstruction *ki, 
-					 ref<Expr> key) {
-  key = toUnique(state, key);
-  assert(isa<ConstantExpr>(key) && 
-	 "pthread_getspecific key address is not constant");
-  ref<Expr> addr;
-  std::map< ref<Expr>, ref<Expr> >::iterator it = state.crtThread().tls.find(key);
-  if(it != state.crtThread().tls.end())
-    addr  = state.crtThread().tls[key];
-  else
-    //XXX: should also set errno to EINVAL
-    addr = Expr::createPointer(0);
-  
-  //set return value
-  bindLocal(ki, state, addr);
-}
-
-void Executor::executePthreadSetSpecific(ExecutionState &state, 
-					 KInstruction *ki, 
-					 ref<Expr> key,
-					 ref<Expr> value) {
-  key = toUnique(state, key);
-  assert(isa<ConstantExpr>(key) && "pthread_setspecific key address is not constant");
-  
-  state.crtThread().tls[key] = value;
-
-  //Fault Injection options
-  //The pthread_setspecific() function shall fail if:
-  // ENOMEM 
-  // Insufficient memory exists to associate the value with the key.
-  // The pthread_setspecific() function may fail if:
-  // EINVAL The key value is invalid.
-  int returnValue = 0;
-  bindLocal(ki, state, ConstantExpr::create(returnValue, 
-					    getWidthForLLVMType(ki->inst->getType())));
-}
-
-void Executor::executePthreadKeyDelete(ExecutionState &state, 
-				       KInstruction *ki, 
-				       ref<Expr> key) {
-  int ret = 0;
-  key = toUnique(state, key);
-  assert(isa<ConstantExpr>(key) && "pthread_key_delete address is not constant");
-  
-  std::map< ref<Expr> , KFunction*>::iterator it =  state.crtProcess().tls_keys.find(key);
-  if(it != state.crtProcess().tls_keys.end())
-    state.crtProcess().tls_keys.erase(it);
-  else {
-    //Fault Injection options
-    //The pthread_key_delete() function may fail if:
-    //EINVAL The key value is invalid.
-    ret = 1;
-    ObjectPair op;
-    //XXX : hack - errno should be thread local, not global
-    int* errno_addr = __errno_location();
-    ref<ConstantExpr> addr = Expr::createPointer((uint64_t) errno_addr);
-    state.addressSpace().resolveOne(addr, op);
-    const MemoryObject *mo = op.first;
-    ref<Expr> offset = mo->getOffsetExpr(addr);
-    ObjectState *wos = state.addressSpace().getWriteable(mo, op.second);
-    wos->write(offset, ConstantExpr::create(EINVAL, 
-					    getWidthForLLVMType(ki->inst->getType())));
-  }  
-  bindLocal(ki, state, ConstantExpr::create(ret, 
-					    getWidthForLLVMType(ki->inst->getType())));
-}
-
 void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki) {
-
-  CLOUD9_DEBUG("Forking...");
-
   Thread &pThread = state.crtThread();
 
   Process &child = state.forkProcess();
@@ -3653,61 +3494,20 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki) {
 }
 
 
-void Executor::schedule(ExecutionState &state, 
-			bool terminate) 			
+void Executor::schedule(ExecutionState &state)
 {
-  schedule(state, terminate, 0, NULL);
-}
-
-
-void Executor::schedule(ExecutionState &state, 
-			bool terminate, 
-			int LockOpType, 
-			Mutex* mutex) {
-  preemption_schedule(state, terminate);
-  
-}
-
-
-void Executor::preemption_schedule(ExecutionState &state, bool terminate)
-{
-  //std::cout << "entering schedule " << state.crtThread->tid << " state " << &state <<  " node " << state.ptreeNode<< std::endl;
-
-  printDebug(state, "entering schedule", !terminate);
-  
-  // if we are scheduling because a thread terminates, we do not add it 
-  // to the list of live threads
-  if (terminate) {
-    if (state.threads.size() == 1) {
-      klee_message("terminating state");
-      terminateState(state);
-      return;
-    } else {
-      assert(state.threads.size() > 1);
-      state.terminateThread();
-    }
-  }
-  
-  //obtain the list of enabled threads
-  std::stringstream dmesg;
-  dmesg << "enabled threads: ";
 
   bool no_deadlock = false;
   for(ExecutionState::threads_ty::iterator it = state.threads.begin();
       it != state.threads.end();  it++) {
     if(it->second.enabled) {
-      dmesg << it->second.tid << " ";
       no_deadlock = true;
-      //should break unless debugging
       break;
     }
   }
   
-  printDebug(state, dmesg.str(), !terminate);
-  
   if (!no_deadlock)
     {
-      printDebug(state, "deadlock: no enabled transitions", !terminate);
       klee_message("terminating state");
       return terminateStateOnError(state, " ******** deadlock", "user.err");
     }

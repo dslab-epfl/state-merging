@@ -411,11 +411,6 @@ private:
   /// \param address address of the function pointer
   KFunction* resolveFunction(ref<Expr> address);
 
-  void initTLS(ExecutionState &state, Thread* t);
-  bool destroyTLS(ExecutionState &state, 
-		  KInstruction* ki, 
-		  Thread* thread);
-
 
   //pthread handlers
   void executePthreadCreate(ExecutionState &state,
@@ -481,38 +476,10 @@ private:
   void executePthreadCondDestroy(ExecutionState &state, 
 				 KInstruction *ki, 
 				 ref<Expr> cond_var);
-
-  void executePthreadKeyCreate(ExecutionState &state, 
-			       KInstruction *ki, 
-			       ref<Expr> key, 
-			       ref<Expr> destructor);
-  
-  void executePthreadGetSpecific(ExecutionState &state, 
-				 KInstruction *ki, 
-				 ref<Expr> key);
-
-  void executePthreadSetSpecific(ExecutionState &state, 
-				 KInstruction *ki, 
-				 ref<Expr> key,
-				 ref<Expr> value);
-			       
-  void executePthreadKeyDelete(ExecutionState &state, 
-			       KInstruction *ki, 
-			       ref<Expr> key);
   
   void executeProcessFork(ExecutionState &state, KInstruction *ki);
-
-  /// Choose the next thread to execute next. Can potentially context-switch the current thread.
-  void schedule(ExecutionState &state,
-			  bool terminate);
-
-  /// Choose the next thread to execute next. Can potentially context-switch the current thread.
-  void schedule(ExecutionState &state, 
-			  bool terminate, 
-			  int LockOpType, 
-			  Mutex* mutex);
   
-  void preemption_schedule(ExecutionState &state, bool terminate);
+  void schedule(ExecutionState &state);
   
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);

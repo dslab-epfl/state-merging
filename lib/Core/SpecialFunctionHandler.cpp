@@ -94,6 +94,12 @@ HandlerInfo handlerInfo[] = {
   add("klee_make_shared", handleMakeShared, false),
   add("klee_bind_shared", handleBindShared, false),
   add("klee_get_context", handleGetContext, false),
+  add("klee_get_thread_info", handleGetThreadInfo, true),
+  add("klee_get_process_info", handleGetProcessInfo, true),
+  add("klee_get_wlist", handleGetWList, true),
+  add("klee_thread_preempt", handleThreadPreempt, false),
+  add("klee_thread_sleep", handleThreadSleep, false),
+  add("klee_thread_notify", handleThreadNotify, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
@@ -132,10 +138,6 @@ HandlerInfo handlerInfo[] = {
   add("pthread_cond_broadcast", handlePthreadCondBroadcast, true),
   add("pthread_cond_init", handlePthreadCondInit, true),
   add("pthread_cond_destroy", handlePthreadCondDestroy, true),
-  add("pthread_key_create", handlePthreadKeyCreate, true),
-  add("pthread_getspecific", handlePthreadGetSpecific, true),
-  add("pthread_setspecific", handlePthreadSetSpecific, true),
-  add("pthread_key_delete", handlePthreadKeyDelete, true),
 
   //multiprocess functions
   add("fork", handleFork, true),
@@ -237,6 +239,22 @@ void SpecialFunctionHandler::processMemoryLocation(ExecutionState &state,
                                      "user.err");
     }
   }
+}
+
+bool SpecialFunctionHandler::writeConcreteValue(ExecutionState &state,
+        ref<Expr> address, uint64_t value, Expr::Width width) {
+  ObjectPair op;
+
+  if (!state.addressSpace().resolveOne(cast<ConstantExpr>(address), op)) {
+    executor.terminateStateOnError(state, "invalid pointer for writing concrete value into", "user.err");
+    return false;
+  }
+
+  ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
+
+  os->write(op.first->getOffsetExpr(address), ConstantExpr::create(value, width));
+
+  return true;
 }
 
 /****/
@@ -703,45 +721,6 @@ void SpecialFunctionHandler::handlePthreadCondDestroy(ExecutionState &state,
   executor.executePthreadCondDestroy(state, target, arguments[0]);  
 }
 
-
-
-void SpecialFunctionHandler::handlePthreadKeyCreate(ExecutionState &state, 
-						    KInstruction *target, 
-						    std::vector <ref<Expr> > &arguments)
-{
-  assert(arguments.size() == 2 &&
-	 "invalid number of arguments to pthread_key_create");
-  executor.executePthreadKeyCreate(state, target, arguments[0], arguments[1]);
-}
-
-
-void SpecialFunctionHandler::handlePthreadGetSpecific(ExecutionState &state, 
-						    KInstruction *target, 
-						    std::vector <ref<Expr> > &arguments)
-{
-  assert(arguments.size() == 1 &&
-	 "invalid number of arguments to pthread_getspecific");
-  executor.executePthreadGetSpecific(state, target, arguments[0]);
-}
-
-void SpecialFunctionHandler::handlePthreadSetSpecific(ExecutionState &state, 
-						    KInstruction *target, 
-						    std::vector <ref<Expr> > &arguments)
-{
-  assert(arguments.size() == 2 &&
-	 "invalid number of arguments to pthread_setspecific");
-  executor.executePthreadSetSpecific(state, target, arguments[0], arguments[1]);
-}
-
-void SpecialFunctionHandler::handlePthreadKeyDelete(ExecutionState &state, 
-						    KInstruction *target, 
-						    std::vector <ref<Expr> > &arguments)
-{
-  assert(arguments.size() == 1 &&
-	 "invalid number of arguments to pthread_key_delete");
-  executor.executePthreadKeyDelete(state, target, arguments[0]);
-}
-
 void SpecialFunctionHandler::handleCalloc(ExecutionState &state,
                             KInstruction *target,
                             std::vector<ref<Expr> > &arguments) {
@@ -922,41 +901,63 @@ void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
   }
 
   if (!tidAddr->isZero()) {
-    ObjectPair op;
-    if (!state.addressSpace().resolveOne(cast<ConstantExpr>(tidAddr), op)) {
-      executor.terminateStateOnError(state, "invalid tid pointer passed to klee_get_thread_info", "user.err");
+    if (!writeConcreteValue(state, tidAddr, state.crtThread().tid,
+        executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))))
       return;
-    }
-
-    ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
-
-    os->write(op.first->getOffsetExpr(tidAddr), ConstantExpr::create(state.crtThread().tid,
-        executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))));
   }
 
   if (!pidAddr->isZero()) {
-    ObjectPair op;
-    if (!state.addressSpace().resolveOne(cast<ConstantExpr>(pidAddr), op)) {
-      executor.terminateStateOnError(state, "invalid pid pointer passed to klee_get_thread_info", "user.err");
+    if (!writeConcreteValue(state, pidAddr, state.crtProcess().pid,
+        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))))
       return;
-    }
-
-    ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
-    os->write(op.first->getOffsetExpr(pidAddr), ConstantExpr::create(state.crtProcess().pid,
-        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))));
   }
 
   if (!ppidAddr->isZero()) {
-    ObjectPair op;
-    if (!state.addressSpace().resolveOne(cast<ConstantExpr>(ppidAddr), op)) {
-      executor.terminateStateOnError(state, "invalid ppid pointer passed to klee_get_thread_info", "user.err");
+    if (!writeConcreteValue(state, ppidAddr, state.crtProcess().ppid,
+        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))))
       return;
-    }
-
-    ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
-    os->write(op.first->getOffsetExpr(ppidAddr), ConstantExpr::create(state.crtProcess().ppid,
-        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))));
   }
+
+}
+
+void SpecialFunctionHandler::handleGetThreadInfo(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+
+}
+
+void SpecialFunctionHandler::handleGetProcessInfo(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+
+}
+
+void SpecialFunctionHandler::handleGetWList(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_get_wlist");
+
+  wlist_id_t id = state.getWaitingList();
+
+  executor.bindLocal(target, state, ConstantExpr::create(id,
+      executor.getWidthForLLVMType(target->inst->getType())));
+}
+
+void SpecialFunctionHandler::handleThreadPreempt(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+
+}
+
+void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+
+}
+
+void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
 
 }
 

@@ -40,9 +40,6 @@ private:
   /* Thread syncrhonization objects */
   std::map<ref<Expr>, Mutex> mutexes;
   std::map<ref<Expr>, CondVar> cond_vars;
-  std::map< ref<Expr> , KFunction*> tls_keys;
-
-  uint64_t tlsKeyCounter;
 
 public:
   Process();
@@ -56,8 +53,6 @@ public:
   std::map<thread_id_t, wlist_id_t> threads;
 
   AddressSpace addressSpace;
-
-  uint64_t nextTLSKey() { return tlsKeyCounter++; }
 };
 }
 

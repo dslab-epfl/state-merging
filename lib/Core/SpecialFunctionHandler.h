@@ -63,6 +63,9 @@ namespace klee {
         ref<Expr> address, ref<Expr> size,
         const std::string &name, resolutions_ty &resList);
 
+    bool writeConcreteValue(ExecutionState &state,
+        ref<Expr> address, uint64_t value, Expr::Width width);
+
     std::string readStringAtAddress(ExecutionState &state, ref<Expr> address);
     
     /* Handlers */
@@ -70,6 +73,7 @@ namespace klee {
 #define HANDLER(name) void name(ExecutionState &state, \
                                 KInstruction *target, \
                                 std::vector< ref<Expr> > &arguments)
+
     HANDLER(handleAbort);
     HANDLER(handleAliasFunction);
     HANDLER(handleAssert);
@@ -88,7 +92,10 @@ namespace klee {
     HANDLER(handleGetContext);
     HANDLER(handleGetErrno);
     HANDLER(handleGetObjSize);
+    HANDLER(handleGetProcessInfo);
+    HANDLER(handleGetThreadInfo);
     HANDLER(handleGetValue);
+    HANDLER(handleGetWList);
     HANDLER(handleIsSymbolic);
     HANDLER(handleMakeShared);
     HANDLER(handleMakeSymbolic);
@@ -107,6 +114,9 @@ namespace klee {
     HANDLER(handleSetForking);
     HANDLER(handleSilentExit);
     HANDLER(handleStackTrace);
+    HANDLER(handleThreadNotify);
+    HANDLER(handleThreadPreempt);
+    HANDLER(handleThreadSleep);
     HANDLER(handleUnderConstrained);
     HANDLER(handleValloc);
     HANDLER(handleWarning);
@@ -123,10 +133,6 @@ namespace klee {
     HANDLER(handlePthreadCondBroadcast);
     HANDLER(handlePthreadCondInit);
     HANDLER(handlePthreadCondDestroy);
-    HANDLER(handlePthreadKeyCreate);
-    HANDLER(handlePthreadGetSpecific);
-    HANDLER(handlePthreadSetSpecific);
-    HANDLER(handlePthreadKeyDelete);
 #undef HANDLER
   };
 } // End klee namespace

@@ -155,6 +155,26 @@ extern "C" {
 
   void klee_get_context(uint64_t *tid, int32_t *pid, int32_t *ppid);
 
+  int klee_get_thread_info(uint64_t tid, uint64_t *wlist);
+
+  int klee_get_process_info(uint64_t pid, uint64_t *plist, uint64_t *clist);
+
+  uint64_t klee_get_wlist(void);
+
+  void klee_thread_preempt(void);
+
+  void klee_thread_sleep(uint64_t wlist);
+
+  void klee_thread_notify(uint64_t wlist, int all);
+
+  static inline void klee_thread_notify_one(uint64_t wlist) {
+    klee_thread_notify(wlist, 0);
+  }
+
+  static inline void klee_thread_notify_all(uint64_t wlist) {
+    klee_thread_notify(wlist, 1);
+  }
+
 #ifdef __cplusplus
 }
 #endif
