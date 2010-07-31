@@ -12,8 +12,6 @@
 
 namespace klee {
 
-thread_id_t Thread::tidCounter = 2;
-
 /* StackFrame Methods */
 
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
@@ -60,8 +58,10 @@ StackFrame::~StackFrame() {
 
 /* Thread class methods */
 
-Thread::Thread(KFunction * kf) :
-  enabled(true), joinState(false), joining(INVALID_THREAD_ID) {
+Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
+  enabled(true) {
+
+  tuid = std::make_pair(tid, pid);
 
   if (kf) {
     stack.push_back(StackFrame(0, kf));
@@ -70,7 +70,6 @@ Thread::Thread(KFunction * kf) :
     prevPC = pc;
   }
 
-  tid = tidCounter++;
 }
 
 }

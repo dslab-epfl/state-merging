@@ -28,6 +28,8 @@ typedef uint64_t thread_id_t;
 typedef uint64_t process_id_t;
 typedef uint64_t wlist_id_t;
 
+typedef std::pair<thread_id_t, process_id_t> thread_uid_t;
+
 #define INVALID_THREAD_ID   ((uint64_t)(-1))
 
 class Mutex {
@@ -99,10 +101,6 @@ class Thread {
   friend class ExecutionState;
   friend class Process;
 private:
-  static thread_id_t tidCounter;
-  bool joinState;
-
-  thread_id_t joining; // the thread we are joining
 
   KInstIterator pc, prevPC;
   unsigned incomingBBIndex;
@@ -112,13 +110,12 @@ private:
   bool enabled;
   wlist_id_t waitingList;
 
-  std::map<ref<Expr> , ref<Expr> > tls;
-
+  thread_uid_t tuid;
 public:
-  Thread(KFunction *start_function);
+  Thread(thread_id_t tid, process_id_t pid, KFunction *start_function);
 
-  thread_id_t tid;
-  process_id_t pid;
+  thread_id_t getTid() const { return tuid.first; }
+  process_id_t getPid() const { return tuid.second; }
 };
 
 }

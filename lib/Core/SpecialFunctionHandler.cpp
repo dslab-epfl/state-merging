@@ -94,8 +94,6 @@ HandlerInfo handlerInfo[] = {
   add("klee_make_shared", handleMakeShared, false),
   add("klee_bind_shared", handleBindShared, false),
   add("klee_get_context", handleGetContext, false),
-  add("klee_get_thread_info", handleGetThreadInfo, true),
-  add("klee_get_process_info", handleGetProcessInfo, true),
   add("klee_get_wlist", handleGetWList, true),
   add("klee_thread_preempt", handleThreadPreempt, false),
   add("klee_thread_sleep", handleThreadSleep, false),
@@ -920,82 +918,6 @@ void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
 
 }
 
-void SpecialFunctionHandler::handleGetThreadInfo(ExecutionState &state,
-                    KInstruction *target,
-                    std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 2 && "invalid number of arguments to klee_get_thread_info");
-
-  ref<Expr> tidExpr = executor.toUnique(state, arguments[0]);
-  ref<Expr> wlistAddr = executor.toUnique(state, arguments[1]);
-
-  if (!isa<ConstantExpr>(tidExpr) || !isa<ConstantExpr>(wlistAddr)) {
-    executor.terminateStateOnError(state, "klee_get_thread_info", "user.err");
-    return;
-  }
-
-  uint64_t tid = cast<ConstantExpr>(tidExpr)->getZExtValue();
-
-  if (state.threads.count(tid) == 0) {
-    executor.bindLocal(target, state, ConstantExpr::create(0,
-        executor.getWidthForLLVMType(target->inst->getType())));
-    return;
-  }
-
-  Thread &t = state.threads.find(tid)->second;
-  Process &p = state.processes.find(t.pid)->second;
-
-  if (!wlistAddr->isZero()) {
-    if (!writeConcreteValue(state, wlistAddr, p.threads[tid],
-        executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))))
-      return;
-  }
-
-  executor.bindLocal(target, state, ConstantExpr::create(1,
-      executor.getWidthForLLVMType(target->inst->getType())));
-}
-
-void SpecialFunctionHandler::handleGetProcessInfo(ExecutionState &state,
-                    KInstruction *target,
-                    std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 3 && "invalid number of arguments to klee_get_process_info");
-
-  ref<Expr> pidExpr = executor.toUnique(state, arguments[0]);
-  ref<Expr> plistAddr = executor.toUnique(state, arguments[1]);
-  ref<Expr> clistAddr = executor.toUnique(state, arguments[2]);
-
-  if (!isa<ConstantExpr>(pidExpr) || !isa<ConstantExpr>(plistAddr) ||
-      !isa<ConstantExpr>(clistAddr)) {
-    executor.terminateStateOnError(state, "klee_get_process_info", "user.err");
-    return;
-  }
-
-  int32_t pid = cast<ConstantExpr>(pidExpr)->getZExtValue();
-
-  if (state.processes.count(pid) == 0) {
-    executor.bindLocal(target, state, ConstantExpr::create(0,
-        executor.getWidthForLLVMType(target->inst->getType())));
-    return;
-  }
-
-  Process &p = state.processes.find(pid)->second;
-  Process &pp = state.processes.find(p.ppid)->second;
-
-  if (!plistAddr->isZero()) {
-    if (!writeConcreteValue(state, plistAddr, pp.children[pid],
-        executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))))
-      return;
-  }
-
-  if (!clistAddr->isZero()) {
-    if (!writeConcreteValue(state, clistAddr, p.anyChild,
-        executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))))
-      return;
-  }
-
-  executor.bindLocal(target, state, ConstantExpr::create(1,
-      executor.getWidthForLLVMType(target->inst->getType())));
-}
-
 void SpecialFunctionHandler::handleGetWList(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
@@ -1010,19 +932,45 @@ void SpecialFunctionHandler::handleGetWList(ExecutionState &state,
 void SpecialFunctionHandler::handleThreadPreempt(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_thread_preempt");
 
+  executor.schedule(state);
 }
 
 void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_thread_sleep");
 
+  ref<Expr> wlistExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(wlistExpr)) {
+    executor.terminateStateOnError(state, "klee_thread_sleep", "user.err");
+    return;
+  }
+
+  state.sleepThread(cast<ConstantExpr>(wlistExpr)->getZExtValue());
+  executor.schedule(state);
 }
 
 void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_thread_notify");
 
+  ref<Expr> wlist = executor.toUnique(state, arguments[0]);
+  ref<Expr> all = executor.toUnique(state, arguments[1]);
+
+  if (!isa<ConstantExpr>(wlist) || !isa<ConstantExpr>(all)) {
+    executor.terminateStateOnError(state, "klee_thread_notify", "user.err");
+    return;
+  }
+
+  if (all->isZero()) {
+    state.notifyOne(cast<ConstantExpr>(wlist)->getZExtValue());
+  } else {
+    state.notifyAll(cast<ConstantExpr>(wlist)->getZExtValue());
+  }
 }
 
 void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state,

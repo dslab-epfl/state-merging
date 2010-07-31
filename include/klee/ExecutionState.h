@@ -64,9 +64,10 @@ class ExecutionState {
 
 public:
   typedef std::vector<StackFrame> stack_ty;
-  typedef std::map<thread_id_t, Thread> threads_ty;
+
+  typedef std::map<thread_uid_t, Thread> threads_ty;
   typedef std::map<process_id_t, Process> processes_ty;
-  typedef std::map<wlist_id_t, std::set<thread_id_t> > wlists_ty;
+  typedef std::map<wlist_id_t, std::set<thread_uid_t> > wlists_ty;
 
 private:
   // unsupported, use copy constructor
@@ -125,8 +126,8 @@ public:
 
   AddressSpace::cow_domain_t cowDomain;
 
-  Thread& createThread(KFunction *kf);
-  Process& forkProcess();
+  Thread& createThread(thread_id_t tid, KFunction *kf);
+  Process& forkProcess(process_id_t pid);
   void terminateThread() { terminateThread(crtThreadIt); }
   void terminateThread(threads_ty::iterator it);
 
@@ -139,7 +140,7 @@ public:
         it = threads.begin();
     }
 
-    crtProcessIt = processes.find(crtThreadIt->second.pid);
+    crtProcessIt = processes.find(crtThreadIt->second.getPid());
 
     return it;
   }
@@ -151,7 +152,7 @@ public:
       crtProcessIt = processes.end();
     } else {
       crtThreadIt = it;
-      crtProcessIt = processes.find(crtThreadIt->second.pid);
+      crtProcessIt = processes.find(crtThreadIt->second.getPid());
     }
   }
 
@@ -215,7 +216,7 @@ public:
     StackFrame &sf = t.stack.back();
     for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
            ie = sf.allocas.end(); it != ie; ++it)
-      processes.find(t.pid)->second.addressSpace.unbindObject(*it);
+      processes.find(t.getPid())->second.addressSpace.unbindObject(*it);
     t.stack.pop_back();
   }
   void popFrame() {

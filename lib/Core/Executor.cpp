@@ -3037,7 +3037,7 @@ void Executor::printDebug(ExecutionState &state, std::string s, bool line)
 	std::cerr << std::endl;
       }
     std::cerr << " state " << &state;
-    std::cerr << " thread " << state.crtThread().tid << std::endl;
+    std::cerr << " thread " << state.crtThread().getTid() << std::endl;
     std::cerr << s << std::endl;
   }
 }
@@ -3103,46 +3103,6 @@ void  Executor::executePthreadCreate(ExecutionState &state,
   int returnValue = 0;
   bindLocal(target, state, ConstantExpr::create(returnValue, 
 						getWidthForLLVMType(target->inst->getType())));
-}
-
-
-void  Executor::executePthreadJoin(ExecutionState &state, 
-				   KInstruction *ki, 
-				   ref<Expr> thread, 
-				   ref<Expr> value_ptr) {
-  thread = toUnique(state, thread);
-  assert(isa<ConstantExpr>(thread) &&
-	 "pthread_t thread variable is not constant");
-  uint64_t tid = cast<ConstantExpr>(thread)->getZExtValue();
-  
-  ExecutionState::threads_ty::iterator it = state.threads.find(tid);
-    
-  // set the return value to the current stack ... 
-  // if we want to enable FI we need to find a better solution
-  // such as binding the return value using bindObjectInState(....
-  // from the joining thread
-  int returnValue = 0;
-  bindLocal(ki, state, ConstantExpr::create(returnValue, 
-					    getWidthForLLVMType(ki->inst->getType())));
-  
-  // Fault Injection - can set ERRNO to these values
-  // The pthread_join() function SHALL fail if:
-  // EINVAL 
-  // The implementation has detected that the value specified by thread does not refer to a joinable thread.
-  // ESRCH  
-  // No thread could be found corresponding to that specified by the given thread ID.
-  // The pthread_join() function MAY fail if:
-  //  EDEADLK
-  // A deadlock was detected or the value of thread specifies the calling thread.
-  
-
-  if (it != state.threads.end()) {
-      state.crtThread().joinState = true;
-      state.crtThread().joining = tid;
-      state.crtThread().enabled = false;
-      schedule(state);
-  }
-  // Simply return from pthread_join. This thread will be scheduled back after it was joined.
 }
 
 // returns false in case the mutex is not defined 

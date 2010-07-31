@@ -144,6 +144,10 @@ extern "C" {
   /* Print stack trace. */
   void klee_stack_trace(void);
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Shared Memory Management
+  //////////////////////////////////////////////////////////////////////////////
+
   /* Marks a private memory object shareable between processes */
   void klee_make_shared(void *addr, size_t nbytes);
 
@@ -153,11 +157,17 @@ extern "C" {
    */
   void klee_bind_shared(void *addr, size_t nbytes);
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Thread Scheduling Management
+  //////////////////////////////////////////////////////////////////////////////
+
+  int klee_thread_create(uint64_t tid, void *(*start_routine)(void*), void *arg);
+  void klee_thread_terminate();
+
+  int klee_process_fork(int32_t pid);
+  int klee_process_terminate();
+
   void klee_get_context(uint64_t *tid, int32_t *pid, int32_t *ppid);
-
-  int klee_get_thread_info(uint64_t tid, uint64_t *wlist);
-
-  int klee_get_process_info(int32_t pid, uint64_t *plist, uint64_t *clist);
 
   uint64_t klee_get_wlist(void);
 

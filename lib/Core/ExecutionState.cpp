@@ -51,12 +51,12 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     executor(_executor),
     fakeState(false),
     depth(0),
+    forkDisabled(false),
     queryCost(0.), 
     weight(1),
     instsSinceCovNew(0),
     coveredNew(false),
     lastCoveredTime(sys::TimeValue::now()),
-    forkDisabled(false),
     ptreeNode(0),
     wlistCounter(1),
     preemptions(0) {
@@ -68,10 +68,10 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
   : c9State(NULL),
     executor(_executor),
     fakeState(true),
-    globalConstraints(assumptions),
     queryCost(0.),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0),
+    globalConstraints(assumptions),
     wlistCounter(1),
     preemptions(0) {
 
@@ -81,43 +81,39 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
 }
 
 void ExecutionState::setupMain(KFunction *kf) {
-  Process mainProc = Process();
-  Thread mainThread = Thread(kf);
+  Process mainProc = Process(2, 1);
+  Thread mainThread = Thread(0, 2, kf);
 
-  mainThread.pid = mainProc.pid;
-  mainProc.threads.insert(std::make_pair(mainThread.tid, getWaitingList()));
-  mainProc.anyChild = getWaitingList();
-  mainProc.ppid = 1;
+  mainProc.threads.insert(mainThread.getTid());
 
-  threads.insert(std::make_pair(mainThread.tid, mainThread));
+  threads.insert(std::make_pair(mainThread.tuid, mainThread));
   processes.insert(std::make_pair(mainProc.pid, mainProc));
 
   crtThreadIt = threads.begin();
-  crtProcessIt = processes.find(crtThreadIt->second.pid);
+  crtProcessIt = processes.find(crtThreadIt->second.getPid());
 
   cowDomain.push_back(&crtProcessIt->second.addressSpace);
 
   crtProcessIt->second.addressSpace.cowDomain = &cowDomain;
 }
 
-Thread& ExecutionState::createThread(KFunction *kf) {
-  Thread newThread = Thread(kf);
-  newThread.pid = crtProcess().pid;
-  crtProcess().threads.insert(std::make_pair(newThread.tid, getWaitingList()));
+Thread& ExecutionState::createThread(thread_id_t tid, KFunction *kf) {
+  Thread newThread = Thread(tid, crtProcess().pid, kf);
+  crtProcess().threads.insert(newThread.getTid());
 
-  threads.insert(std::make_pair(newThread.tid, newThread));
+  threads.insert(std::make_pair(newThread.tuid, newThread));
 
-  return threads.find(newThread.tid)->second;
+  return threads.find(newThread.tuid)->second;
 }
 
-Process& ExecutionState::forkProcess() {
+Process& ExecutionState::forkProcess(process_id_t pid) {
   for (processes_ty::iterator it = processes.begin(); it != processes.end(); it++) {
     it->second.addressSpace.cowKey++;
   }
 
   Process forked = Process(crtProcess());
 
-  forked.pid = Process::pidCounter++;
+  forked.pid = pid;
   forked.ppid = crtProcess().pid;
   forked.threads.clear();
 
@@ -125,14 +121,13 @@ Process& ExecutionState::forkProcess() {
   crtProcess().forkPath.push_back(0); // Parent
 
   Thread forkedThread = Thread(crtThread());
-  forkedThread.pid = forked.pid;
-  forkedThread.tid = Thread::tidCounter++;
+  forkedThread.tuid = std::make_pair(0, forked.pid);
 
-  forked.threads.insert(std::make_pair(forkedThread.tid, getWaitingList()));
-  forked.anyChild = getWaitingList();
-  crtProcess().children.insert(std::make_pair(forked.pid, getWaitingList()));
+  forked.threads.insert(forkedThread.getTid());
 
-  threads.insert(std::make_pair(forkedThread.tid, forkedThread));
+  crtProcess().children.insert(forked.pid);
+
+  threads.insert(std::make_pair(forkedThread.tuid, forkedThread));
   processes.insert(std::make_pair(forked.pid, forked));
 
   cowDomain.push_back(&processes.find(forked.pid)->second.addressSpace);
@@ -144,15 +139,11 @@ Process& ExecutionState::forkProcess() {
 void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
   assert(threads.size() > 1);
 
-  Process &proc = processes.find(thrIt->second.pid)->second;
-
-  notifyAll(proc.threads[thrIt->second.tid]);
+  Process &proc = processes.find(thrIt->second.getPid())->second;
 
   if (proc.threads.size() == 1) {
     if (proc.ppid != 1) {
       Process &parent = processes.find(proc.ppid)->second;
-      notifyAll(parent.children[proc.pid]);
-      notifyAll(parent.anyChild);
 
       parent.children.erase(proc.pid);
     }
@@ -164,7 +155,7 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
 
     processes.erase(proc.pid);
   } else
-    proc.threads.erase(thrIt->second.tid);
+    proc.threads.erase(thrIt->second.getTid());
 
   if (thrIt == crtThreadIt) {
     scheduleNext(threads.end());
@@ -176,24 +167,27 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
 
 void ExecutionState::sleepThread(wlist_id_t wlist) {
   assert(crtThread().enabled);
+  assert(wlist > 0);
 
   crtThread().enabled = false;
   crtThread().waitingList = wlist;
 
-  waitingLists[wlist].insert(crtThread().tid);
+  waitingLists[wlist].insert(crtThread().tuid);
 
   scheduleNext(threads.end());
 }
 
 void ExecutionState::notifyOne(wlist_id_t wlist) {
-  std::set<thread_id_t> &wl = waitingLists[wlist];
+  assert(wlist > 0);
+
+  std::set<thread_uid_t> &wl = waitingLists[wlist];
 
   if (wl.size() > 0) {
-    thread_id_t tid = *wl.begin();
+    thread_uid_t tuid = *wl.begin();
 
     wl.erase(wl.begin());
 
-    Thread &thread = threads.find(tid)->second;
+    Thread &thread = threads.find(tuid)->second;
     thread.enabled = true;
     thread.waitingList = 0;
   }
@@ -203,10 +197,12 @@ void ExecutionState::notifyOne(wlist_id_t wlist) {
 }
 
 void ExecutionState::notifyAll(wlist_id_t wlist) {
-  std::set<thread_id_t> &wl = waitingLists[wlist];
+  assert(wlist > 0);
+
+  std::set<thread_uid_t> &wl = waitingLists[wlist];
 
   if (wl.size() > 0) {
-    for (std::set<thread_id_t>::iterator it = wl.begin(); it != wl.end(); it++) {
+    for (std::set<thread_uid_t>::iterator it = wl.begin(); it != wl.end(); it++) {
       Thread &thread = threads.find(*it)->second;
       thread.enabled = true;
       thread.waitingList = 0;
@@ -239,7 +235,7 @@ ExecutionState *ExecutionState::branch() {
   falseState->coveredLines.clear();
   falseState->c9State = NULL;
 
-  falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tid);
+  falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tuid);
   falseState->crtProcessIt = falseState->processes.find(crtProcessIt->second.pid);
 
   falseState->cowDomain.clear();

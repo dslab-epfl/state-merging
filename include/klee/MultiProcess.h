@@ -23,17 +23,12 @@ class Thread;
 
 typedef uint64_t process_id_t;
 typedef uint64_t thread_id_t;
-typedef uint64_t wlist_id_t;
-
-#define INVALID_PROCESS_ID ((uint64_t)(-1))
 
 class Process {
   friend class Thread;
   friend class ExecutionState;
   friend class Executor;
 private:
-
-  static process_id_t pidCounter;
 
   std::vector<unsigned int> forkPath; // 0 - parent, 1 - child
 
@@ -42,15 +37,13 @@ private:
   std::map<ref<Expr>, CondVar> cond_vars;
 
 public:
-  Process();
+  Process(process_id_t _pid, process_id_t _ppid) : pid(_pid), ppid(_ppid) { }
 
   process_id_t pid;
   process_id_t ppid;
 
-  std::map<process_id_t, wlist_id_t> children;
-  wlist_id_t anyChild;
-
-  std::map<thread_id_t, wlist_id_t> threads;
+  std::set<process_id_t> children;
+  std::set<thread_id_t> threads;
 
   AddressSpace addressSpace;
 };

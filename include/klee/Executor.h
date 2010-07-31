@@ -419,10 +419,6 @@ private:
 			    ref<Expr> attr, 
 			    ref<Expr>  start_function,
 			    ref<Expr> arg);
-  void executePthreadJoin(ExecutionState &state, 
-			  KInstruction *ki, 
-			  ref<Expr> thread, 
-			  ref<Expr> value_ptr);
 
   bool acquireMutex(ExecutionState &state,
 			      KInstruction *ki,
