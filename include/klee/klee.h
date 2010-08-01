@@ -165,7 +165,7 @@ extern "C" {
   void klee_thread_terminate();
 
   int klee_process_fork(int32_t pid);
-  int klee_process_terminate();
+  void klee_process_terminate();
 
   void klee_get_context(uint64_t *tid, int32_t *pid, int32_t *ppid);
 

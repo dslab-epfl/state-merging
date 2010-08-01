@@ -101,6 +101,13 @@ HandlerInfo handlerInfo[] = {
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
+
+  add("klee_thread_create", handleThreadCreate, true),
+  add("klee_thread_terminate", handleThreadTerminate, false),
+
+  add("klee_process_fork", handleProcessFork, true),
+  add("klee_process_terminate", handleProcessTerminate, true),
+
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
   add("valloc", handleValloc, true),
@@ -124,13 +131,10 @@ HandlerInfo handlerInfo[] = {
 
 
   //pthreads functions
-  add("pthread_create", handlePthreadCreate, true),
-  add("pthread_join", handlePthreadJoin, true),
   add("pthread_mutex_lock", handlePthreadMutexLock, true),
   add("pthread_mutex_unlock", handlePthreadMutexUnlock, true),
   add("pthread_mutex_init", handlePthreadMutexInit, true),
   add("pthread_mutex_destroy", handlePthreadMutexDestroy, true),
-  add("pthread_exit", handlePthreadExit, true),
   add("pthread_cond_wait", handlePthreadCondWait, true),
   add("pthread_cond_signal", handlePthreadCondSignal, true),
   add("pthread_cond_broadcast", handlePthreadCondBroadcast, true),
@@ -594,30 +598,6 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
                      ConstantExpr::create(errno, Expr::Int32));
 }
 
-// pthreads handlers
-
-void SpecialFunctionHandler::handlePthreadCreate(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments) 
-{
-  assert(arguments.size() == 4 &&
-	 "invalid number of arguments to pthread_create");
-  
-  //for now we ignore the attribute arguments to pthread_create
-  executor.executePthreadCreate(state, target, arguments[0], arguments[1],
-      arguments[2], arguments[3]);
-}
-
-void SpecialFunctionHandler::handlePthreadJoin(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==2 &&
-	 "invalid number of arguments to pthread_join");
-  
-  executor.executePthreadJoin(state, target, arguments[0], arguments[1]);  
-}
-
 void SpecialFunctionHandler::handlePthreadMutexLock(ExecutionState &state,
                                             KInstruction *target,
                                             std::vector<ref<Expr> > &arguments)
@@ -656,17 +636,6 @@ void SpecialFunctionHandler::handlePthreadMutexDestroy(ExecutionState &state,
 	 "invalid number of arguments to pthread_mutex_destroy");
   
   executor.executePthreadMutexDestroy(state, target, arguments[0]);  
-}
-
-
-void SpecialFunctionHandler::handlePthreadExit(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 &&
-	 "invalid number of arguments to pthread_exit");
-  
-  executor.executePthreadExit(state, target, arguments[0]);  
 }
 
 void SpecialFunctionHandler::handlePthreadCondWait(ExecutionState &state,
@@ -972,6 +941,28 @@ void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
     state.notifyAll(cast<ConstantExpr>(wlist)->getZExtValue());
   }
 }
+
+void SpecialFunctionHandler::handleThreadCreate(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+}
+
+void SpecialFunctionHandler::handleThreadTerminate(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+}
+
+void SpecialFunctionHandler::handleProcessFork(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+}
+
+void SpecialFunctionHandler::handleProcessTerminate(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+}
+
+
 
 void SpecialFunctionHandler::handleCheckMemoryAccess(ExecutionState &state,
                                                      KInstruction *target,
