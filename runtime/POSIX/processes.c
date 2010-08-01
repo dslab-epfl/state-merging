@@ -22,3 +22,11 @@ pid_t getppid(void) {
 
   return result;
 }
+
+void exit(int status) {
+  klee_process_terminate();
+}
+
+void _exit(int status) {
+  exit(status);
+}

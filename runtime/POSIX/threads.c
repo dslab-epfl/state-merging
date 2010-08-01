@@ -58,7 +58,7 @@ int pthread_create(pthread_t *restrict thread, const pthread_attr_t *restrict at
 }
 
 void pthread_exit(void *value_ptr) {
-
+  klee_thread_terminate(); // Does not return
 }
 
 

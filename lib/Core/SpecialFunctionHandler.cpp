@@ -62,11 +62,11 @@ HandlerInfo handlerInfo[] = {
   addDNR("__assert_fail", handleAssertFail),
   addDNR("_assert", handleAssert),
   addDNR("abort", handleAbort),
-  addDNR("_exit", handleExit),
-  { "exit", &SpecialFunctionHandler::handleExit, true, false, true },
   addDNR("klee_abort", handleAbort),
   addDNR("klee_silent_exit", handleSilentExit),  
   addDNR("klee_report_error", handleReportError),
+  addDNR("klee_thread_terminate", handleThreadTerminate),
+  addDNR("klee_process_terminate", handleProcessTerminate),
 
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
@@ -103,10 +103,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_alias_function", handleAliasFunction, false),
 
   add("klee_thread_create", handleThreadCreate, false),
-  add("klee_thread_terminate", handleThreadTerminate, false),
-
   add("klee_process_fork", handleProcessFork, true),
-  add("klee_process_terminate", handleProcessTerminate, true),
 
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -305,26 +302,12 @@ void SpecialFunctionHandler::handleAbort(ExecutionState &state,
   executor.terminateStateOnError(state, "abort failure", "abort.err");
 }
 
-void SpecialFunctionHandler::handleExit(ExecutionState &state,
-                           KInstruction *target,
-                           std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==1 && "invalid number of arguments to exit");
-
-  if (state.processes.size() == 1)
-    executor.terminateStateOnExit(state);
-  else
-    executor.executeProcessExit(state);
-}
-
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
                                               KInstruction *target,
                                               std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
 
-  if (state.processes.size() == 1)
-    executor.terminateState(state);
-  else
-    executor.executeProcessExit(state);
+  executor.terminateState(state);
 }
 
 void SpecialFunctionHandler::handleAliasFunction(ExecutionState &state,

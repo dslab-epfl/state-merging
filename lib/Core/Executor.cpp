@@ -1402,9 +1402,19 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         //main exit
         terminateStateOnExit(state);
       } else if (state.crtProcess().threads.size() == 1){
-        executeProcessExit(state);
+        // Invoke exit()
+        Function *f = kmodule->module->getFunction("exit");
+        std::vector<ref<Expr> > arguments;
+        arguments.push_back(result);
+
+        executeCall(state, NULL, f, arguments);
       } else {
-        executeThreadExit(state);
+        // Invoke pthread_exit()
+        Function *f = kmodule->module->getFunction("pthread_exit");
+        std::vector<ref<Expr> > arguments;
+        arguments.push_back(result);
+
+        executeCall(state, NULL, f, arguments);
       }
     } else {
       state.popFrame();
@@ -3268,7 +3278,7 @@ void Executor::executeThreadExit(ExecutionState &state) {
 
 void Executor::executeProcessExit(ExecutionState &state) {
   if (state.processes.size() == 1) {
-    terminateState(state);
+    terminateStateOnExit(state);
     return;
   }
 
