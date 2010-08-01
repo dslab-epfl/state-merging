@@ -102,7 +102,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
 
-  add("klee_thread_create", handleThreadCreate, true),
+  add("klee_thread_create", handleThreadCreate, false),
   add("klee_thread_terminate", handleThreadTerminate, false),
 
   add("klee_process_fork", handleProcessFork, true),
@@ -140,9 +140,6 @@ HandlerInfo handlerInfo[] = {
   add("pthread_cond_broadcast", handlePthreadCondBroadcast, true),
   add("pthread_cond_init", handlePthreadCondInit, true),
   add("pthread_cond_destroy", handlePthreadCondDestroy, true),
-
-  //multiprocess functions
-  add("fork", handleFork, true),
 
 
 #undef addDNR
@@ -316,7 +313,7 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
   if (state.processes.size() == 1)
     executor.terminateStateOnExit(state);
   else
-    executor.executeProcessExit(state, target);
+    executor.executeProcessExit(state);
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
@@ -327,7 +324,7 @@ void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
   if (state.processes.size() == 1)
     executor.terminateState(state);
   else
-    executor.executeProcessExit(state, target);
+    executor.executeProcessExit(state);
 }
 
 void SpecialFunctionHandler::handleAliasFunction(ExecutionState &state,
@@ -868,7 +865,7 @@ void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
   }
 
   if (!tidAddr->isZero()) {
-    if (!writeConcreteValue(state, tidAddr, state.crtThread().tid,
+    if (!writeConcreteValue(state, tidAddr, state.crtThread().getTid(),
         executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))))
       return;
   }
@@ -945,21 +942,49 @@ void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
 void SpecialFunctionHandler::handleThreadCreate(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 3 && "invalid number of arguments to klee_thread_create");
+
+  ref<Expr> tid = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(tid)) {
+    executor.terminateStateOnError(state, "klee_thread_create", "user.err");
+    return;
+  }
+
+  executor.executeThreadCreate(state, cast<ConstantExpr>(tid)->getZExtValue(),
+      arguments[1], arguments[2]);
 }
 
 void SpecialFunctionHandler::handleThreadTerminate(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_thread_terminate");
+
+  executor.executeThreadExit(state);
 }
 
 void SpecialFunctionHandler::handleProcessFork(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_process_fork");
+
+  ref<Expr> pid = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(pid)) {
+    executor.terminateStateOnError(state, "klee_process_fork", "user.err");
+    return;
+  }
+
+  executor.executeProcessFork(state, target,
+      cast<ConstantExpr>(pid)->getZExtValue());
 }
 
 void SpecialFunctionHandler::handleProcessTerminate(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_process_terminate");
+
+  executor.executeProcessExit(state);
 }
 
 
@@ -1075,13 +1100,6 @@ void SpecialFunctionHandler::handleBreakpoint(ExecutionState &state,
                                    "klee_breakpoint requires a constant arg",
                                    "user.err");
   }
-}
-
-void SpecialFunctionHandler::handleFork(ExecutionState &state,
-    KInstruction *target, std::vector<ref<Expr> > &arguments) {
-  assert(arguments.empty() && "fork does not take any arguments");
-
-  executor.executeProcessFork(state, target);
 }
 
 void SpecialFunctionHandler::handleMarkGlobal(ExecutionState &state,

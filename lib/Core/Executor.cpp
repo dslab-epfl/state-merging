@@ -1402,9 +1402,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         //main exit
         terminateStateOnExit(state);
       } else if (state.crtProcess().threads.size() == 1){
-        executeProcessExit(state, ki);
+        executeProcessExit(state);
       } else {
-        executeThreadExit(state, ki);
+        executeThreadExit(state);
       }
     } else {
       state.popFrame();
@@ -3044,65 +3044,19 @@ void Executor::printDebug(ExecutionState &state, std::string s, bool line)
 
 
 //pthread handlers
-void  Executor::executePthreadCreate(ExecutionState &state,
-				     KInstruction *target,
-				     ref<Expr>  thread,
-				     ref<Expr> attr, 
-				     ref<Expr>  start_function,
-				     ref<Expr> arg)
+void Executor::executeThreadCreate(ExecutionState &state, thread_id_t tid,
+				     ref<Expr> start_function, ref<Expr> arg)
 {
-  //XXX: sanity check arg
-  std::stringstream msg;
-  msg << "pthreadCreate thread " << thread;
-  printDebug(state, msg.str(), true);
-
-  thread = toUnique(state, thread);
-
-  assert(isa<ConstantExpr>(thread) &&
-	 "pthread_t thread variable is not constant - unsupported yet"); 
-  
-  ConstantExpr *thread_address = dyn_cast<ConstantExpr>(thread);
-
-  ObjectPair op;
-  state.addressSpace().resolveOne(thread_address, op);
-  const MemoryObject *mo = op.first;
-  ref<Expr> offset = mo->getOffsetExpr(thread);
 
   KFunction *kf = resolveFunction(start_function);
   assert(kf && "cannot resolve thread start function");
 
-  Thread &t = state.createThread(kf);
-
-  Expr::Width W = thread->getWidth();
-  ref<Expr> value = ConstantExpr::create(t.tid, W);
-  ObjectState *os = state.addressSpace().getWriteable(mo, op.second);
-  os->write(offset, value);
+  Thread &t = state.createThread(tid, kf);
  
   bindArgumentToPthreadCreate(kf, 0, t.stack.back(), arg);
-  
-  std::stringstream dmesg;
-  dmesg << "created thread " << t.tid;
-  printDebug(state, dmesg.str(), true);
 
   if (statsTracker)
     statsTracker->framePushed(&t.stack.back(), 0);
-
-  // XXX: Fault Injection - great oportunity to return all kinds of errors
-  // The pthread_create() function shall fail if
-  // EAGAIN 
-  // The system lacked the necessary resources to create another thread, 
-  // or the system-imposed limit on the total number of threads in a 
-  // process {PTHREAD_THREADS_MAX} would be exceeded.
-  // EINVAL 
-  // The value specified by attr is invalid.
-  // EPERM  
-  // The caller does not have appropriate permission to set the required
-  // scheduling parameters or scheduling policy.
-
-  //return 0 from pthread_create
-  int returnValue = 0;
-  bindLocal(target, state, ConstantExpr::create(returnValue, 
-						getWidthForLLVMType(target->inst->getType())));
 }
 
 // returns false in case the mutex is not defined 
@@ -3132,7 +3086,7 @@ bool Executor::acquireMutex(ExecutionState &state,
       dmesg << "mutex 0x" << std::hex << mutex << " was free";
       printDebug(state, dmesg.str(), true);
 	  
-      m->tid = state.crtThread().tid;  // set the mutex owner
+      m->tid = state.crtThread().getTid();  // set the mutex owner
       m->taken = true; // acquire the mutex
 
       assert(state.crtThread().enabled);
@@ -3144,7 +3098,7 @@ bool Executor::acquireMutex(ExecutionState &state,
 	  
       state.crtThread().enabled = false;
       // enqueue this thread in the mutex waiting queue
-      m->waiting.push_back(state.crtThread().tid);
+      m->waiting.push_back(state.crtThread().getTid());
     }
 
   return true;
@@ -3184,7 +3138,7 @@ void Executor::releaseMutex(ExecutionState &state,
   if(it != state.crtProcess().mutexes.end())  {
     Mutex &m = it->second;
     
-    uint64_t tid = state.crtThread().tid;
+    uint64_t tid = state.crtThread().getTid();
     
     if(m.waiting.size() != 0) {
       // the current code simply enables the next thread in the mutex queue
@@ -3198,7 +3152,7 @@ void Executor::releaseMutex(ExecutionState &state,
       tid  = m.waiting.front(); // next thread to get this lock
       
       //XXX:zamf optimize this using a map from tids to Threads
-      Thread &t = state.threads.find(tid)->second;
+      Thread &t = state.threads.find(std::make_pair(tid, state.crtProcess().pid))->second;
       
       //TODO: could also help the scheduler a bit by puting this thread
       //in front of the scheduling queue
@@ -3206,7 +3160,7 @@ void Executor::releaseMutex(ExecutionState &state,
       m.waiting.erase(m.waiting.begin());
       
       // TODO: do we need the owner?
-      m.tid = t.tid;  // replace the owner
+      m.tid = t.getTid();  // replace the owner
       assert(m.taken);
     } else {
       m.taken = false;
@@ -3293,27 +3247,12 @@ void  Executor::executePthreadMutexDestroy(ExecutionState &state,
 					    getWidthForLLVMType(ki->inst->getType())));
 }
 
-void Executor::executeThreadExit(ExecutionState &state, KInstruction *ki) {
+void Executor::executeThreadExit(ExecutionState &state) {
 
   printDebug(state, "executing thread exit", false);
 
-  for (ExecutionState::threads_ty::iterator it = state.threads.begin(); it
-      != state.threads.end(); it++) {
-    if (state.crtThread().tid == it->second.joining) {
-      Thread &t = it->second;
-      t.joinState = false;
-      t.enabled = true;
-      t.joining = INVALID_THREAD_ID;
-
-      std::stringstream msg;
-      msg << "on exit enabled thread " << t.tid;
-      printDebug(state, msg.str(), false);
-      break;
-    }
-  }
-
   //terminate this thread and schedule another one
-  state.crtThread().enabled = false;
+
   if (state.threads.size() == 1) {
     klee_message("terminating state");
     terminateStateOnExit(state);
@@ -3322,33 +3261,27 @@ void Executor::executeThreadExit(ExecutionState &state, KInstruction *ki) {
     assert(state.threads.size() > 1);
     state.terminateThread();
   }
+
   schedule(state);
 
 }
 
-void Executor::executeProcessExit(ExecutionState &state,
-             KInstruction *ki) {
+void Executor::executeProcessExit(ExecutionState &state) {
   if (state.processes.size() == 1) {
     terminateState(state);
     return;
   }
 
-  state.crtThread().enabled = false;
-
-  for (std::map<thread_id_t, wlist_id_t>::iterator it = state.crtProcess().threads.begin();
+  for (std::set<thread_uid_t>::iterator it = state.crtProcess().threads.begin();
       it != state.crtProcess().threads.end(); it++) {
 
-    ExecutionState::threads_ty::iterator it2 = state.threads.find(it->first);
+    ExecutionState::threads_ty::iterator it2 =
+        state.threads.find(*it);
+
     state.terminateThread(it2);
   }
 
   schedule(state);
-}
-
-void Executor::executePthreadExit(ExecutionState &state, 
-				  KInstruction *ki,
-				  ref<Expr> value_ptr) {
-  executeThreadExit(state, ki);
 }
   
 void  Executor::executePthreadCondWait(ExecutionState &state, 
@@ -3360,7 +3293,7 @@ void  Executor::executePthreadCondWait(ExecutionState &state,
   std::map<ref<Expr>, CondVar>::iterator it = state.crtProcess().cond_vars.find(cond_var);
   if(it != state.crtProcess().cond_vars.end()) {
     CondVar& cv = it->second;
-    cv.threads.push_back(crt->tid);
+    cv.threads.push_back(crt->getTid());
     state.crtThread().enabled=false;
   }
 }
@@ -3377,7 +3310,7 @@ void Executor::executePthreadCondSignal(ExecutionState &state,
 
     // remove the first in the queue, if any
     if (cv.threads.size() > 0) {
-      Thread &next = state.threads.find(cv.threads.front())->second;
+      Thread &next = state.threads.find(std::make_pair(cv.threads.front(), state.crtProcess().pid))->second;
       next.enabled = true;
 
       cv.threads.erase(cv.threads.begin());
@@ -3394,7 +3327,7 @@ void Executor::executePthreadCondBroadcast(ExecutionState &state,
 
     for (std::vector<thread_id_t>::iterator it = cv.threads.begin(); it
         != cv.threads.end(); it++) {
-      Thread &next = state.threads.find(*it)->second;
+      Thread &next = state.threads.find(std::make_pair(*it, state.crtProcess().pid))->second;
       next.enabled = true;
 
       cv.threads.erase(it);
@@ -3435,20 +3368,21 @@ void Executor::executePthreadCondDestroy(ExecutionState &state,
 					    getWidthForLLVMType(ki->inst->getType())));
 }
 
-void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki) {
+void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
+    process_id_t pid) {
   Thread &pThread = state.crtThread();
 
-  Process &child = state.forkProcess();
+  Process &child = state.forkProcess(pid);
 
-  Thread &cThread = state.threads.find(child.threads.begin()->first)->second;
+  Thread &cThread = state.threads.find(*child.threads.begin())->second;
 
   // Set return value in the child
-  state.scheduleNext(state.threads.find(cThread.tid));
+  state.scheduleNext(state.threads.find(cThread.tuid));
   bindLocal(ki, state, ConstantExpr::create(0,
       getWidthForLLVMType(ki->inst->getType())));
 
   // Set return value in the parent
-  state.scheduleNext(state.threads.find(pThread.tid));
+  state.scheduleNext(state.threads.find(pThread.tuid));
   bindLocal(ki, state, ConstantExpr::create(child.pid,
       getWidthForLLVMType(ki->inst->getType())));
 }
@@ -3514,7 +3448,7 @@ void Executor::schedule(ExecutionState &state)
         newState->ptreeNode = res.first;
         lastState->ptreeNode = res.second;
 
-        newState->scheduleNext(newState->threads.find(it->second.tid));
+        newState->scheduleNext(newState->threads.find(it->second.tuid));
 
         lastState = newState;
       }

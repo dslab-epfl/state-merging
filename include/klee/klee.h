@@ -161,7 +161,7 @@ extern "C" {
   // Thread Scheduling Management
   //////////////////////////////////////////////////////////////////////////////
 
-  int klee_thread_create(uint64_t tid, void *(*start_routine)(void*), void *arg);
+  void klee_thread_create(uint64_t tid, void *(*start_routine)(void*), void *arg);
   void klee_thread_terminate();
 
   int klee_process_fork(int32_t pid);

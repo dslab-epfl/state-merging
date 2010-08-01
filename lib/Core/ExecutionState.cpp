@@ -84,7 +84,7 @@ void ExecutionState::setupMain(KFunction *kf) {
   Process mainProc = Process(2, 1);
   Thread mainThread = Thread(0, 2, kf);
 
-  mainProc.threads.insert(mainThread.getTid());
+  mainProc.threads.insert(mainThread.tuid);
 
   threads.insert(std::make_pair(mainThread.tuid, mainThread));
   processes.insert(std::make_pair(mainProc.pid, mainProc));
@@ -99,7 +99,7 @@ void ExecutionState::setupMain(KFunction *kf) {
 
 Thread& ExecutionState::createThread(thread_id_t tid, KFunction *kf) {
   Thread newThread = Thread(tid, crtProcess().pid, kf);
-  crtProcess().threads.insert(newThread.getTid());
+  crtProcess().threads.insert(newThread.tuid);
 
   threads.insert(std::make_pair(newThread.tuid, newThread));
 
@@ -123,7 +123,7 @@ Process& ExecutionState::forkProcess(process_id_t pid) {
   Thread forkedThread = Thread(crtThread());
   forkedThread.tuid = std::make_pair(0, forked.pid);
 
-  forked.threads.insert(forkedThread.getTid());
+  forked.threads.insert(forkedThread.tuid);
 
   crtProcess().children.insert(forked.pid);
 
@@ -155,7 +155,7 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
 
     processes.erase(proc.pid);
   } else
-    proc.threads.erase(thrIt->second.getTid());
+    proc.threads.erase(thrIt->second.tuid);
 
   if (thrIt == crtThreadIt) {
     scheduleNext(threads.end());

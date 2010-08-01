@@ -43,7 +43,7 @@ public:
   process_id_t ppid;
 
   std::set<process_id_t> children;
-  std::set<thread_id_t> threads;
+  std::set<thread_uid_t> threads;
 
   AddressSpace addressSpace;
 };

@@ -413,12 +413,8 @@ private:
 
 
   //pthread handlers
-  void executePthreadCreate(ExecutionState &state,
-			    KInstruction *ki,
-			     ref<Expr>  thread,
-			    ref<Expr> attr, 
-			    ref<Expr>  start_function,
-			    ref<Expr> arg);
+  void executeThreadCreate(ExecutionState &state, thread_id_t tid,
+      ref<Expr> start_function, ref<Expr> arg);
 
   bool acquireMutex(ExecutionState &state,
 			      KInstruction *ki,
@@ -443,15 +439,9 @@ private:
 				  KInstruction *ki, 
 				  ref<Expr> mutex);
 
-  void executeThreadExit(ExecutionState &state, 
-			 KInstruction *ki);
+  void executeThreadExit(ExecutionState &state);
   
-  void executeProcessExit(ExecutionState &state,
-             KInstruction *ki);
-
-  void executePthreadExit(ExecutionState &state, 
-			  KInstruction *ki,
-			  ref<Expr> value_ptr);
+  void executeProcessExit(ExecutionState &state);
   
   void executePthreadCondWait(ExecutionState &state, 
 			      KInstruction *ki, 
@@ -473,7 +463,8 @@ private:
 				 KInstruction *ki, 
 				 ref<Expr> cond_var);
   
-  void executeProcessFork(ExecutionState &state, KInstruction *ki);
+  void executeProcessFork(ExecutionState &state, KInstruction *ki,
+      process_id_t pid);
   
   void schedule(ExecutionState &state);
   
