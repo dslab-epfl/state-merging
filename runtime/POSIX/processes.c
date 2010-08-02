@@ -16,21 +16,6 @@
 
 #include "multiprocess.h"
 
-static inline unsigned int _new_pdata() {
-  unsigned int idx;
-  for (idx = 0; idx < MAX_PROCESSES; idx++) {
-    if (!__pdata[idx].allocated)
-      return idx;
-  }
-
-  return MAX_THREADS;
-}
-
-static inline void _clear_pdata(unsigned int idx) {
-  memset(&__pdata[idx], 0, sizeof(proc_data_t));
-}
-
-
 ////////////////////////////////////////////////////////////////////////////////
 // The POSIX API
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,7 +59,8 @@ void _exit(int status) {
 }
 
 pid_t fork(void) {
-  unsigned int newIdx = _new_pdata();
+  unsigned int newIdx;
+  LIST_ALLOC(__pdata, newIdx);
 
   if (newIdx == MAX_PROCESSES) {
     errno = ENOMEM;
@@ -82,7 +68,6 @@ pid_t fork(void) {
   }
 
   proc_data_t *pdata = &__pdata[newIdx];
-  pdata->allocated = 1;
   pdata->terminated = 0;
   pdata->wlist = klee_get_wlist();
   pdata->children_wlist = klee_get_wlist();
@@ -194,7 +179,7 @@ pid_t waitpid(pid_t pid, int *status, int options) {
   }
 
   // Now we can safely clean up the process structure
-  _clear_pdata(idx);
+  LIST_CLEAR(__pdata, idx);
 
   return INDEX_TO_PID(idx);
 }

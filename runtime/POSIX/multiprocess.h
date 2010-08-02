@@ -20,6 +20,8 @@ typedef uint64_t wlist_id_t;
 #define DEFAULT_PROCESS 2
 #define DEFAULT_PARENT  1
 
+#define MAX_MUTEXES     16
+
 #define PID_TO_INDEX(pid)   ((pid) - 2)
 #define INDEX_TO_PID(idx)   ((idx) + 2)
 
@@ -44,9 +46,41 @@ typedef struct {
 
   char allocated;
   char terminated;
+  char joinable;
 } thread_data_t;
 
-extern thread_data_t __tdata[MAX_THREADS];
+typedef struct {
+  wlist_id_t wlist;
+
+  unsigned int owner;
+
+  char allocated;
+} mutex_data_t;
+
+typedef struct {
+  thread_data_t threads[MAX_THREADS];
+  mutex_data_t mutexes[MAX_MUTEXES];
+} tsync_data_t;
+
+extern tsync_data_t __tsync;
+
+#define LIST_INIT(list)  \
+  do { memset(&list, 0, sizeof(list)); } while (0)
+
+#define LIST_ALLOC(list, item) \
+  do { \
+    item = sizeof(list)/sizeof(list[0]); \
+    unsigned int __i; \
+    for (__i = 0; __i < sizeof(list)/sizeof(list[0]); __i++) { \
+      if (!list[__i].allocated) { \
+        list[__i].allocated = 1; \
+        item = __i;  break; \
+      } \
+    } \
+  } while (0)
+
+#define LIST_CLEAR(list, item) \
+  do { memset(&list[item], 0, sizeof(list[item])); } while (0)
 
 void klee_init_processes(void);
 void klee_init_threads(void);

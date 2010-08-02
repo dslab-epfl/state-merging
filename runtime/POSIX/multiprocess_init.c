@@ -17,7 +17,7 @@
 proc_data_t __pdata[MAX_PROCESSES];
 
 void klee_init_processes(void) {
-  memset(&__pdata, 0, sizeof(__pdata));
+  LIST_INIT(__pdata);
   klee_make_shared(&__pdata, sizeof(__pdata));
 
   proc_data_t *pdata = &__pdata[PID_TO_INDEX(DEFAULT_PROCESS)];
@@ -34,14 +34,16 @@ void klee_init_processes(void) {
 // Threads
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_data_t __tdata[MAX_THREADS];
+tsync_data_t __tsync;
 
 void klee_init_threads(void) {
-  memset(&__tdata, 0, sizeof(__tdata));
+  LIST_INIT(__tsync.threads);
+  LIST_INIT(__tsync.mutexes);
 
-  thread_data_t *def_data = &__tdata[DEFAULT_THREAD];
+  thread_data_t *def_data = &__tsync.threads[DEFAULT_THREAD];
   def_data->allocated = 1;
   def_data->terminated = 0;
   def_data->ret_value = 0;
+  def_data->joinable = 1; // Why not?
   def_data->wlist = klee_get_wlist();
 }
