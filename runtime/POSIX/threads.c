@@ -7,7 +7,6 @@
 
 #include <pthread.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -15,8 +14,6 @@
 #include <klee/klee.h>
 
 #include "multiprocess.h"
-
-thread_data_t __tdata[MAX_THREADS];
 
 static inline unsigned int _new_tdata() {
   int tid;
@@ -30,16 +27,6 @@ static inline unsigned int _new_tdata() {
 
 static inline void _clear_tdata(unsigned int tid) {
   memset(&__tdata[tid], 0, sizeof(thread_data_t));
-}
-
-void klee_init_threads(void) {
-  memset(&__tdata, 0, sizeof(__tdata));
-
-  thread_data_t *def_data = &__tdata[DEFAULT_THREAD];
-  def_data->allocated = 1;
-  def_data->terminated = 0;
-  def_data->ret_value = 0;
-  def_data->wlist = klee_get_wlist();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

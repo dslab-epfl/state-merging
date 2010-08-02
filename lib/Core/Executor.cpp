@@ -3286,14 +3286,9 @@ void Executor::executeProcessExit(ExecutionState &state) {
     return;
   }
 
-  for (std::set<thread_uid_t>::iterator it = state.crtProcess().threads.begin();
-      it != state.crtProcess().threads.end(); it++) {
+  CLOUD9_DEBUG("Terminating " << state.crtProcess().threads.size() << " threads of the current process...");
 
-    ExecutionState::threads_ty::iterator it2 =
-        state.threads.find(*it);
-
-    state.terminateThread(it2);
-  }
+  state.terminateProcess(state.crtProcessIt);
 
   schedule(state);
 }
@@ -3384,6 +3379,9 @@ void Executor::executePthreadCondDestroy(ExecutionState &state,
 
 void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
     process_id_t pid) {
+
+  CLOUD9_DEBUG("Forking with pid " << pid);
+
   Thread &pThread = state.crtThread();
 
   Process &child = state.forkProcess(pid);
@@ -3405,6 +3403,8 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
 void Executor::schedule(ExecutionState &state)
 {
 
+  CLOUD9_DEBUG("Scheduling " << state.threads.size() << " threads in " << state.processes.size() << " processes ...");
+
   bool no_deadlock = false;
   for(ExecutionState::threads_ty::iterator it = state.threads.begin();
       it != state.threads.end();  it++) {
@@ -3423,7 +3423,7 @@ void Executor::schedule(ExecutionState &state)
   bool forkSchedule = false;
   bool incPreemptions = false;
 
-  if(state.crtThreadIt == state.threads.end()) {
+  if(state.crtThreadIt == state.threads.end() || !state.crtThread().enabled) {
     ExecutionState::threads_ty::iterator it = state.nextThread(state.crtThreadIt);
 
     while (!it->second.enabled)

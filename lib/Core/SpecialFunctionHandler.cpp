@@ -832,15 +832,13 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
 void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
                           KInstruction *target,
                           std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 3 &&
+  assert(arguments.size() == 2 &&
       "invalid number of arguments to klee_get_context");
 
   ref<Expr> tidAddr = executor.toUnique(state, arguments[0]);
   ref<Expr> pidAddr = executor.toUnique(state, arguments[1]);
-  ref<Expr> ppidAddr = executor.toUnique(state, arguments[2]);
 
-  if (!isa<ConstantExpr>(tidAddr) || !isa<ConstantExpr>(pidAddr) ||
-      !isa<ConstantExpr>(ppidAddr)) {
+  if (!isa<ConstantExpr>(tidAddr) || !isa<ConstantExpr>(pidAddr)) {
     executor.terminateStateOnError(state,
                                    "klee_get_context requires constant args",
                                    "user.err");
@@ -858,13 +856,6 @@ void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
         executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))))
       return;
   }
-
-  if (!ppidAddr->isZero()) {
-    if (!writeConcreteValue(state, ppidAddr, state.crtProcess().ppid,
-        executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))))
-      return;
-  }
-
 }
 
 void SpecialFunctionHandler::handleGetWList(ExecutionState &state,
@@ -889,6 +880,7 @@ void SpecialFunctionHandler::handleThreadPreempt(ExecutionState &state,
 void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
+
   assert(arguments.size() == 1 && "invalid number of arguments to klee_thread_sleep");
 
   ref<Expr> wlistExpr = executor.toUnique(state, arguments[0]);
@@ -897,6 +889,8 @@ void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
     executor.terminateStateOnError(state, "klee_thread_sleep", "user.err");
     return;
   }
+
+  CLOUD9_DEBUG("Sleeping...");
 
   state.sleepThread(cast<ConstantExpr>(wlistExpr)->getZExtValue());
   executor.schedule(state);
@@ -914,6 +908,8 @@ void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
     executor.terminateStateOnError(state, "klee_thread_notify", "user.err");
     return;
   }
+
+  CLOUD9_DEBUG("Waking up...");
 
   if (all->isZero()) {
     state.notifyOne(cast<ConstantExpr>(wlist)->getZExtValue());

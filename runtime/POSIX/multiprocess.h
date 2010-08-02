@@ -8,6 +8,9 @@
 #ifndef THREADS_H_
 #define THREADS_H_
 
+#include <stdint.h>
+#include <sys/types.h>
+
 typedef uint64_t wlist_id_t;
 
 #define MAX_THREADS     8
@@ -17,14 +20,8 @@ typedef uint64_t wlist_id_t;
 #define DEFAULT_PROCESS 2
 #define DEFAULT_PARENT  1
 
-typedef struct {
-  wlist_id_t wlist;
-
-  void *ret_value;
-
-  char allocated;
-  char terminated;
-} thread_data_t;
+#define PID_TO_INDEX(pid)   ((pid) - 2)
+#define INDEX_TO_PID(idx)   ((idx) + 2)
 
 typedef struct {
   wlist_id_t wlist;
@@ -37,6 +34,19 @@ typedef struct {
   char allocated;
   char terminated;
 } proc_data_t;
+
+extern proc_data_t __pdata[MAX_PROCESSES];
+
+typedef struct {
+  wlist_id_t wlist;
+
+  void *ret_value;
+
+  char allocated;
+  char terminated;
+} thread_data_t;
+
+extern thread_data_t __tdata[MAX_THREADS];
 
 void klee_init_processes(void);
 void klee_init_threads(void);

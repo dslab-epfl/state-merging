@@ -16,11 +16,6 @@
 
 #include "multiprocess.h"
 
-#define PID_TO_INDEX(pid)   ((pid) - 2)
-#define INDEX_TO_PID(idx)   ((idx) + 2)
-
-proc_data_t __pdata[MAX_PROCESSES];
-
 static inline unsigned int _new_pdata() {
   unsigned int idx;
   for (idx = 0; idx < MAX_PROCESSES; idx++) {
@@ -35,19 +30,6 @@ static inline void _clear_pdata(unsigned int idx) {
   memset(&__pdata[idx], 0, sizeof(proc_data_t));
 }
 
-void klee_init_processes(void) {
-  memset(&__pdata, 0, sizeof(__pdata));
-  klee_make_shared(&__pdata, sizeof(__pdata));
-
-  proc_data_t *pdata = &__pdata[PID_TO_INDEX(DEFAULT_PROCESS)];
-  pdata->allocated = 1;
-  pdata->terminated = 0;
-  pdata->parent = DEFAULT_PARENT;
-  pdata->wlist = klee_get_wlist();
-  pdata->children_wlist = klee_get_wlist();
-
-  klee_init_threads();
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // The POSIX API
@@ -67,7 +49,7 @@ pid_t getppid(void) {
   return __pdata[PID_TO_INDEX(pid)].parent;
 }
 
-void exit(int status) {
+void _exit(int status) {
   pid_t pid = getpid();
 
   // Checking for zombie processes
@@ -91,11 +73,7 @@ void exit(int status) {
   klee_process_terminate();
 }
 
-void _exit(int status) {
-  exit(status);
-}
-
-int fork() {
+pid_t fork(void) {
   unsigned int newIdx = _new_pdata();
 
   if (newIdx == MAX_PROCESSES) {
@@ -118,6 +96,16 @@ int fork() {
   }
 
   return res;
+}
+
+pid_t vfork(void) {
+  pid_t pid = fork();
+
+  if (pid > 0) {
+    waitpid(pid, 0, 0);
+  }
+
+  return pid;
 }
 
 pid_t wait(int *status) {

@@ -137,25 +137,13 @@ Process& ExecutionState::forkProcess(process_id_t pid) {
 }
 
 void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
-  assert(threads.size() > 1);
+  CLOUD9_DEBUG("Terminating thread...");
 
   Process &proc = processes.find(thrIt->second.getPid())->second;
 
-  if (proc.threads.size() == 1) {
-    if (proc.ppid != 1) {
-      Process &parent = processes.find(proc.ppid)->second;
+  assert(proc.threads.size() > 1);
 
-      parent.children.erase(proc.pid);
-    }
-
-    AddressSpace::cow_domain_t::iterator it =
-        std::find(cowDomain.begin(), cowDomain.end(), &proc.addressSpace);
-    assert(it != cowDomain.end());
-    cowDomain.erase(it);
-
-    processes.erase(proc.pid);
-  } else
-    proc.threads.erase(thrIt->second.tuid);
+  proc.threads.erase(thrIt->second.tuid);
 
   if (thrIt == crtThreadIt) {
     scheduleNext(threads.end());
@@ -163,6 +151,34 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
 
   threads.erase(thrIt);
 
+}
+
+void ExecutionState::terminateProcess(processes_ty::iterator procIt) {
+  CLOUD9_DEBUG("Terminating process...");
+
+  assert(processes.size() > 1);
+
+  for (std::set<thread_uid_t>::iterator it = procIt->second.threads.begin();
+      it != procIt->second.threads.end(); it++) {
+    threads.erase(threads.find(*it));
+  }
+
+  if (procIt->second.ppid != 1) {
+    Process &parent = processes.find(procIt->second.ppid)->second;
+
+    parent.children.erase(procIt->second.pid);
+  }
+
+  AddressSpace::cow_domain_t::iterator it =
+      std::find(cowDomain.begin(), cowDomain.end(), &procIt->second.addressSpace);
+  assert(it != cowDomain.end());
+  cowDomain.erase(it);
+
+  if (procIt == crtProcessIt) {
+    scheduleNext(threads.end());
+  }
+
+  processes.erase(procIt);
 }
 
 void ExecutionState::sleepThread(wlist_id_t wlist) {
@@ -173,8 +189,6 @@ void ExecutionState::sleepThread(wlist_id_t wlist) {
   crtThread().waitingList = wlist;
 
   waitingLists[wlist].insert(crtThread().tuid);
-
-  scheduleNext(threads.end());
 }
 
 void ExecutionState::notifyOne(wlist_id_t wlist) {
