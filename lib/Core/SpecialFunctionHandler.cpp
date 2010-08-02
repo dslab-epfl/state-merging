@@ -126,19 +126,6 @@ HandlerInfo handlerInfo[] = {
   // operator new(unsigned long)
   add("_Znwm", handleNew, true),
 
-
-  //pthreads functions
-  add("pthread_mutex_lock", handlePthreadMutexLock, true),
-  add("pthread_mutex_unlock", handlePthreadMutexUnlock, true),
-  add("pthread_mutex_init", handlePthreadMutexInit, true),
-  add("pthread_mutex_destroy", handlePthreadMutexDestroy, true),
-  add("pthread_cond_wait", handlePthreadCondWait, true),
-  add("pthread_cond_signal", handlePthreadCondSignal, true),
-  add("pthread_cond_broadcast", handlePthreadCondBroadcast, true),
-  add("pthread_cond_init", handlePthreadCondInit, true),
-  add("pthread_cond_destroy", handlePthreadCondDestroy, true),
-
-
 #undef addDNR
 #undef add  
 };
@@ -576,96 +563,6 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
          "invalid number of arguments to klee_get_obj_size");
   executor.bindLocal(target, state,
                      ConstantExpr::create(errno, Expr::Int32));
-}
-
-void SpecialFunctionHandler::handlePthreadMutexLock(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 && 
-	 "invalid number of arguments to pthread_mutex_lock");
-  
-  executor.executePthreadMutexLock(state, target, arguments[0]);  
-}
-
-void SpecialFunctionHandler::handlePthreadMutexUnlock(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 &&
-	 "invalid number of arguments to pthread_mutex_unlock");
-  
-  executor.executePthreadMutexUnlock(state, target, arguments[0]);  
-}
-
-void SpecialFunctionHandler::handlePthreadMutexInit(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==2 &&
-	 "invalid number of arguments to pthread_mutex_init");
-  
-  executor.executePthreadMutexInit(state, target, arguments[0], arguments[1]);  
-}
-
-void SpecialFunctionHandler::handlePthreadMutexDestroy(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 &&
-	 "invalid number of arguments to pthread_mutex_destroy");
-  
-  executor.executePthreadMutexDestroy(state, target, arguments[0]);  
-}
-
-void SpecialFunctionHandler::handlePthreadCondWait(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==2 && 
-	 "invalid number of arguments to pthread_cond_wait");
-  
-  executor.executePthreadCondWait(state, target, arguments[0], arguments[1]);  
-}
-
-void SpecialFunctionHandler::handlePthreadCondSignal(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 &&
-	 "invalid number of arguments to pthread_signal");
-  
-  executor.executePthreadCondSignal(state, target, arguments[0]);  
-}
-
-void SpecialFunctionHandler::handlePthreadCondBroadcast(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 &&
-	 "invalid number of arguments to pthread_broadcast");
-  
-  executor.executePthreadCondBroadcast(state, target, arguments[0]);  
-}
-
-void SpecialFunctionHandler::handlePthreadCondInit(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==2 &&
-	 "invalid number of arguments to pthread_cond_init");
-  
-  executor.executePthreadCondInit(state, target, arguments[0], arguments[1]);  
-}
-
-void SpecialFunctionHandler::handlePthreadCondDestroy(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments)
-{
-  assert(arguments.size()==1 &&
-	 "invalid number of arguments to pthread_cond_destroy");
-  
-  executor.executePthreadCondDestroy(state, target, arguments[0]);  
 }
 
 void SpecialFunctionHandler::handleCalloc(ExecutionState &state,

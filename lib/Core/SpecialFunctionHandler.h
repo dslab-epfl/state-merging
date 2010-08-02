@@ -121,15 +121,6 @@ namespace klee {
     HANDLER(handleValloc);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);
-    HANDLER(handlePthreadMutexLock);
-    HANDLER(handlePthreadMutexUnlock);
-    HANDLER(handlePthreadMutexInit);
-    HANDLER(handlePthreadMutexDestroy);
-    HANDLER(handlePthreadCondWait);
-    HANDLER(handlePthreadCondSignal);
-    HANDLER(handlePthreadCondBroadcast);
-    HANDLER(handlePthreadCondInit);
-    HANDLER(handlePthreadCondDestroy);
 #undef HANDLER
   };
 } // End klee namespace

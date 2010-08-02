@@ -396,10 +396,6 @@ private:
   void processTimers(ExecutionState *current,
                      double maxInstTime);
   void resetTimers();
-                
-
-  /// Verbose debug info for thred related functions
-  void printDebug(ExecutionState &state, std::string s, bool line);
 
   /// Pthread create needs a specific StackFrame instead of the one of the current state
   void bindArgumentToPthreadCreate(KFunction *kf, unsigned index, 
@@ -416,52 +412,9 @@ private:
   void executeThreadCreate(ExecutionState &state, thread_id_t tid,
       ref<Expr> start_function, ref<Expr> arg);
 
-  bool acquireMutex(ExecutionState &state,
-			      KInstruction *ki,
-			      ref<Expr> mutex);
-
-  void executePthreadMutexLock(ExecutionState &state, 
-			       KInstruction *ki, 
-			       ref<Expr> mutex);
-  
-  void releaseMutex(ExecutionState &state, 
-		    ref<Expr> mutex);
-
-  void executePthreadMutexUnlock(ExecutionState &state, 
-			       KInstruction *ki, 
-			       ref<Expr> mutex);
-
-  void executePthreadMutexInit(ExecutionState &state, 
-			       KInstruction *ki, 
-			       ref<Expr> mutex, 
-			       ref<Expr> ignored_attr);
-  void executePthreadMutexDestroy(ExecutionState &state, 
-				  KInstruction *ki, 
-				  ref<Expr> mutex);
-
   void executeThreadExit(ExecutionState &state);
   
   void executeProcessExit(ExecutionState &state);
-  
-  void executePthreadCondWait(ExecutionState &state, 
-			      KInstruction *ki, 
-			      ref<Expr> cond_var, 
-			      ref<Expr> mutex);
-  void executePthreadCondSignal(ExecutionState &state, 
-				KInstruction *ki, 
-				ref<Expr> cond_var);
-  void executePthreadCondBroadcast(ExecutionState &state, 
-				   KInstruction *ki, 
-				   ref<Expr> cond_var);
-  
-  void executePthreadCondInit(ExecutionState &state, 
-			      KInstruction *ki, 
-			      ref<Expr> cond_var,
-			      ref<Expr> ignored);
-  
-  void executePthreadCondDestroy(ExecutionState &state, 
-				 KInstruction *ki, 
-				 ref<Expr> cond_var);
   
   void executeProcessFork(ExecutionState &state, KInstruction *ki,
       process_id_t pid);

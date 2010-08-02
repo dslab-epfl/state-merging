@@ -30,42 +30,6 @@ typedef uint64_t wlist_id_t;
 
 typedef std::pair<thread_id_t, process_id_t> thread_uid_t;
 
-#define INVALID_THREAD_ID   ((uint64_t)(-1))
-
-class Mutex {
-  friend class Executor;
-  friend class ExecutionState;
-  friend class Thread;
-private:
-  ref<Expr> address;
-  bool taken;
-  int type;
-  // the thread that holds this lock
-  thread_id_t tid;
-  std::vector<thread_id_t> waiting;
-
-public:
-  Mutex(ref<Expr> _address) :
-    address(_address), taken(false), tid(0) {
-  }
-};
-
-
-
-class CondVar {
-  friend class Executor;
-  friend class ExecutionState;
-  friend class Thread;
-public:
-  CondVar(ref<Expr> _address) :
-    address(_address) {
-  }
-
-private:
-  ref<Expr> address;
-  std::vector<thread_id_t> threads;
-};
-
 struct StackFrame {
   KInstIterator caller;
   KFunction *kf;
