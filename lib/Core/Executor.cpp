@@ -1151,8 +1151,12 @@ void Executor::executeCall(ExecutionState &state,
                            std::vector< ref<Expr> > &arguments) {
   fireControlFlowEvent(&state, ::cloud9::worker::CALL);
 
-  Instruction *i = ki->inst;
-  if (f && f->isDeclaration()) {
+
+  Instruction *i = NULL;
+  if (ki)
+      i = ki->inst;
+
+  if (ki && f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch

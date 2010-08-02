@@ -162,12 +162,12 @@ extern "C" {
   //////////////////////////////////////////////////////////////////////////////
 
   void klee_thread_create(uint64_t tid, void *(*start_routine)(void*), void *arg);
-  void klee_thread_terminate();
+  void klee_thread_terminate() __attribute__ ((__noreturn__));
 
   int klee_process_fork(int32_t pid);
-  void klee_process_terminate();
+  void klee_process_terminate() __attribute__ ((__noreturn__));
 
-  void klee_get_context(uint64_t *tid, int32_t *pid, int32_t *ppid);
+  void klee_get_context(uint64_t *tid, int32_t *pid);
 
   uint64_t klee_get_wlist(void);
 
