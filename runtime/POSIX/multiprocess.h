@@ -20,10 +20,21 @@ typedef uint64_t wlist_id_t;
 #define DEFAULT_PROCESS 2
 #define DEFAULT_PARENT  1
 
-#define MAX_MUTEXES     16
-
 #define PID_TO_INDEX(pid)   ((pid) - 2)
 #define INDEX_TO_PID(idx)   ((idx) + 2)
+
+#define MAX_MUTEXES     16
+#define MAX_CONDVARS    16
+
+#define DEFAULT_MUTEX   0
+
+#define MUTEX_TO_INDEX(mtx) ((mtx) - 1)
+#define INDEX_TO_MUTEX(idx) ((idx) + 1)
+
+#define DEFAULT_CONDVAR 0
+
+#define COND_TO_INDEX(cond) ((cond) - 1)
+#define INDEX_TO_COND(idx)  ((idx) + 1)
 
 typedef struct {
   wlist_id_t wlist;
@@ -52,14 +63,26 @@ typedef struct {
 typedef struct {
   wlist_id_t wlist;
 
+  char taken;
   unsigned int owner;
+  unsigned int queued;
 
   char allocated;
 } mutex_data_t;
 
 typedef struct {
+  wlist_id_t wlist;
+
+  char allocated;
+  unsigned int mutex;
+  unsigned int queued;
+} condvar_data_t;
+
+typedef struct {
   thread_data_t threads[MAX_THREADS];
+
   mutex_data_t mutexes[MAX_MUTEXES];
+  condvar_data_t condvars[MAX_CONDVARS];
 } tsync_data_t;
 
 extern tsync_data_t __tsync;
@@ -81,6 +104,9 @@ extern tsync_data_t __tsync;
 
 #define LIST_CLEAR(list, item) \
   do { memset(&list[item], 0, sizeof(list[item])); } while (0)
+
+#define LIST_CHECK(list, item) \
+  ((item < sizeof(list)/sizeof(list[0])) && (list[item].allocated))
 
 void klee_init_processes(void);
 void klee_init_threads(void);

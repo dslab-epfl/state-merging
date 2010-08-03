@@ -5,6 +5,8 @@
  *      Author: stefan
  */
 
+#include "multiprocess.h"
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,8 +14,6 @@
 #include <errno.h>
 
 #include <klee/klee.h>
-
-#include "multiprocess.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // The PThreads API
