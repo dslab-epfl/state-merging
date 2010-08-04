@@ -25,6 +25,60 @@
 
 #include "klee/Config/config.h"
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+
+
+#include <stdint.h>
+#ifdef WIN32
+#define BYTE_ORDER LITTLE_ENDIAN
+#else
+#ifndef DARWIN
+#include <endian.h>
+#else
+#if (defined(__ppc__) || defined(__ppc64__))
+#define BYTE_ORDER BIG_ENDIAN
+#elif (defined(__i386__) || defined(__x86_64__))
+#define BYTE_ORDER LITTLE_ENDIAN
+#endif
+#endif
+#endif
+#include <stdio.h>
+
+// don't know if we should just fake it by doing reverse.
+
+#if BYTE_ORDER == BIG_ENDIAN
+uint32_t __ntohl (uint32_t x) { return x; }
+uint16_t __ntohs (uint16_t x) { return x; }
+uint32_t __htonl (uint32_t x) { return x; }
+uint16_t __htons (uint16_t x) { return x; }
+
+#elif BYTE_ORDER == LITTLE_ENDIAN
+
+// from dietlibc
+static inline unsigned short bswap_16(unsigned short x) {
+  return (x>>8) | (x<<8);
+}
+
+static inline unsigned int bswap_32(unsigned int x) {
+  return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
+}
+
+uint32_t __ntohl (uint32_t x) { return bswap_32(x); }
+uint16_t __ntohs (uint16_t x) { return bswap_16(x); }
+uint32_t __htonl (uint32_t x) { return bswap_32(x); }
+uint16_t __htons (uint16_t x) { return bswap_16(x); }
+
+#else
+#       error "You seem to have an unsupported byteorder"
+#endif
+
+
+
 void klee_warning(const char*);
 void klee_warning_once(const char*);
 
@@ -71,13 +125,6 @@ void sync(void) {
 
 extern int __fgetc_unlocked(FILE *f);
 extern int __fputc_unlocked(int c, FILE *f);
-
-int __socketcall(int type, int *args) __attribute__((weak));
-int __socketcall(int type, int *args) {
-  klee_warning("ignoring (EAFNOSUPPORT)");
-  errno = EAFNOSUPPORT;
-  return -1;
-}
 
 int _IO_getc(FILE *f) __attribute__((weak));
 int _IO_getc(FILE *f) {
@@ -471,16 +518,22 @@ int setresuid(uid_t ruid, uid_t euid, uid_t suid) {
 
 int setrlimit(__rlimit_resource_t resource, const struct rlimit *rlim) __attribute__((weak));
 int setrlimit(__rlimit_resource_t resource, const struct rlimit *rlim) {
+#if 0
   klee_warning("ignoring (EPERM)");
   errno = EPERM;
   return -1;
+#endif
+  return 0;
 }
 
 int setrlimit64(__rlimit_resource_t resource, const struct rlimit64 *rlim) __attribute__((weak));
 int setrlimit64(__rlimit_resource_t resource, const struct rlimit64 *rlim) {
+#if 0
   klee_warning("ignoring (EPERM)");
   errno = EPERM;
   return -1;
+#endif
+  return 0;
 }
 
 pid_t setsid(void) __attribute__((weak));

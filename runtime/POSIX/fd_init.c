@@ -34,32 +34,77 @@ exe_file_system_t __exe_fs;
    mostly care about sym case anyway. */
 
 
-exe_sym_env_t __exe_env = { 
-  {{ 0, eOpen | eReadable, 0, 0}, 
-   { 1, eOpen | eWriteable, 0, 0}, 
-   { 2, eOpen | eWriteable, 0, 0}},
+exe_sym_env_t __exe_env = {
+  {{ 0, eOpen | eReadable,  0, NULL, {NULL, 0}, NULL, 0},
+   { 1, eOpen | eWriteable, 0, NULL, {NULL, 0}, NULL, 0},
+   { 2, eOpen | eWriteable, 0, NULL, {NULL, 0}, NULL, 0}},
   022,
   0,
   0
 };
 
-static void __create_new_dfile(exe_disk_file_t *dfile, unsigned size, 
-                               const char *name, struct stat64 *defaults) {
+
+
+
+static int __isupper(const char c) {
+  return (('A' <= c) & (c <= 'Z'));
+}
+
+static void __create_new_dfile(exe_disk_file_t *dfile, unsigned size, const char* name, 
+			       struct stat64 *defaults, int is_foreign) {
   struct stat64 *s = malloc(sizeof(*s));
   const char *sp;
-  char sname[64];
+  char file_name[64], data_name[64], stat_name[64], src_name[64];
+  unsigned i;
+
+  assert(dfile);
+  
   for (sp=name; *sp; ++sp)
-    sname[sp-name] = *sp;
-  memcpy(&sname[sp-name], "-stat", 6);
+    file_name[sp-name] = *sp;
+  strcpy(&file_name[sp-name], "-name");
 
+  for (sp=name; *sp; ++sp)
+    data_name[sp-name] = *sp;
+  strcpy(&data_name[sp-name], "-data");
+
+  for (sp=name; *sp; ++sp)
+    stat_name[sp-name] = *sp;
+  strcpy(&stat_name[sp-name], "-stat");
+  
+  /* Handle dfile names */
+  dfile->name = malloc(KLEE_MAX_PATH_LEN);
+  klee_make_symbolic(dfile->name, KLEE_MAX_PATH_LEN, file_name);
+  klee_make_shared(dfile->name, KLEE_MAX_PATH_LEN);
+
+  for (i=0; i<KLEE_MAX_PATH_LEN-1; i++)
+    klee_prefer_cex(dfile->name, __isupper(dfile->name[i]));
+
+  if (strcmp(name, "STDIN") == 0) {
+    if (strcmp(dfile->name, "STDIN") != 0)
+      klee_silent_exit(0);
+  }
+  if (strcmp(name, "STDOUT") == 0) {
+    if (strcmp(dfile->name, "STDOUT") != 0)
+      klee_silent_exit(0);
+  }
+
+  if (strncmp(name, "STREAM", sizeof("STREAM")-1) == 0 || 
+      strncmp(name, "DGRAM", sizeof("DGRAM")-1) == 0) {
+    if (strcmp(dfile->name, name) != 0)
+      klee_silent_exit(0);
+  }
+
+  /* No reason not to allow files of size 0, but to support this, we
+     need to be change the way memory is allocated and freed when
+     writing/reading .bout files. */
   assert(size);
-
+  
   dfile->size = size;
   dfile->contents = malloc(dfile->size);
-  klee_make_symbolic(dfile->contents, dfile->size, name);
+  klee_make_symbolic(dfile->contents, dfile->size, data_name);
   klee_make_shared(dfile->contents, dfile->size);
   
-  klee_make_symbolic(s, sizeof(*s), sname);
+  klee_make_symbolic(s, sizeof(*s), stat_name);
   klee_make_shared(s, sizeof(*s));
 
   /* For broken tests */
@@ -94,6 +139,30 @@ static void __create_new_dfile(exe_disk_file_t *dfile, unsigned size,
   s->st_size = dfile->size;
   s->st_blocks = 8;
   dfile->stat = s;
+
+  dfile->src = NULL;
+  if (is_foreign) {
+    struct sockaddr_storage *ss;
+
+    klee_assume((dfile->stat->st_mode & S_IFMT) == S_IFSOCK);
+
+    for (sp=name; *sp; ++sp)
+      src_name[sp-name] = *sp;
+    strcpy(&src_name[sp-name], "-src");
+
+    dfile->src = calloc(1, sizeof(*(dfile->src)));
+    dfile->src->addr = ss = malloc(sizeof(*(dfile->src->addr)));
+    klee_make_symbolic(dfile->src->addr, sizeof(*dfile->src->addr), src_name);
+
+    klee_make_shared(dfile->src, sizeof(*(dfile->src)));
+    klee_make_shared(dfile->src->addr, sizeof(*(dfile->src->addr)));
+    /* Assume the port number is non-zero for PF_INET and PF_INET6. */
+    /* Since the address family will be assigned later, we
+       conservatively assume that the port number is non-zero for
+       every address family supported. */
+    klee_assume(/* ss->ss_family != PF_INET  || */ ((struct sockaddr_in  *)ss)->sin_port  != 0);
+    klee_assume(/* ss->ss_family != PF_INET6 || */ ((struct sockaddr_in6 *)ss)->sin6_port != 0);
+  }
 }
 
 static unsigned __sym_uint32(const char *name) {
@@ -111,9 +180,13 @@ static unsigned __sym_uint32(const char *name) {
    max_failures: maximum number of system call failures */
 void klee_init_fds(unsigned n_files, unsigned file_length, 
 		   int sym_stdout_flag, int save_all_writes_flag,
+		   unsigned n_streams, unsigned stream_len,
+           unsigned n_dgrams, unsigned dgram_len,
 		   unsigned max_failures) {
   unsigned k;
-  char name[7] = "?-data";
+  char fname[] = "FILE?";
+  char sname[] = "STREAM?";
+  char dname[] = "DGRAM?";
   struct stat64 s;
 
   stat64(".", &s);
@@ -122,11 +195,12 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 
   __exe_fs.n_sym_files = n_files;
   __exe_fs.sym_files = malloc(sizeof(*__exe_fs.sym_files) * n_files);
+  __exe_fs.n_sym_files_used = 0;
   klee_make_shared(__exe_fs.sym_files, sizeof(*__exe_fs.sym_files) * n_files);
 
   for (k=0; k < n_files; k++) {
-    name[0] = 'A' + k;
-    __create_new_dfile(&__exe_fs.sym_files[k], file_length, name, &s);
+    fname[strlen(fname)-1] = '1' + k;
+    __create_new_dfile(&__exe_fs.sym_files[k], file_length, fname, &s, 0);
   }
   
   /* setting symbolic stdin */
@@ -134,7 +208,7 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
     __exe_fs.sym_stdin = malloc(sizeof(*__exe_fs.sym_stdin));
     klee_make_shared(__exe_fs.sym_stdin, sizeof(*__exe_fs.sym_stdin));
 
-    __create_new_dfile(__exe_fs.sym_stdin, file_length, "stdin", &s);
+    __create_new_dfile(__exe_fs.sym_stdin, file_length, "STDIN", &s, 0);
     __exe_env.fds[0].dfile = __exe_fs.sym_stdin;
   }
   else __exe_fs.sym_stdin = NULL;
@@ -165,7 +239,7 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
     __exe_fs.sym_stdout = malloc(sizeof(*__exe_fs.sym_stdout));
     klee_make_shared(__exe_fs.sym_stdout, sizeof(*__exe_fs.sym_stdout));
 
-    __create_new_dfile(__exe_fs.sym_stdout, 1024, "stdout", &s);
+    __create_new_dfile(__exe_fs.sym_stdout, 1024, "STDOUT", &s, 0);
     __exe_env.fds[1].dfile = __exe_fs.sym_stdout;
     __exe_fs.stdout_writes = 0;
   }
@@ -174,4 +248,23 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
   __exe_env.save_all_writes = save_all_writes_flag;
   __exe_env.version = __sym_uint32("model_version");
   klee_assume(__exe_env.version == 1);
+
+  /** Streams **/
+  __exe_fs.n_sym_streams = n_streams;
+  __exe_fs.sym_streams = malloc(sizeof(*__exe_fs.sym_streams) * n_streams);
+  for (k=0; k < n_streams; k++) {
+    sname[strlen(sname)-1] = '1' + k;
+    __create_new_dfile(&__exe_fs.sym_streams[k], stream_len, sname, &s, 1);
+  }
+  __exe_fs.n_sym_streams_used = 0;
+
+
+  /** Datagrams **/
+  __exe_fs.n_sym_dgrams = n_dgrams;
+  __exe_fs.sym_dgrams = malloc(sizeof(*__exe_fs.sym_dgrams) * n_dgrams);
+  for (k=0; k < n_dgrams; k++) {
+    dname[strlen(dname)-1] = '1' + k;
+    __create_new_dfile(&__exe_fs.sym_dgrams[k], dgram_len, dname, &s, 1);
+  }
+  __exe_fs.n_sym_dgrams_used = 0;
 }

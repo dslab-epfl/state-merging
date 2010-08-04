@@ -3030,7 +3030,7 @@ KFunction* Executor::resolveFunction(ref<Expr> address)
 void Executor::executeThreadCreate(ExecutionState &state, thread_id_t tid,
 				     ref<Expr> start_function, ref<Expr> arg)
 {
-
+  CLOUD9_DEBUG("Creating thread...");
   KFunction *kf = resolveFunction(start_function);
   assert(kf && "cannot resolve thread start function");
 
@@ -3044,6 +3044,7 @@ void Executor::executeThreadCreate(ExecutionState &state, thread_id_t tid,
 
 void Executor::executeThreadExit(ExecutionState &state) {
   //terminate this thread and schedule another one
+  CLOUD9_DEBUG("Exiting thread...");
 
   if (state.threads.size() == 1) {
     klee_message("terminating state");

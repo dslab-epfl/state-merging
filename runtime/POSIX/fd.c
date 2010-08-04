@@ -27,6 +27,8 @@
 #include <sys/mtio.h>
 #include <termios.h>
 #include <sys/select.h>
+#include <ctype.h>
+
 #include <klee/klee.h>
 
 /* #define DEBUG */
@@ -34,8 +36,15 @@
 void klee_warning(const char*);
 void klee_warning_once(const char*);
 int klee_get_errno(void);
+void klee_change_name(void*, char*);
 
-/* Returns pointer to the symbolic file structure is the pathname is symbolic */
+static void *__concretize_ptr(const void *p);
+static size_t __concretize_size(size_t s);
+static const char *__concretize_string(const char *s);
+
+
+
+/* Returns pointer to the symbolic file structure if the pathname is symbolic */
 static exe_disk_file_t *__get_sym_file(const char *pathname) {
   char c = pathname[0];
   unsigned i;
@@ -60,7 +69,7 @@ static size_t __concretize_size(size_t s);
 static const char *__concretize_string(const char *s);
 
 /* Returns pointer to the file entry for a valid fd */
-static exe_file_t *__get_file(int fd) {
+exe_file_t* __get_file(int fd) {
   if (fd>=0 && fd<MAX_FDS) {
     exe_file_t *f = &__exe_env.fds[fd];
     if (f->flags & eOpen)
@@ -125,28 +134,47 @@ static int has_permission(int flags, struct stat64 *s) {
 }
 
 
-int __fd_open(const char *pathname, int flags, mode_t mode) {
-  exe_disk_file_t *df;
-  exe_file_t *f;
+/* Returns next available fd.  Sets eOpen in associated flags.  
+   If no more fds are available, returns -1 and sets errno to ENFILE.
+   Otherwise, set *pf to &__exe_env.fds[fd]. */
+int __get_new_fd(exe_file_t **pf) {
   int fd;
 
   for (fd = 0; fd < MAX_FDS; ++fd)
     if (!(__exe_env.fds[fd].flags & eOpen))
       break;
   if (fd == MAX_FDS) {
-    errno = EMFILE;
+    errno = ENFILE;
     return -1;
   }
   
-  f = &__exe_env.fds[fd];
+  *pf = &__exe_env.fds[fd];
 
   /* Should be the case if file was available, but just in case. */
-  memset(f, 0, sizeof *f);
+  memset(*pf, 0, sizeof **pf);
+  (*pf)->fd = -1;
+  (*pf)->flags = eOpen;
 
-  df = __get_sym_file(pathname); 
+  return fd;
+}
+
+
+void  __undo_get_new_fd(exe_file_t *f) {
+  memset(f, 0, sizeof *f);
+}
+
+
+int __fd_open(const char *pathname, int flags, mode_t mode)  {
+  exe_disk_file_t *df;
+  exe_file_t *f;
+
+  int fd = __get_new_fd(&f);
+  if (fd < 0) 
+    return fd;
+
+  df = __get_sym_file(pathname);
   if (df) {    
-    /* XXX Should check access against mode / stat / possible
-       deletion. */
+    /* XXX Should check access against mode / stat / possible deletion. */
     f->dfile = df;
     
     if ((flags & O_CREAT) && (flags & O_EXCL)) {
@@ -225,10 +253,37 @@ int close(int fd) {
   else r = 0;
 #endif
 
+  if ((f->flags & eSocket) && (f->flags & eDgramSocket)) {
+    assert(f->dfile);   /* We assume a symbolic socket */
+    assert(f->foreign); /* and a non-NULL foreign address */
+    free(f->foreign);
+  }
   memset(f, 0, sizeof *f);
   
   return r;
 }
+
+
+ssize_t __fd_scatter_read(exe_file_t *f, const struct iovec *iov, int iovcnt)
+{
+  ssize_t total = 0;
+
+  assert(f->off >= 0);
+  if (f->dfile->size < f->off)
+    return 0;
+
+  for (; iovcnt > 0; iov++, iovcnt--) {
+    size_t this_len = iov->iov_len;
+    if (f->off + this_len > f->dfile->size)
+      this_len = f->dfile->size - f->off;
+    memcpy(iov->iov_base, f->dfile->contents + f->off, this_len);
+    total += this_len;
+    f->off += this_len;
+  }
+
+  return total;
+}
+
 
 ssize_t read(int fd, void *buf, size_t count) {
   static int n_calls = 0;
@@ -281,20 +336,53 @@ ssize_t read(int fd, void *buf, size_t count) {
     return r;
   }
   else {
-    assert(f->off >= 0);
-    if (((off64_t)f->dfile->size) < f->off)
-      return 0;
-
     /* symbolic file */
-    if (f->off + count > f->dfile->size) {
-      count = f->dfile->size - f->off;
-    }
-    
-    memcpy(buf, f->dfile->contents + f->off, count);
-    f->off += count;
-    
-    return count;
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len  = count;
+    return __fd_scatter_read(f, &iov, 1);
   }
+}
+
+
+ssize_t __fd_gather_write(exe_file_t *f, const struct iovec *iov, int iovcnt)
+{
+  ssize_t total = 0;
+
+  for (; iovcnt > 0; iov++, iovcnt--) {
+    size_t this_len = iov->iov_len;
+    if (f->dfile->src) {
+      /* writes to a symbolic socket always succeed, ignored */
+      klee_check_memory_access(iov->iov_base, iov->iov_len);
+      goto skip;
+    }
+
+    if (f->off + this_len > f->dfile->size) {
+      if (__exe_env.save_all_writes)
+        assert(0);
+      else {
+        if (f->off < f->dfile->size)
+          this_len = f->dfile->size - f->off;
+        else
+          this_len = 0;
+      }
+    }
+
+    if (this_len)
+      memcpy(f->dfile->contents + f->off, iov->iov_base, this_len);
+    
+    if (this_len != iov->iov_len)
+      klee_warning_once("write() ignores bytes.");
+
+    if (f->dfile == __exe_fs.sym_stdout)
+      __exe_fs.stdout_writes += this_len;
+
+  skip:
+    total += iov->iov_len;
+    f->off += iov->iov_len;
+  }
+
+  return total;
 }
 
 
@@ -343,29 +431,10 @@ ssize_t write(int fd, const void *buf, size_t count) {
   }
   else {
     /* symbolic file */    
-    size_t actual_count = 0;
-    if (f->off + count <= f->dfile->size)
-      actual_count = count;
-    else {
-      if (__exe_env.save_all_writes)
-	assert(0);
-      else {
-	if (f->off < (off64_t) f->dfile->size)
-	  actual_count = f->dfile->size - f->off;	
-      }
-    }
-    
-    if (actual_count)
-      memcpy(f->dfile->contents + f->off, buf, actual_count);
-    
-    if (count != actual_count)
-      fprintf(stderr, "WARNING: write() ignores bytes.\n");
-
-    if (f->dfile == __exe_fs.sym_stdout)
-      __exe_fs.stdout_writes += actual_count;
-
-    f->off += count;
-    return count;
+    struct iovec iov;
+    iov.iov_base = (void *) buf;  /* const_cast */
+    iov.iov_len  = count;
+    return __fd_gather_write(f, &iov, 1);
   }
 }
 
@@ -1049,7 +1118,7 @@ int dup(int oldfd) {
       if (!(__exe_env.fds[fd].flags & eOpen))
         break;
     if (fd == MAX_FDS) {
-      errno = EMFILE;
+      errno = ENFILE;
       return -1;
     } else {
       return dup2(oldfd, fd);
@@ -1189,10 +1258,24 @@ int select(int nfds, fd_set *read, fd_set *write,
         return -1;
       } else if (f->dfile) {
         /* Operations on this fd will never block... */
-        if (FD_ISSET(i, &in_read)) FD_SET(i, read);
-        if (FD_ISSET(i, &in_write)) FD_SET(i, write);
-        if (FD_ISSET(i, &in_except)) FD_SET(i, except);
-        ++count;
+        unsigned flags = 0;
+        if (FD_ISSET(i, &in_read)) {
+          if (!(f->flags & eSocket))
+            flags |= 01;
+          else if (f->flags & eDgramSocket)
+            flags |= (__exe_fs.n_sym_dgrams_used  < __exe_fs.n_sym_dgrams)  ? 01 : 0; /* more dgrams available */
+          else if (f->flags & eListening)
+            flags |= (__exe_fs.n_sym_streams_used < __exe_fs.n_sym_streams) ? 01 : 0; /* more streams available */
+          else
+            flags |= 01;
+
+          if (flags & 01) FD_SET(i, read);
+        }
+        if (FD_ISSET(i, &in_write)) { flags |= 02; FD_SET(i, write); }
+	//XXX: zamf: this is strange, why should set except if there was no error, 
+	//I don't understand how this could have worked
+        //if (FD_ISSET(i, &in_except)) { flags |= 04; FD_SET(i, except); }
+        if (flags) ++count;
       } else {
         if (FD_ISSET(i, &in_read)) FD_SET(f->fd, &os_read);
         if (FD_ISSET(i, &in_write)) FD_SET(f->fd, &os_write);

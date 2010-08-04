@@ -29,26 +29,93 @@ static void __emit_error(const char *msg) {
    terminates the program with an error message is the string is not a
    proper number */   
 static long int __str_to_int(char *s, const char *error_msg) {
-  long int res = 0;
-  char c;
+  long int res;
+  char *endptr;
 
-  if (!*s) __emit_error(error_msg);
+  if (*s == '\0')
+    __emit_error(error_msg);
 
-  while ((c = *s++)) {
-    if (c == '\0') {
-      break;
-    } else if (c>='0' && c<='9') {
-      res = res*10 + (c - '0');
-    } else {
-      __emit_error(error_msg);
-    }
-  }
+  res = strtol(s, &endptr, 0);
+
+  if (*endptr != '\0')
+    __emit_error(error_msg);
+
   return res;
 }
 
 static int __isprint(const char c) {
   /* Assume ASCII */
-  return (32 <= c && c <= 126);
+  return ((32 <= c) & (c <= 126));
+}
+
+static int __getodigit(const char c) {
+  return (('0' <= c) && (c <= '7')) ? (c - '0') : -1;
+}
+
+static int __getxdigit(const char c) {
+  return (('0' <= c) && (c <= '9')) ? (c - '0') :
+         (('A' <= c) && (c <= 'F')) ? (c - 'A') + 10:
+         (('a' <= c) && (c <= 'f')) ? (c - 'a') + 10: -1;
+}
+
+/* Convert in-place, but it's okay because no escape sequences "expand". */
+static size_t __convert_escape_sequences(char *s)
+{
+  char *d0 = s, *d = s;
+
+  while (*s) {
+    if (*s != '\\')
+      *d++ = *s++;
+    else {
+      s++;
+      switch (*s++) {
+        int n[3];
+      default:  *d++ = s[-1]; break;
+      case 'a': *d++ = '\a'; break;
+      case 'b': *d++ = '\b'; break;
+      case 'f': *d++ = '\f'; break;
+      case 'n': *d++ = '\n'; break;
+      case 'r': *d++ = '\r'; break;
+      case 't': *d++ = '\t'; break;
+      case 'v': *d++ = '\v'; break;
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+        n[0] = __getodigit(s[-1]);
+        if ((n[1] = __getodigit(*s)) >= 0) {
+          s++;
+          if ((n[2] = __getodigit(*s)) >= 0) {
+            s++;
+            *d++ = (n[0] << 6) | (n[1] << 3) | n[2];
+          }
+          else
+            *d++ = (n[0] << 3) | n[1];
+        }
+        else
+          *d++ = n[0];
+        break;
+      case 'x':
+        if ((n[0] = __getxdigit(*s)) >= 0) {
+          s++;
+          if ((n[1] = __getxdigit(*s)) >= 0) {
+            s++;
+            *d++ = (n[0] << 4) | n[1];
+          }
+          else
+            *d++ = n[0];
+        }
+        else /* error */
+          __emit_error("invalid escape sequence");
+        break;
+      }
+    }
+  }
+  return d - d0;
 }
 
 static int __streq(const char *a, const char *b) {
@@ -91,6 +158,8 @@ void klee_init_env(int* argcPtr, char*** argvPtr) {
   char* new_argv[1024];
   unsigned max_len, min_argvs, max_argvs;
   unsigned sym_files = 0, sym_file_len = 0;
+  unsigned sym_streams = 0, sym_stream_len = 0;
+  unsigned sym_dgrams = 0, sym_dgram_len = 0;
   int sym_stdout_flag = 0;
   int save_all_writes_flag = 0;
   int fd_fail = 0;
@@ -177,6 +246,37 @@ usage: (klee_init_env) [options] [program arguments]\n\
 		
       fd_fail = __str_to_int(argv[k++], msg);
     }
+    /* "sym-connections": for backward compatability */
+    else if (__streq(argv[k], "--sym-connections") || __streq(argv[k], "-sym-connections")) {
+      const char* msg = "--sym-connections expects two integer arguments <no-connections> <bytes-per-connection>";
+
+      if (k+2 >= argc)
+        __emit_error(msg);
+
+      k++;
+      sym_streams = __str_to_int(argv[k++], msg);
+      sym_stream_len = __str_to_int(argv[k++], msg);
+    }
+    else if (__streq(argv[k], "--sym-streams") || __streq(argv[k], "-sym-streams")) {
+      const char* msg = "--sym-streams expects two integer arguments <no-streams> <bytes-per-stream>";
+
+      if (k+2 >= argc)
+        __emit_error(msg);
+
+      k++;
+      sym_streams = __str_to_int(argv[k++], msg);
+      sym_stream_len = __str_to_int(argv[k++], msg);
+    }
+    else if (__streq(argv[k], "--sym-datagrams") || __streq(argv[k], "-sym-datagrams")) {
+      const char* msg = "--sym-datagrams expects two integer arguments <no-datagrams> <bytes-per-datagram>";
+
+      if (k+2 >= argc)
+        __emit_error(msg);
+
+      k++;
+      sym_dgrams = __str_to_int(argv[k++], msg);
+      sym_dgram_len = __str_to_int(argv[k++], msg);
+    }
     else {
       /* simply copy arguments */
       __add_arg(&new_argc, new_argv, argv[k++], 1024);
@@ -195,6 +295,8 @@ usage: (klee_init_env) [options] [program arguments]\n\
 
   klee_init_fds(sym_files, sym_file_len, 
 		sym_stdout_flag, save_all_writes_flag, 
+		sym_streams, sym_stream_len,
+        sym_dgrams, sym_dgram_len,
 		fd_fail);
 
   klee_breakpoint(42);
