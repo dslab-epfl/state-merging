@@ -126,3 +126,13 @@ int pthread_detach(pthread_t thread) {
 
   return 0;
 }
+
+int pthread_attr_init(pthread_attr_t *attr) {
+  klee_warning("pthread_attr_init does nothing");
+  return 0;
+}
+
+int pthread_attr_destroy(pthread_attr_t *attr) {
+  klee_warning("pthread_attr_destroy does nothing");
+  return 0;
+}
