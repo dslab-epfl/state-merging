@@ -18,8 +18,6 @@ void klee_warning(const char*);
 void klee_warning_once(const char*);
 int klee_get_errno(void);
 
-
-int __socketcall(int type, unsigned long *args) __attribute__((weak));
 int __socketcall(int type, unsigned long *args) {
   switch (type) {
   case SYS_SOCKET:

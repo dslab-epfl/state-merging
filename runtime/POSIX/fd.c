@@ -1188,29 +1188,8 @@ ssize_t readlink(const char *path, char *buf, size_t bufsize) {
     return r;
   }
 }
- 
-void _FD_CLR(int n, fd_set *p)
-{
-  (p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS));
-}
- 
-signed char _FD_ISSET(int n, fd_set *p)
-{
-  return ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)));
-}
- 
-void _FD_SET(int n, fd_set *p)
-{
-  (p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS));
-}
- 
-int _FD_ZERO(fd_set *p)
-{
-  memset((char *)(p), '\0', sizeof(*(p)));
-  return 0;
-}
- 
- 
+
+// Copy-paste this into the program that uses the regular FD_* operations
 #undef FD_SET
 #undef FD_CLR
 #undef FD_ISSET
@@ -1219,6 +1198,7 @@ int _FD_ZERO(fd_set *p)
 #define	FD_CLR(n, p)	((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
 #define	FD_ISSET(n, p)	((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
 #define FD_ZERO(p)	memset((char *)(p), '\0', sizeof(*(p)))
+
 int select(int nfds, fd_set *read, fd_set *write,
            fd_set *except, struct timeval *timeout) {
   fd_set in_read, in_write, in_except, os_read, os_write, os_except;
