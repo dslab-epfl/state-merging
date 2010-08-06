@@ -12,6 +12,10 @@
 #include <stdlib.h>
 #include <klee/klee.h>
 
+////////////////////////////////////////////////////////////////////////////////
+// Stream Buffers
+////////////////////////////////////////////////////////////////////////////////
+
 void __notify_event(stream_buffer_t *buff, char event) {
   if (event & EVENT_READ)
     klee_thread_notify_all(buff->empty_wlist);
@@ -124,4 +128,42 @@ int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist) {
   }
 
   return -1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Block buffers
+////////////////////////////////////////////////////////////////////////////////
+
+void _block_init(block_buffer_t *buff, size_t max_size) {
+  memset(buff, 0, sizeof(block_buffer_t));
+  buff->contents = (char*)malloc(max_size);
+  buff->max_size = max_size;
+}
+
+void _block_destroy(block_buffer_t *buff) {
+  free(buff->contents);
+}
+
+ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, off_t offset) {
+  if (offset + count > buff->max_size)
+    count = buff->max_size - offset;
+
+  if (count == 0)
+    return 0;
+
+  memcpy(dest, &buff->contents[offset], count);
+
+  return count;
+}
+
+ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, off_t offset) {
+  if (offset + count > buff->max_size)
+    count = buff->max_size - offset;
+
+  if (count == 0)
+    return 0;
+
+  memcpy(&buff->contents[offset], src, count);
+
+  return count;
 }
