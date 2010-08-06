@@ -19,7 +19,7 @@
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
   unsigned int idx;
-  LIST_ALLOC(__tsync.mutexes, idx);
+  STATIC_LIST_ALLOC(__tsync.mutexes, idx);
 
   if (idx == MAX_MUTEXES) {
     errno = ENOMEM;
@@ -38,12 +38,12 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
 int pthread_mutex_destroy(pthread_mutex_t *mutex) {
   unsigned int idx = MUTEX_TO_INDEX(*((unsigned int*)mutex));
 
-  if (!LIST_CHECK(__tsync.mutexes, idx)) {
+  if (!STATIC_LIST_CHECK(__tsync.mutexes, idx)) {
     errno = EINVAL;
     return -1;
   }
 
-  LIST_CLEAR(__tsync.mutexes, idx);
+  STATIC_LIST_CLEAR(__tsync.mutexes, idx);
 
   return 0;
 }
@@ -58,7 +58,7 @@ static int _atomic_mutex_lock(pthread_mutex_t *mutex, char try) {
 
   unsigned int idx = MUTEX_TO_INDEX(*((unsigned int*)mutex));
 
-  if (!LIST_CHECK(__tsync.mutexes, idx)) {
+  if (!STATIC_LIST_CHECK(__tsync.mutexes, idx)) {
     errno = EINVAL;
     return -1;
   }
@@ -102,7 +102,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
 static int _atomic_mutex_unlock(pthread_mutex_t *mutex) {
   unsigned int idx = MUTEX_TO_INDEX(*((unsigned int*)mutex));
 
-  if (!LIST_CHECK(__tsync.mutexes, idx)) {
+  if (!STATIC_LIST_CHECK(__tsync.mutexes, idx)) {
     errno = EINVAL;
     return -1;
   }
@@ -136,7 +136,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 
 int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) {
   unsigned int idx;
-  LIST_ALLOC(__tsync.condvars, idx);
+  STATIC_LIST_ALLOC(__tsync.condvars, idx);
 
   if (idx == MAX_CONDVARS) {
     errno = ENOMEM;
@@ -153,12 +153,12 @@ int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) {
 int pthread_cond_destroy(pthread_cond_t *cond) {
   unsigned int idx = COND_TO_INDEX(*((unsigned int*)cond));
 
-  if (!LIST_CHECK(__tsync.condvars, idx)) {
+  if (!STATIC_LIST_CHECK(__tsync.condvars, idx)) {
     errno = EINVAL;
     return -1;
   }
 
-  LIST_CLEAR(__tsync.condvars, idx);
+  STATIC_LIST_CLEAR(__tsync.condvars, idx);
 
   return 0;
 }
@@ -179,12 +179,12 @@ static int _atomic_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 
   unsigned int idx = COND_TO_INDEX(*((unsigned int*)cond));
 
-  if (!LIST_CHECK(__tsync.condvars, idx)) {
+  if (!STATIC_LIST_CHECK(__tsync.condvars, idx)) {
     errno = EINVAL;
     return -1;
   }
 
-  if (!LIST_CHECK(__tsync.mutexes, MUTEX_TO_INDEX(*((unsigned int*)mutex)))) {
+  if (!STATIC_LIST_CHECK(__tsync.mutexes, MUTEX_TO_INDEX(*((unsigned int*)mutex)))) {
     errno = EINVAL;
     return -1;
   }
@@ -229,7 +229,7 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 static int _atomic_cond_notify(pthread_cond_t *cond, char all) {
   unsigned int idx = COND_TO_INDEX(*((unsigned int*)cond));
 
-  if (!LIST_CHECK(__tsync.condvars, idx)) {
+  if (!STATIC_LIST_CHECK(__tsync.condvars, idx)) {
     errno = EINVAL;
     return -1;
   }

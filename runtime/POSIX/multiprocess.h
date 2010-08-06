@@ -11,20 +11,18 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include "lists.h"
+#include "maxlimits.h"
+
 typedef uint64_t wlist_id_t;
 
-#define MAX_THREADS     8
 #define DEFAULT_THREAD  0
 
-#define MAX_PROCESSES   8
 #define DEFAULT_PROCESS 2
 #define DEFAULT_PARENT  1
 
 #define PID_TO_INDEX(pid)   ((pid) - 2)
 #define INDEX_TO_PID(idx)   ((idx) + 2)
-
-#define MAX_MUTEXES     16
-#define MAX_CONDVARS    16
 
 #define DEFAULT_MUTEX   0
 
@@ -86,27 +84,6 @@ typedef struct {
 } tsync_data_t;
 
 extern tsync_data_t __tsync;
-
-#define LIST_INIT(list)  \
-  do { memset(&list, 0, sizeof(list)); } while (0)
-
-#define LIST_ALLOC(list, item) \
-  do { \
-    item = sizeof(list)/sizeof(list[0]); \
-    unsigned int __i; \
-    for (__i = 0; __i < sizeof(list)/sizeof(list[0]); __i++) { \
-      if (!list[__i].allocated) { \
-        list[__i].allocated = 1; \
-        item = __i;  break; \
-      } \
-    } \
-  } while (0)
-
-#define LIST_CLEAR(list, item) \
-  do { memset(&list[item], 0, sizeof(list[item])); } while (0)
-
-#define LIST_CHECK(list, item) \
-  ((item < sizeof(list)/sizeof(list[0])) && (list[item].allocated))
 
 void klee_init_processes(void);
 void klee_init_threads(void);

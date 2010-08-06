@@ -60,7 +60,7 @@ void _exit(int status) {
 
 pid_t fork(void) {
   unsigned int newIdx;
-  LIST_ALLOC(__pdata, newIdx);
+  STATIC_LIST_ALLOC(__pdata, newIdx);
 
   if (newIdx == MAX_PROCESSES) {
     errno = ENOMEM;
@@ -179,7 +179,7 @@ pid_t waitpid(pid_t pid, int *status, int options) {
   }
 
   // Now we can safely clean up the process structure
-  LIST_CLEAR(__pdata, idx);
+  STATIC_LIST_CLEAR(__pdata, idx);
 
   return INDEX_TO_PID(idx);
 }

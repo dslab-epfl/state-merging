@@ -30,7 +30,7 @@ pthread_t pthread_self(void) {
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     void *(*start_routine)(void*), void *arg) {
   unsigned int newIdx;
-  LIST_ALLOC(__tsync.threads, newIdx);
+  STATIC_LIST_ALLOC(__tsync.threads, newIdx);
 
   if (newIdx == MAX_THREADS) {
     errno = EAGAIN;
@@ -59,7 +59,7 @@ void pthread_exit(void *value_ptr) {
 
     klee_thread_notify_all(tdata->wlist);
   } else {
-    LIST_CLEAR(__tsync.threads, idx);
+    STATIC_LIST_CLEAR(__tsync.threads, idx);
   }
 
   klee_thread_terminate(); // Does not return
@@ -96,7 +96,7 @@ int pthread_join(pthread_t thread, void **value_ptr) {
     *value_ptr = tdata->ret_value;
   }
 
-  LIST_CLEAR(__tsync.threads, thread);
+  STATIC_LIST_CLEAR(__tsync.threads, thread);
 
   return 0;
 }
@@ -119,7 +119,7 @@ int pthread_detach(pthread_t thread) {
   }
 
   if (tdata->terminated) {
-    LIST_CLEAR(__tsync.threads, thread);
+    STATIC_LIST_CLEAR(__tsync.threads, thread);
   } else {
     tdata->joinable = 0;
   }
