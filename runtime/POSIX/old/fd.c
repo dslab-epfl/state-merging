@@ -552,26 +552,6 @@ int chdir(const char *path) {
   }
 }
 
-int fchdir(int fd) {
-  exe_file_t *f = __get_file(fd);
-  
-  if (!f) {
-    errno = EBADF;
-    return -1;
-  }
-
-  if (f->dfile) {
-    klee_warning("symbolic file, ignoring (ENOENT)");
-    errno = ENOENT;
-    return -1;
-  } else {
-    int r = syscall(__NR_fchdir, f->fd);
-    if (r == -1)
-      errno = klee_get_errno();
-    return r;
-  }
-}
-
 /* Sets mode and or errno and return appropriate result. */
 static int __df_chmod(exe_disk_file_t *df, mode_t mode) {
   if (geteuid() == df->stat->st_uid) {
@@ -654,24 +634,6 @@ int chown(const char *path, uid_t owner, gid_t group) {
   }
 }
 
-int fchown(int fd, uid_t owner, gid_t group) {
-  exe_file_t *f = __get_file(fd);
-
-  if (!f) {
-    errno = EBADF;
-    return -1;
-  }
-
-  if (f->dfile) {
-    return __df_chown(f->dfile, owner, group);
-  } else {
-    int r = syscall(__NR_fchown, fd, owner, group);
-    if (r == -1)
-      errno = klee_get_errno();
-    return r;
-  }
-}
-
 int lchown(const char *path, uid_t owner, gid_t group) {
   /* XXX Ignores 'l' part */
   exe_disk_file_t *df = __get_sym_file(path);
@@ -742,60 +704,7 @@ int __fd_ftruncate(int fd, off64_t length) {
   }  
 }
 
-int fcntl(int fd, int cmd, ...) {
-  exe_file_t *f = __get_file(fd);
-  va_list ap;
-  unsigned arg; /* 32 bit assumption (int/ptr) */
 
-  if (!f) {
-    errno = EBADF;
-    return -1;
-  }
-  
-  if (cmd==F_GETFD || cmd==F_GETFL || cmd==F_GETOWN || cmd==F_GETSIG ||
-      cmd==F_GETLEASE || cmd==F_NOTIFY) {
-    arg = 0;
-  } else {
-    va_start(ap, cmd);
-    arg = va_arg(ap, int);
-    va_end(ap);
-  }
-
-  if (f->dfile) {
-    switch(cmd) {
-    case F_GETFD: {
-      int flags = 0;
-      if (f->flags & eCloseOnExec)
-        flags |= FD_CLOEXEC;
-      return flags;
-    } 
-    case F_SETFD: {
-      f->flags &= ~eCloseOnExec;
-      if (arg & FD_CLOEXEC)
-        f->flags |= eCloseOnExec;
-      return 0;
-    }
-    case F_GETFL: {
-      /* XXX (CrC): This should return the status flags: O_APPEND,
-	 O_ASYNC, O_DIRECT, O_NOATIME, O_NONBLOCK.  As of now, we
-	 discard these flags during open().  We should save them and
-	 return them here.  These same flags can be set by F_SETFL,
-	 which we could also handle properly. 
-      */
-      return 0;
-    }
-    default:
-      klee_warning("symbolic file, ignoring (EINVAL)");
-      errno = EINVAL;
-      return -1;
-    }
-  } else {
-    int r = syscall(__NR_fcntl, f->fd, cmd, arg );
-    if (r == -1)
-      errno = klee_get_errno();
-    return r;
-  }
-}
 
 int __fd_statfs(const char *path, struct statfs *buf) {
   exe_disk_file_t *dfile = __get_sym_file(path);
@@ -831,51 +740,6 @@ int fstatfs(int fd, struct statfs *buf) {
     if (r == -1)
       errno = klee_get_errno();
     return r;
-  }
-}
-
-
-int dup2(int oldfd, int newfd) {
-  exe_file_t *f = __get_file(oldfd);
-
-  if (!f || !(newfd>=0 && newfd<MAX_FDS)) {
-    errno = EBADF;
-    return -1;
-  } else {
-    exe_file_t *f2 = &__exe_env.fds[newfd];
-    if (f2->flags & eOpen) close(newfd);
-
-    /* XXX Incorrect, really we need another data structure for open
-       files */
-    *f2 = *f;
-
-    f2->flags &= ~eCloseOnExec;
-      
-    /* I'm not sure it is wise, but we can get away with not dup'ng
-       the OS fd, since actually that will in many cases effect the
-       sharing of the open file (and the process should never have
-       access to it). */
-
-    return newfd;
-  }
-}
-
-int dup(int oldfd) {
-  exe_file_t *f = __get_file(oldfd);
-  if (!f) {
-    errno = EBADF;
-    return -1;
-  } else {
-    int fd;
-    for (fd = 0; fd < MAX_FDS; ++fd)
-      if (!(__exe_env.fds[fd].flags & eOpen))
-        break;
-    if (fd == MAX_FDS) {
-      errno = ENFILE;
-      return -1;
-    } else {
-      return dup2(oldfd, fd);
-    }
   }
 }
 
