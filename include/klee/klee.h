@@ -144,6 +144,10 @@ extern "C" {
   /* Print stack trace. */
   void klee_stack_trace(void);
 
+  void klee_call_underlying(const char *fn_name, ...);
+  int klee_call_underlying_i32(const char *fn_name, ...);
+  void *klee_call_underlying_ptr(const char *fn_name, ...);
+
   //////////////////////////////////////////////////////////////////////////////
   // Shared Memory Management
   //////////////////////////////////////////////////////////////////////////////

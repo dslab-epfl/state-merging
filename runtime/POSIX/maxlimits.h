@@ -16,5 +16,7 @@
 
 #define MAX_EVENTS      4
 
+#define MAX_FDS         32
+
 
 #endif /* MAXLIMITS_H_ */

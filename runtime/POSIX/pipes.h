@@ -1,18 +1,18 @@
 /*
- * sockets.h
+ * pipes.h
  *
  *  Created on: Aug 7, 2010
  *      Author: stefan
  */
 
-#ifndef SOCKETS_H_
-#define SOCKETS_H_
+#ifndef PIPES_H_
+#define PIPES_H_
 
 #include "fd.h"
 
 typedef struct {
   file_base_t __bdata;
-};
+} pipe_t;
 
 
-#endif /* SOCKETS_H_ */
+#endif /* PIPES_H_ */
