@@ -42,32 +42,6 @@ static void *__concretize_ptr(const void *p);
 static size_t __concretize_size(size_t s);
 static const char *__concretize_string(const char *s);
 
-
-
-/* Returns pointer to the symbolic file structure if the pathname is symbolic */
-static exe_disk_file_t *__get_sym_file(const char *pathname) {
-  char c = pathname[0];
-  unsigned i;
-
-  if (c == 0 || pathname[1] != 0)
-    return NULL;
-
-  for (i=0; i<__exe_fs.n_sym_files; ++i) {
-    if (c == 'A' + (char) i) {
-      exe_disk_file_t *df = &__exe_fs.sym_files[i];
-      if (df->stat->st_ino == 0)
-        return NULL;
-      return df;
-    }
-  }
-  
-  return NULL;
-}
-
-static void *__concretize_ptr(const void *p);
-static size_t __concretize_size(size_t s);
-static const char *__concretize_string(const char *s);
-
 /* Returns pointer to the file entry for a valid fd */
 exe_file_t* __get_file(int fd) {
   if (fd>=0 && fd<MAX_FDS) {
@@ -131,36 +105,6 @@ static int has_permission(int flags, struct stat64 *s) {
     return 0;
 
   return 1;
-}
-
-
-/* Returns next available fd.  Sets eOpen in associated flags.  
-   If no more fds are available, returns -1 and sets errno to ENFILE.
-   Otherwise, set *pf to &__exe_env.fds[fd]. */
-int __get_new_fd(exe_file_t **pf) {
-  int fd;
-
-  for (fd = 0; fd < MAX_FDS; ++fd)
-    if (!(__exe_env.fds[fd].flags & eOpen))
-      break;
-  if (fd == MAX_FDS) {
-    errno = ENFILE;
-    return -1;
-  }
-  
-  *pf = &__exe_env.fds[fd];
-
-  /* Should be the case if file was available, but just in case. */
-  memset(*pf, 0, sizeof **pf);
-  (*pf)->fd = -1;
-  (*pf)->flags = eOpen;
-
-  return fd;
-}
-
-
-void  __undo_get_new_fd(exe_file_t *f) {
-  memset(f, 0, sizeof *f);
 }
 
 

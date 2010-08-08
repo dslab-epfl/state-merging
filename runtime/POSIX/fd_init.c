@@ -6,13 +6,22 @@
  */
 
 #include "fd.h"
+#include "files.h"
 
-fd_entry_t __fdt[MAX_FDS];
+#include <stdlib.h>
+
+// File descriptor table static initialization,
+// for pre-klee_init_fds FD operations
+fd_entry_t __fdt[MAX_FDS] = {
+    { FD_IS_CONCRETE | FD_IS_PIPE, 0, NULL, 1},
+    { FD_IS_CONCRETE | FD_IS_PIPE, 1, NULL, 1},
+    { FD_IS_CONCRETE | FD_IS_PIPE, 2, NULL, 1}
+};
+
+// Symbolic file system
+filesystem_t __fs;
 
 void klee_init_fds(unsigned n_files, unsigned file_length,
-                   int sym_stdout_flag, int do_all_writes_flag,
-                   unsigned n_streams, unsigned stream_len,
-                   unsigned n_dgrams, unsigned dgram_len,
-                   unsigned max_failures) {
+                   int sym_stdout_flag) {
   assert(0 && "not implemented");
 }

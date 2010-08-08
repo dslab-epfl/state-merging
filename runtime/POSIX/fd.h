@@ -8,7 +8,7 @@
 #ifndef FD_H_
 #define FD_H_
 
-#include "maxlimits.h"
+#include "common.h"
 
 #define FD_IS_CONCRETE      (1 << 0)    // The calls get forwarded to the underlying implementation
 #define FD_IS_DUMMY         (1 << 1)    // The data read is symbolic, and the data written is discarded
@@ -38,10 +38,7 @@ typedef struct {
 extern fd_entry_t __fdt[MAX_FDS];
 
 void klee_init_fds(unsigned n_files, unsigned file_length,
-                   int sym_stdout_flag, int do_all_writes_flag,
-                   unsigned n_streams, unsigned stream_len,
-                   unsigned n_dgrams, unsigned dgram_len,
-                   unsigned max_failures);
+                   int sym_stdout_flag);
 
 
 #endif /* FD_H_ */

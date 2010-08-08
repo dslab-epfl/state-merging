@@ -10,7 +10,7 @@
 
 #include <unistd.h>
 
-#include "maxlimits.h"
+#include "common.h"
 #include "multiprocess.h"
 
 #define EVENT_READ  (1 << 0)
