@@ -74,17 +74,7 @@ int fstat(int fd, struct stat *buf) {
   return __fd_fstat(fd, (struct stat64*) buf);
 }
 
-int ftruncate64(int fd, off64_t length) {
-  return __fd_ftruncate(fd, length);
-}
-
 int statfs(const char *path, struct statfs *buf) __attribute__((weak));
 int statfs(const char *path, struct statfs *buf) {
   return __fd_statfs(path, buf);
 }
-
-int getdents64(unsigned int fd, struct dirent *dirp, unsigned int count) {
-  return __fd_getdents(fd, (struct dirent64*) dirp, count);
-}
-int __getdents64(unsigned int fd, struct dirent *dirp, unsigned int count)
-     __attribute__((alias("getdents64")));

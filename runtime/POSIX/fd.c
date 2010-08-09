@@ -192,39 +192,6 @@ int fcntl(int fd, int cmd, ...) {
 // Forwarded / unsupported calls
 ////////////////////////////////////////////////////////////////////////////////
 
-#define _WRAP_FD_SYSCALL_ERROR(call, ...) \
-  do { \
-    if (!STATIC_LIST_CHECK(__fdt, fd)) { \
-      errno = EBADF; \
-      return -1; \
-    } \
-    if (!((__fdt[fd]).flags & FD_IS_CONCRETE)) { \
-      klee_warning("symbolic file, " #call " unsupported (EBADF)"); \
-      errno = EBADF; \
-      return -1; \
-    } \
-    int ret = klee_call_underlying_i32(#call, __fdt[fd].concrete_fd, ##__VA_ARGS__); \
-    if (ret == -1) \
-      errno = klee_get_errno(); \
-    return ret; \
-  } while (0)
-
-#define _WRAP_FD_SYSCALL_IGNORE(call, ...) \
-  do { \
-    if (!STATIC_LIST_CHECK(__fdt, fd)) { \
-      errno = EBADF; \
-      return -1; \
-    } \
-    if (!((__fdt[fd]).flags & FD_IS_CONCRETE)) { \
-      return 0; \
-    } \
-    int ret = klee_call_underlying_i32(#call, __fdt[fd].concrete_fd, ##__VA_ARGS__); \
-    if (ret == -1) \
-      errno = klee_get_errno(); \
-    return ret; \
-  } while (0)
-
-
 int ioctl(int fd, int requrest, ...) {
   if (!STATIC_LIST_CHECK(__fdt, fd)) {
     errno = EBADF;
@@ -246,27 +213,11 @@ int ioctl(int fd, int requrest, ...) {
 
   va_end(ap);
 
-  int ret = klee_call_underlying_i32("ioctl", __fdt[fd].concrete_fd, request, argp);
+  int ret = CALL_UNDERLYING(ioctl, __fdt[fd].concrete_fd, request, argp);
 
   if (ret == -1) {
     errno = klee_get_errno();
   }
 
   return ret;
-}
-
-int fsync(int fd) {
-  _WRAP_FD_SYSCALL_IGNORE(fsync);
-}
-
-int fdatasync(int fd) {
-  _WRAP_FD_SYSCALL_IGNORE(fdatasync);
-}
-
-int fchdir(int fd) {
-  _WRAP_FD_SYSCALL_ERROR(fchdir);
-}
-
-int fchown(int fd, uid_t owner, gid_t group) {
-  _WRAP_FD_SYSCALL_ERROR(fchown, owner, group);
 }

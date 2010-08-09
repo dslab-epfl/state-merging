@@ -47,6 +47,7 @@ int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist);
 typedef struct {
   char *contents;
   size_t max_size;
+  size_t size;
 } block_buffer_t;
 
 

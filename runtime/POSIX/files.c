@@ -15,6 +15,18 @@
 #include <unistd.h>
 #include <klee/klee.h>
 
+#define CHECK_IS_FILE(fd) \
+  do { \
+    if (!STATIC_LIST_CHECK(__fdt, fd)) { \
+    errno = EBADF; \
+    return -1; \
+    } \
+    if (!(__fdt[fd].attr & FD_IS_FILE)) { \
+      errno = ESPIPE; \
+      return -1; \
+    } \
+  } while (0)
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Internal Routines
@@ -22,6 +34,43 @@
 
 static int __isupper(const char c) {
   return (('A' <= c) & (c <= 'Z'));
+}
+
+static void *__concretize_ptr(const void *p) {
+  /* XXX 32-bit assumption */
+  char *pc = (char*) klee_get_valuel((long) p);
+  klee_assume(pc == p);
+  return pc;
+}
+
+static size_t __concretize_size(size_t s) {
+  size_t sc = klee_get_valuel((long)s);
+  klee_assume(sc == s);
+  return sc;
+}
+
+static const char *__concretize_string(const char *s) {
+  char *sc = __concretize_ptr(s);
+  unsigned i;
+
+  for (i=0; ; ++i) {
+    char c = *sc;
+    if (!(i&(i-1))) {
+      if (!c) {
+        *sc++ = 0;
+        break;
+      } else if (c=='/') {
+        *sc++ = '/';
+      }
+    } else {
+      char cc = (char) klee_get_valuel((long)c);
+      klee_assume(cc == c);
+      *sc++ = cc;
+      if (!cc) break;
+    }
+  }
+
+  return s;
 }
 
 /* Returns pointer to the symbolic file structure if the pathname is symbolic */
@@ -112,6 +161,117 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 // The POSIX API
 ////////////////////////////////////////////////////////////////////////////////
 
+char *getcwd(char *buf, size_t size) {
+  int r;
+
+  if (!buf) {
+    if (!size)
+      size = 1024;
+    buf = malloc(size);
+  }
+
+  buf = __concretize_ptr(buf);
+  size = __concretize_size(size);
+  /* XXX In terms of looking for bugs we really should do this check
+     before concretization, at least once the routine has been fixed
+     to properly work with symbolics. */
+  klee_check_memory_access(buf, size);
+  r = CALL_UNDERLYING(getcwd, buf, size);
+  if (r == -1) {
+    errno = klee_get_errno();
+    return NULL;
+  }
+
+  return buf;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static off_t _lseek(file_t *file, off_t offset, int whence) {
+  off_t newOff;
+  switch (whence) {
+  case SEEK_SET:
+    newOff = offset;
+    break;
+  case SEEK_CUR:
+    newOff = file->offset + offset;
+    break;
+  case SEEK_END:
+    newOff = file->storage.contents.size + offset;
+    break;
+  default:
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (newOff < 0 || newOff > file->storage.contents.size) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  file->offset = newOff;
+  return file->offset;
+}
+
+off_t lseek(int fd, off_t offset, int whence) {
+  CHECK_IS_FILE(fd);
+
+  if (__fdt[fd].attr & FD_IS_CONCRETE) {
+    int res = CALL_UNDERLYING(lseek, __fdt[fd].concrete_fd, offset, whence);
+    if (res == -1) {
+      errno = klee_get_errno();
+    }
+    return res;
+  }
+
+  file_t *file = (file_t*)__fdt[fd].io_object;
+
+  return _lseek(file, offset, whence);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int _chmod(disk_file_t *dfile, mode_t mode) {
+  if (geteuid() == dfile->stat->st_uid) {
+    if (getgid() != dfile->stat->st_gid)
+      mode &= ~ S_ISGID;
+    dfile->stat->st_mode = ((dfile->stat->st_mode & ~07777) |
+                         (mode & 07777));
+    return 0;
+  } else {
+    errno = EPERM;
+    return -1;
+  }
+}
+
+int chmod(const char *path, mode_t mode) {
+  disk_file_t *dfile = __get_sym_file(path);
+
+  if (!dfile) {
+    int res = CALL_UNDERLYING(chmod, __concretize_string(path), mode);
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
+  return __chmod(dfile, mode);
+}
+
+int fchmod(int fd, mode_t mode) {
+  CHECK_IS_FILE(fd);
+
+  if (__fdt[fd].attr & FD_IS_CONCRETE) {
+    int res = CALL_UNDERLYING(fchmod, __fdt[fd].concrete_fd, mode);
+    if (res == -1)
+      errno = klee_get_errno();
+    return -1;
+  }
+
+  file_t *file = (file_t*)__fdt[fd].io_object;
+
+  return _chmod(file->storage, mode);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Directory management
@@ -140,4 +300,96 @@ struct dirent *readdir(DIR *dirp) {
 ////////////////////////////////////////////////////////////////////////////////
 // Forwarded / unsupported calls
 ////////////////////////////////////////////////////////////////////////////////
+
+#define _WRAP_FILE_SYSCALL_ERROR(call, ...) \
+  do { \
+    if (__get_sym_file(pathname)) { \
+      klee_warning("symbolic path, " #call " unsupported (ENOENT)"); \
+      errno = ENOENT; \
+      return -1; \
+    } \
+    int ret = CALL_UNDERLYING(call, __concretize_string(pathname), ##__VA_ARGS__); \
+    if (ret == -1) \
+      errno = klee_get_errno(); \
+    return ret; \
+  } while (0)
+
+#define _WRAP_FILE_SYSCALL_IGNORE(call, ...) \
+  do { \
+    if (__get_sym_file(pathname)) { \
+      klee_warning("symbolic path, " #call " does nothing"); \
+      return 0; \
+    } \
+    int ret = CALL_UNDERLYING(call, __concretize_string(pathname), ##__VA_ARGS__); \
+    if (ret == -1) \
+      errno = klee_get_errno(); \
+    return ret; \
+  } while (0)
+
+#define _WRAP_FILE_SYSCALL_BLOCK(call, ...) \
+  do { \
+    klee_warning(#call " blocked (EPERM)"); \
+    errno = EPERM; \
+    return -1; \
+  } while (0)
+
+int rmdir(const char *pathname) {
+  _WRAP_FILE_SYSCALL_BLOCK(rmdir);
+}
+
+ssize_t readlink(const char *pathname, char *buf, size_t bufsize) {
+  _WRAP_FILE_SYSCALL_ERROR(readlink, buf, bufsize);
+}
+
+int unlink(const char *pathname) {
+  _WRAP_FILE_SYSCALL_BLOCK(unlink);
+}
+
+int chroot(const char *pathname) {
+  _WRAP_FILE_SYSCALL_BLOCK(chroot);
+}
+
+int chown(const char *pathname, uid_t owner, gid_t group) {
+  _WRAP_FILE_SYSCALL_ERROR(chown, owner, group);
+}
+
+int lchown(const char *pathname, uid_t owner, gid_t group) {
+  _WRAP_FILE_SYSCALL_ERROR(lchown, owner, group);
+}
+
+int chdir(const char *pathname) {
+  _WRAP_FILE_SYSCALL_ERROR(chdir);
+}
+
+int fsync(int fd) {
+  _WRAP_FD_SYSCALL_IGNORE(fsync);
+}
+
+int fdatasync(int fd) {
+  _WRAP_FD_SYSCALL_IGNORE(fdatasync);
+}
+
+int fchdir(int fd) {
+  _WRAP_FD_SYSCALL_ERROR(fchdir);
+}
+
+int fchown(int fd, uid_t owner, gid_t group) {
+  _WRAP_FD_SYSCALL_ERROR(fchown, owner, group);
+}
+
+int fstatfs(int fd, struct statfs *buf) {
+  _WRAP_FD_SYSCALL_ERROR(fstatfs, buf);
+}
+
+int statfs(const char *pathname, struct statfs *buf) {
+  _WRAP_FILE_SYSCALL_ERROR(statfs, buf);
+}
+
+int ftruncate(int fd, off_t length) {
+  _WRAP_FD_SYSCALL_ERROR(ftruncate, length);
+}
+
+int truncate(const char *pathname, off_t length) {
+  _WRAP_FILE_SYSCALL_ERROR(truncate, length);
+}
 

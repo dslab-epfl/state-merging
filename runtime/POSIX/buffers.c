@@ -138,6 +138,7 @@ void _block_init(block_buffer_t *buff, size_t max_size) {
   memset(buff, 0, sizeof(block_buffer_t));
   buff->contents = (char*)malloc(max_size);
   buff->max_size = max_size;
+  buff->size = 0;
 }
 
 void _block_destroy(block_buffer_t *buff) {
@@ -145,8 +146,11 @@ void _block_destroy(block_buffer_t *buff) {
 }
 
 ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, off_t offset) {
-  if (offset + count > buff->max_size)
-    count = buff->max_size - offset;
+  if (offset > buff->size)
+    return -1;
+
+  if (offset + count > buff->size)
+    count = buff->size - offset;
 
   if (count == 0)
     return 0;
@@ -157,11 +161,16 @@ ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, off_t offset
 }
 
 ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, off_t offset) {
+  if (offset > buff->max_size)
+    return -1;
+
   if (offset + count > buff->max_size)
     count = buff->max_size - offset;
 
   if (count == 0)
     return 0;
+
+  buff->size = offset + count;
 
   memcpy(&buff->contents[offset], src, count);
 

@@ -59,10 +59,6 @@ int open(const char *pathname, int flags, ...) {
   return __fd_open(pathname, flags, mode);
 }
 
-off_t lseek(int fd, off_t off, int whence) {
-  return (off_t) __fd_lseek(fd, off, whence);
-}
-
 int __xstat(int vers, const char *path, struct stat *buf) {
   struct stat64 tmp;
   int res = __fd_stat(path, &tmp);
@@ -105,58 +101,6 @@ int fstat(int fd, struct stat *buf) {
   return res;
 }
 
-int ftruncate(int fd, off_t length) {
-  return __fd_ftruncate(fd, length);
-}
-
-int statfs(const char *path, struct statfs *buf32) {
-#if 0
-    struct statfs64 buf;
-
-    if (__fd_statfs(path, &buf) < 0)
-	return -1;
-
-    buf32->f_type = buf.f_type;
-    buf32->f_bsize = buf.f_bsize;
-    buf32->f_blocks = buf.f_blocks;
-    buf32->f_bfree = buf.f_bfree;
-    buf32->f_bavail = buf.f_bavail;
-    buf32->f_files = buf.f_files;
-    buf32->f_ffree = buf.f_ffree;
-    buf32->f_fsid = buf.f_fsid;
-    buf32->f_namelen = buf.f_namelen;
-
-    return 0;
-#else
-    return __fd_statfs(path, buf32);
-#endif
-}
-
-/* Based on uclibc version. We use getdents64 and then rewrite the
-   results over themselves, as dirent32s. */
-ssize_t getdents(int fd, struct dirent *dirp, size_t nbytes) {
-  struct dirent64 *dp64 = (struct dirent64*) dirp;
-  ssize_t res = __fd_getdents(fd, dp64, nbytes);
-
-  if (res>0) {
-    struct dirent64 *end = (struct dirent64*) ((char*) dp64 + res);
-    while (dp64 < end) {
-      struct dirent *dp = (struct dirent *) dp64;
-      size_t name_len = (dp64->d_reclen - 
-                           (size_t) &((struct dirent64*) 0)->d_name);
-      dp->d_ino = dp64->d_ino;
-      dp->d_off = dp64->d_off;
-      dp->d_reclen = dp64->d_reclen;
-      dp->d_type = dp64->d_type;
-      memmove(dp->d_name, dp64->d_name, name_len);
-      dp64 = (struct dirent64*) ((char*) dp64 + dp->d_reclen);
-    }
-  }
-
-  return res;
-}
-int __getdents(unsigned int fd, struct dirent *dirp, unsigned int count)
-     __attribute__((alias("getdents")));
 
 /* Forward to 64 versions (uclibc expects versions w/o asm specifier) */
 
@@ -173,11 +117,6 @@ int open64(const char *pathname, int flags, ...) {
   }
 
   return __fd_open(pathname, flags, mode);
-}
-
-off64_t lseek64(int fd, off64_t off, int whence) __attribute__((weak));
-off64_t lseek64(int fd, off64_t off, int whence) {
-  return __fd_lseek(fd, off, whence);
 }
 
 int stat64(const char *path, struct stat64 *buf) __attribute__((weak));
