@@ -15,8 +15,14 @@
 #include <sys/vfs.h>
 #include <fcntl.h>
 
+#ifdef __FORCE_USE_UNDERLYING
+#define DECLARE_UNDERLYING(type, name, ...) \
+    type __klee_original_ ## name(__VA_ARGS__); \
+    __attribute__((used)) static const void* __usage_original_ ## name = (void*)&__klee_original_ ## name;
+#else
 #define DECLARE_UNDERLYING(type, name, ...) \
     type __klee_original_ ## name(__VA_ARGS__);
+#endif
 
 DECLARE_UNDERLYING(int, stat, const char *path, struct stat *buf);
 DECLARE_UNDERLYING(int, fstat, int fd, struct stat *buf);

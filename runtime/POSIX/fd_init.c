@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <assert.h>
+#include <stdio.h>
+#include <errno.h>
 
 #include <klee/klee.h>
 
@@ -36,6 +38,8 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 
   struct stat s;
   int res = CALL_UNDERLYING(stat, ".", &s);
+  errno = klee_get_errno();
+
   assert(res == 0 && "Could not get default stat values");
 
   klee_make_shared(&__fs, sizeof(filesystem_t));

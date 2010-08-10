@@ -1011,6 +1011,45 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
   return 0;
 }
 #else
+
+static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
+  mainModule->getOrInsertFunction("__underlying_linkage",
+      Type::getVoidTy(getGlobalContext()), NULL);
+
+  mainModule->getOrInsertFunction("_exit",
+      Type::getVoidTy(getGlobalContext()),
+      Type::getInt32Ty(getGlobalContext()), NULL);
+
+  llvm::sys::Path Path(getKleeLibraryPath());
+  Path.appendComponent("libkleeRuntimePOSIX.bca");
+  klee_message("NOTE: Using model: %s", Path.c_str());
+  mainModule = klee::linkWithLibrary(mainModule, Path.c_str());
+  assert(mainModule && "unable to link with simple model");
+
+  // Now look for all the "__klee_original_*" declarations, and replace them
+  // with their POSIX name
+  for (Module::iterator it = mainModule->begin(); it != mainModule->end(); it++) {
+    Function *f = it;
+    StringRef fName = f->getName();
+
+    if (!fName.startswith("__klee_original_"))
+      continue;
+
+    StringRef newName = fName.substr(strlen("__klee_original_"), fName.size());
+
+    Function *modelF = mainModule->getFunction(newName);
+
+    if (modelF != NULL) {
+      modelF->setName(std::string("__klee_model_").append(newName.str()));
+    }
+
+    f->setName(newName);
+  }
+
+
+  return mainModule;
+}
+
 static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
   Function *f;
   // force import of __uClibc_main
@@ -1090,7 +1129,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
   //    if (f) f->setName("fputc_unlocked");
   //    f = mainModule->getFunction("__fgetc_unlocked");
   //    if (f) f->setName("fgetc_unlocked");
-  
+#if 0
   Function *f2;
   f = mainModule->getFunction("open");
   f2 = mainModule->getFunction("__libc_open");
@@ -1100,6 +1139,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
       f2->eraseFromParent();
     } else {
       f2->setName("open");
+      CLOUD9_DEBUG("New name: " << f2->getNameStr());
       assert(f2->getName() == "open");
     }
   }
@@ -1115,6 +1155,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
       assert(f2->getName() == "fcntl");
     }
   }
+#endif
 
   // XXX we need to rearchitect so this can also be used with
   // programs externally linked with uclibc.
@@ -1285,6 +1326,10 @@ int main(int argc, char **argv, char **envp) {
                                   /*Optimize=*/OptimizeModule, 
                                   /*CheckDivZero=*/CheckDivZero);
   
+  if (WithPOSIXRuntime) {
+    mainModule = linkWithPOSIX(mainModule);
+  }
+
   switch (Libc) {
   case NoLibc: /* silence compiler warning */
     break;
@@ -1301,14 +1346,6 @@ int main(int argc, char **argv, char **envp) {
   case UcLibc:
     mainModule = linkWithUclibc(mainModule);
     break;
-  }
-
-  if (WithPOSIXRuntime) {
-    llvm::sys::Path Path(Opts.LibraryDir);
-    Path.appendComponent("libkleeRuntimePOSIX.bca");
-    klee_message("NOTE: Using model: %s", Path.c_str());
-    mainModule = klee::linkWithLibrary(mainModule, Path.c_str());
-    assert(mainModule && "unable to link with simple model");
   }
 
   // Get the desired main function.  klee_main initializes uClibc

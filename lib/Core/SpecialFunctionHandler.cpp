@@ -806,8 +806,6 @@ void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
     return;
   }
 
-  CLOUD9_DEBUG("Waking up...");
-
   if (all->isZero()) {
     state.notifyOne(cast<ConstantExpr>(wlist)->getZExtValue());
   } else {
