@@ -45,20 +45,6 @@ static void __stat64_to_stat(struct stat64 *a, struct stat *b) {
 
 /***/
 
-int open(const char *pathname, int flags, ...) {
-  mode_t mode = 0;
-
-  if (flags & O_CREAT) {
-    /* get mode */
-    va_list ap;
-    va_start(ap, flags);
-    mode = va_arg(ap, mode_t);
-    va_end(ap);
-  }
-
-  return __fd_open(pathname, flags, mode);
-}
-
 int __xstat(int vers, const char *path, struct stat *buf) {
   struct stat64 tmp;
   int res = __fd_stat(path, &tmp);

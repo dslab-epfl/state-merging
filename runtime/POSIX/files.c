@@ -161,6 +161,131 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 // The POSIX API
 ////////////////////////////////////////////////////////////////////////////////
 
+/* Returns 1 if the process has the access rights specified by 'flags'
+   to the file with stat 's'.  Returns 0 otherwise*/
+static int _can_open(int flags, const struct stat *s) {
+  int write_access, read_access;
+  mode_t mode = s->st_mode;
+
+  if (flags & (O_RDONLY | O_RDWR))
+    read_access = 1;
+  else
+    read_access = 0;
+
+  if (flags & (O_WRONLY | O_RDWR))
+    write_access = 1;
+  else
+    write_access = 0;
+
+  /* XXX: We don't worry about process uid and gid for now.
+     We allow access if any user has access to the file. */
+#if 0
+  uid_t uid = s->st_uid;
+  uid_t euid = geteuid();
+  gid_t gid = s->st_gid;
+  gid_t egid = getegid();
+#endif
+
+  if (read_access && !(mode & (S_IRUSR | S_IRGRP | S_IROTH)))
+    return 0;
+
+  if (write_access && !(mode & (S_IWUSR | S_IWGRP | S_IWOTH)))
+    return 0;
+
+  return 1;
+}
+
+int open(const char *pathname, int flags, ...) {
+  mode_t mode = 0;
+
+  if (flags & O_CREAT) {
+    /* get mode */
+    va_list ap;
+    va_start(ap, flags);
+    mode = va_arg(ap, mode_t);
+    va_end(ap);
+  }
+
+  // Obtain a new file descriptor
+  int fd;
+  STATIC_LIST_ALLOC(__fdt, fd);
+
+  if (fd == MAX_FDS) {
+    errno = ENFILE;
+    return -1;
+  }
+
+  fd_entry_t *fde = &__fdt[fd];
+  fde->attr |= FD_IS_FILE;
+
+  // Obtain a symbolic file
+  disk_file_t *dfile = __get_sym_file(pathname);
+
+  if (!dfile) {
+    // Try to open the file concretely
+    fde->concrete_fd = CALL_UNDERLYING(open, __concretize_string(pathname),
+        flags, mode);
+
+    if (fde->concrete_fd == -1) {
+      errno = klee_get_errno();
+      STATIC_LIST_CLEAR(__fdt, fd);
+      return -1;
+    }
+
+    fde->attr |= FD_IS_CONCRETE;
+
+    return fd;
+  }
+
+  // Checking the flags
+  if ((flags & O_CREAT) && (flags & O_EXCL)) {
+    errno = EEXIST;
+    return -1;
+  }
+
+  if ((flags & O_TRUNC) && (flags & O_RDONLY)) {
+    /* The result of using O_TRUNC with O_RDONLY is undefined, so we
+   return error */
+    fprintf(stderr, "Undefined call to open(): O_TRUNC | O_RDONLY\n");
+    errno = EACCES;
+    return -1;
+  }
+
+  if ((flags & O_EXCL) && !(flags & O_CREAT)) {
+    /* The result of using O_EXCL without O_CREAT is undefined, so
+   we return error */
+    fprintf(stderr, "Undefined call to open(): O_EXCL w/o O_RDONLY\n");
+    errno = EACCES;
+    return -1;
+  }
+
+  if (!_can_open(flags, dfile->stat)) {
+    errno = EACCES;
+    return -1;
+  }
+
+  // Now we can set up the open file structure...
+  file_t *file = (file_t*)malloc(sizeof(file_t));
+  file->__bdata.flags = flags;
+  file->__bdata.refcount = 1;
+  file->storage = dfile;
+  file->offset = 0;
+
+  if ((flags & (O_WRONLY | O_RDWR)) && (flags & O_TRUNC)) {
+    file->storage->contents.size = 0;
+  }
+
+  if (flags & O_CLOEXEC) {
+    fde->attr |= FD_CLOSE_ON_EXEC;
+  }
+}
+
+int creat(const char *pathname, mode_t mode) {
+  return open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 char *getcwd(char *buf, size_t size) {
   int r;
 
@@ -393,3 +518,6 @@ int truncate(const char *pathname, off_t length) {
   _WRAP_FILE_SYSCALL_ERROR(truncate, length);
 }
 
+int access(const char *pathname, int mode) {
+  _WRAP_FILE_SYSCALL_IGNORE(access, mode);
+}
