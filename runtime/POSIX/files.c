@@ -8,16 +8,24 @@
 #include "files.h"
 
 #include "common.h"
+#include "underlying.h"
 
+#include <stdio.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 #include <klee/klee.h>
+#include <fcntl.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <assert.h>
 
 #define CHECK_IS_FILE(fd) \
   do { \
-    if (!STATIC_LIST_CHECK(__fdt, fd)) { \
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) { \
     errno = EBADF; \
     return -1; \
     } \
@@ -120,7 +128,7 @@ static void _init_stats(disk_file_t *dfile, const struct stat *defstats) {
   klee_prefer_cex(stat, stat->st_mtime == defstats->st_mtime);
   klee_prefer_cex(stat, stat->st_ctime == defstats->st_ctime);
 
-  stat->st_size = dfile->contents->max_size;
+  stat->st_size = dfile->contents.max_size;
   stat->st_blocks = 8;
 }
 
@@ -239,11 +247,13 @@ int open(const char *pathname, int flags, ...) {
 
   // Checking the flags
   if ((flags & O_CREAT) && (flags & O_EXCL)) {
+    STATIC_LIST_CLEAR(__fdt, fd);
     errno = EEXIST;
     return -1;
   }
 
   if ((flags & O_TRUNC) && (flags & O_RDONLY)) {
+    STATIC_LIST_CLEAR(__fdt, fd);
     /* The result of using O_TRUNC with O_RDONLY is undefined, so we
    return error */
     fprintf(stderr, "Undefined call to open(): O_TRUNC | O_RDONLY\n");
@@ -252,6 +262,7 @@ int open(const char *pathname, int flags, ...) {
   }
 
   if ((flags & O_EXCL) && !(flags & O_CREAT)) {
+    STATIC_LIST_CLEAR(__fdt, fd);
     /* The result of using O_EXCL without O_CREAT is undefined, so
    we return error */
     fprintf(stderr, "Undefined call to open(): O_EXCL w/o O_RDONLY\n");
@@ -260,6 +271,7 @@ int open(const char *pathname, int flags, ...) {
   }
 
   if (!_can_open(flags, dfile->stat)) {
+    STATIC_LIST_CLEAR(__fdt, fd);
     errno = EACCES;
     return -1;
   }
@@ -278,16 +290,24 @@ int open(const char *pathname, int flags, ...) {
   if (flags & O_CLOEXEC) {
     fde->attr |= FD_CLOSE_ON_EXEC;
   }
+
+  return fd;
 }
 
 int creat(const char *pathname, mode_t mode) {
   return open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
+void _close_file(file_t *file) {
+  assert(file->__bdata.refcount == 0);
+
+  free(file);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 char *getcwd(char *buf, size_t size) {
-  int r;
+  char *r;
 
   if (!buf) {
     if (!size)
@@ -302,7 +322,8 @@ char *getcwd(char *buf, size_t size) {
      to properly work with symbolics. */
   klee_check_memory_access(buf, size);
   r = CALL_UNDERLYING(getcwd, buf, size);
-  if (r == -1) {
+
+  if (r == NULL) {
     errno = klee_get_errno();
     return NULL;
   }
@@ -322,14 +343,14 @@ static off_t _lseek(file_t *file, off_t offset, int whence) {
     newOff = file->offset + offset;
     break;
   case SEEK_END:
-    newOff = file->storage.contents.size + offset;
+    newOff = file->storage->contents.size + offset;
     break;
   default:
     errno = EINVAL;
     return -1;
   }
 
-  if (newOff < 0 || newOff > file->storage.contents.size) {
+  if (newOff < 0 || (size_t)newOff > file->storage->contents.size) {
     errno = EINVAL;
     return -1;
   }
@@ -379,7 +400,7 @@ int chmod(const char *path, mode_t mode) {
     return res;
   }
 
-  return __chmod(dfile, mode);
+  return _chmod(dfile, mode);
 }
 
 int fchmod(int fd, mode_t mode) {

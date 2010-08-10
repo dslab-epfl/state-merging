@@ -53,8 +53,8 @@ typedef struct {
 
 void _block_init(block_buffer_t *buff, size_t max_size);
 void _block_destroy(block_buffer_t *buff);
-ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, off_t offset);
-ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, off_t offset);
+ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, size_t offset);
+ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, size_t offset);
 
 
 #endif /* BUFFERS_H_ */

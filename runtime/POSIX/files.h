@@ -40,5 +40,7 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 
 disk_file_t *__get_sym_file(const char *pathname);
 
+void _close_file(file_t *file);
+
 
 #endif /* FILES_H_ */

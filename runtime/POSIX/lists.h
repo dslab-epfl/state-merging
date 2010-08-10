@@ -58,7 +58,7 @@
   do { memset(&list[item], 0, sizeof(list[item])); } while (0)
 
 #define STATIC_LIST_CHECK(list, item) \
-  ((item < sizeof(list)/sizeof(list[0])) && (list[item].allocated))
+  (((item) < sizeof(list)/sizeof(list[0])) && (list[item].allocated))
 
 
 #endif /* LISTS_H_ */

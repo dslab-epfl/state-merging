@@ -8,7 +8,15 @@
 #include "fd.h"
 #include "files.h"
 
+#include "underlying.h"
+
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <assert.h>
+
+#include <klee/klee.h>
 
 // File descriptor table static initialization,
 // for pre-klee_init_fds FD operations
@@ -23,5 +31,25 @@ filesystem_t __fs;
 
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    int sym_stdout_flag) {
-  assert(0 && "not implemented");
+  char fname[] = "FILE??";
+  unsigned int fname_len = strlen(fname);
+
+  struct stat s;
+  int res = CALL_UNDERLYING(stat, ".", &s);
+  assert(res == 0 && "Could not get default stat values");
+
+  klee_make_shared(&__fs, sizeof(filesystem_t));
+  memset(&__fs, 0, sizeof(filesystem_t));
+
+  // Create n symbolic files
+  unsigned int i;
+  for (i = 0; i < n_files; i++) {
+    __fs.files[i] = (disk_file_t*)malloc(sizeof(disk_file_t));
+    disk_file_t *dfile = __fs.files[i];
+
+    fname[fname_len-1] = '0' + (i % 10);
+    fname[fname_len-2] = '0' + (i / 10);
+
+    __init_disk_file(dfile, file_length, fname, &s);
+  }
 }

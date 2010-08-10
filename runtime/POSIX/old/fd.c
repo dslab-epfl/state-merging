@@ -31,43 +31,6 @@
 
 #include <klee/klee.h>
 
-int close(int fd) {
-  static int n_calls = 0;
-  exe_file_t *f;
-  int r = 0;
-  
-  n_calls++;  
-
-  f = __get_file(fd);
-  if (!f) {
-    errno = EBADF;
-    return -1;
-  } 
-
-  if (__exe_fs.max_failures && *__exe_fs.close_fail == n_calls) {
-    __exe_fs.max_failures--;
-    errno = EIO;
-    return -1;
-  }
-
-#if 0
-  if (!f->dfile) {
-    /* if a concrete fd */
-    r = syscall(__NR_close, f->fd);
-  }
-  else r = 0;
-#endif
-
-  if ((f->flags & eSocket) && (f->flags & eDgramSocket)) {
-    assert(f->dfile);   /* We assume a symbolic socket */
-    assert(f->foreign); /* and a non-NULL foreign address */
-    free(f->foreign);
-  }
-  memset(f, 0, sizeof *f);
-  
-  return r;
-}
-
 
 ssize_t __fd_scatter_read(exe_file_t *f, const struct iovec *iov, int iovcnt)
 {

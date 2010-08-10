@@ -294,10 +294,7 @@ usage: (klee_init_env) [options] [program arguments]\n\
   klee_init_processes();
 
   klee_init_fds(sym_files, sym_file_len, 
-		sym_stdout_flag, save_all_writes_flag, 
-		sym_streams, sym_stream_len,
-        sym_dgrams, sym_dgram_len,
-		fd_fail);
+		sym_stdout_flag);
 
   klee_breakpoint(42);
 }

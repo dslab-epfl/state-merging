@@ -145,7 +145,7 @@ void _block_destroy(block_buffer_t *buff) {
   free(buff->contents);
 }
 
-ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, off_t offset) {
+ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, size_t offset) {
   if (offset > buff->size)
     return -1;
 
@@ -160,7 +160,7 @@ ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, off_t offset
   return count;
 }
 
-ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, off_t offset) {
+ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, size_t offset) {
   if (offset > buff->max_size)
     return -1;
 

@@ -21,10 +21,9 @@
 
 #define MAX_PATH_LEN    75
 
-#define DECLARE_UNDERLYING(type, name, ...) \
-    type __klee_original_ ## name(__VA_ARGS__);
-
 #define CALL_UNDERLYING(name, ...) \
-    __klee_original_ ## name(__VA_ARGS);
+    __klee_original_ ## name(__VA_ARGS__);
+
+int klee_get_errno(void);
 
 #endif /* COMMON_H_ */

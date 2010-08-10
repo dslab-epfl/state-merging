@@ -36,11 +36,11 @@ extern fd_entry_t __fdt[MAX_FDS];
 
 #define _WRAP_FD_SYSCALL_ERROR(call, ...) \
   do { \
-    if (!STATIC_LIST_CHECK(__fdt, fd)) { \
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) { \
       errno = EBADF; \
       return -1; \
     } \
-    if (!((__fdt[fd]).flags & FD_IS_CONCRETE)) { \
+    if (!((__fdt[fd]).attr & FD_IS_CONCRETE)) { \
       klee_warning("symbolic file, " #call " unsupported (EBADF)"); \
       errno = EBADF; \
       return -1; \
@@ -53,11 +53,11 @@ extern fd_entry_t __fdt[MAX_FDS];
 
 #define _WRAP_FD_SYSCALL_IGNORE(call, ...) \
   do { \
-    if (!STATIC_LIST_CHECK(__fdt, fd)) { \
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) { \
       errno = EBADF; \
       return -1; \
     } \
-    if (!((__fdt[fd]).flags & FD_IS_CONCRETE)) { \
+    if (!((__fdt[fd]).attr & FD_IS_CONCRETE)) { \
       klee_warning("symbolic file, " #call " does nothing"); \
       return 0; \
     } \

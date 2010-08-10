@@ -8,6 +8,8 @@
 #include "fd.h"
 
 #include "lists.h"
+#include "underlying.h"
+#include "files.h"
 
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
@@ -16,6 +18,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include <klee/klee.h>
 
@@ -23,8 +26,51 @@
 // FD specific POSIX routines
 ////////////////////////////////////////////////////////////////////////////////
 
+int close(int fd) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    errno = EBADF;
+    return -1;
+  }
+
+  fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_CONCRETE) {
+    int res = CALL_UNDERLYING(close, fde->concrete_fd);
+    if (res == -1)
+      errno = klee_get_errno();
+    else
+      STATIC_LIST_CLEAR(__fdt, fd);
+
+    return res;
+  }
+
+  // Decrement the underlying IO object refcount
+  assert(fde->io_object->refcount > 0);
+  fde->io_object->refcount--;
+
+  if (fde->io_object->refcount > 0) {
+    // Just clear this FD
+    STATIC_LIST_CLEAR(__fdt, fd);
+    return 0;
+  }
+
+  // Check the type of the descriptor
+  if (fde->attr & FD_IS_FILE) {
+    _close_file((file_t*)fde->io_object);
+  } else if (fde->attr & FD_IS_PIPE) {
+    // XXX to do
+  } else if (fde->attr & FD_IS_SOCKET) {
+    // XXX to do
+  }
+
+  STATIC_LIST_CLEAR(__fdt, fd);
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 int dup3(int oldfd, int newfd, int flags) {
-  if (!STATIC_LIST_CHECK(__fdt, oldfd)) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)oldfd)) {
     errno = EBADF;
     return -1;
   }
@@ -39,7 +85,7 @@ int dup3(int oldfd, int newfd, int flags) {
     return -1;
   }
 
-  if (STATIC_LIST_CHECK(__fdt, newfd)) {
+  if (STATIC_LIST_CHECK(__fdt, (unsigned)newfd)) {
     close(newfd);
   }
 
@@ -49,10 +95,10 @@ int dup3(int oldfd, int newfd, int flags) {
 
   if (fde->attr & FD_IS_CONCRETE) {
     if (flags & FD_CLOSE_ON_EXEC) {
-      fde->concrete_fd = klee_call_underlying_i32("fcntl", __fdt[oldfd].concrete_fd,
+      fde->concrete_fd = CALL_UNDERLYING(fcntl, __fdt[oldfd].concrete_fd,
           F_DUPFD_CLOEXEC, 0);
     } else {
-      fde->concrete_fd = klee_call_underlying_i32("fcntl", __fdt[oldfd].concrete_fd,
+      fde->concrete_fd = CALL_UNDERLYING(fcntl, __fdt[oldfd].concrete_fd,
           F_DUPFD, 0);
     }
 
@@ -76,7 +122,7 @@ int dup3(int oldfd, int newfd, int flags) {
 }
 
 int dup2(int oldfd, int newfd) {
-  if (!STATIC_LIST_CHECK(__fdt, oldfd)) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)oldfd)) {
     errno = EBADF;
     return -1;
   }
@@ -93,7 +139,7 @@ int dup2(int oldfd, int newfd) {
 }
 
 static int _dup(int oldfd, int startfd) {
-  if (!STATIC_LIST_CHECK(__fdt, oldfd)) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)oldfd)) {
     errno = EBADF;
     return -1;
   }
@@ -122,8 +168,10 @@ int dup(int oldfd) {
   return _dup(oldfd, 0);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 int fcntl(int fd, int cmd, ...) {
-  if (!STATIC_LIST_CHECK(__fdt, fd)) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
   }
@@ -140,11 +188,13 @@ int fcntl(int fd, int cmd, ...) {
   }
 
   if (__fdt[fd].attr & FD_IS_CONCRETE) {
-    int res = klee_call_underlying_i32("fcntl", __fdt[fd].concrete_fd, cmd, arg);
+    int res = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd, cmd, arg);
     if (res == -1) {
       errno = klee_get_errno();
       return -1;
     }
+
+    return res;
   } else {
     fd_entry_t *fde = &__fdt[fd];
     int res;
@@ -192,14 +242,14 @@ int fcntl(int fd, int cmd, ...) {
 // Forwarded / unsupported calls
 ////////////////////////////////////////////////////////////////////////////////
 
-int ioctl(int fd, int requrest, ...) {
-  if (!STATIC_LIST_CHECK(__fdt, fd)) {
+int ioctl(int fd, unsigned long request, ...) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
   }
 
   // For now, this works only on concrete FDs
-  if (!(__fdt[fd].flags & FD_IS_CONCRETE)) {
+  if (!(__fdt[fd].attr & FD_IS_CONCRETE)) {
     klee_warning("symbolic file, ioctl() unsupported (ENOTTY)");
     errno = ENOTTY;
     return -1;
