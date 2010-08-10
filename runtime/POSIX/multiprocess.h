@@ -10,9 +10,10 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include "lists.h"
-#include "maxlimits.h"
+#include "common.h"
 
 typedef uint64_t wlist_id_t;
 
@@ -20,6 +21,7 @@ typedef uint64_t wlist_id_t;
 
 #define DEFAULT_PROCESS 2
 #define DEFAULT_PARENT  1
+#define DEFAULT_UMASK   (S_IWGRP | S_IWOTH)
 
 #define PID_TO_INDEX(pid)   ((pid) - 2)
 #define INDEX_TO_PID(idx)   ((idx) + 2)
@@ -39,6 +41,7 @@ typedef struct {
   wlist_id_t children_wlist;
 
   pid_t parent;
+  mode_t umask;
 
   int ret_value;
 

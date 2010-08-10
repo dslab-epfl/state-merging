@@ -24,6 +24,7 @@ void klee_init_processes(void) {
   pdata->allocated = 1;
   pdata->terminated = 0;
   pdata->parent = DEFAULT_PARENT;
+  pdata->umask = DEFAULT_UMASK;
   pdata->wlist = klee_get_wlist();
   pdata->children_wlist = klee_get_wlist();
 

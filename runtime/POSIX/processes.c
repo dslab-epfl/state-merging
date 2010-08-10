@@ -34,6 +34,15 @@ pid_t getppid(void) {
   return __pdata[PID_TO_INDEX(pid)].parent;
 }
 
+mode_t umask(mode_t mask) {
+  proc_data_t *pdata = &__pdata[PID_TO_INDEX(getpid())];
+  mode_t res = pdata->umask;
+
+  pdata->umask = mask & 0777;
+
+  return res;
+}
+
 void _exit(int status) {
   pid_t pid = getpid();
 
@@ -67,11 +76,14 @@ pid_t fork(void) {
     return -1;
   }
 
+  proc_data_t *ppdata = &__pdata[PID_TO_INDEX(getpid())];
+
   proc_data_t *pdata = &__pdata[newIdx];
   pdata->terminated = 0;
   pdata->wlist = klee_get_wlist();
   pdata->children_wlist = klee_get_wlist();
   pdata->parent = getpid();
+  pdata->umask = ppdata->umask;
 
   int res = klee_process_fork(INDEX_TO_PID(newIdx)); // Here we split our ways...
 
