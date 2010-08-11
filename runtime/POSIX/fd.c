@@ -7,7 +7,7 @@
 
 #include "fd.h"
 
-#include "lists.h"
+#include "common.h"
 #include "underlying.h"
 #include "files.h"
 
@@ -318,7 +318,8 @@ int fcntl(int fd, int cmd, ...) {
 
   long arg;
 
-  if (cmd & (F_GETFD | F_GETFL | F_GETOWN | F_GETSIG | F_GETLEASE | F_NOTIFY)) {
+  if (cmd == F_GETFD || cmd == F_GETFL || cmd == F_GETOWN || cmd == F_GETSIG
+      || cmd == F_GETLEASE || cmd == F_NOTIFY) {
     arg = 0;
   } else {
     va_list ap;

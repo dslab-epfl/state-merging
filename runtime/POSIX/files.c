@@ -316,6 +316,8 @@ int open(const char *pathname, int flags, ...) {
     fde->attr |= FD_CLOSE_ON_EXEC;
   }
 
+  fde->io_object = (file_base_t*)file;
+
   return fd;
 }
 

@@ -7,7 +7,7 @@
 
 #include "buffers.h"
 
-#include "lists.h"
+#include "common.h"
 
 #include <stdlib.h>
 #include <klee/klee.h>
@@ -36,23 +36,57 @@ void __notify_event(stream_buffer_t *buff, char event) {
   }
 }
 
-void _stream_init(stream_buffer_t *buff, size_t max_size) {
+stream_buffer_t *_stream_create(size_t max_size) {
+  stream_buffer_t *buff = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
+
   memset(buff, 0, sizeof(stream_buffer_t));
   buff->contents = (char*) malloc(max_size);
   buff->max_size = max_size;
+  buff->queued = 0;
+  buff->destroying = 0;
+  buff->closed = 0;
   STATIC_LIST_INIT(buff->evt_queue);
+
+  return buff;
 }
 
 void _stream_destroy(stream_buffer_t *buff) {
+  __notify_event(buff, EVENT_READ | EVENT_WRITE | EVENT_ERROR);
+
   free(buff->contents);
+
+  if (buff->queued == 0) { // Nobody will do that for us, so we free it now
+    free(buff);
+  } else {
+    buff->destroying = 1;
+  }
+}
+
+void _stream_close(stream_buffer_t *buff) {
+  __notify_event(buff, EVENT_READ | EVENT_WRITE);
+
+  buff->closed = 1;
 }
 
 ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
   if (count == 0)
     return 0;
 
-  while (buff->size == 0)
+  while (buff->size == 0) {
+    if (buff->closed)
+      return 0;
+
+    buff->queued++;
     klee_thread_sleep(buff->empty_wlist);
+    buff->queued--;
+
+    if (buff->destroying) {
+      if (buff->queued == 0)
+        free(buff);
+
+      return -1;
+    }
+  }
 
   if (buff->size < count)
     count = buff->size;
@@ -78,8 +112,21 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
   if (count == 0)
     return 0;
 
-  while (buff->size == buff->max_size)
+  while (buff->size == buff->max_size) {
+    if (buff->closed)
+      return 0;
+
+    buff->queued++;
     klee_thread_sleep(buff->full_wlist);
+    buff->queued--;
+
+    if (buff->destroying) {
+      if (buff->queued == 0)
+        free(buff);
+
+      return -1;
+    }
+  }
 
   if (count > buff->max_size - buff->size)
     count = buff->max_size - buff->size;
@@ -131,7 +178,7 @@ int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Block buffers
+// Block Buffers
 ////////////////////////////////////////////////////////////////////////////////
 
 void _block_init(block_buffer_t *buff, size_t max_size) {
@@ -141,7 +188,7 @@ void _block_init(block_buffer_t *buff, size_t max_size) {
   buff->size = 0;
 }
 
-void _block_destroy(block_buffer_t *buff) {
+void _block_finalize(block_buffer_t *buff) {
   free(buff->contents);
 }
 

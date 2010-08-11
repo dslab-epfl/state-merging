@@ -12,7 +12,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "lists.h"
 #include "common.h"
 
 typedef uint64_t wlist_id_t;

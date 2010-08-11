@@ -7,6 +7,7 @@
 
 #include "fd.h"
 #include "files.h"
+#include "sockets.h"
 
 #include "underlying.h"
 
@@ -31,8 +32,10 @@ fd_entry_t __fdt[MAX_FDS] = {
 // Symbolic file system
 filesystem_t __fs;
 
-void klee_init_fds(unsigned n_files, unsigned file_length,
-                   int sym_stdout_flag) {
+// Symbolic network
+network_t __net;
+
+static void _init_filesystem(unsigned n_files, unsigned file_length) {
   char fname[] = "FILE??";
   unsigned int fname_len = strlen(fname);
 
@@ -56,4 +59,14 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 
     __init_disk_file(dfile, file_length, fname, &s);
   }
+}
+
+static void _init_network(void) {
+
+}
+
+void klee_init_fds(unsigned n_files, unsigned file_length,
+                   int sym_stdout_flag) {
+  _init_filesystem(n_files, file_length);
+  _init_network();
 }

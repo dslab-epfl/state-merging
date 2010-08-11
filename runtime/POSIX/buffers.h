@@ -34,15 +34,21 @@ typedef struct {
   buffer_event_t evt_queue[MAX_EVENTS];
   wlist_id_t empty_wlist;
   wlist_id_t full_wlist;
+
+  unsigned int queued;
+  char destroying;
+  char closed;
 } stream_buffer_t;
 
-void _stream_init(stream_buffer_t *buff, size_t max_size);
+stream_buffer_t *_stream_create(size_t max_size);
 void _stream_destroy(stream_buffer_t *buff);
+
 ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count);
 ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count);
+void _stream_close(stream_buffer_t *buff);
+
 int _stream_register_event(stream_buffer_t *buff, char events, wlist_id_t wlist);
 int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist);
-
 
 typedef struct {
   char *contents;
@@ -52,7 +58,7 @@ typedef struct {
 
 
 void _block_init(block_buffer_t *buff, size_t max_size);
-void _block_destroy(block_buffer_t *buff);
+void _block_finalize(block_buffer_t *buff);
 ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, size_t offset);
 ssize_t _block_write(block_buffer_t *buff, const char *src, size_t count, size_t offset);
 
