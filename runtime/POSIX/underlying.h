@@ -64,5 +64,8 @@ DECLARE_UNDERLYING(int, ftruncate, int fd, off_t length);
 
 DECLARE_UNDERLYING(int, access, const char *pathname, int mode);
 
+DECLARE_UNDERLYING(ssize_t, read, int fd, void *buf, size_t count);
+DECLARE_UNDERLYING(ssize_t, write, int fd, const void *buf, size_t count);
+
 
 #endif /* UNDERLYING_H_ */

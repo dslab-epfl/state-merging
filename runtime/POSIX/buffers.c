@@ -74,7 +74,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
   return count;
 }
 
-ssize_t _stream_write(stream_buffer_t *buff, char *src, size_t count) {
+ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
   if (count == 0)
     return 0;
 
@@ -160,7 +160,7 @@ ssize_t _block_read(block_buffer_t *buff, char *dest, size_t count, size_t offse
   return count;
 }
 
-ssize_t _block_write(block_buffer_t *buff, char *src, size_t count, size_t offset) {
+ssize_t _block_write(block_buffer_t *buff, const char *src, size_t count, size_t offset) {
   if (offset > buff->max_size)
     return -1;
 

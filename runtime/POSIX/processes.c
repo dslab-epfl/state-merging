@@ -6,6 +6,7 @@
  */
 
 #include "multiprocess.h"
+#include "fd.h"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -90,6 +91,8 @@ pid_t fork(void) {
   if (res == 0) {
     // We're in the child. Re-initialize the threading structures
     klee_init_threads();
+
+    __adjust_fds_on_fork();
   }
 
   return res;

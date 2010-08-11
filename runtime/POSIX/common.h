@@ -8,6 +8,8 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include <sys/types.h>
+
 #define MAX_THREADS     8
 #define MAX_PROCESSES   8
 
@@ -25,5 +27,9 @@
     __klee_original_ ## name(__VA_ARGS__);
 
 int klee_get_errno(void);
+
+void *__concretize_ptr(const void *p);
+size_t __concretize_size(size_t s);
+const char *__concretize_string(const char *s);
 
 #endif /* COMMON_H_ */

@@ -70,5 +70,7 @@ extern fd_entry_t __fdt[MAX_FDS];
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    int sym_stdout_flag);
 
+void __adjust_fds_on_fork(void);
+
 
 #endif /* FD_H_ */

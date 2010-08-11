@@ -44,43 +44,6 @@ static int __isupper(const char c) {
   return (('A' <= c) & (c <= 'Z'));
 }
 
-static void *__concretize_ptr(const void *p) {
-  /* XXX 32-bit assumption */
-  char *pc = (char*) klee_get_valuel((long) p);
-  klee_assume(pc == p);
-  return pc;
-}
-
-static size_t __concretize_size(size_t s) {
-  size_t sc = klee_get_valuel((long)s);
-  klee_assume(sc == s);
-  return sc;
-}
-
-static const char *__concretize_string(const char *s) {
-  char *sc = __concretize_ptr(s);
-  unsigned i;
-
-  for (i=0; ; ++i) {
-    char c = *sc;
-    if (!(i&(i-1))) {
-      if (!c) {
-        *sc++ = 0;
-        break;
-      } else if (c=='/') {
-        *sc++ = '/';
-      }
-    } else {
-      char cc = (char) klee_get_valuel((long)c);
-      klee_assume(cc == c);
-      *sc++ = cc;
-      if (!cc) break;
-    }
-  }
-
-  return s;
-}
-
 /* Returns pointer to the symbolic file structure if the pathname is symbolic */
 disk_file_t *__get_sym_file(const char *pathname) {
   char c = pathname[0];
@@ -128,7 +91,7 @@ static void _init_stats(disk_file_t *dfile, const struct stat *defstats) {
   klee_prefer_cex(stat, stat->st_mtime == defstats->st_mtime);
   klee_prefer_cex(stat, stat->st_ctime == defstats->st_ctime);
 
-  stat->st_size = dfile->contents.max_size;
+  stat->st_size = dfile->contents.size;
   stat->st_blocks = 8;
 }
 
@@ -167,6 +130,68 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 
 ////////////////////////////////////////////////////////////////////////////////
 // The POSIX API
+////////////////////////////////////////////////////////////////////////////////
+
+ssize_t _read_file(file_t *file, void *buf, size_t count) {
+  ssize_t res = _block_read(&file->storage->contents, buf, count, file->offset);
+  assert(res >= 0);
+
+  file->offset += res;
+  file->storage->stat->st_size = file->storage->contents.size;
+
+  return res;
+}
+
+ssize_t _write_file(file_t *file, const void *buf, size_t count) {
+  ssize_t res = _block_write(&file->storage->contents, buf, count, file->offset);
+  assert(res >= 0);
+
+  file->offset += res;
+  file->storage->stat->st_size = file->storage->contents.size;
+
+  if (res == 0)
+    errno = EFBIG;
+
+  return res;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int _stat_dfile(disk_file_t *dfile, struct stat *buf) {
+  memcpy(buf, dfile->stat, sizeof(struct stat));
+  return 0;
+}
+
+int _stat_file(file_t *file, struct stat *buf) {
+  return _stat_dfile(file->storage, buf);
+}
+
+int stat(const char *path, struct stat *buf) {
+  disk_file_t *dfile = __get_sym_file(path);
+
+  if (!dfile) {
+    int res = CALL_UNDERLYING(stat, __concretize_string(path), buf);
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
+  return _stat_dfile(dfile, buf);
+}
+
+int lstat(const char *path, struct stat *buf) {
+  disk_file_t *dfile = __get_sym_file(path);
+
+  if (!dfile) {
+    int res = CALL_UNDERLYING(lstat, __concretize_string(path), buf);
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
+  return _stat_dfile(dfile, buf);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /* Returns 1 if the process has the access rights specified by 'flags'

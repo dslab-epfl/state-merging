@@ -41,6 +41,9 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 disk_file_t *__get_sym_file(const char *pathname);
 
 void _close_file(file_t *file);
+ssize_t _read_file(file_t *file, void *buf, size_t count);
+ssize_t _write_file(file_t *file, const void *buf, size_t count);
+int _stat_file(file_t *file, struct stat *buf);
 
 
 #endif /* FILES_H_ */

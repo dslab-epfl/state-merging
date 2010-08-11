@@ -23,7 +23,114 @@
 #include <klee/klee.h>
 
 ////////////////////////////////////////////////////////////////////////////////
+// Internal routines
+////////////////////////////////////////////////////////////////////////////////
+
+void __adjust_fds_on_fork(void) {
+  // Increment the ref. counters for all the open files pointed by the FDT.
+  int fd;
+  for (fd = 0; fd < MAX_FDS; fd++) {
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd))
+      continue;
+    if (__fdt[fd].attr & FD_IS_CONCRETE) {
+      __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
+          F_DUPFD, 0);
+      assert(__fdt[fd].concrete_fd != -1);
+    } else {
+      __fdt[fd].io_object->refcount++;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // FD specific POSIX routines
+////////////////////////////////////////////////////////////////////////////////
+
+ssize_t read(int fd, void *buf, size_t count) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    errno = EBADF;
+    return -1;
+  }
+
+  fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_CONCRETE) {
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
+    /* XXX In terms of looking for bugs we really should do this check
+       before concretization, at least once the routine has been fixed
+       to properly work with symbolics. */
+    klee_check_memory_access(buf, count);
+
+    int res = CALL_UNDERLYING(read, fde->concrete_fd, buf, count);
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
+  // Check for permissions
+  if (!(fde->io_object->flags & (O_RDONLY | O_RDWR))) {
+    errno = EBADF;
+    return -1;
+  }
+
+  // It's OK, we pass the control to the specific implementations
+  if (fde->attr & FD_IS_FILE) {
+    return _read_file((file_t*)fde->io_object, buf, count);
+  } else if (fde->attr & FD_IS_PIPE) {
+    // XXX To do
+  } else if (fde->attr & FD_IS_SOCKET) {
+    // XXX To do
+  } else {
+    assert(0 && "Invalid file descriptor");
+    return -1;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+ssize_t write(int fd, const void *buf, size_t count) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    errno = EBADF;
+    return -1;
+  }
+
+  fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_CONCRETE) {
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
+    /* XXX In terms of looking for bugs we really should do this check
+      before concretization, at least once the routine has been fixed
+      to properly work with symbolics. */
+    klee_check_memory_access(buf, count);
+
+    int res = CALL_UNDERLYING(write, fde->concrete_fd, buf, count);
+    if (res == -1)
+      errno = klee_get_errno();
+
+    return res;
+  }
+
+  // Check for permissions
+  if (!(fde->io_object->flags & (O_WRONLY | O_RDWR))) {
+    errno = EBADF;
+    return -1;
+  }
+
+  // Mkay, let's do it
+  if (fde->attr & FD_IS_FILE) {
+    return _write_file((file_t*)fde->io_object, buf, count);
+  } else if (fde->attr & FD_IS_PIPE) {
+    // XXX To do
+  } else if (fde->attr & FD_IS_SOCKET) {
+    // XXX To do
+  } else {
+    assert(0 && "Invalid file descriptor");
+    return -1;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 int close(int fd) {
@@ -61,10 +168,43 @@ int close(int fd) {
     // XXX to do
   } else if (fde->attr & FD_IS_SOCKET) {
     // XXX to do
+  } else {
+    assert(0 && "Invalid file descriptor");
+    return -1;
   }
 
   STATIC_LIST_CLEAR(__fdt, fd);
   return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int fstat(int fd, struct stat *buf) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    errno = EBADF;
+    return -1;
+  }
+
+  fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_CONCRETE) {
+    int res = CALL_UNDERLYING(fstat, fde->concrete_fd, buf);
+
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
+  if (fde->attr & FD_IS_FILE) {
+    return _stat_file((file_t*)fde->io_object, buf);
+  } else if (fde->attr & FD_IS_PIPE) {
+    // XXX To do
+  } else if (fde->attr & FD_IS_SOCKET) {
+    // XXX To do
+  } else {
+    assert(0 && "Invalid file descriptor");
+    return -1;
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
