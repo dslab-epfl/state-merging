@@ -24,24 +24,23 @@ typedef struct {
   char allocated;
 } buffer_event_t;
 
+// A basic producer-consumer data structure
 typedef struct {
   char *contents;
   size_t max_size;
 
-  off_t start;
+  size_t start;
   size_t size;
 
   buffer_event_t evt_queue[MAX_EVENTS];
   wlist_id_t empty_wlist;
   wlist_id_t full_wlist;
 
-  unsigned int queued;
-  char destroying;
   char closed;
 } stream_buffer_t;
 
-stream_buffer_t *_stream_create(size_t max_size);
-void _stream_destroy(stream_buffer_t *buff);
+void _stream_init(stream_buffer_t *buff, size_t max_size);
+void _stream_finalize(stream_buffer_t *buff);
 
 ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count);
 ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count);

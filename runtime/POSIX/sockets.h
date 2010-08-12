@@ -10,6 +10,7 @@
 
 #include "fd.h"
 #include "buffers.h"
+#include "multiprocess.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -19,10 +20,9 @@
 #define DEFAULT_UNUSED_PORT     32768
 
 #define SOCK_STATUS_CREATED     (1 << 0)
-#define SOCK_STATUS_BOUND       (1 << 1)
-#define SOCK_STATUS_LISTENING   (1 << 2)
-#define SOCK_STATUS_CONNECTED   (1 << 3)
-#define SOCK_STATUS_CLOSED      (1 << 4) // Transient state due to concurrency
+#define SOCK_STATUS_LISTENING   (1 << 1)
+#define SOCK_STATUS_CONNECTED   (1 << 2)
+#define SOCK_STATUS_CLOSED      (1 << 3) // Transient state due to concurrency
 
 struct socket;
 
@@ -57,8 +57,12 @@ typedef struct socket {
   end_point_t *remote_end;
 
   // For TCP connections
-  stream_buffer_t *out;
-  stream_buffer_t *in;
+  stream_buffer_t *out;     // The output buffer
+  stream_buffer_t *in;      // The input buffer
+  wlist_id_t wlist;         // The waiting list for the connected notif.
+
+  // For TCP listening
+  stream_buffer_t *listen;
 } socket_t;
 
 

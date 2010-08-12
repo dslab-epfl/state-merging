@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include <klee/klee.h>
 
@@ -102,6 +103,11 @@ static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
   return &__net.end_points[i];
 }
 
+void __release_inet_end(end_point_t *end_point) {
+  free(end_point->addr);
+  memset(end_point, 0, sizeof(end_point_t));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // The Sockets API
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +152,8 @@ int socket(int domain, int type, int protocol) {
 
   // Create the socket object
   socket_t *sock = (socket_t*)malloc(sizeof(socket_t));
+  memset(sock, 0, sizeof(socket_t));
+
   sock->__bdata.flags = O_RDWR;
   sock->__bdata.refcount = 1;
 
@@ -173,8 +181,8 @@ static int _bind_inet(socket_t *sock, struct sockaddr_in *addr) {
     return -1;
   }
 
-  sock->status = SOCK_STATUS_BOUND;
   sock->local_end = end_point;
+  end_point->socket = sock;
 
   return 0;
 }
@@ -184,7 +192,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
-  if (sock->status & SOCK_STATUS_BOUND) {
+  if (sock->local_end != NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -209,7 +217,7 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
-  if (!(sock->status & SOCK_STATUS_BOUND)) {
+  if (sock->local_end == NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -235,7 +243,7 @@ int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
-  if (!(sock->status & SOCK_STATUS_CONNECTED)) {
+  if (sock->remote_end == NULL) {
     errno = ENOTCONN;
     return -1;
   }
@@ -254,4 +262,30 @@ int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     assert(0 && "invalid socket");
     return -1;
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int listen(int sockfd, int backlog) {
+  CHECK_IS_SOCKET(sockfd);
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  if (sock->status != SOCK_STATUS_CREATED || sock->local_end == NULL) {
+    errno = EOPNOTSUPP;
+    return -1;
+  }
+
+  if (sock->type != SOCK_STREAM) {
+    errno = EOPNOTSUPP;
+    return -1;
+  }
+
+  // Create the listening queue
+  sock->status = SOCK_STATUS_LISTENING;
+
+  sock->listen = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
+  _stream_init(sock->listen, backlog*sizeof(socket_t*));
+
+  return 0;
 }

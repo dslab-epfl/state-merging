@@ -102,49 +102,6 @@ int __fd_connect(unsigned long *args) {
   return 0;
 }
 
-
-int __fd_listen(unsigned long *args) {
-  int os_r;
-  int sockfd = args[0];
-  /*int backlog = args[1];*/
-
-  exe_file_t *f = __get_file(sockfd);
-
-  if (!f) {
-    errno = EBADF;      /* Bad file number */
-    return -1;
-  }
-
-  if (!(f->flags & eSocket)) {
-    errno = ENOTSOCK;   /* Socket operation on non-socket */
-    return -1;
-  }
-
-  if (f->flags & eDgramSocket) {
-    errno = EOPNOTSUPP; /* Operation not supported on transport endpoint */
-    return -1;
-  }
-
-  if (f->dfile) {
-    /* assume success for symbolic socket */
-    os_r = 0;
-  }
-  else {
-    args[0] = f->fd;
-    os_r = 0 /* syscall(__NR_socketcall, SYS_LISTEN, args) */;
-    args[0] = sockfd;
-    if (os_r < 0) {
-      errno = klee_get_errno();
-      return -1;
-    }
-  }
-
-  f->flags |= eListening;
-
-  return os_r;
-}
-
-
 int __fd_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   int connfd;
   exe_file_t *connf;

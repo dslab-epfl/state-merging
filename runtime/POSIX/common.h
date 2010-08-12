@@ -11,20 +11,21 @@
 #include <sys/types.h>
 #include <string.h>
 
-#define MAX_THREADS     8
-#define MAX_PROCESSES   8
+#define MAX_THREADS         8
+#define MAX_PROCESSES       8
 
-#define MAX_MUTEXES     16
-#define MAX_CONDVARS    16
+#define MAX_MUTEXES         16
+#define MAX_CONDVARS        16
 
-#define MAX_EVENTS      4
+#define MAX_EVENTS          4
 
-#define MAX_FDS         64
-#define MAX_FILES       16
+#define MAX_FDS             64
+#define MAX_FILES           16
 
-#define MAX_PATH_LEN    75
+#define MAX_PATH_LEN        75
 
-#define MAX_PORTS       32
+#define MAX_PORTS           32
+#define MAX_PENDING_CONN    4
 
 #define CALL_UNDERLYING(name, ...) \
     __klee_original_ ## name(__VA_ARGS__);

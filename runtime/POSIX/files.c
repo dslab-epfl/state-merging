@@ -303,6 +303,8 @@ int open(const char *pathname, int flags, ...) {
 
   // Now we can set up the open file structure...
   file_t *file = (file_t*)malloc(sizeof(file_t));
+  memset(file, 0, sizeof(file_t));
+
   file->__bdata.flags = flags;
   file->__bdata.refcount = 1;
   file->storage = dfile;
