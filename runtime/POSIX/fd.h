@@ -71,6 +71,7 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
                    int sym_stdout_flag);
 
 void __adjust_fds_on_fork(void);
+void __close_fds(void);
 
 
 #endif /* FD_H_ */

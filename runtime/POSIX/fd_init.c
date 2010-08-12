@@ -35,6 +35,17 @@ filesystem_t __fs;
 // Symbolic network
 network_t __net;
 
+static void _init_fdt(void) {
+  // Duplicate the STD{IN,OUT,ERR} descriptors, since they belong to
+  // the symbolic execution engine and we don't want to manipulate them
+  // directly.
+  int fd;
+  for (fd = 0; fd < 3; fd++) {
+    __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
+        F_DUPFD, 0);
+  }
+}
+
 static void _init_filesystem(unsigned n_files, unsigned file_length) {
   char fname[] = "FILE??";
   unsigned int fname_len = strlen(fname);
@@ -67,6 +78,7 @@ static void _init_network(void) {
 
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    int sym_stdout_flag) {
+  _init_fdt();
   _init_filesystem(n_files, file_length);
   _init_network();
 }

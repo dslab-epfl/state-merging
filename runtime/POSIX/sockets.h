@@ -31,6 +31,7 @@ typedef struct {
 
   struct socket *socket;
 
+  unsigned int refcount;
   char allocated;
 }  end_point_t;
 

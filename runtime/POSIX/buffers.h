@@ -49,6 +49,14 @@ void _stream_close(stream_buffer_t *buff);
 int _stream_register_event(stream_buffer_t *buff, char events, wlist_id_t wlist);
 int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist);
 
+static inline int _stream_is_empty(stream_buffer_t *buff) {
+  return (buff->size == 0);
+}
+
+static inline int _stream_is_full(stream_buffer_t *buff) {
+  return (buff->size == buff->max_size);
+}
+
 typedef struct {
   char *contents;
   size_t max_size;

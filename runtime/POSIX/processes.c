@@ -47,6 +47,9 @@ mode_t umask(mode_t mask) {
 void _exit(int status) {
   pid_t pid = getpid();
 
+  // Closing all open file descriptors
+  __close_fds();
+
   // Checking for zombie processes
   unsigned int idx;
   for (idx = 0; idx < MAX_PROCESSES; idx++) {

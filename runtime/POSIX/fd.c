@@ -42,6 +42,16 @@ void __adjust_fds_on_fork(void) {
   }
 }
 
+void __close_fds(void) {
+  int fd;
+  for (fd = 0; fd < MAX_FDS; fd++) {
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd))
+      continue;
+
+    close(fd);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // FD specific POSIX routines
 ////////////////////////////////////////////////////////////////////////////////
