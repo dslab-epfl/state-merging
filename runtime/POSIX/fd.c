@@ -10,6 +10,8 @@
 #include "common.h"
 #include "underlying.h"
 #include "files.h"
+#include "sockets.h"
+#include "pipes.h"
 
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
@@ -90,7 +92,7 @@ ssize_t read(int fd, void *buf, size_t count) {
   } else if (fde->attr & FD_IS_PIPE) {
     // XXX To do
   } else if (fde->attr & FD_IS_SOCKET) {
-    // XXX To do
+    return _read_socket((socket_t*)fde->io_object, buf, count);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;
@@ -134,7 +136,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
   } else if (fde->attr & FD_IS_PIPE) {
     // XXX To do
   } else if (fde->attr & FD_IS_SOCKET) {
-    // XXX To do
+    return _write_socket((socket_t*)fde->io_object, buf, count);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;
@@ -177,7 +179,7 @@ int close(int fd) {
   } else if (fde->attr & FD_IS_PIPE) {
     // XXX to do
   } else if (fde->attr & FD_IS_SOCKET) {
-    // XXX to do
+    _close_socket((socket_t*)fde->io_object);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;
@@ -210,7 +212,7 @@ int fstat(int fd, struct stat *buf) {
   } else if (fde->attr & FD_IS_PIPE) {
     // XXX To do
   } else if (fde->attr & FD_IS_SOCKET) {
-    // XXX To do
+    return _stat_socket((socket_t*)fde->io_object, buf);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;

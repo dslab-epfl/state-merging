@@ -115,6 +115,55 @@ static void __release_end_point(end_point_t *end_point) {
   }
 }
 
+// close() /////////////////////////////////////////////////////////////////////
+
+void _close_socket(socket_t *sock) {
+
+}
+
+// read() //////////////////////////////////////////////////////////////////////
+
+ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
+  if (sock->status != SOCK_STATUS_CONNECTED) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (sock->in == NULL) {
+    // The socket is shut down for reading
+    return 0;
+  }
+
+  ssize_t res = _stream_read(sock->in, buf, count);
+
+  return res;
+}
+
+// write() /////////////////////////////////////////////////////////////////////
+
+ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
+  if (sock->status != SOCK_STATUS_CONNECTED) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (sock->out == NULL) {
+    // The socket is shut down for writing
+    errno = EPIPE;
+    return -1;
+  }
+
+  ssize_t res = _stream_write(sock->out, buf, count);
+
+  return res;
+}
+
+// fstat() /////////////////////////////////////////////////////////////////////
+
+int _stat_socket(socket_t *sock, struct stat *buf) {
+  assert(0 && "not implemented");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // The Sockets API
 ////////////////////////////////////////////////////////////////////////////////
@@ -468,7 +517,9 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   end_point->socket = local;
   remote->remote_end = end_point;
 
+  __release_end_point(local->remote_end);
   local->remote_end = remote->local_end;
+  remote->local_end->refcount++;
 
   // Setup streams
   local->in = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
@@ -484,4 +535,34 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // Now return in our process
   return fd;
+}
+
+// Socket specific I/O /////////////////////////////////////////////////////////
+
+ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
+  if (flags != 0) {
+    klee_warning("send() flags unsupported for now");
+    errno = EINVAL;
+    return -1;
+  }
+
+  CHECK_IS_SOCKET(sockfd);
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  return _write_socket(sock, buf, len);
+}
+
+ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
+  if (flags != 0) {
+    klee_warning("recv() flags unsupported for now");
+    errno = EINVAL;
+    return -1;
+  }
+
+  CHECK_IS_SOCKET(sockfd);
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  return _read_socket(sock, buf, len);
 }
