@@ -36,11 +36,13 @@ typedef struct {
   wlist_id_t empty_wlist;
   wlist_id_t full_wlist;
 
+  unsigned int queued;
+  char destroying;
   char closed;
 } stream_buffer_t;
 
-void _stream_init(stream_buffer_t *buff, size_t max_size);
-void _stream_finalize(stream_buffer_t *buff);
+stream_buffer_t *_stream_create(size_t max_size);
+void _stream_destroy(stream_buffer_t *buff);
 
 ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count);
 ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count);

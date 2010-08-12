@@ -117,8 +117,54 @@ static void __release_end_point(end_point_t *end_point) {
 
 // close() /////////////////////////////////////////////////////////////////////
 
-void _close_socket(socket_t *sock) {
+static void _shutdown(socket_t *sock, int how);
 
+void _close_socket(socket_t *sock) {
+  if (sock->status == SOCK_STATUS_CONNECTED) {
+    _shutdown(sock, SHUT_RDWR);
+  }
+
+  if (sock->status == SOCK_STATUS_LISTENING) {
+    while (!_stream_is_empty(sock->listen)) {
+      socket_t *remote;
+      ssize_t res = _stream_read(sock->listen, (char*)&remote, sizeof(socket_t*));
+      assert(res == sizeof(socket_t*));
+
+      remote->__bdata.queued--;
+
+      if (remote->status == SOCK_STATUS_CLOSED) {
+        if (remote->__bdata.queued == 0)
+          free(remote);
+
+      } else {
+        klee_thread_notify_all(remote->wlist);
+      }
+    }
+
+    _stream_destroy(sock->listen);
+  }
+
+  if (sock->wlist) {
+    klee_thread_notify_all(sock->wlist);
+  }
+
+  if (sock->local_end) {
+    sock->local_end->socket = NULL;
+    __release_end_point(sock->local_end);
+    sock->local_end = NULL;
+  }
+
+  if (sock->remote_end) {
+    sock->remote_end->socket = NULL;
+    __release_end_point(sock->remote_end);
+    sock->remote_end = NULL;
+  }
+
+  sock->status = SOCK_STATUS_CLOSED;
+
+  if (sock->__bdata.queued == 0) {
+    free(sock);
+  }
 }
 
 // read() //////////////////////////////////////////////////////////////////////
@@ -134,7 +180,22 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
     return 0;
   }
 
+  sock->__bdata.queued++;
   ssize_t res = _stream_read(sock->in, buf, count);
+  sock->__bdata.queued--;
+
+  if (sock->status == SOCK_STATUS_CLOSED) {
+    if (sock->__bdata.queued == 0)
+      free(sock);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (res == -1) {
+    // The stream was shut down in the mean time
+    errno = EINVAL;
+  }
 
   return res;
 }
@@ -153,7 +214,22 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
     return -1;
   }
 
+  sock->__bdata.queued++;
   ssize_t res = _stream_write(sock->out, buf, count);
+  sock->__bdata.queued--;
+
+  if (sock->status == SOCK_STATUS_CLOSED) {
+    if (sock->__bdata.queued == 0)
+      free(sock);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (res == -1) {
+    // The stream was shut down in the mean time
+    errno = EINVAL;
+  }
 
   return res;
 }
@@ -212,6 +288,7 @@ int socket(int domain, int type, int protocol) {
 
   sock->__bdata.flags = O_RDWR;
   sock->__bdata.refcount = 1;
+  sock->__bdata.queued = 0;
 
   sock->status = SOCK_STATUS_CREATED;
   sock->type = type;
@@ -293,6 +370,20 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   }
 }
 
+static void _getpeername(socket_t *sock, struct sockaddr *addr, socklen_t *addrlen) {
+  if (sock->domain == AF_INET) {
+    socklen_t len = *addrlen;
+
+    if (len > sizeof(struct sockaddr_in))
+      len = sizeof(struct sockaddr_in);
+
+    memcpy(addr, sock->remote_end->addr, len);
+    *addrlen = sizeof(struct sockaddr_in);
+  } else {
+    assert(0 && "invalid socket");
+  }
+}
+
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   CHECK_IS_SOCKET(sockfd);
 
@@ -303,19 +394,9 @@ int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
-  if (sock->domain == AF_INET) {
-    socklen_t len = *addrlen;
+  _getpeername(sock, addr, addrlen);
 
-    if (len > sizeof(struct sockaddr_in))
-      len = sizeof(struct sockaddr_in);
-
-    memcpy(addr, sock->remote_end->addr, len);
-    *addrlen = sizeof(struct sockaddr_in);
-
-    return 0;
-  } else {
-    assert(0 && "invalid socket");
-  }
+  return 0;
 }
 
 // listen() ////////////////////////////////////////////////////////////////////
@@ -338,8 +419,7 @@ int listen(int sockfd, int backlog) {
   // Create the listening queue
   sock->status = SOCK_STATUS_LISTENING;
 
-  sock->listen = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
-  _stream_init(sock->listen, backlog*sizeof(socket_t*));
+  sock->listen = _stream_create(backlog*sizeof(socket_t*));
 
   return 0;
 }
@@ -422,7 +502,19 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
   assert(res == sizeof(socket_t*));
 
   // ... and we wait for a notification
+  sock->__bdata.queued += 2;
   klee_thread_sleep(sock->wlist);
+  sock->__bdata.queued--;
+
+  if (sock->status == SOCK_STATUS_CLOSED) {
+    if (sock->__bdata.queued == 0)
+      free(sock);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  sock->wlist = 0;
 
   if (sock->status != SOCK_STATUS_CONNECTED) {
     __release_end_point(sock->remote_end);
@@ -468,8 +560,31 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   socket_t *remote, *local;
   end_point_t *end_point;
+
+  sock->__bdata.queued++;
   ssize_t res = _stream_read(sock->listen, (char*)&remote, sizeof(socket_t*));
+  sock->__bdata.queued--;
+
+  if (sock->status == SOCK_STATUS_CLOSED) {
+    if (sock->__bdata.queued == 0)
+      free(sock);
+
+    errno = EINVAL;
+    return -1;
+  }
+
   assert(res == sizeof(socket_t*));
+
+  remote->__bdata.queued--;
+
+  if (remote->status == SOCK_STATUS_CLOSED) {
+    if (remote->__bdata.queued == 0) {
+      free(remote);
+    }
+
+    errno = ECONNABORTED;
+    return -1;
+  }
 
   klee_thread_notify_all(remote->wlist);
 
@@ -502,11 +617,14 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // Setup socket attributes
   local = (socket_t*)malloc(sizeof(socket_t));
+  memset(local, 0, sizeof(socket_t));
+
   __fdt[fd].attr |= FD_IS_SOCKET;
   __fdt[fd].io_object = (file_base_t*)local;
 
   local->__bdata.flags |= O_RDWR;
   local->__bdata.refcount = 1;
+  local->__bdata.queued = 0;
 
   local->status = SOCK_STATUS_CONNECTED;
   local->domain = remote->domain;
@@ -522,19 +640,59 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   remote->local_end->refcount++;
 
   // Setup streams
-  local->in = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
-  _stream_init(local->in, SOCKET_BUFFER_SIZE);
+  local->in = _stream_create(SOCKET_BUFFER_SIZE);
   remote->out = local->in;
 
-  local->out = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
-  _stream_init(local->out, SOCKET_BUFFER_SIZE);
+  local->out = _stream_create(SOCKET_BUFFER_SIZE);
   remote->in = local->out;
 
   // All is good for the remote socket
   remote->status = SOCK_STATUS_CONNECTED;
+  _getpeername(local, addr, addrlen);
 
   // Now return in our process
   return fd;
+}
+
+// shutdown() //////////////////////////////////////////////////////////////////
+
+static void _shutdown(socket_t *sock, int how) {
+  if ((how == SHUT_RD || how == SHUT_RDWR) && sock->in != NULL) {
+    // Shutting down the reading part...
+    if (sock->in->closed) {
+      _stream_destroy(sock->in);
+    } else {
+      _stream_close(sock->in);
+    }
+
+    sock->in = NULL;
+  }
+
+  if ((how == SHUT_WR || how == SHUT_RDWR) && sock->out != NULL) {
+    // Shutting down the writing part...
+    if (sock->out->closed) {
+      _stream_destroy(sock->out);
+    } else {
+      _stream_close(sock->out);
+    }
+
+    sock->out = NULL;
+  }
+}
+
+int shutdown(int sockfd, int how) {
+  CHECK_IS_SOCKET(sockfd);
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  if (sock->status != SOCK_STATUS_CONNECTED) {
+    errno = ENOTCONN;
+    return -1;
+  }
+
+  _shutdown(sock, how);
+
+  return 0;
 }
 
 // Socket specific I/O /////////////////////////////////////////////////////////

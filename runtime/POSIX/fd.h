@@ -19,6 +19,7 @@
 
 typedef struct {
   unsigned int refcount;
+  unsigned int queued;
   int flags;
 } file_base_t;
 

@@ -36,16 +36,30 @@ void __notify_event(stream_buffer_t *buff, char event) {
   }
 }
 
-void _stream_init(stream_buffer_t *buff, size_t max_size) {
+stream_buffer_t *_stream_create(size_t max_size) {
+  stream_buffer_t *buff = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
+
   memset(buff, 0, sizeof(stream_buffer_t));
   buff->contents = (char*) malloc(max_size);
   buff->max_size = max_size;
   buff->closed = 0;
+  buff->destroying = 0;
+  buff->queued = 0;
   STATIC_LIST_INIT(buff->evt_queue);
+
+  return buff;
 }
 
-void _stream_finalize(stream_buffer_t *buff) {
+void _stream_destroy(stream_buffer_t *buff) {
+  __notify_event(buff, EVENT_READ | EVENT_WRITE | EVENT_ERROR);
+
   free(buff->contents);
+
+  if (buff->queued == 0) {
+    free(buff);
+  } else {
+    buff->destroying = 1;
+  }
 }
 
 void _stream_close(stream_buffer_t *buff) {
@@ -62,7 +76,16 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
     if (buff->closed)
       return 0;
 
+    buff->queued++;
     klee_thread_sleep(buff->empty_wlist);
+    buff->queued--;
+
+    if (buff->destroying) {
+      if (buff->queued == 0)
+        free(buff);
+
+      return -1;
+    }
   }
 
   if (buff->size < count)
@@ -93,7 +116,16 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
     if (buff->closed)
       return 0;
 
+    buff->queued++;
     klee_thread_sleep(buff->full_wlist);
+    buff->queued--;
+
+    if (buff->destroying) {
+      if (buff->queued == 0)
+        free(buff);
+
+      return -1;
+    }
   }
 
   if (count > buff->max_size - buff->size)
