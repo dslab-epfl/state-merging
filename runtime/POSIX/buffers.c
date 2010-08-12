@@ -112,10 +112,10 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
   if (count == 0)
     return 0;
 
-  while (buff->size == buff->max_size) {
-    if (buff->closed)
-      return 0;
+  if (buff->closed)
+    return 0;
 
+  while (buff->size == buff->max_size) {
     buff->queued++;
     klee_thread_sleep(buff->full_wlist);
     buff->queued--;
@@ -126,6 +126,9 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
 
       return -1;
     }
+
+    if (buff->closed)
+      return 0;
   }
 
   if (count > buff->max_size - buff->size)

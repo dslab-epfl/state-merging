@@ -175,7 +175,7 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
     return -1;
   }
 
-  if (sock->in == NULL) {
+  if (sock->in == NULL || count == 0) {
     // The socket is shut down for reading
     return 0;
   }
@@ -208,10 +208,14 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
     return -1;
   }
 
-  if (sock->out == NULL) {
+  if (sock->out == NULL || sock->out->closed) {
     // The socket is shut down for writing
     errno = EPIPE;
     return -1;
+  }
+
+  if (count == 0) {
+    return 0;
   }
 
   sock->__bdata.queued++;

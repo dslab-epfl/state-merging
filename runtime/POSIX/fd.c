@@ -90,7 +90,7 @@ ssize_t read(int fd, void *buf, size_t count) {
   if (fde->attr & FD_IS_FILE) {
     return _read_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
-    // XXX To do
+    return _read_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
     return _read_socket((socket_t*)fde->io_object, buf, count);
   } else {
@@ -134,7 +134,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
   if (fde->attr & FD_IS_FILE) {
     return _write_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
-    // XXX To do
+    return _write_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
     return _write_socket((socket_t*)fde->io_object, buf, count);
   } else {
@@ -177,7 +177,7 @@ int close(int fd) {
   if (fde->attr & FD_IS_FILE) {
     _close_file((file_t*)fde->io_object);
   } else if (fde->attr & FD_IS_PIPE) {
-    // XXX to do
+    _close_pipe((pipe_end_t*)fde->io_object);
   } else if (fde->attr & FD_IS_SOCKET) {
     _close_socket((socket_t*)fde->io_object);
   } else {
@@ -210,7 +210,7 @@ int fstat(int fd, struct stat *buf) {
   if (fde->attr & FD_IS_FILE) {
     return _stat_file((file_t*)fde->io_object, buf);
   } else if (fde->attr & FD_IS_PIPE) {
-    // XXX To do
+    return _stat_pipe((pipe_end_t*)fde->io_object, buf);
   } else if (fde->attr & FD_IS_SOCKET) {
     return _stat_socket((socket_t*)fde->io_object, buf);
   } else {

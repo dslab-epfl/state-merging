@@ -28,6 +28,7 @@
 #define MAX_PENDING_CONN    4
 
 #define SOCKET_BUFFER_SIZE  64
+#define PIPE_BUFFER_SIZE    64
 
 #define CALL_UNDERLYING(name, ...) \
     __klee_original_ ## name(__VA_ARGS__);
