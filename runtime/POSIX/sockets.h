@@ -18,6 +18,7 @@
 #include <netinet/ip.h>
 
 #define DEFAULT_UNUSED_PORT     32768
+#define DEFAULT_NETWORK_ADDR    ((((((192 << 8) | 168) << 8) | 1) << 8) | 1)
 
 #define SOCK_STATUS_CREATED     (1 << 0)
 #define SOCK_STATUS_LISTENING   (1 << 1)
@@ -44,7 +45,12 @@ typedef struct {
   end_point_t end_points[MAX_PORTS];
 } network_t;
 
+typedef struct {
+  end_point_t end_points[MAX_UNIX_EPOINTS];
+} unix_t;
+
 extern network_t __net;
+extern unix_t __unix_net;
 
 
 typedef struct socket {

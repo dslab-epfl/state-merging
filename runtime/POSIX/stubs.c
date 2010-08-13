@@ -34,49 +34,6 @@
 
 
 #include <stdint.h>
-#ifdef WIN32
-#define BYTE_ORDER LITTLE_ENDIAN
-#else
-#ifndef DARWIN
-#include <endian.h>
-#else
-#if (defined(__ppc__) || defined(__ppc64__))
-#define BYTE_ORDER BIG_ENDIAN
-#elif (defined(__i386__) || defined(__x86_64__))
-#define BYTE_ORDER LITTLE_ENDIAN
-#endif
-#endif
-#endif
-#include <stdio.h>
-
-// don't know if we should just fake it by doing reverse.
-
-#if BYTE_ORDER == BIG_ENDIAN
-uint32_t __ntohl (uint32_t x) { return x; }
-uint16_t __ntohs (uint16_t x) { return x; }
-uint32_t __htonl (uint32_t x) { return x; }
-uint16_t __htons (uint16_t x) { return x; }
-
-#elif BYTE_ORDER == LITTLE_ENDIAN
-
-// from dietlibc
-static inline unsigned short bswap_16(unsigned short x) {
-  return (x>>8) | (x<<8);
-}
-
-static inline unsigned int bswap_32(unsigned int x) {
-  return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
-}
-
-uint32_t __ntohl (uint32_t x) { return bswap_32(x); }
-uint16_t __ntohs (uint16_t x) { return bswap_16(x); }
-uint32_t __htonl (uint32_t x) { return bswap_32(x); }
-uint16_t __htons (uint16_t x) { return bswap_16(x); }
-
-#else
-#       error "You seem to have an unsupported byteorder"
-#endif
-
 
 
 void klee_warning(const char*);

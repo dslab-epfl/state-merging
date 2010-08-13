@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include <klee/klee.h>
 
@@ -36,7 +37,7 @@ void __adjust_fds_on_fork(void) {
       continue;
     if (__fdt[fd].attr & FD_IS_CONCRETE) {
       __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
-          F_DUPFD, 0);
+          F_DUPFD, 0L);
       assert(__fdt[fd].concrete_fd != -1);
     } else {
       __fdt[fd].io_object->refcount++;

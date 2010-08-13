@@ -25,6 +25,8 @@
 #define MAX_PATH_LEN        75
 
 #define MAX_PORTS           32
+#define MAX_UNIX_EPOINTS    32
+
 #define MAX_PENDING_CONN    4
 
 #define SOCKET_BUFFER_SIZE  64

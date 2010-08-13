@@ -11,6 +11,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -103,6 +104,10 @@ static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
   newaddr->sin_port = port;
 
   return &__net.end_points[i];
+}
+
+static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
+
 }
 
 static void __release_end_point(end_point_t *end_point) {

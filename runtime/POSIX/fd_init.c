@@ -18,6 +18,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
 
 #include <klee/klee.h>
 
@@ -30,10 +33,11 @@ fd_entry_t __fdt[MAX_FDS] = {
 };
 
 // Symbolic file system
-filesystem_t __fs;
+filesystem_t    __fs;
 
 // Symbolic network
-network_t __net;
+network_t       __net;
+unix_t          __unix_net;
 
 static void _init_fdt(void) {
   // Duplicate the STD{IN,OUT,ERR} descriptors, since they belong to
@@ -42,7 +46,8 @@ static void _init_fdt(void) {
   int fd;
   for (fd = 0; fd < 3; fd++) {
     __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
-        F_DUPFD, 0);
+        F_DUPFD, 0L);
+    assert(__fdt[fd].concrete_fd != -1);
   }
 }
 
@@ -73,7 +78,9 @@ static void _init_filesystem(unsigned n_files, unsigned file_length) {
 }
 
 static void _init_network(void) {
-
+  // Initialize the INET domain
+  __net.net_addr.s_addr = htonl(DEFAULT_NETWORK_ADDR);
+  // Initialize the UNIX domain
 }
 
 void klee_init_fds(unsigned n_files, unsigned file_length,
