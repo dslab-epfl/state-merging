@@ -79,9 +79,9 @@ static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
       if (!STATIC_LIST_CHECK(__net.end_points, i))
         continue;
 
-      struct sockaddr_in *addr = (struct sockaddr_in*)__net.end_points[i].addr;
+      struct sockaddr_in *crt = (struct sockaddr_in*)__net.end_points[i].addr;
 
-      if (addr->sin_port == port) {
+      if (crt->sin_port == port) {
         __net.end_points[i].refcount++;
         return &__net.end_points[i];
       }
@@ -107,7 +107,44 @@ static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
 }
 
 static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
+  unsigned int i;
+  if (addr) {
+    // Search for an existing one...
+    for (i = 0; i < MAX_UNIX_EPOINTS; i++) {
+      if (!STATIC_LIST_CHECK(__unix_net.end_points, i))
+        continue;
 
+      struct sockaddr_un *crt = (struct sockaddr_un*)__unix_net.end_points[i].addr;
+
+      if (!crt)
+        continue;
+
+      if (strcmp(addr->sun_path, crt->sun_path) == 0) {
+        __unix_net.end_points[i].refcount++;
+        return &__unix_net.end_points[i];
+      }
+    }
+  }
+
+  // Create a new end point
+  STATIC_LIST_ALLOC(__unix_net.end_points, i);
+
+  if (i == MAX_UNIX_EPOINTS)
+    return NULL;
+
+  __unix_net.end_points[i].addr = NULL;
+  __unix_net.end_points[i].refcount = 1;
+  __unix_net.end_points[i].socket = NULL;
+
+  if (addr) {
+    __unix_net.end_points[i].addr = (struct sockaddr*)malloc(sizeof(addr->sun_family) + strlen(addr->sun_path) + 1);
+    struct sockaddr_un *newaddr = (struct sockaddr_un*)__unix_net.end_points[i].addr;
+
+    newaddr->sun_family = AF_UNIX;
+    strcpy(newaddr->sun_path, addr->sun_path);
+  }
+
+  return &__net.end_points[i];
 }
 
 static void __release_end_point(end_point_t *end_point) {
@@ -310,8 +347,30 @@ int socket(int domain, int type, int protocol) {
 
 // bind() //////////////////////////////////////////////////////////////////////
 
-static int _bind_inet(socket_t *sock, struct sockaddr_in *addr) {
-  end_point_t* end_point = __get_inet_end(addr);
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  CHECK_IS_SOCKET(sockfd);
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  if (sock->local_end != NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (addr->sa_family != sock->domain) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  end_point_t *end_point;
+
+  if (sock->domain == AF_INET) {
+    end_point = __get_inet_end((struct sockaddr_in*)addr);
+  } else if (sock->domain == AF_UNIX) {
+    end_point = __get_unix_end((struct sockaddr_un*)addr);
+  } else {
+    assert(0 && "invalid socket");
+  }
 
   if (end_point == NULL) {
     errno = EINVAL;
@@ -330,29 +389,44 @@ static int _bind_inet(socket_t *sock, struct sockaddr_in *addr) {
   return 0;
 }
 
-int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-  CHECK_IS_SOCKET(sockfd);
+// get{sock,peer}name() ////////////////////////////////////////////////////////
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
-
-  if (sock->local_end != NULL) {
-    errno = EINVAL;
-    return -1;
-  }
-
-  if (addr->sa_family != sock->domain) {
-    errno = EINVAL;
-    return -1;
-  }
-
+static void _get_endpoint_name(socket_t *sock, end_point_t *end_point,
+    struct sockaddr *addr, socklen_t *addrlen) {
   if (sock->domain == AF_INET) {
-    return _bind_inet(sock, (struct sockaddr_in*)addr);
+    socklen_t len = *addrlen;
+
+    if (len > sizeof(struct sockaddr_in))
+      len = sizeof(struct sockaddr_in);
+
+    memcpy(addr, end_point->addr, len);
+    *addrlen = sizeof(struct sockaddr_in);
+  } else if (sock->domain == AF_UNIX) {
+    socklen_t len = *addrlen;
+
+    if (end_point->addr) {
+      struct sockaddr_un *ep_addr = (struct sockaddr_un*)end_point->addr;
+      socklen_t ep_len = sizeof(ep_addr->sun_family) + strlen(ep_addr->sun_path) + 1;
+
+      if (len > ep_len)
+        len = ep_len;
+
+      memcpy(addr, ep_addr, len);
+      *addrlen = ep_len;
+    } else {
+      struct sockaddr_un tmp;
+      tmp.sun_family = AF_UNIX;
+
+      if (len > sizeof(tmp.sun_family))
+        len = sizeof(tmp.sun_family);
+
+      memcpy(addr, &tmp, sizeof(tmp.sun_family));
+      *addrlen = sizeof(tmp.sun_family);
+    }
   } else {
     assert(0 && "invalid socket");
   }
 }
-
-// get{sock,peer}name() ////////////////////////////////////////////////////////
 
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   CHECK_IS_SOCKET(sockfd);
@@ -364,33 +438,9 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
-  if (sock->domain == AF_INET) {
-    socklen_t len = *addrlen;
+  _get_endpoint_name(sock, sock->local_end, addr, addrlen);
 
-    if (len > sizeof(struct sockaddr_in))
-      len = sizeof(struct sockaddr_in);
-
-    memcpy(addr, sock->local_end->addr, len);
-    *addrlen = sizeof(struct sockaddr_in);
-
-    return 0;
-  } else {
-    assert(0 && "invalid socket");
-  }
-}
-
-static void _getpeername(socket_t *sock, struct sockaddr *addr, socklen_t *addrlen) {
-  if (sock->domain == AF_INET) {
-    socklen_t len = *addrlen;
-
-    if (len > sizeof(struct sockaddr_in))
-      len = sizeof(struct sockaddr_in);
-
-    memcpy(addr, sock->remote_end->addr, len);
-    *addrlen = sizeof(struct sockaddr_in);
-  } else {
-    assert(0 && "invalid socket");
-  }
+  return 0;
 }
 
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
@@ -403,7 +453,7 @@ int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
-  _getpeername(sock, addr, addrlen);
+  _get_endpoint_name(sock, sock->remote_end, addr, addrlen);
 
   return 0;
 }
@@ -467,6 +517,34 @@ static int _inet_stream_reach(socket_t *sock, const struct sockaddr *addr, sockl
   return 0;
 }
 
+static int _unix_stream_reach(socket_t *sock, const struct sockaddr *addr, socklen_t addrlen) {
+  if (sock->local_end == NULL) {
+    // We obtain an anonymous UNIX bind point
+    sock->local_end = __get_unix_end(NULL);
+
+    if (sock->local_end == NULL) {
+      errno = EAGAIN;
+      return -1;
+    }
+  }
+
+  assert(sock->remote_end == NULL);
+
+  if (addr->sa_family != AF_UNIX || addrlen < sizeof(addr->sa_family) + 1) {
+    errno = EAFNOSUPPORT;
+    return -1;
+  }
+
+  sock->remote_end = __get_unix_end((struct sockaddr_un*)addr);
+
+  if (!sock->remote_end) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  return 0;
+}
+
 static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_t addrlen) {
   if (sock->status != SOCK_STATUS_CREATED) {
     if (sock->status == SOCK_STATUS_CONNECTED) {
@@ -478,9 +556,12 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
     }
   }
 
+  // Let's obtain the end points
   if (sock->domain == AF_INET) {
-    // Let's obtain the end points
     if (_inet_stream_reach(sock, addr, addrlen) == -1)
+      return -1;
+  } else if (sock->domain == AF_UNIX) {
+    if (_unix_stream_reach(sock, addr, addrlen) == -1)
       return -1;
   } else {
     assert(0 && "invalid socket");
@@ -491,6 +572,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
       sock->remote_end->socket->domain != sock->domain) {
 
     __release_end_point(sock->remote_end);
+    sock->remote_end = NULL;
     errno = ECONNREFUSED;
     return -1;
   }
@@ -499,6 +581,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
   if (_stream_is_full(remote->listen)) {
     __release_end_point(sock->remote_end);
+    sock->remote_end = NULL;
     errno = ECONNREFUSED;
     return -1;
   }
@@ -527,6 +610,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
   if (sock->status != SOCK_STATUS_CONNECTED) {
     __release_end_point(sock->remote_end);
+    sock->remote_end = NULL;
     errno = ECONNREFUSED;
     return -1;
   }
@@ -607,7 +691,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     end_point = __get_inet_end(&local_addr);
 
     if (end_point == NULL) {
-      __release_end_point(end_point);
+      errno = EINVAL;
+      return -1;
+    }
+  } else if (sock->domain == AF_UNIX){
+    end_point = __get_unix_end(NULL);
+
+    if (end_point == NULL) {
       errno = EINVAL;
       return -1;
     }
@@ -657,7 +747,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // All is good for the remote socket
   remote->status = SOCK_STATUS_CONNECTED;
-  _getpeername(local, addr, addrlen);
+  _get_endpoint_name(local, local->remote_end, addr, addrlen);
 
   // Now return in our process
   return fd;
