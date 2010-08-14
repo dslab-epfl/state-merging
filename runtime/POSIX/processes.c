@@ -91,6 +91,7 @@ pid_t fork(void) {
 
   fd_entry_t shadow_fdt[MAX_FDS];
 
+  // We need this hack in order to make the fork and FDT duplication atomic.
   memcpy(shadow_fdt, __fdt, sizeof(shadow_fdt));
   __adjust_fds_on_fork();
 
@@ -209,5 +210,4 @@ pid_t waitpid(pid_t pid, int *status, int options) {
 
 int waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options) {
   assert(0 && "not implemented");
-  return -1;
 }
