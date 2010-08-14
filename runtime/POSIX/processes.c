@@ -89,13 +89,18 @@ pid_t fork(void) {
   pdata->parent = getpid();
   pdata->umask = ppdata->umask;
 
+  fd_entry_t shadow_fdt[MAX_FDS];
+
+  memcpy(shadow_fdt, __fdt, sizeof(shadow_fdt));
+  __adjust_fds_on_fork();
+
   int res = klee_process_fork(INDEX_TO_PID(newIdx)); // Here we split our ways...
 
   if (res == 0) {
     // We're in the child. Re-initialize the threading structures
     klee_init_threads();
-
-    __adjust_fds_on_fork();
+  } else {
+    memcpy(__fdt, shadow_fdt, sizeof(__fdt));
   }
 
   return res;

@@ -1136,6 +1136,9 @@ void Executor::executeCall(ExecutionState &state,
                            std::vector< ref<Expr> > &arguments) {
   fireControlFlowEvent(&state, ::cloud9::worker::CALL);
 
+  //if (f) {
+  //  CLOUD9_DEBUG("Executing call: " << f->getNameStr());
+  //}
 
   Instruction *i = NULL;
   if (ki)

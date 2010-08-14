@@ -8,7 +8,7 @@
 #include "files.h"
 
 #include "common.h"
-#include "underlying.h"
+#include "models.h"
 
 #include <stdio.h>
 #include <dirent.h>
@@ -166,7 +166,7 @@ int _stat_file(file_t *file, struct stat *buf) {
   return _stat_dfile(file->storage, buf);
 }
 
-int stat(const char *path, struct stat *buf) {
+DEFINE_MODEL(int, stat, const char *path, struct stat *buf) {
   disk_file_t *dfile = __get_sym_file(path);
 
   if (!dfile) {
@@ -179,7 +179,7 @@ int stat(const char *path, struct stat *buf) {
   return _stat_dfile(dfile, buf);
 }
 
-int lstat(const char *path, struct stat *buf) {
+DEFINE_MODEL(int, lstat, const char *path, struct stat *buf) {
   disk_file_t *dfile = __get_sym_file(path);
 
   if (!dfile) {
@@ -228,7 +228,7 @@ static int _can_open(int flags, const struct stat *s) {
   return 1;
 }
 
-int open(const char *pathname, int flags, ...) {
+DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   mode_t mode = 0;
 
   if (flags & O_CREAT) {
@@ -323,7 +323,7 @@ int open(const char *pathname, int flags, ...) {
   return fd;
 }
 
-int creat(const char *pathname, mode_t mode) {
+DEFINE_MODEL(int, creat, const char *pathname, mode_t mode) {
   return open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
@@ -335,7 +335,7 @@ void _close_file(file_t *file) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-char *getcwd(char *buf, size_t size) {
+DEFINE_MODEL(char *, getcwd, char *buf, size_t size) {
   char *r;
 
   if (!buf) {
@@ -388,7 +388,7 @@ static off_t _lseek(file_t *file, off_t offset, int whence) {
   return file->offset;
 }
 
-off_t lseek(int fd, off_t offset, int whence) {
+DEFINE_MODEL(off_t, lseek, int fd, off_t offset, int whence) {
   CHECK_IS_FILE(fd);
 
   if (__fdt[fd].attr & FD_IS_CONCRETE) {
@@ -419,7 +419,7 @@ static int _chmod(disk_file_t *dfile, mode_t mode) {
   }
 }
 
-int chmod(const char *path, mode_t mode) {
+DEFINE_MODEL(int, chmod, const char *path, mode_t mode) {
   disk_file_t *dfile = __get_sym_file(path);
 
   if (!dfile) {
@@ -432,7 +432,7 @@ int chmod(const char *path, mode_t mode) {
   return _chmod(dfile, mode);
 }
 
-int fchmod(int fd, mode_t mode) {
+DEFINE_MODEL(int, fchmod, int fd, mode_t mode) {
   CHECK_IS_FILE(fd);
 
   if (__fdt[fd].attr & FD_IS_CONCRETE) {
@@ -452,22 +452,22 @@ int fchmod(int fd, mode_t mode) {
 // Directory management
 ////////////////////////////////////////////////////////////////////////////////
 
-DIR *opendir(const char *name) {
+DEFINE_MODEL(DIR *, opendir, const char *name) {
   assert(0 && "not implemented");
   return NULL;
 }
 
-DIR *fdopendir(int fd) {
+DEFINE_MODEL(DIR *, fdopendir, int fd) {
   assert(0 && "not implemented");
   return NULL;
 }
 
-int closedir(DIR *dirp) {
+DEFINE_MODEL(int, closedir, DIR *dirp) {
   assert(0 && "not implemented");
   return -1;
 }
 
-struct dirent *readdir(DIR *dirp) {
+DEFINE_MODEL(struct dirent *, readdir, DIR *dirp) {
   assert(0 && "not implemented");
   return NULL;
 }
@@ -508,66 +508,66 @@ struct dirent *readdir(DIR *dirp) {
     return -1; \
   } while (0)
 
-int rmdir(const char *pathname) {
+DEFINE_MODEL(int, rmdir, const char *pathname) {
   _WRAP_FILE_SYSCALL_BLOCK(rmdir);
 }
 
-ssize_t readlink(const char *pathname, char *buf, size_t bufsize) {
+DEFINE_MODEL(ssize_t, readlink, const char *pathname, char *buf, size_t bufsize) {
   _WRAP_FILE_SYSCALL_ERROR(readlink, buf, bufsize);
 }
 
-int unlink(const char *pathname) {
+DEFINE_MODEL(int, unlink, const char *pathname) {
   _WRAP_FILE_SYSCALL_BLOCK(unlink);
 }
 
-int chroot(const char *pathname) {
+DEFINE_MODEL(int, chroot, const char *pathname) {
   _WRAP_FILE_SYSCALL_BLOCK(chroot);
 }
 
-int chown(const char *pathname, uid_t owner, gid_t group) {
+DEFINE_MODEL(int, chown, const char *pathname, uid_t owner, gid_t group) {
   _WRAP_FILE_SYSCALL_ERROR(chown, owner, group);
 }
 
-int lchown(const char *pathname, uid_t owner, gid_t group) {
+DEFINE_MODEL(int, lchown, const char *pathname, uid_t owner, gid_t group) {
   _WRAP_FILE_SYSCALL_ERROR(lchown, owner, group);
 }
 
-int chdir(const char *pathname) {
+DEFINE_MODEL(int, chdir, const char *pathname) {
   _WRAP_FILE_SYSCALL_ERROR(chdir);
 }
 
-int fsync(int fd) {
+DEFINE_MODEL(int, fsync, int fd) {
   _WRAP_FD_SYSCALL_IGNORE(fsync);
 }
 
-int fdatasync(int fd) {
+DEFINE_MODEL(int, fdatasync, int fd) {
   _WRAP_FD_SYSCALL_IGNORE(fdatasync);
 }
 
-int fchdir(int fd) {
+DEFINE_MODEL(int, fchdir, int fd) {
   _WRAP_FD_SYSCALL_ERROR(fchdir);
 }
 
-int fchown(int fd, uid_t owner, gid_t group) {
+DEFINE_MODEL(int, fchown, int fd, uid_t owner, gid_t group) {
   _WRAP_FD_SYSCALL_ERROR(fchown, owner, group);
 }
 
-int fstatfs(int fd, struct statfs *buf) {
+DEFINE_MODEL(int, fstatfs, int fd, struct statfs *buf) {
   _WRAP_FD_SYSCALL_ERROR(fstatfs, buf);
 }
 
-int statfs(const char *pathname, struct statfs *buf) {
+DEFINE_MODEL(int, statfs, const char *pathname, struct statfs *buf) {
   _WRAP_FILE_SYSCALL_ERROR(statfs, buf);
 }
 
-int ftruncate(int fd, off_t length) {
+DEFINE_MODEL(int, ftruncate, int fd, off_t length) {
   _WRAP_FD_SYSCALL_ERROR(ftruncate, length);
 }
 
-int truncate(const char *pathname, off_t length) {
+DEFINE_MODEL(int, truncate, const char *pathname, off_t length) {
   _WRAP_FILE_SYSCALL_ERROR(truncate, length);
 }
 
-int access(const char *pathname, int mode) {
+DEFINE_MODEL(int, access, const char *pathname, int mode) {
   _WRAP_FILE_SYSCALL_IGNORE(access, mode);
 }

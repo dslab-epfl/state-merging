@@ -8,7 +8,7 @@
 #include "fd.h"
 
 #include "common.h"
-#include "underlying.h"
+#include "models.h"
 #include "files.h"
 #include "sockets.h"
 #include "pipes.h"
@@ -36,9 +36,11 @@ void __adjust_fds_on_fork(void) {
     if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd))
       continue;
     if (__fdt[fd].attr & FD_IS_CONCRETE) {
+      //printf("Duplicating fd %d: old concrete - %d ", fd, __fdt[fd].concrete_fd);
       __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
           F_DUPFD, 0L);
       assert(__fdt[fd].concrete_fd != -1);
+      //printf("new concrete - %d\n", __fdt[fd].concrete_fd);
     } else {
       __fdt[fd].io_object->refcount++;
     }
@@ -59,7 +61,7 @@ void __close_fds(void) {
 // FD specific POSIX routines
 ////////////////////////////////////////////////////////////////////////////////
 
-ssize_t read(int fd, void *buf, size_t count) {
+DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -102,7 +104,7 @@ ssize_t read(int fd, void *buf, size_t count) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ssize_t write(int fd, const void *buf, size_t count) {
+DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -111,6 +113,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
+    //printf("Writing on fd %d (concrete value %d)\n", fd, fde->concrete_fd);
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
     /* XXX In terms of looking for bugs we really should do this check
@@ -146,7 +149,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int close(int fd) {
+DEFINE_MODEL(int, close, int fd) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -155,6 +158,7 @@ int close(int fd) {
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
+    //printf("Closing fd %d (concrete %d)\n", fd, fde->concrete_fd);
     int res = CALL_UNDERLYING(close, fde->concrete_fd);
     if (res == -1)
       errno = klee_get_errno();
@@ -192,7 +196,7 @@ int close(int fd) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int fstat(int fd, struct stat *buf) {
+DEFINE_MODEL(int, fstat, int fd, struct stat *buf) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -222,7 +226,7 @@ int fstat(int fd, struct stat *buf) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int dup3(int oldfd, int newfd, int flags) {
+DEFINE_MODEL(int, dup3, int oldfd, int newfd, int flags) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)oldfd)) {
     errno = EBADF;
     return -1;
@@ -274,7 +278,7 @@ int dup3(int oldfd, int newfd, int flags) {
   return newfd;
 }
 
-int dup2(int oldfd, int newfd) {
+DEFINE_MODEL(int, dup2, int oldfd, int newfd) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)oldfd)) {
     errno = EBADF;
     return -1;
@@ -317,13 +321,13 @@ static int _dup(int oldfd, int startfd) {
   return dup2(oldfd, fd);
 }
 
-int dup(int oldfd) {
+DEFINE_MODEL(int, dup, int oldfd) {
   return _dup(oldfd, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int fcntl(int fd, int cmd, ...) {
+DEFINE_MODEL(int, fcntl, int fd, int cmd, ...) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -396,7 +400,7 @@ int fcntl(int fd, int cmd, ...) {
 // Forwarded / unsupported calls
 ////////////////////////////////////////////////////////////////////////////////
 
-int ioctl(int fd, unsigned long request, ...) {
+DEFINE_MODEL(int, ioctl, int fd, unsigned long request, ...) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;

@@ -32,8 +32,27 @@
 #define SOCKET_BUFFER_SIZE  64
 #define PIPE_BUFFER_SIZE    64
 
+// A model needs to be declared only when it's supposed to interface
+// an existing C library call.
+
+#define __DECLARE_MODEL(type, name, ...) \
+  type __klee_model_ ## name(__VA_ARGS__); \
+  type __klee_original_ ## name(__VA_ARGS__);
+
+#ifdef __FORCE_USE_MODELS
+#define DECLARE_MODEL(type, name, ...) \
+  __DECLARE_MODEL(type, name, ##__VA_ARGS__) \
+  __attribute__((used)) static const void* __usage_model_ ## name = (void*)&__klee_model_ ## name;
+#else
+#define DECLARE_MODEL(type, name, ...) \
+  __DECLARE_MODEL(type, name, ##__VA_ARGS__)
+#endif
+
 #define CALL_UNDERLYING(name, ...) \
     __klee_original_ ## name(__VA_ARGS__);
+
+#define DEFINE_MODEL(type, name, ...) \
+    type __klee_model_ ## name(__VA_ARGS__)
 
 int klee_get_errno(void);
 
