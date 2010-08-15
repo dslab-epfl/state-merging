@@ -25,15 +25,13 @@ void __notify_event(stream_buffer_t *buff, char event) {
 
   unsigned int i;
   for (i = 0; i < MAX_EVENTS; i++) {
-    if (!STATIC_LIST_CHECK(buff->evt_queue, i))
+    if (!ARRAY_CHECK(buff->evt_queue, i))
       continue;
-    buffer_event_t *evt = &buff->evt_queue[i];
 
-    if (evt->events & event) {
-      klee_thread_notify_all(evt->wlist);
-      STATIC_LIST_CLEAR(buff->evt_queue, i);
-    }
+    klee_thread_notify_all(buff->evt_queue[i]);
   }
+
+  ARRAY_INIT(buff->evt_queue);
 }
 
 stream_buffer_t *_stream_create(size_t max_size) {
@@ -45,13 +43,13 @@ stream_buffer_t *_stream_create(size_t max_size) {
   buff->closed = 0;
   buff->destroying = 0;
   buff->queued = 0;
-  STATIC_LIST_INIT(buff->evt_queue);
+  ARRAY_INIT(buff->evt_queue);
 
   return buff;
 }
 
 void _stream_destroy(stream_buffer_t *buff) {
-  __notify_event(buff, EVENT_READ | EVENT_WRITE | EVENT_ERROR);
+  __notify_event(buff, EVENT_READ | EVENT_WRITE);
 
   free(buff->contents);
 
@@ -152,15 +150,14 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
   return count;
 }
 
-int _stream_register_event(stream_buffer_t *buff, char events, wlist_id_t wlist) {
+int _stream_register_event(stream_buffer_t *buff, wlist_id_t wlist) {
   unsigned int idx;
-  STATIC_LIST_ALLOC(buff->evt_queue, idx);
+  ARRAY_ALLOC(buff->evt_queue, idx);
 
   if (idx == MAX_EVENTS)
     return -1;
 
-  buff->evt_queue[idx].events = events;
-  buff->evt_queue[idx].wlist = wlist;
+  buff->evt_queue[idx] = wlist;
 
   return 0;
 }
@@ -168,11 +165,8 @@ int _stream_register_event(stream_buffer_t *buff, char events, wlist_id_t wlist)
 int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist) {
   unsigned int idx;
   for (idx = 0; idx < MAX_EVENTS; idx++) {
-    if (!STATIC_LIST_CHECK(buff->evt_queue, idx))
-      continue;
-
-    if (buff->evt_queue[idx].wlist == wlist) {
-      STATIC_LIST_CLEAR(buff->evt_queue, idx);
+    if (buff->evt_queue[idx] == wlist) {
+      ARRAY_CLEAR(buff->evt_queue, idx);
       return 0;
     }
   }

@@ -287,6 +287,72 @@ int _stat_socket(socket_t *sock, struct stat *buf) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+int _is_blocking_socket(socket_t *sock, int event) {
+  if (sock->status == SOCK_STATUS_CREATED)
+    return 0;
+
+  if (sock->status == SOCK_STATUS_CONNECTED) {
+    switch (event) {
+    case EVENT_READ:
+      return sock->in && _stream_is_empty(sock->in) && !sock->in->closed;
+    case EVENT_WRITE:
+      return sock->out && _stream_is_full(sock->out) && !sock->out->closed;
+    default:
+      assert(0 && "invalid event");
+    }
+  }
+
+  if (sock->status == SOCK_STATUS_LISTENING) {
+    switch (event) {
+    case EVENT_READ:
+      assert (!sock->listen->closed && "invalid socket state");
+      return _stream_is_empty(sock->listen);
+    case EVENT_WRITE:
+      return 0;
+    default:
+      assert(0 && "invalid event");
+    }
+  }
+
+  // We should never reach here...
+  assert(0 && "invalid socket state");
+}
+
+int _register_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
+  if (sock->status == SOCK_STATUS_CONNECTED) {
+    if ((events & EVENT_READ) && _stream_register_event(sock->in, wlist) == -1)
+      return -1;
+
+    if ((events & EVENT_WRITE) && _stream_register_event(sock->out, wlist) == -1) {
+      _stream_clear_event(sock->in, wlist);
+      return -1;
+    }
+  }
+
+  if (sock->status == SOCK_STATUS_LISTENING) {
+    return _stream_register_event(sock->listen, wlist);
+  }
+
+  // We should never reach here
+  assert(0 && "invalid socket state");
+}
+
+void _deregister_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
+  if (sock->status == SOCK_STATUS_CONNECTED) {
+    if ((events & EVENT_READ) && sock->in)
+      _stream_clear_event(sock->in, wlist);
+
+    if ((events & EVENT_WRITE) && sock->out)
+      _stream_clear_event(sock->out, wlist);
+  }
+
+  if (sock->status == SOCK_STATUS_LISTENING) {
+    _stream_clear_event(sock->listen, wlist);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // The Sockets API
 ////////////////////////////////////////////////////////////////////////////////
 

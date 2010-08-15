@@ -15,14 +15,6 @@
 
 #define EVENT_READ  (1 << 0)
 #define EVENT_WRITE (1 << 1)
-#define EVENT_ERROR (1 << 2)
-
-typedef struct {
-  char events;
-  wlist_id_t wlist;
-
-  char allocated;
-} buffer_event_t;
 
 // A basic producer-consumer data structure
 typedef struct {
@@ -32,7 +24,7 @@ typedef struct {
   size_t start;
   size_t size;
 
-  buffer_event_t evt_queue[MAX_EVENTS];
+  wlist_id_t evt_queue[MAX_EVENTS];
   wlist_id_t empty_wlist;
   wlist_id_t full_wlist;
 
@@ -48,7 +40,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count);
 ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count);
 void _stream_close(stream_buffer_t *buff);
 
-int _stream_register_event(stream_buffer_t *buff, char events, wlist_id_t wlist);
+int _stream_register_event(stream_buffer_t *buff, wlist_id_t wlist);
 int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist);
 
 static inline int _stream_is_empty(stream_buffer_t *buff) {

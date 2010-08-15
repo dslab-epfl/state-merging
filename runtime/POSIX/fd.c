@@ -12,6 +12,7 @@
 #include "files.h"
 #include "sockets.h"
 #include "pipes.h"
+#include "buffers.h"
 
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
@@ -324,6 +325,236 @@ static int _dup(int oldfd, int startfd) {
 DEFINE_MODEL(int, dup, int oldfd) {
   return _dup(oldfd, 0);
 }
+
+// select() ////////////////////////////////////////////////////////////////////
+
+#define _FD_SET(n, p)    ((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
+#define _FD_CLR(n, p)    ((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
+#define _FD_ISSET(n, p)  ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
+#define _FD_ZERO(p)  memset((char *)(p), '\0', sizeof(*(p)))
+
+static int _validate_fd_set(int nfds, fd_set *fds) {
+  int res = 0;
+
+  int fd;
+  for (fd = 0; fd < nfds; fd++) {
+    if (!_FD_ISSET(fd, fds))
+      continue;
+
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd))
+      return -1;
+
+    if (__fdt[fd].attr & FD_IS_CONCRETE) {
+      klee_warning("unsupported concrete FD in fd_set (EBADF)");
+      return -1;
+    }
+    res++;
+  }
+
+  return res;
+}
+
+// XXX These functions could be refactored into implementations per object
+
+static int _is_blocking(int fd, int event) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    return 0;
+  }
+
+  switch (event) {
+  case EVENT_READ:
+    if (!(__fdt[fd].io_object->flags & (O_RDWR | O_RDONLY))) {
+      return 0;
+    }
+    break;
+  case EVENT_WRITE:
+    if (!(__fdt[fd].io_object->flags & (O_RDWR | O_WRONLY))) {
+      return 0;
+    }
+    break;
+  default:
+    assert(0 && "invalid event");
+  }
+
+  if (__fdt[fd].attr & FD_IS_FILE) {
+    return 0; // A file never blocks in our model
+  } else if (__fdt[fd].attr & FD_IS_PIPE) {
+    return _is_blocking_pipe((pipe_end_t*)__fdt[fd].io_object, event);
+  } else if (__fdt[fd].attr & FD_IS_SOCKET) {
+    return _is_blocking_socket((socket_t*)__fdt[fd].io_object, event);
+  } else {
+    assert(0 && "invalid fd");
+  }
+}
+
+static int _register_events(int fd, wlist_id_t wlist, int events) {
+  assert(STATIC_LIST_CHECK(__fdt, (unsigned)fd));
+
+  if (__fdt[fd].attr & FD_IS_PIPE) {
+    return _register_events_pipe((pipe_end_t*)__fdt[fd].io_object, wlist, events);
+  } else if (__fdt[fd].attr & FD_IS_SOCKET) {
+    return _register_events_socket((socket_t*)__fdt[fd].io_object, wlist, events);
+  } else {
+    assert(0 && "invalid fd");
+  }
+}
+
+static void _deregister_events(int fd, wlist_id_t wlist, int events) {
+  if(!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    // Silently exit
+    return;
+  }
+
+  if (__fdt[fd].attr & FD_IS_PIPE) {
+    _deregister_events_pipe((pipe_end_t*)__fdt[fd].io_object, wlist, events);
+  } else if (__fdt[fd].attr & FD_IS_SOCKET) {
+    _deregister_events_socket((socket_t*)__fdt[fd].io_object, wlist, events);
+  } else {
+    assert(0 && "invalid fd");
+  }
+}
+
+int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+    struct timeval *timeout) {
+  if (nfds < 0 || (unsigned)nfds > sizeof(fd_set) * 8) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  int totalfds = 0;
+
+  // Validating the fds
+  if (readfds) {
+    int res = _validate_fd_set(nfds, readfds);
+    if (res ==  -1) {
+      errno = EBADF;
+      return -1;
+    }
+
+    totalfds += res;
+  }
+
+  if (writefds) {
+    int res = _validate_fd_set(nfds, writefds);
+    if (res == -1) {
+      errno = EBADF;
+      return -1;
+    }
+
+    totalfds += res;
+  }
+
+  if (exceptfds) {
+    int res = _validate_fd_set(nfds, exceptfds);
+    if (res == -1) {
+      errno = EBADF;
+      return -1;
+    }
+
+    totalfds += res;
+  }
+
+  if (totalfds == 0) // Nothing to watch for
+    return 0;
+
+  fd_set out_readfds, out_writefds;
+  _FD_ZERO(&out_readfds);
+  _FD_ZERO(&out_writefds);
+  // No out_exceptfds here. This means that the thread will hang if select()
+  // is called with FDs only in exceptfds.
+
+  int fd;
+  int res = 0;
+
+  wlist_id_t wlist = 0;
+
+  do {
+    // First check to see if we have anything available
+    for (fd = 0; fd < nfds; fd++) {
+      if (readfds && _FD_ISSET(fd, readfds) && !_is_blocking(fd, EVENT_READ)) {
+        _FD_SET(fd, &out_readfds);
+        res++;
+      }
+      if (writefds && _FD_ISSET(fd, writefds) && !_is_blocking(fd, EVENT_WRITE)) {
+        _FD_SET(fd, &out_writefds);
+        res++;
+      }
+    }
+
+    if (res == 0) { // Nope, bad luck...
+
+      // We wait until at least one FD becomes non-blocking
+
+      // In particular, if all FD blocked, then all of them would be
+      // valid FDs (none of them closed in the mean time)
+      if (wlist == 0)
+        wlist = klee_get_wlist();
+
+      int fail = 0;
+
+      // Register ourselves to the relevant FDs
+      for (fd = 0; fd < nfds; fd++) {
+        int events = 0;
+        if (readfds && _FD_ISSET(fd, readfds)) {
+          events |= EVENT_READ;
+        }
+        if (writefds && _FD_ISSET(fd, writefds)) {
+          events |= EVENT_WRITE;
+        }
+
+        if (events != 0) {
+          if (_register_events(fd, wlist, events) == -1) {
+            fail = 1;
+            break;
+          }
+        }
+      }
+
+      if (!fail)
+        klee_thread_sleep(wlist);
+
+      // Now deregister, in order to avoid useless notifications
+      for (fd = 0; fd < nfds; fd++) {
+        int events = 0;
+        if (readfds && _FD_ISSET(fd, readfds)) {
+          events |= EVENT_READ;
+        }
+        if (writefds && _FD_ISSET(fd, writefds)) {
+          events |= EVENT_WRITE;
+        }
+
+        if (events != 0) {
+          _deregister_events(fd, wlist, events);
+        }
+      }
+
+      if (fail) {
+        errno = ENOMEM;
+        return -1;
+      }
+    }
+
+  } while (res == 0);
+
+  if (readfds) {
+    memcpy(readfds, &out_readfds, sizeof(fd_set));
+  }
+
+  if (writefds) {
+    memcpy(writefds, &out_writefds, sizeof(fd_set));
+  }
+
+  if (exceptfds) {
+    _FD_ZERO(exceptfds);
+  }
+
+  return res;
+}
+
+#undef _FD_SET
+#undef _FD_CLR
+#undef _FD_ISSET
+#undef _FD_ZERO
 
 ////////////////////////////////////////////////////////////////////////////////
 

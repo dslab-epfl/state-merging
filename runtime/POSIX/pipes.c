@@ -85,6 +85,27 @@ int _stat_pipe(pipe_end_t *pipe, struct stat *buf) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+int _is_blocking_pipe(pipe_end_t *pipe, int event) {
+  switch (event) {
+  case EVENT_READ:
+    return _stream_is_empty(pipe->buffer) && !pipe->buffer->closed;
+  case EVENT_WRITE:
+    return _stream_is_full(pipe->buffer) && !pipe->buffer->closed;
+  default:
+    assert(0 && "invalid event");
+  }
+}
+
+int _register_events_pipe(pipe_end_t *pipe, wlist_id_t wlist, int events) {
+  return _stream_register_event(pipe->buffer, wlist);
+}
+
+void _deregister_events_pipe(pipe_end_t *pipe, wlist_id_t wlist, int events) {
+  _stream_clear_event(pipe->buffer, wlist);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // The POSIX API
 ////////////////////////////////////////////////////////////////////////////////
 
