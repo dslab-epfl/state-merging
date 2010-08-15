@@ -797,13 +797,13 @@ int shutdown(int sockfd, int how) {
 // Socket specific I/O /////////////////////////////////////////////////////////
 
 ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
+  CHECK_IS_SOCKET(sockfd);
+
   if (flags != 0) {
     klee_warning("send() flags unsupported for now");
     errno = EINVAL;
     return -1;
   }
-
-  CHECK_IS_SOCKET(sockfd);
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
@@ -811,15 +811,146 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
 }
 
 ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
+  CHECK_IS_SOCKET(sockfd);
+
   if (flags != 0) {
     klee_warning("recv() flags unsupported for now");
     errno = EINVAL;
     return -1;
   }
 
-  CHECK_IS_SOCKET(sockfd);
-
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
   return _read_socket(sock, buf, len);
+}
+
+// {get,set}sockopt() //////////////////////////////////////////////////////////
+
+int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen) {
+  CHECK_IS_SOCKET(sockfd);
+
+  klee_warning("unsupported getsockopt()");
+
+  errno = EINVAL;
+  return -1;
+}
+
+int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen) {
+  CHECK_IS_SOCKET(sockfd);
+
+  klee_warning("unsupported setsockopt()");
+
+  errno = EINVAL;
+  return -1;
+}
+
+// socketpair() ////////////////////////////////////////////////////////////////
+
+int socketpair(int domain, int type, int protocol, int sv[2]) {
+  // Check the parameters
+
+  if (domain != AF_UNIX) {
+    errno = EAFNOSUPPORT;
+    return -1;
+  }
+
+  if (type != SOCK_STREAM) {
+    klee_warning("unsupported socketpair() type");
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (protocol != 0) {
+    klee_warning("unsupported socketpair() protocol");
+    errno = EPROTONOSUPPORT;
+    return -1;
+  }
+
+  // Get two file descriptors
+  int fd1, fd2;
+
+  STATIC_LIST_ALLOC(__fdt, fd1);
+  if (fd1 == MAX_FDS) {
+    errno = ENFILE;
+    return -1;
+  }
+
+  STATIC_LIST_ALLOC(__fdt, fd2);
+  if (fd2 == MAX_FDS) {
+    STATIC_LIST_CLEAR(__fdt, fd1);
+
+    errno = ENFILE;
+    return -1;
+  }
+
+  // Get two anonymous UNIX end points
+  end_point_t *ep1, *ep2;
+
+  ep1 = __get_unix_end(NULL);
+  ep2 = __get_unix_end(NULL);
+
+  if (!ep1 || !ep2) {
+    STATIC_LIST_CLEAR(__fdt, fd1);
+    STATIC_LIST_CLEAR(__fdt, fd2);
+
+    if (ep1)
+      __release_end_point(ep1);
+
+    if (ep2)
+      __release_end_point(ep2);
+
+    errno = ENOMEM;
+    return -1;
+  }
+
+  // Create the first socket object
+  socket_t *sock1 = (socket_t*)malloc(sizeof(socket_t));
+  memset(sock1, 0, sizeof(socket_t));
+
+  __fdt[fd1].attr |= FD_IS_SOCKET;
+  __fdt[fd1].io_object = (file_base_t*)sock1;
+
+  sock1->__bdata.flags = O_RDWR;
+  sock1->__bdata.refcount = 1;
+  sock1->__bdata.queued = 0;
+
+  sock1->domain = domain;
+  sock1->type = type;
+  sock1->status = SOCK_STATUS_CONNECTED;
+
+  sock1->local_end = ep1;
+  ep1->socket = sock1;
+
+  sock1->remote_end = ep2;
+
+  sock1->in = _stream_create(SOCKET_BUFFER_SIZE);
+  sock1->out = _stream_create(SOCKET_BUFFER_SIZE);
+
+  // Create the second socket object
+  socket_t *sock2 = (socket_t*)malloc(sizeof(socket_t));
+  memset(sock2, 0, sizeof(socket_t));
+
+  __fdt[fd2].attr |= FD_IS_SOCKET;
+  __fdt[fd2].io_object = (file_base_t*)sock2;
+
+  sock2->__bdata.flags = O_RDWR;
+  sock2->__bdata.refcount = 1;
+  sock2->__bdata.queued = 0;
+
+  sock2->domain = domain;
+  sock2->type = type;
+  sock2->status = SOCK_STATUS_CONNECTED;
+
+  sock2->local_end = ep2;
+  ep2->socket = sock2;
+
+  sock2->remote_end = ep1;
+
+  sock2->in = sock1->out;
+  sock2->out = sock1->in;
+
+  // Finalize
+  sv[0] = fd1; sv[1] = fd2;
+
+  return 0;
 }
