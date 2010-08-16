@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <klee/klee.h>
 
@@ -414,9 +415,10 @@ static void _deregister_events(int fd, wlist_id_t wlist, int events) {
   }
 }
 
+// XXX Maybe we should break this into more pieces?
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     struct timeval *timeout) {
-  if (nfds < 0 || (unsigned)nfds > sizeof(fd_set) * 8) {
+  if (nfds < 0 || nfds > FD_SETSIZE) {
     errno = EINVAL;
     return -1;
   }
@@ -457,9 +459,21 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
   if (totalfds == 0) // Nothing to watch for
     return 0;
 
-  fd_set out_readfds, out_writefds;
-  _FD_ZERO(&out_readfds);
-  _FD_ZERO(&out_writefds);
+  // Compute the minimum size of the FD set
+  int setsize = ((nfds / NFDBITS) + ((nfds % NFDBITS) ? 1 : 0)) * (NFDBITS / 8);
+
+  fd_set *out_readfds = NULL;
+  fd_set *out_writefds = NULL;
+
+  if (readfds) {
+    out_readfds = (fd_set*)malloc(setsize);
+    memset(out_readfds, 0, setsize);
+  }
+  if (writefds) {
+    out_writefds = (fd_set*)malloc(setsize);
+    memset(out_writefds, 0, setsize);
+  }
+
   // No out_exceptfds here. This means that the thread will hang if select()
   // is called with FDs only in exceptfds.
 
@@ -472,11 +486,11 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     // First check to see if we have anything available
     for (fd = 0; fd < nfds; fd++) {
       if (readfds && _FD_ISSET(fd, readfds) && !_is_blocking(fd, EVENT_READ)) {
-        _FD_SET(fd, &out_readfds);
+        _FD_SET(fd, out_readfds);
         res++;
       }
       if (writefds && _FD_ISSET(fd, writefds) && !_is_blocking(fd, EVENT_WRITE)) {
-        _FD_SET(fd, &out_writefds);
+        _FD_SET(fd, out_writefds);
         res++;
       }
     }
@@ -537,15 +551,17 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
   } while (res == 0);
 
   if (readfds) {
-    memcpy(readfds, &out_readfds, sizeof(fd_set));
+    memcpy(readfds, out_readfds, setsize);
+    free(out_readfds);
   }
 
   if (writefds) {
-    memcpy(writefds, &out_writefds, sizeof(fd_set));
+    memcpy(writefds, out_writefds, setsize);
+    free(out_writefds);
   }
 
   if (exceptfds) {
-    _FD_ZERO(exceptfds);
+    memset(exceptfds, 0, setsize);
   }
 
   return res;
