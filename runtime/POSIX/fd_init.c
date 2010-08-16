@@ -56,7 +56,6 @@ static void _init_filesystem(unsigned n_files, unsigned file_length) {
 
   struct stat s;
   int res = CALL_UNDERLYING(stat, ".", &s);
-  errno = klee_get_errno();
 
   assert(res == 0 && "Could not get default stat values");
 

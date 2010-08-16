@@ -59,6 +59,33 @@ int sigaction(int signum, const struct sigaction *act,
   return 0;
 }
 
+typedef void (*sighandler_t)(int);
+
+sighandler_t signal(int signum, sighandler_t handler) {
+  klee_warning_once("silently ignoring");
+  return 0;
+}
+
+sighandler_t sigset(int sig, sighandler_t disp) {
+  klee_warning_once("silently ignoring");
+  return 0;
+}
+
+int sighold(int sig) {
+  klee_warning_once("silently ignoring");
+  return 0;
+}
+
+int sigrelse(int sig) {
+  klee_warning_once("silently ignoring");
+  return 0;
+}
+
+int sigignore(int sig) {
+  klee_warning_once("silently ignoring");
+  return 0;
+}
+
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
      __attribute__((weak));
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {

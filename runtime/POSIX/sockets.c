@@ -405,7 +405,7 @@ int socket(int domain, int type, int protocol) {
   klee_make_shared(sock, sizeof(socket_t));
   memset(sock, 0, sizeof(socket_t));
 
-  sock->__bdata.flags = O_RDWR;
+  sock->__bdata.flags |= O_RDWR;
   sock->__bdata.refcount = 1;
   sock->__bdata.queued = 0;
 
@@ -415,6 +415,7 @@ int socket(int domain, int type, int protocol) {
 
   fde->io_object = (file_base_t*)sock;
 
+  fprintf(stderr, "Socket created: %d\n", fd);
   return fd;
 }
 
@@ -985,7 +986,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   __fdt[fd1].attr |= FD_IS_SOCKET;
   __fdt[fd1].io_object = (file_base_t*)sock1;
 
-  sock1->__bdata.flags = O_RDWR;
+  sock1->__bdata.flags |= O_RDWR;
   sock1->__bdata.refcount = 1;
   sock1->__bdata.queued = 0;
 
@@ -1009,7 +1010,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   __fdt[fd2].attr |= FD_IS_SOCKET;
   __fdt[fd2].io_object = (file_base_t*)sock2;
 
-  sock2->__bdata.flags = O_RDWR;
+  sock2->__bdata.flags |= O_RDWR;
   sock2->__bdata.refcount = 1;
   sock2->__bdata.queued = 0;
 
@@ -1027,6 +1028,6 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
 
   // Finalize
   sv[0] = fd1; sv[1] = fd2;
-
+  fprintf(stderr, "Socket pair created (%d, %d)\n", fd1, fd2);
   return 0;
 }

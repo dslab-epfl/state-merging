@@ -199,12 +199,12 @@ static int _can_open(int flags, const struct stat *s) {
   int write_access, read_access;
   mode_t mode = s->st_mode;
 
-  if (flags & (O_RDONLY | O_RDWR))
+  if ((flags & O_ACCMODE) != O_WRONLY)
     read_access = 1;
   else
     read_access = 0;
 
-  if (flags & (O_WRONLY | O_RDWR))
+  if ((flags & O_ACCMODE) != O_RDONLY)
     write_access = 1;
   else
     write_access = 0;
@@ -267,7 +267,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     }
 
     fde->attr |= FD_IS_CONCRETE;
-
+    fprintf(stderr, "Concrete file open (concrete fd: %d) - %d\n", fde->concrete_fd, fd);
     return fd;
   }
 
@@ -278,7 +278,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     return -1;
   }
 
-  if ((flags & O_TRUNC) && (flags & O_RDONLY)) {
+  if ((flags & O_TRUNC) && (flags & O_ACCMODE) == O_RDONLY) {
     STATIC_LIST_CLEAR(__fdt, fd);
     /* The result of using O_TRUNC with O_RDONLY is undefined, so we
    return error */
@@ -312,7 +312,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   file->storage = dfile;
   file->offset = 0;
 
-  if ((flags & (O_WRONLY | O_RDWR)) && (flags & O_TRUNC)) {
+  if ((flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC)) {
     file->storage->contents.size = 0;
   }
 

@@ -82,6 +82,7 @@ static int _atomic_mutex_lock(pthread_mutex_t *mutex, char try) {
 }
 
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
+  //klee_stack_trace();
   int res = _atomic_mutex_lock(mutex, 0);
 
   if (res == 0)
@@ -123,6 +124,8 @@ static int _atomic_mutex_unlock(pthread_mutex_t *mutex) {
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+  //klee_stack_trace();
+
   int res = _atomic_mutex_unlock(mutex);
 
   klee_thread_preempt();

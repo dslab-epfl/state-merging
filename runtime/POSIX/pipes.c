@@ -164,5 +164,7 @@ int pipe(int pipefd[2]) {
   __fdt[fdw].io_object = (file_base_t*)pipew;
 
   pipefd[0] = fdr; pipefd[1] = fdw;
+
+  fprintf(stderr, "Pipe created (%d, %d)\n", fdr, fdw);
   return 0;
 }

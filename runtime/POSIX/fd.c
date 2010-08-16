@@ -85,13 +85,15 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
     return res;
   }
 
+  fprintf(stderr, "Reading %lu bytes of data from FD %d\n", count, fd);
+
   // Check for permissions
-  if (!(fde->io_object->flags & (O_RDONLY | O_RDWR))) {
+  if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
+    fprintf(stderr, "Permission error (flags: %o)\n", fde->io_object->flags);
     errno = EBADF;
     return -1;
   }
 
-  // It's OK, we pass the control to the specific implementations
   if (fde->attr & FD_IS_FILE) {
     return _read_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
@@ -131,7 +133,7 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
   }
 
   // Check for permissions
-  if (!(fde->io_object->flags & (O_WRONLY | O_RDWR))) {
+  if ((fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
     errno = EBADF;
     return -1;
   }
@@ -364,12 +366,12 @@ static int _is_blocking(int fd, int event) {
 
   switch (event) {
   case EVENT_READ:
-    if (!(__fdt[fd].io_object->flags & (O_RDWR | O_RDONLY))) {
+    if ((__fdt[fd].io_object->flags & O_ACCMODE) == O_WRONLY) {
       return 0;
     }
     break;
   case EVENT_WRITE:
-    if (!(__fdt[fd].io_object->flags & (O_RDWR | O_WRONLY))) {
+    if ((__fdt[fd].io_object->flags & O_ACCMODE) == O_RDONLY) {
       return 0;
     }
     break;
