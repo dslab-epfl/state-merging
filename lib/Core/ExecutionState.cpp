@@ -169,6 +169,14 @@ void ExecutionState::terminateProcess(processes_ty::iterator procIt) {
     parent.children.erase(procIt->second.pid);
   }
 
+  if (procIt->second.children.size() > 0) {
+    // Reassign the children to process 1
+    for (std::set<process_id_t>::iterator it = procIt->second.children.begin();
+        it != procIt->second.children.end(); it++) {
+      processes.find(*it)->second.ppid = 1;
+    }
+  }
+
   AddressSpace::cow_domain_t::iterator it =
       std::find(cowDomain.begin(), cowDomain.end(), &procIt->second.addressSpace);
   assert(it != cowDomain.end());

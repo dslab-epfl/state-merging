@@ -54,7 +54,8 @@ void _exit(int status) {
   unsigned int idx;
   for (idx = 0; idx < MAX_PROCESSES; idx++) {
     if (__pdata[idx].allocated && __pdata[idx].parent == pid) {
-      assert(0 && "zombie process");
+      // Reassign the child to process "init"
+      __pdata[idx].parent = DEFAULT_PARENT;
     }
   }
 
