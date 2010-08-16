@@ -148,14 +148,9 @@ extern "C" {
   // Shared Memory Management
   //////////////////////////////////////////////////////////////////////////////
 
-  /* Marks a private memory object shareable between processes */
+  /* Marks a private memory object shared between processes (if they know
+   * the address) */
   void klee_make_shared(void *addr, size_t nbytes);
-
-  /* Binds a previously shared object into the current process address space.
-   * Note that this operation is done automatically during fork(), via
-   * standard Klee mechanisms.
-   */
-  void klee_bind_shared(void *addr, size_t nbytes);
 
   //////////////////////////////////////////////////////////////////////////////
   // Thread Scheduling Management

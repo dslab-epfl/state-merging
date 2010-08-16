@@ -92,7 +92,6 @@ HandlerInfo handlerInfo[] = {
   add("klee_set_forking", handleSetForking, false),
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_make_shared", handleMakeShared, false),
-  add("klee_bind_shared", handleBindShared, false),
   add("klee_get_context", handleGetContext, false),
   add("klee_get_wlist", handleGetWList, true),
   add("klee_thread_preempt", handleThreadPreempt, false),
@@ -623,67 +622,6 @@ void SpecialFunctionHandler::handleFree(ExecutionState &state,
   executor.executeFree(state, arguments[0]);
 }
 
-void SpecialFunctionHandler::handleBindShared(ExecutionState &state,
-                          KInstruction *target,
-                          std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 2 &&
-      "invalid number of arguments to klee_bind_shared");
-
-  ref<Expr> address = executor.toUnique(state, arguments[0]);
-  ref<Expr> size = executor.toUnique(state, arguments[1]);
-
-  if (!isa<ConstantExpr>(address) || !isa<ConstantExpr>(size)) {
-    executor.terminateStateOnError(state,
-                                   "klee_bind_shared requires constant args",
-                                   "user.err");
-    return;
-  }
-
-  ObjectPair referenceOp;
-
-  if (state.addressSpace().resolveOne(cast<ConstantExpr>(address), referenceOp)) {
-    executor.terminateStateOnError(state, "klee_bind_shared attempted on bound object",
-        "user.err");
-    return;
-  }
-
-  for (ExecutionState::processes_ty::iterator it = state.processes.begin();
-      it != state.processes.end(); it++) {
-    if (it == state.crtProcessIt)
-      continue;
-
-    ObjectPair op;
-
-    if (!it->second.addressSpace.resolveOne(cast<ConstantExpr>(address), op))
-      continue;
-
-    if (!op.second->isShared) {
-      executor.terminateStateOnError(state, "klee_bind_shared requires shared object",
-          "user.err");
-      return;
-    }
-
-    if (!referenceOp.first)
-      referenceOp = op;
-    else {
-      if (op != referenceOp) {
-        executor.terminateStateOnError(state, "inconsistent shared memory state",
-            "user.err");
-        return;
-      }
-    }
-  }
-
-  if (!referenceOp.first) {
-    executor.terminateStateOnError(state, "invalid address for klee_bind_shared",
-        "user.err");
-    return;
-  }
-
-  state.addressSpace().bindSharedObject(referenceOp.first,
-      const_cast<ObjectState*>(referenceOp.second));
-}
-
 void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
                           KInstruction *target,
                           std::vector<ref<Expr> > &arguments) {
@@ -723,6 +661,15 @@ void SpecialFunctionHandler::handleMakeShared(ExecutionState &state,
 
     ObjectState *newOS = state.addressSpace().getWriteable(mo, os);
     newOS->isShared = true;
+
+    // Now bind this object in the other address spaces
+    for (ExecutionState::processes_ty::iterator pit = s->processes.begin();
+        pit != s->processes.end(); pit++) {
+      if (pit == s->crtProcessIt)
+        continue; // Skip the current process
+
+      pit->second.addressSpace.bindSharedObject(mo, newOS);
+    }
   }
 }
 
