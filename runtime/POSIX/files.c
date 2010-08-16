@@ -239,6 +239,8 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     va_end(ap);
   }
 
+  fprintf(stderr, "Attempting to open: %s\n", __concretize_string(pathname));
+
   // Obtain a new file descriptor
   int fd;
   STATIC_LIST_ALLOC(__fdt, fd);
