@@ -18,6 +18,7 @@
 #include <netinet/ip.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <klee/klee.h>
 
@@ -361,6 +362,7 @@ void _deregister_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int socket(int domain, int type, int protocol) {
+  fprintf(stderr, "Attempting to create a socket\n");
   // Check the validity of the request
   switch (domain) {
   case AF_INET:
@@ -919,8 +921,8 @@ int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t
 // socketpair() ////////////////////////////////////////////////////////////////
 
 int socketpair(int domain, int type, int protocol, int sv[2]) {
+  fprintf(stderr, "Attempting to create a pair of UNIX sockets\n");
   // Check the parameters
-
   if (domain != AF_UNIX) {
     errno = EAFNOSUPPORT;
     return -1;

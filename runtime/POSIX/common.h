@@ -9,6 +9,15 @@
 #define COMMON_H_
 
 #include <sys/types.h>
+
+#ifdef __USE_MISC
+#undef __USE_MISC
+#include <sys/stat.h>
+#define __USE_MISC 1
+#else
+#include <sys/stat.h>
+#endif
+
 #include <string.h>
 
 #define MAX_THREADS         8

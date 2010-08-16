@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <klee/klee.h>
 
@@ -113,6 +114,8 @@ void _deregister_events_pipe(pipe_end_t *pipe, wlist_id_t wlist, int events) {
 
 int pipe(int pipefd[2]) {
   int fdr, fdw;
+
+  fprintf(stderr, "Attempting to create a pipe\n");
 
   // Allocate the two file descriptors
   STATIC_LIST_ALLOC(__fdt, fdr);

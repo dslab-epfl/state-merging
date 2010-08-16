@@ -18,7 +18,6 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <sys/times.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -111,13 +110,6 @@ int mknod(const char *pathname, mode_t mode, dev_t dev) __attribute__((weak));
 int mknod(const char *pathname, mode_t mode, dev_t dev) {
   klee_warning("ignoring (EIO)");
   errno = EIO;
-  return -1;
-}
-
-int pipe(int filedes[2]) __attribute__((weak));
-int pipe(int filedes[2]) {
-  klee_warning("ignoring (ENFILE)");
-  errno = ENFILE;
   return -1;
 }
 
@@ -272,41 +264,6 @@ char *canonicalize_file_name (const char *name) {
 int getloadavg(double loadavg[], int nelem) __attribute__((weak));
 int getloadavg(double loadavg[], int nelem) {
   klee_warning("ignoring (-1 result)");
-  return -1;
-}
-
-pid_t wait(int *status) __attribute__((weak));
-pid_t wait(int *status) {
-  klee_warning("ignoring (ECHILD)");
-  errno = ECHILD;
-  return -1;
-}
-
-pid_t wait3(int *status, int options, struct rusage *rusage) __attribute__((weak));
-pid_t wait3(int *status, int options, struct rusage *rusage) {
-  klee_warning("ignoring (ECHILD)");
-  errno = ECHILD;
-  return -1;
-}
-
-pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage) __attribute__((weak));
-pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage) {
-  klee_warning("ignoring (ECHILD)");
-  errno = ECHILD;
-  return -1;
-}
-
-pid_t waitpid(pid_t pid, int *status, int options) __attribute__((weak));
-pid_t waitpid(pid_t pid, int *status, int options) {
-  klee_warning("ignoring (ECHILD)");
-  errno = ECHILD;
-  return -1;
-}
-
-pid_t waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options) __attribute__((weak));
-pid_t waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options) {
-  klee_warning("ignoring (ECHILD)");
-  errno = ECHILD;
   return -1;
 }
 

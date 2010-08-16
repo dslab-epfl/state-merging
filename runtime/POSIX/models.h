@@ -12,15 +12,6 @@
 
 #include <unistd.h>
 #include <sys/types.h>
-
-#ifdef __USE_MISC
-#undef __USE_MISC
-#include <sys/stat.h>
-#define __USE_MISC 1
-#else
-#include <sys/stat.h>
-#endif
-
 #include <sys/ioctl.h>
 #include <sys/vfs.h>
 #include <fcntl.h>

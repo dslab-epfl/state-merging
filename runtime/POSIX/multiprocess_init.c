@@ -7,6 +7,8 @@
 
 #include "multiprocess.h"
 
+#include "models.h"
+
 #include <string.h>
 #include <klee/klee.h>
 
