@@ -94,6 +94,7 @@ static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
     return NULL;
 
   __net.end_points[i].addr = (struct sockaddr*)malloc(sizeof(struct sockaddr_in));
+  klee_make_shared(__net.end_points[i].addr, sizeof(struct sockaddr_in));
   __net.end_points[i].refcount = 1;
   __net.end_points[i].socket = NULL;
 
@@ -137,7 +138,10 @@ static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
   __unix_net.end_points[i].socket = NULL;
 
   if (addr) {
-    __unix_net.end_points[i].addr = (struct sockaddr*)malloc(sizeof(addr->sun_family) + strlen(addr->sun_path) + 1);
+    size_t addrsize = sizeof(addr->sun_family) + strlen(addr->sun_path) + 1;
+    __unix_net.end_points[i].addr = (struct sockaddr*)malloc(addrsize);
+    klee_make_shared(__unix_net.end_points[i].addr, addrsize);
+
     struct sockaddr_un *newaddr = (struct sockaddr_un*)__unix_net.end_points[i].addr;
 
     newaddr->sun_family = AF_UNIX;
@@ -396,6 +400,7 @@ int socket(int domain, int type, int protocol) {
 
   // Create the socket object
   socket_t *sock = (socket_t*)malloc(sizeof(socket_t));
+  klee_make_shared(sock, sizeof(socket_t));
   memset(sock, 0, sizeof(socket_t));
 
   sock->__bdata.flags = O_RDWR;
@@ -544,7 +549,7 @@ int listen(int sockfd, int backlog) {
   // Create the listening queue
   sock->status = SOCK_STATUS_LISTENING;
 
-  sock->listen = _stream_create(backlog*sizeof(socket_t*));
+  sock->listen = _stream_create(backlog*sizeof(socket_t*), 1);
 
   return 0;
 }
@@ -782,6 +787,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // Setup socket attributes
   local = (socket_t*)malloc(sizeof(socket_t));
+  klee_make_shared(local, sizeof(socket_t));
   memset(local, 0, sizeof(socket_t));
 
   __fdt[fd].attr |= FD_IS_SOCKET;
@@ -805,10 +811,10 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   remote->local_end->refcount++;
 
   // Setup streams
-  local->in = _stream_create(SOCKET_BUFFER_SIZE);
+  local->in = _stream_create(SOCKET_BUFFER_SIZE, 1);
   remote->out = local->in;
 
-  local->out = _stream_create(SOCKET_BUFFER_SIZE);
+  local->out = _stream_create(SOCKET_BUFFER_SIZE, 1);
   remote->in = local->out;
 
   // All is good for the remote socket
@@ -971,6 +977,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
 
   // Create the first socket object
   socket_t *sock1 = (socket_t*)malloc(sizeof(socket_t));
+  klee_make_shared(sock1, sizeof(socket_t));
   memset(sock1, 0, sizeof(socket_t));
 
   __fdt[fd1].attr |= FD_IS_SOCKET;
@@ -989,11 +996,12 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
 
   sock1->remote_end = ep2;
 
-  sock1->in = _stream_create(SOCKET_BUFFER_SIZE);
-  sock1->out = _stream_create(SOCKET_BUFFER_SIZE);
+  sock1->in = _stream_create(SOCKET_BUFFER_SIZE, 1);
+  sock1->out = _stream_create(SOCKET_BUFFER_SIZE, 1);
 
   // Create the second socket object
   socket_t *sock2 = (socket_t*)malloc(sizeof(socket_t));
+  klee_make_shared(sock2, sizeof(socket_t));
   memset(sock2, 0, sizeof(socket_t));
 
   __fdt[fd2].attr |= FD_IS_SOCKET;

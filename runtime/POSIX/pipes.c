@@ -15,6 +15,8 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include <klee/klee.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 // Internal routines
 ////////////////////////////////////////////////////////////////////////////////
@@ -130,11 +132,13 @@ int pipe(int pipefd[2]) {
   }
 
   // Initialize the stream buffer
-  stream_buffer_t *buff = _stream_create(PIPE_BUFFER_SIZE);
+  stream_buffer_t *buff = _stream_create(PIPE_BUFFER_SIZE, 1);
 
   // Create the pipe read point
   pipe_end_t *piper = (pipe_end_t*)malloc(sizeof(pipe_end_t));
+  klee_make_shared(piper, sizeof(pipe_end_t));
   memset(piper, 0, sizeof(pipe_end_t));
+
   piper->__bdata.flags |= O_RDONLY;
   piper->__bdata.refcount = 1;
   piper->__bdata.queued = 0;
@@ -145,7 +149,9 @@ int pipe(int pipefd[2]) {
 
   // Create the pipe write point
   pipe_end_t *pipew = (pipe_end_t*)malloc(sizeof(pipe_end_t));
+  klee_make_shared(pipew, sizeof(pipe_end_t));
   memset(pipew, 0, sizeof(pipe_end_t));
+
   pipew->__bdata.flags |= O_WRONLY;
   pipew->__bdata.refcount = 1;
   pipew->__bdata.queued = 0;

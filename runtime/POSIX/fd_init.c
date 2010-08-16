@@ -68,6 +68,8 @@ static void _init_filesystem(unsigned n_files, unsigned file_length) {
   unsigned int i;
   for (i = 0; i < n_files; i++) {
     __fs.files[i] = (disk_file_t*)malloc(sizeof(disk_file_t));
+    klee_make_shared(__fs.files[i], sizeof(disk_file_t));
+
     disk_file_t *dfile = __fs.files[i];
 
     fname[fname_len-1] = '0' + (i % 10);
@@ -79,8 +81,15 @@ static void _init_filesystem(unsigned n_files, unsigned file_length) {
 
 static void _init_network(void) {
   // Initialize the INET domain
+  klee_make_shared(&__net, sizeof(__net));
+
   __net.net_addr.s_addr = htonl(DEFAULT_NETWORK_ADDR);
+  __net.next_port = htons(DEFAULT_UNUSED_PORT);
+  STATIC_LIST_INIT(__net.end_points);
+
   // Initialize the UNIX domain
+  klee_make_shared(&__unix_net, sizeof(__unix_net));
+  STATIC_LIST_INIT(__unix_net.end_points);
 }
 
 void klee_init_fds(unsigned n_files, unsigned file_length,

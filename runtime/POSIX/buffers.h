@@ -33,7 +33,7 @@ typedef struct {
   char closed;
 } stream_buffer_t;
 
-stream_buffer_t *_stream_create(size_t max_size);
+stream_buffer_t *_stream_create(size_t max_size, int shared);
 void _stream_destroy(stream_buffer_t *buff);
 
 ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count);

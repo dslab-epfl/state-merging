@@ -34,7 +34,7 @@ void __notify_event(stream_buffer_t *buff, char event) {
   ARRAY_INIT(buff->evt_queue);
 }
 
-stream_buffer_t *_stream_create(size_t max_size) {
+stream_buffer_t *_stream_create(size_t max_size, int shared) {
   stream_buffer_t *buff = (stream_buffer_t*)malloc(sizeof(stream_buffer_t));
 
   memset(buff, 0, sizeof(stream_buffer_t));
@@ -44,6 +44,11 @@ stream_buffer_t *_stream_create(size_t max_size) {
   buff->destroying = 0;
   buff->queued = 0;
   ARRAY_INIT(buff->evt_queue);
+
+  if (shared) {
+    klee_make_shared(buff, sizeof(stream_buffer_t));
+    klee_make_shared(buff->contents, max_size);
+  }
 
   return buff;
 }
