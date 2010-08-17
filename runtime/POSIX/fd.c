@@ -159,6 +159,8 @@ DEFINE_MODEL(int, close, int fd) {
     return -1;
   }
 
+  fprintf(stderr, "Closing FD %d\n", fd);
+
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
@@ -181,6 +183,8 @@ DEFINE_MODEL(int, close, int fd) {
     STATIC_LIST_CLEAR(__fdt, fd);
     return 0;
   }
+
+  fprintf(stderr, "Releasing the IO object @%lx\n", (uintptr_t)fde->io_object);
 
   // Check the type of the descriptor
   if (fde->attr & FD_IS_FILE) {

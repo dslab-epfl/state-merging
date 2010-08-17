@@ -43,6 +43,8 @@ stream_buffer_t *_stream_create(size_t max_size, int shared) {
   buff->closed = 0;
   buff->destroying = 0;
   buff->queued = 0;
+  buff->empty_wlist = klee_get_wlist();
+  buff->full_wlist = klee_get_wlist();
   ARRAY_INIT(buff->evt_queue);
 
   if (shared) {

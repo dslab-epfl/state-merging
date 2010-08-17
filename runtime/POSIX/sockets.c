@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <netdb.h>
 
 #include <klee/klee.h>
 
@@ -149,15 +150,18 @@ static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
     strcpy(newaddr->sun_path, addr->sun_path);
   }
 
-  return &__net.end_points[i];
+  return &__unix_net.end_points[i];
 }
 
 static void __release_end_point(end_point_t *end_point) {
+  assert(end_point->allocated);
   assert(end_point->refcount > 0);
   end_point->refcount--;
 
   if (end_point->refcount == 0) {
-    free(end_point->addr);
+    if (end_point->addr)
+      free(end_point->addr);
+
     memset(end_point, 0, sizeof(end_point_t));
   }
 }
@@ -202,7 +206,6 @@ void _close_socket(socket_t *sock) {
   }
 
   if (sock->remote_end) {
-    sock->remote_end->socket = NULL;
     __release_end_point(sock->remote_end);
     sock->remote_end = NULL;
   }
@@ -811,7 +814,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   __release_end_point(local->remote_end);
   local->remote_end = remote->local_end;
-  remote->local_end->refcount++;
+  local->remote_end->refcount++;
 
   // Setup streams
   local->in = _stream_create(SOCKET_BUFFER_SIZE, 1);
@@ -998,6 +1001,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   ep1->socket = sock1;
 
   sock1->remote_end = ep2;
+  sock1->remote_end->refcount++;
 
   sock1->in = _stream_create(SOCKET_BUFFER_SIZE, 1);
   sock1->out = _stream_create(SOCKET_BUFFER_SIZE, 1);
@@ -1022,6 +1026,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   ep2->socket = sock2;
 
   sock2->remote_end = ep1;
+  sock2->remote_end->refcount++;
 
   sock2->in = sock1->out;
   sock2->out = sock1->in;
@@ -1030,4 +1035,92 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   sv[0] = fd1; sv[1] = fd2;
   fprintf(stderr, "Socket pair created (%d, %d)\n", fd1, fd2);
   return 0;
+}
+
+// getaddrinfo() & related /////////////////////////////////////////////////////
+
+int getaddrinfo(const char *node, const char *service, const struct addrinfo *hints,
+    struct addrinfo **res) {
+  if (node == NULL && service == NULL) {
+    return EAI_NONAME;
+  }
+
+  if (hints) {
+    if (hints->ai_family != AF_INET && hints->ai_family != AF_UNSPEC) {
+      klee_warning("unsupported family (EAI_ADDRFAMILY)");
+      return EAI_ADDRFAMILY;
+    }
+
+    if (hints->ai_socktype != SOCK_STREAM && hints->ai_socktype != 0) {
+      klee_warning("unsupported socket type (EAI_SOCKTYPE)");
+      return EAI_SOCKTYPE;
+    }
+
+    if (hints->ai_protocol != 0) {
+      klee_warning("unsupported protocol (EAI_SERVICE)");
+      return EAI_SERVICE;
+    }
+
+    // We kinda ignore all the flags, they don't make sense given the
+    // current limitations of the model.
+
+
+    if (hints->ai_addr || hints->ai_addrlen || hints->ai_canonname || hints->ai_next) {
+      return EAI_SYSTEM;
+    }
+  }
+
+  int port = 0;
+
+  if (service != NULL) {
+    port = atoi(service);
+    if (port == 0) {
+      klee_warning("service name not numeric, unsupported by model");
+      return EAI_SERVICE;
+    }
+
+    if (port < 0 || port > 65535) {
+      return EAI_SERVICE;
+    }
+  }
+
+
+  if (node != NULL) {
+    fprintf(stderr, "resolving '%s' to localhost\n", node);
+  }
+
+
+  struct addrinfo *info = (struct addrinfo*)malloc(sizeof(struct addrinfo));
+  memset(info, 0, sizeof(struct addrinfo));
+
+  struct sockaddr_in *addr = (struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
+  memset(addr, 0, sizeof(struct sockaddr_in));
+
+  info->ai_addr = (struct sockaddr*)addr;
+  info->ai_addrlen = sizeof(struct sockaddr_in);
+  info->ai_family = AF_INET;
+  info->ai_protocol = 0;
+  info->ai_socktype = SOCK_STREAM;
+
+  addr->sin_family = AF_INET;
+  addr->sin_addr.s_addr = htonl(DEFAULT_NETWORK_ADDR);
+  if (port != 0)
+    addr->sin_port = htons((uint16_t)port);
+
+  *res = info;
+  return 0;
+}
+
+void freeaddrinfo(struct addrinfo *res) {
+  if (res) {
+    if (res->ai_addr) {
+      free(res->ai_addr);
+    }
+
+  free(res);
+  }
+}
+
+const char *gai_strerror(int errcode) {
+  return "gai model error";
 }
