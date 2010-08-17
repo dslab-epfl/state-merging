@@ -716,9 +716,13 @@ void SpecialFunctionHandler::handleGetWList(ExecutionState &state,
 void SpecialFunctionHandler::handleThreadPreempt(ExecutionState &state,
                     KInstruction *target,
                     std::vector<ref<Expr> > &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_thread_preempt");
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_thread_preempt");
 
-  executor.schedule(state);
+  if (!isa<ConstantExpr>(arguments[0])) {
+    executor.terminateStateOnError(state, "klee_thread_preempt", "user.err");
+  }
+
+  executor.schedule(state, !arguments[0]->isZero());
 }
 
 void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
@@ -735,9 +739,10 @@ void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
   }
 
   CLOUD9_DEBUG("Sleeping...");
+  state.dumpStack(std::cout);
 
   state.sleepThread(cast<ConstantExpr>(wlistExpr)->getZExtValue());
-  executor.schedule(state);
+  executor.schedule(state, false);
 }
 
 void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,

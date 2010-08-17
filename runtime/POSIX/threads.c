@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sched.h>
 
 #include <klee/klee.h>
 
@@ -134,5 +135,14 @@ int pthread_attr_init(pthread_attr_t *attr) {
 
 int pthread_attr_destroy(pthread_attr_t *attr) {
   klee_warning("pthread_attr_destroy does nothing");
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Misc. API
+////////////////////////////////////////////////////////////////////////////////
+
+int sched_yield(void) {
+  klee_thread_preempt(1);
   return 0;
 }

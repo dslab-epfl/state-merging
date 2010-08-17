@@ -557,6 +557,8 @@ int listen(int sockfd, int backlog) {
 
   sock->listen = _stream_create(backlog*sizeof(socket_t*), 1);
 
+  fprintf(stderr, "Socket %d is listening\n", sockfd);
+
   return 0;
 }
 

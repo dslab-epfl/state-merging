@@ -166,7 +166,7 @@ extern "C" {
 
   uint64_t klee_get_wlist(void);
 
-  void klee_thread_preempt(void);
+  void klee_thread_preempt(int yield);
 
   void klee_thread_sleep(uint64_t wlist);
 

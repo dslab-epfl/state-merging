@@ -419,7 +419,7 @@ private:
   void executeProcessFork(ExecutionState &state, KInstruction *ki,
       process_id_t pid);
   
-  void schedule(ExecutionState &state);
+  void schedule(ExecutionState &state, bool yield);
   
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);

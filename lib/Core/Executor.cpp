@@ -3058,7 +3058,7 @@ void Executor::executeThreadExit(ExecutionState &state) {
     state.terminateThread();
   }
 
-  schedule(state);
+  schedule(state, false);
 
 }
 
@@ -3072,7 +3072,7 @@ void Executor::executeProcessExit(ExecutionState &state) {
 
   state.terminateProcess(state.crtProcessIt);
 
-  schedule(state);
+  schedule(state, false);
 }
 
 void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
@@ -3098,21 +3098,20 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
 }
 
 
-void Executor::schedule(ExecutionState &state)
+void Executor::schedule(ExecutionState &state, bool yield)
 {
-
-  CLOUD9_DEBUG("Scheduling " << state.threads.size() << " threads in " << state.processes.size() << " processes ...");
-
-  bool no_deadlock = false;
+  int enabledCount = 0;
   for(ExecutionState::threads_ty::iterator it = state.threads.begin();
       it != state.threads.end();  it++) {
     if(it->second.enabled) {
-      no_deadlock = true;
-      break;
+      enabledCount++;
     }
   }
   
-  if (!no_deadlock)
+  CLOUD9_DEBUG("Scheduling " << state.threads.size() << " threads (" <<
+      enabledCount << " enabled) in " << state.processes.size() << " processes ...");
+
+  if (enabledCount == 0)
     {
       klee_message("terminating state");
       return terminateStateOnError(state, " ******** deadlock", "user.err");
@@ -3121,7 +3120,7 @@ void Executor::schedule(ExecutionState &state)
   bool forkSchedule = false;
   bool incPreemptions = false;
 
-  if(state.crtThreadIt == state.threads.end() || !state.crtThread().enabled) {
+  if(state.crtThreadIt == state.threads.end() || !state.crtThread().enabled || yield) {
     ExecutionState::threads_ty::iterator it = state.nextThread(state.crtThreadIt);
 
     while (!it->second.enabled)

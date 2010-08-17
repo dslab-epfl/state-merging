@@ -470,11 +470,6 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     totalfds += res;
   }
 
-  if (totalfds == 0) {// Nothing to watch for
-    fprintf(stderr, "Nothing to watch for%s...\n", "");
-    return 0;
-  }
-
   // Compute the minimum size of the FD set
   int setsize = ((nfds / NFDBITS) + ((nfds % NFDBITS) ? 1 : 0)) * (NFDBITS / 8);
 
@@ -493,12 +488,11 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
   // No out_exceptfds here. This means that the thread will hang if select()
   // is called with FDs only in exceptfds.
 
-  int fd;
+  wlist_id_t wlist = 0;
   int res = 0;
 
-  wlist_id_t wlist = 0;
-
   do {
+    int fd;
     // First check to see if we have anything available
     for (fd = 0; fd < nfds; fd++) {
       if (readfds && _FD_ISSET(fd, readfds) && !_is_blocking(fd, EVENT_READ)) {
@@ -511,60 +505,70 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
       }
     }
 
-    if (res == 0) { // Nope, bad luck...
+    if (res > 0)
+      break;
 
-      // We wait until at least one FD becomes non-blocking
+    if (timeout != NULL) {
+      klee_warning("simulating timeout");
+      // We just return timeout
+      if (timeout->tv_sec != 0 || timeout->tv_usec != 0)
+        klee_thread_preempt(1);
 
-      // In particular, if all FD blocked, then all of them would be
-      // valid FDs (none of them closed in the mean time)
-      if (wlist == 0)
-        wlist = klee_get_wlist();
+      break;
+    }
 
-      int fail = 0;
+    // Nope, bad luck...
 
-      // Register ourselves to the relevant FDs
-      for (fd = 0; fd < nfds; fd++) {
-        int events = 0;
-        if (readfds && _FD_ISSET(fd, readfds)) {
-          events |= EVENT_READ;
-        }
-        if (writefds && _FD_ISSET(fd, writefds)) {
-          events |= EVENT_WRITE;
-        }
+    // We wait until at least one FD becomes non-blocking
 
-        if (events != 0) {
-          if (_register_events(fd, wlist, events) == -1) {
-            fail = 1;
-            break;
-          }
-        }
+    // In particular, if all FD blocked, then all of them would be
+    // valid FDs (none of them closed in the mean time)
+    if (wlist == 0)
+      wlist = klee_get_wlist();
+
+    int fail = 0;
+
+    // Register ourselves to the relevant FDs
+    for (fd = 0; fd < nfds; fd++) {
+      int events = 0;
+      if (readfds && _FD_ISSET(fd, readfds)) {
+        events |= EVENT_READ;
+      }
+      if (writefds && _FD_ISSET(fd, writefds)) {
+        events |= EVENT_WRITE;
       }
 
-      if (!fail)
-        klee_thread_sleep(wlist);
-
-      // Now deregister, in order to avoid useless notifications
-      for (fd = 0; fd < nfds; fd++) {
-        int events = 0;
-        if (readfds && _FD_ISSET(fd, readfds)) {
-          events |= EVENT_READ;
+      if (events != 0) {
+        if (_register_events(fd, wlist, events) == -1) {
+          fail = 1;
+          break;
         }
-        if (writefds && _FD_ISSET(fd, writefds)) {
-          events |= EVENT_WRITE;
-        }
-
-        if (events != 0) {
-          _deregister_events(fd, wlist, events);
-        }
-      }
-
-      if (fail) {
-        errno = ENOMEM;
-        return -1;
       }
     }
 
-  } while (res == 0);
+    if (!fail)
+      klee_thread_sleep(wlist);
+
+    // Now deregister, in order to avoid useless notifications
+    for (fd = 0; fd < nfds; fd++) {
+      int events = 0;
+      if (readfds && _FD_ISSET(fd, readfds)) {
+        events |= EVENT_READ;
+      }
+      if (writefds && _FD_ISSET(fd, writefds)) {
+        events |= EVENT_WRITE;
+      }
+
+      if (events != 0) {
+        _deregister_events(fd, wlist, events);
+      }
+    }
+
+    if (fail) {
+      errno = ENOMEM;
+      return -1;
+    }
+  } while (1);
 
   if (readfds) {
     memcpy(readfds, out_readfds, setsize);
