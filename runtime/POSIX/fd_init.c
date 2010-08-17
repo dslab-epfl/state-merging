@@ -28,7 +28,7 @@
 fd_entry_t __fdt[MAX_FDS] = {
     { FD_IS_CONCRETE | FD_IS_PIPE, 0, NULL, 1},
     { FD_IS_CONCRETE | FD_IS_PIPE, 1, NULL, 1},
-    { FD_IS_CONCRETE | FD_IS_PIPE, 2, NULL, 1}
+    { FD_IS_CONCRETE | FD_IS_PIPE, 1, NULL, 1}  // Print the program STDERR to our STDOUT
 };
 
 // Symbolic file system

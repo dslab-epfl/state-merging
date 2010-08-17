@@ -146,3 +146,15 @@ int sched_yield(void) {
   klee_thread_preempt(1);
   return 0;
 }
+
+int usleep(useconds_t usec) {
+  klee_warning("yielding instead of usleep()-ing");
+  klee_thread_preempt(1);
+  return 0;
+}
+
+unsigned int sleep(unsigned int seconds) {
+  klee_warning("yielding instead of sleep()-ing");
+  klee_thread_preempt(1);
+  return 0;
+}

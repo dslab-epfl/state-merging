@@ -117,7 +117,6 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
-    //printf("Writing on fd %d (concrete value %d)\n", fd, fde->concrete_fd);
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
     /* XXX In terms of looking for bugs we really should do this check
@@ -159,12 +158,12 @@ DEFINE_MODEL(int, close, int fd) {
     return -1;
   }
 
-  fprintf(stderr, "Closing FD %d\n", fd);
+  //fprintf(stderr, "Closing FD %d\n", fd);
 
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
-    //printf("Closing fd %d (concrete %d)\n", fd, fde->concrete_fd);
+    //fprintf(stderr, "Closing concrete fd: %d\n", fde->concrete_fd);
     int res = CALL_UNDERLYING(close, fde->concrete_fd);
     if (res == -1)
       errno = klee_get_errno();
@@ -282,7 +281,10 @@ DEFINE_MODEL(int, dup3, int oldfd, int newfd, int flags) {
       fde->attr &= ~FD_CLOSE_ON_EXEC;
     }
   }
-
+  printf("New duplicate of %d: %d\n", oldfd, newfd);
+  if (__fdt[newfd].attr & FD_IS_CONCRETE) {
+    printf("New concrete duplicate of %d: %d\n", __fdt[oldfd].concrete_fd, __fdt[newfd].concrete_fd);
+  }
   return newfd;
 }
 
@@ -427,10 +429,6 @@ static void _deregister_events(int fd, wlist_id_t wlist, int events) {
 // XXX Maybe we should break this into more pieces?
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     struct timeval *timeout) {
-  if (timeout) {
-    fprintf(stderr, "Can wait at most %d seconds and %d usecs\n",
-        timeout->tv_sec, timeout->tv_usec);
-  }
   if (nfds < 0 || nfds > FD_SETSIZE) {
     fprintf(stderr, "Invalid nfds\n");
     errno = EINVAL;
