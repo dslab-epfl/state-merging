@@ -348,13 +348,16 @@ static int _validate_fd_set(int nfds, fd_set *fds) {
     if (!_FD_ISSET(fd, fds))
       continue;
 
-    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd))
+    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+      klee_warning("unallocated FD");
       return -1;
+    }
 
     if (__fdt[fd].attr & FD_IS_CONCRETE) {
       klee_warning("unsupported concrete FD in fd_set (EBADF)");
       return -1;
     }
+    fprintf(stderr, "Watching for fd %d\n", fd);
     res++;
   }
 
@@ -424,7 +427,12 @@ static void _deregister_events(int fd, wlist_id_t wlist, int events) {
 // XXX Maybe we should break this into more pieces?
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     struct timeval *timeout) {
+  if (timeout) {
+    fprintf(stderr, "Can wait at most %d seconds and %d usecs\n",
+        timeout->tv_sec, timeout->tv_usec);
+  }
   if (nfds < 0 || nfds > FD_SETSIZE) {
+    fprintf(stderr, "Invalid nfds\n");
     errno = EINVAL;
     return -1;
   }
@@ -462,8 +470,10 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     totalfds += res;
   }
 
-  if (totalfds == 0) // Nothing to watch for
+  if (totalfds == 0) {// Nothing to watch for
+    fprintf(stderr, "Nothing to watch for%s...\n", "");
     return 0;
+  }
 
   // Compute the minimum size of the FD set
   int setsize = ((nfds / NFDBITS) + ((nfds % NFDBITS) ? 1 : 0)) * (NFDBITS / 8);
