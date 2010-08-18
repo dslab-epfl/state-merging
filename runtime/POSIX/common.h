@@ -38,8 +38,8 @@
 
 #define MAX_PENDING_CONN    4
 
-#define SOCKET_BUFFER_SIZE  64
-#define PIPE_BUFFER_SIZE    64
+#define SOCKET_BUFFER_SIZE  4096
+#define PIPE_BUFFER_SIZE    4096
 
 // A model needs to be declared only when it's supposed to interface
 // an existing C library call.

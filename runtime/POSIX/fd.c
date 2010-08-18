@@ -85,7 +85,7 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
     return res;
   }
 
-  fprintf(stderr, "Reading %lu bytes of data from FD %d\n", count, fd);
+  //fprintf(stderr, "Reading %lu bytes of data from FD %d\n", count, fd);
 
   // Check for permissions
   if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
@@ -158,7 +158,7 @@ DEFINE_MODEL(int, close, int fd) {
     return -1;
   }
 
-  //fprintf(stderr, "Closing FD %d\n", fd);
+  fprintf(stderr, "Closing FD %d (pid %d)\n", fd, getpid());
 
   fd_entry_t *fde = &__fdt[fd];
 
@@ -182,8 +182,6 @@ DEFINE_MODEL(int, close, int fd) {
     STATIC_LIST_CLEAR(__fdt, fd);
     return 0;
   }
-
-  fprintf(stderr, "Releasing the IO object @%lx\n", (uintptr_t)fde->io_object);
 
   // Check the type of the descriptor
   if (fde->attr & FD_IS_FILE) {
@@ -359,7 +357,7 @@ static int _validate_fd_set(int nfds, fd_set *fds) {
       klee_warning("unsupported concrete FD in fd_set (EBADF)");
       return -1;
     }
-    fprintf(stderr, "Watching for fd %d\n", fd);
+    //fprintf(stderr, "Watching for fd %d\n", fd);
     res++;
   }
 
@@ -430,7 +428,6 @@ static void _deregister_events(int fd, wlist_id_t wlist, int events) {
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     struct timeval *timeout) {
   if (nfds < 0 || nfds > FD_SETSIZE) {
-    fprintf(stderr, "Invalid nfds\n");
     errno = EINVAL;
     return -1;
   }
@@ -466,6 +463,15 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     }
 
     totalfds += res;
+  }
+
+  if (timeout != NULL && totalfds == 0) {
+    klee_warning("simulating timeout");
+    // We just return timeout
+    if (timeout->tv_sec != 0 || timeout->tv_usec != 0)
+      klee_thread_preempt(1);
+
+    return 0;
   }
 
   // Compute the minimum size of the FD set
@@ -505,15 +511,6 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 
     if (res > 0)
       break;
-
-    if (timeout != NULL) {
-      klee_warning("simulating timeout");
-      // We just return timeout
-      if (timeout->tv_sec != 0 || timeout->tv_usec != 0)
-        klee_thread_preempt(1);
-
-      break;
-    }
 
     // Nope, bad luck...
 
@@ -645,6 +642,11 @@ DEFINE_MODEL(int, fcntl, int fd, int cmd, ...) {
       break;
 
     case F_SETFL:
+      if (arg & (O_APPEND | O_ASYNC | O_DIRECT | O_NOATIME)) {
+        klee_warning("unsupported fcntl flags");
+        errno = EINVAL;
+        return -1;
+      }
       fde->io_object->flags |= (arg & (O_APPEND | O_ASYNC | O_DIRECT | O_NOATIME | O_NONBLOCK));
       // Go through the next case
     case F_GETFL:

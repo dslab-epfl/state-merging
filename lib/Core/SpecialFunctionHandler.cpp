@@ -738,7 +738,7 @@ void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
     return;
   }
 
-  CLOUD9_DEBUG("Sleeping...");
+  //CLOUD9_DEBUG("Sleeping...");
 
   state.sleepThread(cast<ConstantExpr>(wlistExpr)->getZExtValue());
   executor.schedule(state, false);

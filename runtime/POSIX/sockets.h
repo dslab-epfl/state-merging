@@ -22,8 +22,9 @@
 
 #define SOCK_STATUS_CREATED     (1 << 0)
 #define SOCK_STATUS_LISTENING   (1 << 1)
-#define SOCK_STATUS_CONNECTED   (1 << 2)
-#define SOCK_STATUS_CLOSED      (1 << 3) // Transient state due to concurrency
+#define SOCK_STATUS_CONNECTING  (1 << 2)
+#define SOCK_STATUS_CONNECTED   (1 << 3)
+#define SOCK_STATUS_CLOSING     (1 << 4) // Transient state due to concurrency
 
 struct socket;
 

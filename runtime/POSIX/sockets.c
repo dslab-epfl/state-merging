@@ -171,6 +171,8 @@ static void __release_end_point(end_point_t *end_point) {
 static void _shutdown(socket_t *sock, int how);
 
 void _close_socket(socket_t *sock) {
+  // First, do state specific clean-up
+
   if (sock->status == SOCK_STATUS_CONNECTED) {
     _shutdown(sock, SHUT_RDWR);
   }
@@ -183,21 +185,25 @@ void _close_socket(socket_t *sock) {
 
       remote->__bdata.queued--;
 
-      if (remote->status == SOCK_STATUS_CLOSED) {
+      if (remote->status == SOCK_STATUS_CLOSING) {
         if (remote->__bdata.queued == 0)
           free(remote);
 
       } else {
-        klee_thread_notify_all(remote->wlist);
+        if (remote->wlist)
+          klee_thread_notify_all(remote->wlist);
       }
     }
 
     _stream_destroy(sock->listen);
   }
 
-  if (sock->wlist) {
-    klee_thread_notify_all(sock->wlist);
+  if (sock->status == SOCK_STATUS_CONNECTING) {
+    if (sock->wlist)
+      klee_thread_notify_all(sock->wlist);
   }
+
+  // Now clean-up the endpoints
 
   if (sock->local_end) {
     sock->local_end->socket = NULL;
@@ -210,7 +216,8 @@ void _close_socket(socket_t *sock) {
     sock->remote_end = NULL;
   }
 
-  sock->status = SOCK_STATUS_CLOSED;
+  // Mark us as closing, so the returning operations know to release us
+  sock->status = SOCK_STATUS_CLOSING;
 
   if (sock->__bdata.queued == 0) {
     free(sock);
@@ -230,11 +237,18 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
     return 0;
   }
 
+  if (sock->__bdata.flags & O_NONBLOCK) {
+    if (_stream_is_empty(sock->in) && !sock->in->closed) {
+      errno = EAGAIN;
+      return -1;
+    }
+  }
+
   sock->__bdata.queued++;
   ssize_t res = _stream_read(sock->in, buf, count);
   sock->__bdata.queued--;
 
-  if (sock->status == SOCK_STATUS_CLOSED) {
+  if (sock->status == SOCK_STATUS_CLOSING) {
     if (sock->__bdata.queued == 0)
       free(sock);
 
@@ -268,11 +282,18 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
     return 0;
   }
 
+  if (sock->__bdata.flags & O_NONBLOCK) {
+    if (_stream_is_full(sock->out) & !sock->out->closed) {
+      errno = EAGAIN;
+      return -1;
+    }
+  }
+
   sock->__bdata.queued++;
   ssize_t res = _stream_write(sock->out, buf, count);
   sock->__bdata.queued--;
 
-  if (sock->status == SOCK_STATUS_CLOSED) {
+  if (sock->status == SOCK_STATUS_CLOSING) {
     if (sock->__bdata.queued == 0)
       free(sock);
 
@@ -299,6 +320,17 @@ int _stat_socket(socket_t *sock, struct stat *buf) {
 int _is_blocking_socket(socket_t *sock, int event) {
   if (sock->status == SOCK_STATUS_CREATED)
     return 0;
+
+  if (sock->status == SOCK_STATUS_CONNECTING) {
+    switch(event) {
+    case EVENT_READ:
+      return 0;
+    case EVENT_WRITE:
+      return 1;
+    default:
+      assert(0 && "invalid event");
+    }
+  }
 
   if (sock->status == SOCK_STATUS_CONNECTED) {
     switch (event) {
@@ -543,7 +575,8 @@ int listen(int sockfd, int backlog) {
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
-  if (sock->status != SOCK_STATUS_CREATED || sock->local_end == NULL) {
+  if (sock->local_end == NULL || (sock->status != SOCK_STATUS_CREATED &&
+      sock->status != SOCK_STATUS_LISTENING)) {
     errno = EOPNOTSUPP;
     return -1;
   }
@@ -554,9 +587,10 @@ int listen(int sockfd, int backlog) {
   }
 
   // Create the listening queue
-  sock->status = SOCK_STATUS_LISTENING;
-
-  sock->listen = _stream_create(backlog*sizeof(socket_t*), 1);
+  if (sock->status != SOCK_STATUS_LISTENING) {
+    sock->status = SOCK_STATUS_LISTENING;
+    sock->listen = _stream_create(backlog*sizeof(socket_t*), 1);
+  }
 
   fprintf(stderr, "Socket %d is listening\n", sockfd);
 
@@ -666,19 +700,26 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
     return -1;
   }
 
-  // We queue ourselves in the list...
-  if (!sock->wlist)
-    sock->wlist = klee_get_wlist();
+  sock->status = SOCK_STATUS_CONNECTING;
 
   ssize_t res = _stream_write(remote->listen, (char*)&sock, sizeof(socket_t*));
   assert(res == sizeof(socket_t*));
+  sock->__bdata.queued++;
+
+  if (sock->__bdata.flags & O_NONBLOCK) {
+    errno = EINPROGRESS;
+    return -1;
+  }
+
+  // We queue ourselves in the list...
+  sock->wlist = klee_get_wlist();
 
   // ... and we wait for a notification
-  sock->__bdata.queued += 2;
+  sock->__bdata.queued++;
   klee_thread_sleep(sock->wlist);
   sock->__bdata.queued--;
 
-  if (sock->status == SOCK_STATUS_CLOSED) {
+  if (sock->status == SOCK_STATUS_CLOSING) {
     if (sock->__bdata.queued == 0)
       free(sock);
 
@@ -686,11 +727,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
     return -1;
   }
 
-  sock->wlist = 0;
-
   if (sock->status != SOCK_STATUS_CONNECTED) {
-    __release_end_point(sock->remote_end);
-    sock->remote_end = NULL;
     errno = ECONNREFUSED;
     return -1;
   }
@@ -731,6 +768,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
+  if (sock->__bdata.flags & O_NONBLOCK) {
+    if (_stream_is_empty(sock->listen)) {
+      errno = EAGAIN;
+      return -1;
+    }
+  }
+
   socket_t *remote, *local;
   end_point_t *end_point;
 
@@ -738,7 +782,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   ssize_t res = _stream_read(sock->listen, (char*)&remote, sizeof(socket_t*));
   sock->__bdata.queued--;
 
-  if (sock->status == SOCK_STATUS_CLOSED) {
+  if (sock->status == SOCK_STATUS_CLOSING) {
     if (sock->__bdata.queued == 0)
       free(sock);
 
@@ -750,7 +794,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   remote->__bdata.queued--;
 
-  if (remote->status == SOCK_STATUS_CLOSED) {
+  if (remote->status == SOCK_STATUS_CLOSING) {
     if (remote->__bdata.queued == 0) {
       free(remote);
     }
@@ -759,8 +803,17 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
-  klee_thread_notify_all(remote->wlist);
+  assert(remote->status == SOCK_STATUS_CONNECTING);
 
+  if (remote->wlist) {
+    // XXX BUG We should also create an event queue for a connecting socket,
+    // in order to be able to wake up any select() waiting for a socket
+    // to become connected.
+    klee_thread_notify_all(remote->wlist);
+    remote->wlist = 0;
+  }
+
+  int failure = 0;
   // Get a new local port for the connection
   if (sock->domain == AF_INET) {
     struct sockaddr_in local_addr;
@@ -772,14 +825,14 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
     if (end_point == NULL) {
       errno = EINVAL;
-      return -1;
+      failure = 1;
     }
   } else if (sock->domain == AF_UNIX){
     end_point = __get_unix_end(NULL);
 
     if (end_point == NULL) {
       errno = EINVAL;
-      return -1;
+      failure = 1;
     }
   } else {
     assert(0 && "invalid socket");
@@ -787,10 +840,21 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // Get a new file descriptor for the new socket
   int fd;
-  STATIC_LIST_ALLOC(__fdt, fd);
-  if (fd == MAX_FDS) {
-    __release_end_point(end_point);
-    errno = ENFILE;
+  if (!failure) {
+    STATIC_LIST_ALLOC(__fdt, fd);
+    if (fd == MAX_FDS) {
+      __release_end_point(end_point);
+      errno = ENFILE;
+      failure = 1;
+    }
+  }
+
+  if (failure) {
+    remote->status = SOCK_STATUS_CREATED;
+
+    __release_end_point(remote->remote_end);
+    sock->remote_end = NULL;
+
     return -1;
   }
 
@@ -815,6 +879,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   end_point->socket = local;
   __release_end_point(remote->remote_end);
   remote->remote_end = end_point;
+  remote->remote_end->refcount++;
 
   local->remote_end = remote->local_end;
   local->remote_end->refcount++;
@@ -829,6 +894,8 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   // All is good for the remote socket
   remote->status = SOCK_STATUS_CONNECTED;
   _get_endpoint_name(local, local->remote_end, addr, addrlen);
+
+  fprintf(stderr, "Connected socket created: %d\n", fd);
 
   // Now return in our process
   return fd;

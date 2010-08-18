@@ -40,6 +40,13 @@ ssize_t _read_pipe(pipe_end_t *pipe, void *buf, size_t count) {
   if (count == 0)
     return 0;
 
+  if (pipe->__bdata.flags & O_NONBLOCK) {
+    if (_stream_is_empty(pipe->buffer) && !pipe->buffer->closed) {
+      errno = EAGAIN;
+      return -1;
+    }
+  }
+
   pipe->__bdata.queued++;
   ssize_t res = _stream_read(pipe->buffer, buf, count);
   pipe->__bdata.queued--;
@@ -67,6 +74,13 @@ ssize_t _write_pipe(pipe_end_t *pipe, const void *buf, size_t count) {
 
   if (count == 0)
     return 0;
+
+  if (pipe->__bdata.flags & O_NONBLOCK) {
+    if (_stream_is_full(pipe->buffer) && !pipe->buffer->closed) {
+      errno = EAGAIN;
+      return -1;
+    }
+  }
 
   pipe->__bdata.queued++;
   ssize_t res = _stream_write(pipe->buffer, buf, count);
