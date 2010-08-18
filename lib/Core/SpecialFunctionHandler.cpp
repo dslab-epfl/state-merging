@@ -739,7 +739,6 @@ void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
   }
 
   CLOUD9_DEBUG("Sleeping...");
-  state.dumpStack(std::cout);
 
   state.sleepThread(cast<ConstantExpr>(wlistExpr)->getZExtValue());
   executor.schedule(state, false);

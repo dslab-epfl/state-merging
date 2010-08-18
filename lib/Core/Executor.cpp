@@ -3108,8 +3108,8 @@ void Executor::schedule(ExecutionState &state, bool yield)
     }
   }
   
-  CLOUD9_DEBUG("Scheduling " << state.threads.size() << " threads (" <<
-      enabledCount << " enabled) in " << state.processes.size() << " processes ...");
+  //CLOUD9_DEBUG("Scheduling " << state.threads.size() << " threads (" <<
+  //    enabledCount << " enabled) in " << state.processes.size() << " processes ...");
 
   if (enabledCount == 0)
     {

@@ -336,6 +336,7 @@ int _register_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
       _stream_clear_event(sock->in, wlist);
       return -1;
     }
+    return 0;
   }
 
   if (sock->status == SOCK_STATUS_LISTENING) {
@@ -373,7 +374,7 @@ int socket(int domain, int type, int protocol) {
     switch (type) {
     case SOCK_STREAM:
     //case SOCK_DGRAM:
-      if (protocol != 0) {
+      if (protocol != 0 && protocol != IPPROTO_TCP) {
         klee_warning("unsupported protocol");
         errno = EPROTONOSUPPORT;
         return -1;
@@ -812,9 +813,9 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   // Setup end points
   local->local_end = end_point;
   end_point->socket = local;
+  __release_end_point(remote->remote_end);
   remote->remote_end = end_point;
 
-  __release_end_point(local->remote_end);
   local->remote_end = remote->local_end;
   local->remote_end->refcount++;
 
@@ -940,7 +941,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
     return -1;
   }
 
-  if (protocol != 0) {
+  if (protocol != 0 && protocol != IPPROTO_TCP) {
     klee_warning("unsupported socketpair() protocol");
     errno = EPROTONOSUPPORT;
     return -1;
@@ -1058,7 +1059,7 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
       return EAI_SOCKTYPE;
     }
 
-    if (hints->ai_protocol != 0) {
+    if (hints->ai_protocol != 0 && hints->ai_protocol != IPPROTO_TCP) {
       klee_warning("unsupported protocol (EAI_SERVICE)");
       return EAI_SERVICE;
     }
