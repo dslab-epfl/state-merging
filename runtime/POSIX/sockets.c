@@ -221,7 +221,7 @@ void _close_socket(socket_t *sock) {
 
 ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
   if (sock->status != SOCK_STATUS_CONNECTED) {
-    errno = EINVAL;
+    errno = ENOTCONN;
     return -1;
   }
 
@@ -254,7 +254,7 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
 
 ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
   if (sock->status != SOCK_STATUS_CONNECTED) {
-    errno = EINVAL;
+    errno = ENOTCONN;
     return -1;
   }
 
@@ -875,7 +875,7 @@ int shutdown(int sockfd, int how) {
   return 0;
 }
 
-// Socket specific I/O /////////////////////////////////////////////////////////
+// send()/recv() ///////////////////////////////////////////////////////////////
 
 ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
   CHECK_IS_SOCKET(sockfd);
@@ -903,6 +903,90 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
   return _read_socket(sock, buf, len);
+}
+
+// sendmsg()/recvmsg() /////////////////////////////////////////////////////////
+
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
+  CHECK_IS_SOCKET(sockfd);
+
+  if (flags != 0) {
+    klee_warning("sendmsg() flags unsupported for now");
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (msg->msg_control != NULL) {
+    klee_warning("control data unsupported");
+    errno = EINVAL;
+    return -1;
+  }
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  size_t count = 0;
+  size_t i;
+  for (i = 0; i < msg->msg_iovlen; i++) {
+    if (msg->msg_iov[i].iov_len == 0)
+      continue;
+
+    // If we have something written, but now we blocked, we just return
+    // what we have
+    if (count > 0 && _is_blocking_socket(sock, EVENT_WRITE))
+      return count;
+
+    ssize_t res = _write_socket(sock, msg->msg_iov[i].iov_base,
+        msg->msg_iov[i].iov_len);
+
+    if (res == 0 || res == -1) {
+      assert(count == 0);
+      return res;
+    }
+
+    count += res;
+  }
+
+  return count;
+}
+
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  CHECK_IS_SOCKET(sockfd);
+
+  if (flags != 0) {
+    klee_warning("recvmsg() flags unsupported for now");
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (msg->msg_control != NULL) {
+    klee_warning("control data unsupported");
+    errno = EINVAL;
+    return -1;
+  }
+
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+
+  size_t count = 0;
+  size_t i;
+  for (i = 0; i < msg->msg_iovlen; i++) {
+    if (msg->msg_iov[i].iov_len == 0)
+      continue;
+
+    if (count > 0 && _is_blocking_socket(sock, EVENT_READ))
+      return count;
+
+    ssize_t res = _read_socket(sock, msg->msg_iov[i].iov_base,
+        msg->msg_iov[i].iov_len);
+
+    if (res == 0 || res == -1) {
+      assert(count == 0);
+      return res;
+    }
+
+    count += res;
+  }
+
+  return count;
 }
 
 // {get,set}sockopt() //////////////////////////////////////////////////////////
