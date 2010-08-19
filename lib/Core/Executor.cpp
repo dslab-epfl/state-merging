@@ -446,8 +446,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
   if (m->getModuleInlineAsm() != "")
     klee_warning("executable has module level assembly (ignoring)");
 
-  assert(m->lib_begin() == m->lib_end() &&
-         "XXX do not support dependent libraries");
+  //assert(m->lib_begin() == m->lib_end() &&
+  //       "XXX do not support dependent libraries");
 
   // represent function globals using the address of the actual llvm function
   // object. given that we use malloc to allocate memory in states this also

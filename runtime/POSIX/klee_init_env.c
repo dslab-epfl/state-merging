@@ -100,6 +100,7 @@ void klee_init_env(int* argcPtr, char*** argvPtr) {
 
   sym_arg_name[4] = '\0';
 
+#if 0
   // Recognize --help when it is the sole argument.
   if (argc == 2 && __streq(argv[1], "--help")) {
   __emit_error("klee_init_env\n\n\
@@ -113,6 +114,7 @@ usage: (klee_init_env) [options] [program arguments]\n\
   -max-fail <N>             - Allow up to <N> injected failures\n\
   -fd-fail                  - Shortcut for '-max-fail 1'\n\n");
   }
+#endif
 
   while (k < argc) {
     if (__streq(argv[k], "--sym-arg") || __streq(argv[k], "-sym-arg")) {

@@ -1227,8 +1227,9 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
   int port = 0;
 
   if (service != NULL) {
+    fprintf(stderr, "Getting the port number for service '%s'\n", service);
     port = atoi(service);
-    if (port == 0) {
+    if (port == 0 && strcmp(service, "0") != 0) {
       klee_warning("service name not numeric, unsupported by model");
       return EAI_SERVICE;
     }
