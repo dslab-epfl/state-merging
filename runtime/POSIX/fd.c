@@ -300,7 +300,7 @@ DEFINE_MODEL(int, dup2, int oldfd, int newfd) {
   if (newfd == oldfd)
     return 0;
 
-  return dup3(oldfd, newfd, 0);
+  return CALL_MODEL(dup3, oldfd, newfd, 0);
 }
 
 static int _dup(int oldfd, int startfd) {
@@ -326,7 +326,7 @@ static int _dup(int oldfd, int startfd) {
     return -1;
   }
 
-  return dup2(oldfd, fd);
+  return CALL_MODEL(dup2, oldfd, fd);
 }
 
 DEFINE_MODEL(int, dup, int oldfd) {

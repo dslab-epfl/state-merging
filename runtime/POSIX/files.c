@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <sys/syscall.h>
 
 #define CHECK_IS_FILE(fd) \
   do { \
@@ -476,6 +477,25 @@ DEFINE_MODEL(struct dirent *, readdir, DIR *dirp) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Forwarded / unsupported calls
+////////////////////////////////////////////////////////////////////////////////
+
+int __xstat(int ver, const char * path, struct stat * stat_buf) {
+  assert(ver == 1);
+  return CALL_MODEL(stat, path, stat_buf);
+}
+
+int __lxstat(int ver, const char * path, struct stat * stat_buf) {
+  assert(ver == 1);
+
+  return CALL_MODEL(lstat, path, stat_buf);
+}
+
+int __fxstat(int ver, int fildes, struct stat * stat_buf) {
+  assert(ver == 1);
+
+  return CALL_MODEL(fstat, fildes, stat_buf);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #define _WRAP_FILE_SYSCALL_ERROR(call, ...) \

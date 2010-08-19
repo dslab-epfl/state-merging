@@ -399,11 +399,12 @@ void _deregister_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
 
 int socket(int domain, int type, int protocol) {
   fprintf(stderr, "Attempting to create a socket\n");
+  int base_type = type & ~(SOCK_NONBLOCK | SOCK_CLOEXEC);
   // Check the validity of the request
   switch (domain) {
   case AF_INET:
   case AF_UNIX:
-    switch (type) {
+    switch (base_type) {
     case SOCK_STREAM:
     //case SOCK_DGRAM:
       if (protocol != 0 && protocol != IPPROTO_TCP) {
@@ -436,17 +437,24 @@ int socket(int domain, int type, int protocol) {
   fd_entry_t *fde = &__fdt[fd];
   fde->attr |= FD_IS_SOCKET;
 
+  if (type & SOCK_CLOEXEC) {
+    fde->attr |= FD_CLOSE_ON_EXEC;
+  }
+
   // Create the socket object
   socket_t *sock = (socket_t*)malloc(sizeof(socket_t));
   klee_make_shared(sock, sizeof(socket_t));
   memset(sock, 0, sizeof(socket_t));
 
   sock->__bdata.flags |= O_RDWR;
+  if (type & SOCK_NONBLOCK)
+    sock->__bdata.flags |= O_NONBLOCK;
+
   sock->__bdata.refcount = 1;
   sock->__bdata.queued = 0;
 
   sock->status = SOCK_STATUS_CREATED;
-  sock->type = type;
+  sock->type = base_type;
   sock->domain = domain;
 
   fde->io_object = (file_base_t*)sock;
@@ -1061,32 +1069,68 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
 int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen) {
   CHECK_IS_SOCKET(sockfd);
 
-  klee_warning("unsupported getsockopt()");
+  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
-  errno = EINVAL;
-  return -1;
+  switch (level) {
+  case SOL_SOCKET:
+    switch (optname) {
+    case SO_ACCEPTCONN:
+      if (*optlen < sizeof(int)) {
+        errno = EINVAL;
+        return -1;
+      }
+
+      *((int*)optval) = (sock->status == SOCK_STATUS_LISTENING);
+      *optlen = sizeof(int);
+      break;
+    default:
+      klee_warning("unsupported optname");
+      errno = EINVAL;
+      return -1;
+    }
+    break;
+  default:
+    klee_warning("unsupported level");
+    errno = EINVAL;
+    return -1;
+  }
+
+  return 0;
 }
 
 int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen) {
   CHECK_IS_SOCKET(sockfd);
 
-  klee_warning("unsupported setsockopt()");
+  switch (level) {
+  case SOL_SOCKET:
+    // Just silently accept all options
+    break;
+  case IPPROTO_IP:
+    break;
+  case IPPROTO_TCP:
+    break;
+  default:
+    klee_warning("unsupported level");
+    errno = EINVAL;
+    return -1;
+  }
 
-  errno = EINVAL;
-  return -1;
+  return 0;
 }
 
 // socketpair() ////////////////////////////////////////////////////////////////
 
 int socketpair(int domain, int type, int protocol, int sv[2]) {
   fprintf(stderr, "Attempting to create a pair of UNIX sockets\n");
+  int base_type = type & ~(SOCK_CLOEXEC | SOCK_NONBLOCK);
+
   // Check the parameters
   if (domain != AF_UNIX) {
     errno = EAFNOSUPPORT;
     return -1;
   }
 
-  if (type != SOCK_STREAM) {
+  if (base_type != SOCK_STREAM) {
     klee_warning("unsupported socketpair() type");
     errno = EINVAL;
     return -1;
@@ -1148,7 +1192,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   sock1->__bdata.queued = 0;
 
   sock1->domain = domain;
-  sock1->type = type;
+  sock1->type = base_type;
   sock1->status = SOCK_STATUS_CONNECTED;
 
   sock1->local_end = ep1;
@@ -1173,7 +1217,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   sock2->__bdata.queued = 0;
 
   sock2->domain = domain;
-  sock2->type = type;
+  sock2->type = base_type;
   sock2->status = SOCK_STATUS_CONNECTED;
 
   sock2->local_end = ep2;
@@ -1184,6 +1228,16 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
 
   sock2->in = sock1->out;
   sock2->out = sock1->in;
+
+  if (type & SOCK_CLOEXEC) {
+    __fdt[fd1].attr |= FD_CLOSE_ON_EXEC;
+    __fdt[fd2].attr |= FD_CLOSE_ON_EXEC;
+  }
+
+  if (type & SOCK_NONBLOCK) {
+    sock1->__bdata.flags |= O_NONBLOCK;
+    sock2->__bdata.flags |= O_NONBLOCK;
+  }
 
   // Finalize
   sv[0] = fd1; sv[1] = fd2;
@@ -1241,7 +1295,9 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
 
 
   if (node != NULL) {
-    fprintf(stderr, "resolving '%s' to localhost\n", node);
+    if (strcmp(node, "localhost") != 0 && strcmp(node, DEFAULT_HOST_NAME) != 0) {
+      fprintf(stderr, "resolving '%s' to localhost\n", node);
+    }
   }
 
 
@@ -1278,4 +1334,31 @@ void freeaddrinfo(struct addrinfo *res) {
 
 const char *gai_strerror(int errcode) {
   return "gai model error";
+}
+
+// getnameinfo() ///////////////////////////////////////////////////////////////
+
+int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
+    socklen_t hostlen, char *serv, socklen_t servlen, unsigned int flags) {
+
+  if (sa->sa_family != AF_INET || salen < sizeof(struct sockaddr_in)) {
+    return EAI_FAMILY;
+  }
+
+  const struct sockaddr_in *addr = (struct sockaddr_in*)sa;
+
+  if (host != NULL) {
+    if (addr->sin_addr.s_addr != htonl(INADDR_LOOPBACK) &&
+        addr->sin_addr.s_addr != __net.net_addr.s_addr) {
+      klee_warning("foreign IP address solved to local network");
+    }
+
+    strncpy(host, DEFAULT_HOST_NAME, hostlen);
+  }
+
+  if (serv != NULL) {
+    snprintf(serv, servlen, "%d", ntohs(addr->sin_port));
+  }
+
+  return 0;
 }

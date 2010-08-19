@@ -60,6 +60,9 @@
 #define CALL_UNDERLYING(name, ...) \
     __klee_original_ ## name(__VA_ARGS__);
 
+#define CALL_MODEL(name, ...) \
+    __klee_model_ ## name(__VA_ARGS__);
+
 #define DEFINE_MODEL(type, name, ...) \
     type __klee_model_ ## name(__VA_ARGS__)
 

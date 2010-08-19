@@ -19,6 +19,7 @@
 
 #define DEFAULT_UNUSED_PORT     32768
 #define DEFAULT_NETWORK_ADDR    ((((((192 << 8) | 168) << 8) | 1) << 8) | 1) // 192.168.1.1
+#define DEFAULT_HOST_NAME       "192.168.1.1"
 
 #define SOCK_STATUS_CREATED     (1 << 0)
 #define SOCK_STATUS_LISTENING   (1 << 1)
