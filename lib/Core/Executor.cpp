@@ -2671,31 +2671,36 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &info) {
   std::string message = messaget.str();
   static std::set< std::pair<Instruction*, std::string> > emittedErrors;
-  const InstructionInfo &ii = *state.prevPC()->info;
-  
-  if (EmitAllErrors ||
-      emittedErrors.insert(std::make_pair(state.prevPC()->inst, message)).second) {
-    if (ii.file != "") {
-      klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
-    } else {
-      klee_message("ERROR: %s", message.c_str());
-    }
-    if (!EmitAllErrors)
-      klee_message("NOTE: now ignoring this error at this location");
-    
-    std::ostringstream msg;
-    msg << "Error: " << message << "\n";
-    if (ii.file != "") {
-      msg << "File: " << ii.file << "\n";
-      msg << "Line: " << ii.line << "\n";
-    }
-    msg << "Stack: \n";
-    state.dumpStack(msg);
 
-    std::string info_str = info.str();
-    if (info_str != "")
-      msg << "Info: \n" << info_str;
-    interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+  if (state.crtThreadIt == state.threads.end()) {
+    CLOUD9_DEBUG("Error case lost");
+  } else {
+    const InstructionInfo &ii = *state.prevPC()->info;
+
+    if (EmitAllErrors ||
+        emittedErrors.insert(std::make_pair(state.prevPC()->inst, message)).second) {
+      if (ii.file != "") {
+        klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
+      } else {
+        klee_message("ERROR: %s", message.c_str());
+      }
+      if (!EmitAllErrors)
+        klee_message("NOTE: now ignoring this error at this location");
+
+      std::ostringstream msg;
+      msg << "Error: " << message << "\n";
+      if (ii.file != "") {
+        msg << "File: " << ii.file << "\n";
+        msg << "Line: " << ii.line << "\n";
+      }
+      msg << "Stack: \n";
+      state.dumpStack(msg);
+  
+      std::string info_str = info.str();
+      if (info_str != "")
+        msg << "Info: \n" << info_str;
+      interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+    }
   }
     
   terminateState(state);

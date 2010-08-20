@@ -67,7 +67,7 @@ static in_port_t __get_unused_port(void) {
 }
 
 static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
-  if (addr->sin_addr.s_addr != INADDR_ANY && addr->sin_addr.s_addr != INADDR_LOOPBACK &&
+  if (addr->sin_addr.s_addr != INADDR_ANY && addr->sin_addr.s_addr != htonl(INADDR_LOOPBACK) &&
       addr->sin_addr.s_addr != __net.net_addr.s_addr)
     return NULL;
 

@@ -21,6 +21,7 @@
 #include <sys/times.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <syslog.h>
 
 #include "klee/Config/config.h"
 
@@ -551,4 +552,20 @@ int munmap(void*start, size_t length) {
   klee_warning("ignoring (EPERM)");
   errno = EPERM;
   return -1;
+}
+
+void openlog(const char *ident, int option, int facility) {
+  klee_warning("ignoring");
+}
+
+void syslog(int priority, const char *format, ...) {
+  klee_warning("ignoring");
+}
+
+void closelog(void) {
+  klee_warning("ignoring");
+}
+
+void vsyslog(int priority, const char *format, va_list ap) {
+  klee_warning("ignoring");
 }
