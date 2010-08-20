@@ -927,6 +927,23 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   }
 }
 
+Executor::StatePair
+Executor::fork(ExecutionState &current) {
+  ExecutionState *lastState = &current;
+  ExecutionState *newState = lastState->branch();
+
+  addedStates.insert(newState);
+
+  lastState->ptreeNode->data = 0;
+  std::pair<PTree::Node*,PTree::Node*> res =
+   processTree->split(lastState->ptreeNode, newState, lastState);
+  newState->ptreeNode = res.first;
+  lastState->ptreeNode = res.second;
+
+  fireStateBranched(newState, lastState, 0);
+  return StatePair(newState, lastState);
+}
+
 void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(condition)) {
     assert(CE->isTrue() && "attempt to add invalid constraint");
@@ -3103,8 +3120,8 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
 }
 
 
-void Executor::schedule(ExecutionState &state, bool yield)
-{
+void Executor::schedule(ExecutionState &state, bool yield) {
+
   int enabledCount = 0;
   for(ExecutionState::threads_ty::iterator it = state.threads.begin();
       it != state.threads.end();  it++) {
@@ -3116,14 +3133,15 @@ void Executor::schedule(ExecutionState &state, bool yield)
   //CLOUD9_DEBUG("Scheduling " << state.threads.size() << " threads (" <<
   //    enabledCount << " enabled) in " << state.processes.size() << " processes ...");
 
-  if (enabledCount == 0)
-    {
+  if (enabledCount == 0) {
       klee_message("terminating state");
-      return terminateStateOnError(state, " ******** deadlock", "user.err");
+      return terminateStateOnError(state, " ******** hang (possible deadlock?)", "user.err");
     }
   
   bool forkSchedule = false;
   bool incPreemptions = false;
+
+  ExecutionState::threads_ty::iterator oldIt = state.crtThreadIt;
 
   if(state.crtThreadIt == state.threads.end() || !state.crtThread().enabled || yield) {
     ExecutionState::threads_ty::iterator it = state.nextThread(state.crtThreadIt);
@@ -3148,25 +3166,17 @@ void Executor::schedule(ExecutionState &state, bool yield)
     ExecutionState *lastState = &state;
 
     while (it != finalIt) {
-      if (it->second.enabled) {
-
-        ExecutionState *cState = lastState;
-        ExecutionState *newState = cState->branch();
+      // Choose only enabled states, and, in the case of yielding, do not
+      // reschedule the same thread
+      if (it->second.enabled && (!yield || it != oldIt)) {
+        StatePair sp = fork(*lastState);
 
         if (incPreemptions)
-          newState->preemptions = state.preemptions + 1;
+          sp.first->preemptions = state.preemptions + 1;
 
-        addedStates.insert(newState);
+        sp.first->scheduleNext(sp.first->threads.find(it->second.tuid));
 
-        lastState->ptreeNode->data = 0;
-        std::pair<PTree::Node*,PTree::Node*> res =
-          processTree->split(lastState->ptreeNode, newState, lastState);
-        newState->ptreeNode = res.first;
-        lastState->ptreeNode = res.second;
-
-        newState->scheduleNext(newState->threads.find(it->second.tuid));
-
-        lastState = newState;
+        lastState = sp.first;
       }
 
       it = state.nextThread(it);
