@@ -3184,6 +3184,34 @@ void Executor::schedule(ExecutionState &state, bool yield) {
   }
 }
 
+void Executor::executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist) {
+  // Copy the waiting list
+  std::set<thread_uid_t> wl = state.waitingLists[wlist];
+
+  assert(wl.size() > 0);
+
+  if (!ForkOnSchedule) {
+    state.notifyOne(wlist, *wl.begin()); // Deterministically pick the first thread in the queue
+    return;
+  }
+
+  ExecutionState *lastState = &state;
+
+  for (std::set<thread_uid_t>::iterator it = wl.begin(); it != wl.end();) {
+    thread_uid_t tuid = *it++;
+
+    if (it != wl.end()) {
+      StatePair sp = fork(*lastState);
+
+      sp.second->notifyOne(wlist, tuid);
+
+      lastState = sp.first;
+    } else {
+      lastState->notifyOne(wlist, tuid);
+    }
+  }
+}
+
 
 void Executor::executeMemoryOperation(ExecutionState &state,
                                       bool isWrite,

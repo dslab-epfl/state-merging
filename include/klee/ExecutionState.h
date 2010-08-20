@@ -159,7 +159,7 @@ public:
 
   wlist_id_t getWaitingList() { return wlistCounter++; }
   void sleepThread(wlist_id_t wlist);
-  void notifyOne(wlist_id_t wlist);
+  void notifyOne(wlist_id_t wlist, thread_uid_t tid);
   void notifyAll(wlist_id_t wlist);
 
   threads_ty::iterator crtThreadIt;

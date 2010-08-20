@@ -422,6 +422,8 @@ private:
   
   void schedule(ExecutionState &state, bool yield);
   
+  void executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist);
+
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

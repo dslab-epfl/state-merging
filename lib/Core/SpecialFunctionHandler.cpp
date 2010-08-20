@@ -758,8 +758,9 @@ void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
   }
 
   if (all->isZero()) {
-    state.notifyOne(cast<ConstantExpr>(wlist)->getZExtValue());
+    executor.executeThreadNotifyOne(state, cast<ConstantExpr>(wlist)->getZExtValue());
   } else {
+    // It's simple enough such that it can be handled by the state class itself
     state.notifyAll(cast<ConstantExpr>(wlist)->getZExtValue());
   }
 }

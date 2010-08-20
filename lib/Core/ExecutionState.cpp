@@ -199,20 +199,19 @@ void ExecutionState::sleepThread(wlist_id_t wlist) {
   waitingLists[wlist].insert(crtThread().tuid);
 }
 
-void ExecutionState::notifyOne(wlist_id_t wlist) {
+void ExecutionState::notifyOne(wlist_id_t wlist, thread_uid_t tuid) {
   assert(wlist > 0);
 
   std::set<thread_uid_t> &wl = waitingLists[wlist];
 
-  if (wl.size() > 0) {
-    thread_uid_t tuid = *wl.begin();
-
-    wl.erase(wl.begin());
-
-    Thread &thread = threads.find(tuid)->second;
-    thread.enabled = true;
-    thread.waitingList = 0;
+  if (wl.erase(tuid) != 1) {
+    assert(0 && "thread was not waiting");
   }
+
+  Thread &thread = threads.find(tuid)->second;
+  assert(!thread.enabled);
+  thread.enabled = true;
+  thread.waitingList = 0;
 
   if (wl.size() == 0)
     waitingLists.erase(wlist);
