@@ -25,6 +25,21 @@
 
 #include <pthread.h>
 
+
+////////////////////////////////////////////////////////////////////////////////
+
+#undef FD_SET
+#undef FD_CLR
+#undef FD_ISSET
+#undef FD_ZERO
+
+#define FD_SET(n, p)    (__FDS_BITS(p)[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
+#define FD_CLR(n, p)    (__FDS_BITS(p)[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
+#define FD_ISSET(n, p)  (__FDS_BITS(p)[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
+#define FD_ZERO(p)  memset((char *)(p), '\0', sizeof(*(p)))
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define QUEUE_SIZE          3
 #define PRODUCERS_COUNT     5
 #define CONSUMERS_COUNT     5
@@ -57,6 +72,8 @@ typedef struct {
 } producer_data_t;
 
 static void queue_init(queue_t *q, unsigned int capacity) {
+  int res;
+
   memset(q, 0, sizeof(queue_t));
 
   q->data = (int*)malloc(capacity*sizeof(int));
@@ -68,16 +85,25 @@ static void queue_init(queue_t *q, unsigned int capacity) {
 
   q->closed = 0;
 
-  pthread_mutex_init(&q->mutex, NULL);
-  pthread_cond_init(&q->empty, NULL);
-  pthread_cond_init(&q->full, NULL);
+  res = pthread_mutex_init(&q->mutex, NULL);
+  assert(res == 0);
+
+  res = pthread_cond_init(&q->empty, NULL);
+  assert(res == 0);
+
+  res = pthread_cond_init(&q->full, NULL);
+  assert(res == 0);
 }
 
 static void queue_produce(queue_t *q, int c) {
-  pthread_mutex_lock(&q->mutex);
+  int res;
+
+  res = pthread_mutex_lock(&q->mutex);
+  assert(res == 0);
 
   while (q->size == q->capacity) {
-    pthread_cond_wait(&q->full, &q->mutex);
+    res = pthread_cond_wait(&q->full, &q->mutex);
+    assert(res == 0);
   }
 
   assert(!q->closed);
@@ -86,48 +112,69 @@ static void queue_produce(queue_t *q, int c) {
   q->end = (q->end + 1) % q->capacity;
   q->size = q->size + 1;
 
-  pthread_cond_broadcast(&q->empty);
+  res = pthread_cond_broadcast(&q->empty);
+  assert(res == 0);
 
-  pthread_mutex_unlock(&q->mutex);
+  res = pthread_mutex_unlock(&q->mutex);
+  assert(res == 0);
 }
 
 static int queue_consume(queue_t *q) {
-  pthread_mutex_lock(&q->mutex);
+  int res;
+
+  res = pthread_mutex_lock(&q->mutex);
+  assert(res == 0);
 
   while (q->size == 0) {
     if (q->closed) {
-      pthread_mutex_unlock(&q->mutex);
+      res = pthread_mutex_unlock(&q->mutex);
+      assert(res == 0);
       return -1;
     }
 
-    pthread_cond_wait(&q->empty, &q->mutex);
+    res = pthread_cond_wait(&q->empty, &q->mutex);
+    assert(res == 0);
   }
 
   int result = q->data[q->start];
   q->start = (q->start + 1) % q->capacity;
   q->size = q->size - 1;
 
-  pthread_cond_broadcast(&q->full);
+  res = pthread_cond_broadcast(&q->full);
+  assert(res == 0);
 
-  pthread_mutex_unlock(&q->mutex);
+  res = pthread_mutex_unlock(&q->mutex);
+  assert(res == 0);
 
   return result;
 }
 
 static void queue_close(queue_t *q) {
-  pthread_mutex_lock(&q->mutex);
+  int res;
+
+  res = pthread_mutex_lock(&q->mutex);
+  assert(res == 0);
 
   q->closed = 1;
 
-  pthread_cond_broadcast(&q->empty);
+  res = pthread_cond_broadcast(&q->empty);
+  assert(res == 0);
 
-  pthread_mutex_unlock(&q->mutex);
+  res = pthread_mutex_unlock(&q->mutex);
+  assert(res == 0);
 }
 
 static void queue_deinit(queue_t *q) {
-  pthread_mutex_destroy(&q->mutex);
-  pthread_cond_destroy(&q->empty);
-  pthread_cond_destroy(&q->full);
+  int res;
+
+  res = pthread_mutex_destroy(&q->mutex);
+  assert(res == 0);
+
+  res = pthread_cond_destroy(&q->empty);
+  assert(res == 0);
+
+  res = pthread_cond_destroy(&q->full);
+  assert(res == 0);
 
   free(q->data);
 }
@@ -209,6 +256,7 @@ void serve(queue_t *q, int accsock) {
           assert(errno = EAGAIN);
           break;
         }
+        printf("New connection accepted\n");
 
         // Create a new thread to serve this connection
         producer_data_t *pdata = (producer_data_t*)malloc(sizeof(*pdata));
@@ -218,8 +266,10 @@ void serve(queue_t *q, int accsock) {
         pdata->sockfd = connsock;
 
         pthread_t prodthread;
-        pthread_create(&prodthread, NULL, &producer_thread, pdata);
-        pthread_detach(prodthread); // Don't want to join all producers
+        res = pthread_create(&prodthread, NULL, &producer_thread, pdata);
+        assert(res == 0);
+        res = pthread_detach(prodthread); // Don't want to join all producers
+        assert(res == 0);
       }
     }
 
@@ -240,7 +290,8 @@ int server(int initfd) {
   pthread_t cthreads[CONSUMERS_COUNT];
   unsigned i;
   for (i = 0; i < CONSUMERS_COUNT; i++) {
-    pthread_create(&cthreads[i], NULL, &consumer_thread, &q);
+    res = pthread_create(&cthreads[i], NULL, &consumer_thread, &q);
+    assert(res == 0);
   }
 
   // Create the listening socket
@@ -265,12 +316,13 @@ int server(int initfd) {
 
   close(initfd);
 
-  printf("Server initialized\n");
+  fprintf(stderr, "Server initialized\n");
 
   serve(&q, accsock);
 
   for (i = 0; i < CONSUMERS_COUNT; i++) {
-    pthread_join(cthreads[i], NULL);
+    res = pthread_join(cthreads[i], NULL);
+    assert(res == 0);
   }
 
   queue_deinit(&q);
