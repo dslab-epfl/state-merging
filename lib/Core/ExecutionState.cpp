@@ -196,7 +196,9 @@ void ExecutionState::sleepThread(wlist_id_t wlist) {
   crtThread().enabled = false;
   crtThread().waitingList = wlist;
 
-  waitingLists[wlist].insert(crtThread().tuid);
+  std::set<thread_uid_t> &wl = waitingLists[wlist];
+
+  wl.insert(crtThread().tuid);
 }
 
 void ExecutionState::notifyOne(wlist_id_t wlist, thread_uid_t tuid) {

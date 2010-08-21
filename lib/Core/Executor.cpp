@@ -3188,10 +3188,12 @@ void Executor::executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist) {
   // Copy the waiting list
   std::set<thread_uid_t> wl = state.waitingLists[wlist];
 
-  assert(wl.size() > 0);
+  if (!ForkOnSchedule || wl.size() <= 1) {
+    if (wl.size() == 0)
+      state.waitingLists.erase(wlist);
+    else
+      state.notifyOne(wlist, *wl.begin()); // Deterministically pick the first thread in the queue
 
-  if (!ForkOnSchedule) {
-    state.notifyOne(wlist, *wl.begin()); // Deterministically pick the first thread in the queue
     return;
   }
 

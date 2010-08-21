@@ -1067,6 +1067,7 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
     } else {
       f->setName(newName);
       assert(f->getName() == newName);
+      it++;
     }
 
   }
@@ -1370,6 +1371,7 @@ int main(int argc, char **argv, char **envp) {
 
   if (WithPOSIXRuntime) {
     mainModule = linkWithPOSIX(mainModule);
+    mainModule = linkWithUclibc(mainModule);
   }
 
   // Get the desired main function.  klee_main initializes uClibc

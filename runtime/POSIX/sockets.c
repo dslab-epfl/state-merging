@@ -901,7 +901,8 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // All is good for the remote socket
   remote->status = SOCK_STATUS_CONNECTED;
-  _get_endpoint_name(local, local->remote_end, addr, addrlen);
+  if (addr != NULL)
+    _get_endpoint_name(local, local->remote_end, addr, addrlen);
 
   fprintf(stderr, "Connected socket created: %d\n", fd);
 
