@@ -1054,7 +1054,7 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
       continue;
     }
 
-    StringRef newName = fName.substr(strlen("__klee_original_"), fName.size());
+    StringRef newName = fName.substr(strlen("__klee_original_"));
 
     CLOUD9_DEBUG("Patching " << fName.str());
 
@@ -1065,8 +1065,11 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
       it++;
       f->eraseFromParent();
     } else {
-      f->setName(newName);
-      assert(f->getName() == newName);
+      // We switch to strings in order to avoid memory errors due to StringRef
+      // destruction inside setName().
+      std::string newNameStr = newName.str();
+      f->setName(newNameStr);
+      assert(f->getName().str() == newNameStr);
       it++;
     }
 
