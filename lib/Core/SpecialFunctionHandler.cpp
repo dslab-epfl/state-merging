@@ -738,8 +738,6 @@ void SpecialFunctionHandler::handleThreadSleep(ExecutionState &state,
     return;
   }
 
-  CLOUD9_DEBUG("Sleeping on wlist " << cast<ConstantExpr>(wlistExpr)->getZExtValue() << " (crt size: " << state.waitingLists.size() << ")");
-
   state.sleepThread(cast<ConstantExpr>(wlistExpr)->getZExtValue());
   executor.schedule(state, false);
 }
@@ -758,10 +756,8 @@ void SpecialFunctionHandler::handleThreadNotify(ExecutionState &state,
   }
 
   if (all->isZero()) {
-    CLOUD9_DEBUG("Notifying one at wlist " << cast<ConstantExpr>(wlist)->getZExtValue());
     executor.executeThreadNotifyOne(state, cast<ConstantExpr>(wlist)->getZExtValue());
   } else {
-    CLOUD9_DEBUG("Notifying all at wlist " << cast<ConstantExpr>(wlist)->getZExtValue());
     // It's simple enough such that it can be handled by the state class itself
     state.notifyAll(cast<ConstantExpr>(wlist)->getZExtValue());
   }

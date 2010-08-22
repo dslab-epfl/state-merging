@@ -116,6 +116,7 @@ Process& ExecutionState::forkProcess(process_id_t pid) {
   forked.pid = pid;
   forked.ppid = crtProcess().pid;
   forked.threads.clear();
+  forked.children.clear();
 
   forked.forkPath.push_back(1); // Child
   crtProcess().forkPath.push_back(0); // Parent
@@ -154,7 +155,7 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
 }
 
 void ExecutionState::terminateProcess(processes_ty::iterator procIt) {
-  CLOUD9_DEBUG("Terminating process...");
+  CLOUD9_DEBUG("Terminating process " << procIt->second.pid);
 
   assert(processes.size() > 1);
 
