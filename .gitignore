@@ -32,3 +32,6 @@ vgcore.*
 *.pdf
 *.png
 *.eps
+
+*.ll
+*.bc
