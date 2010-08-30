@@ -432,6 +432,8 @@ void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,
                                 std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_is_symbolic");
 
+  //arguments[0]->print(std::cerr);
+
   executor.bindLocal(target, state, 
                      ConstantExpr::create(!isa<ConstantExpr>(arguments[0]),
                                           Expr::Int32));

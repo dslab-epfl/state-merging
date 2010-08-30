@@ -16,8 +16,10 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <arpa/inet.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <netdb.h>
 
@@ -1363,3 +1365,27 @@ int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
 
   return 0;
 }
+
+// Byte order conversion ///////////////////////////////////////////////////////
+
+#undef htons
+#undef htonl
+#undef ntohs
+#undef ntohl
+
+uint16_t htons(uint16_t v) {
+  return (v >> 8) | (v << 8);
+}
+
+uint32_t htonl(uint32_t v) {
+  return htons(v >> 16) | (htons((uint16_t) v) << 16);
+}
+
+uint16_t ntohs(uint16_t v) {
+  return htons(v);
+}
+
+uint32_t ntohl(uint32_t v) {
+  return htonl(v);
+}
+
