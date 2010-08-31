@@ -18,6 +18,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
+  if (INJECT_FAULT(pthread_mutex_init, ENOMEM, EPERM)) {
+    return -1;
+  }
+
   unsigned int idx;
   STATIC_LIST_ALLOC(__tsync.mutexes, idx);
 
@@ -138,6 +142,10 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) {
+  if (INJECT_FAULT(pthread_cond_init, ENOMEM, EAGAIN)) {
+    return -1;
+  }
+
   unsigned int idx;
   STATIC_LIST_ALLOC(__tsync.condvars, idx);
 

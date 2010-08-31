@@ -172,7 +172,7 @@ static void __release_end_point(end_point_t *end_point) {
 
 static void _shutdown(socket_t *sock, int how);
 
-void _close_socket(socket_t *sock) {
+int _close_socket(socket_t *sock) {
   // First, do state specific clean-up
 
   if (sock->status == SOCK_STATUS_CONNECTED) {
@@ -224,6 +224,8 @@ void _close_socket(socket_t *sock) {
   if (sock->__bdata.queued == 0) {
     free(sock);
   }
+
+  return 0;
 }
 
 // read() //////////////////////////////////////////////////////////////////////
@@ -237,6 +239,10 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
   if (sock->in == NULL || count == 0) {
     // The socket is shut down for reading
     return 0;
+  }
+
+  if (INJECT_FAULT(read, ECONNRESET)) {
+    return -1;
   }
 
   if (sock->__bdata.flags & O_NONBLOCK) {
@@ -282,6 +288,10 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
 
   if (count == 0) {
     return 0;
+  }
+
+  if (INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
+    return -1;
   }
 
   if (sock->__bdata.flags & O_NONBLOCK) {
@@ -486,6 +496,10 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     return -1;
   }
 
+  if (INJECT_FAULT(bind, EADDRINUSE)) {
+    return -1;
+  }
+
   end_point_t *end_point;
 
   if (sock->domain == AF_INET) {
@@ -597,6 +611,10 @@ int listen(int sockfd, int backlog) {
 
   if (sock->type != SOCK_STREAM) {
     errno = EOPNOTSUPP;
+    return -1;
+  }
+
+  if (INJECT_FAULT(listen, EADDRINUSE)) {
     return -1;
   }
 
@@ -754,6 +772,10 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
+  if (INJECT_FAULT(sockfd, EACCES, EPERM, ECONNREFUSED)) {
+    return -1;
+  }
+
   if (sock->type == SOCK_STREAM) {
     return _stream_connect(sock, addr, addrlen);
   } else if (sock->type == SOCK_DGRAM) {
@@ -779,6 +801,10 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   if (sock->status != SOCK_STATUS_LISTENING) {
     errno = EINVAL;
+    return -1;
+  }
+
+  if (INJECT_FAULT(accept, ENOMEM, ENOBUFS, EPROTO, EPERM)) {
     return -1;
   }
 
@@ -1146,6 +1172,10 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   if (protocol != 0 && protocol != IPPROTO_TCP) {
     klee_warning("unsupported socketpair() protocol");
     errno = EPROTONOSUPPORT;
+    return -1;
+  }
+
+  if (INJECT_FAULT(socketpair, EMFILE, ENFILE)) {
     return -1;
   }
 

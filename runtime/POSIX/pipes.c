@@ -22,7 +22,7 @@
 // Internal routines
 ////////////////////////////////////////////////////////////////////////////////
 
-void _close_pipe(pipe_end_t *pipe) {
+int _close_pipe(pipe_end_t *pipe) {
   if (!pipe->buffer->closed) {
     _stream_close(pipe->buffer);
   } else {
@@ -34,6 +34,8 @@ void _close_pipe(pipe_end_t *pipe) {
   if (pipe->__bdata.queued == 0) {
     free(pipe);
   }
+
+  return 0;
 }
 
 ssize_t _read_pipe(pipe_end_t *pipe, void *buf, size_t count) {

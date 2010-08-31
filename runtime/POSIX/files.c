@@ -133,6 +133,10 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 ////////////////////////////////////////////////////////////////////////////////
 
 ssize_t _read_file(file_t *file, void *buf, size_t count) {
+  if (INJECT_FAULT(read, EIO)) {
+    return -1;
+  }
+
   ssize_t res = _block_read(&file->storage->contents, buf, count, file->offset);
   assert(res >= 0);
 
@@ -143,6 +147,10 @@ ssize_t _read_file(file_t *file, void *buf, size_t count) {
 }
 
 ssize_t _write_file(file_t *file, const void *buf, size_t count) {
+  if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
+    return -1;
+  }
+
   ssize_t res = _block_write(&file->storage->contents, buf, count, file->offset);
   assert(res >= 0);
 
@@ -158,6 +166,10 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static int _stat_dfile(disk_file_t *dfile, struct stat *buf) {
+  if (INJECT_FAULT(fstat, ELOOP, ENOMEM)) {
+    return -1;
+  }
+
   memcpy(buf, dfile->stat, sizeof(struct stat));
   return 0;
 }
@@ -237,6 +249,10 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     va_start(ap, flags);
     mode = va_arg(ap, mode_t);
     va_end(ap);
+  }
+
+  if (INJECT_FAULT(open, EINTR, ELOOP, EMFILE, ENFILE, ENOMEM, EPERM)) {
+    return -1;
   }
 
   fprintf(stderr, "Attempting to open: %s\n", __concretize_string(pathname));
@@ -330,10 +346,15 @@ DEFINE_MODEL(int, creat, const char *pathname, mode_t mode) {
   return open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
-void _close_file(file_t *file) {
+int _close_file(file_t *file) {
   assert(file->__bdata.refcount == 0);
 
+  if (INJECT_FAULT(close, EIO))
+    return -1;
+
   free(file);
+
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

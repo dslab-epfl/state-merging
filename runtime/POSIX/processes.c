@@ -81,6 +81,10 @@ pid_t fork(void) {
     return -1;
   }
 
+  if (INJECT_FAULT(fork, EAGAIN, ENOMEM)) {
+    return -1;
+  }
+
   proc_data_t *ppdata = &__pdata[PID_TO_INDEX(getpid())];
 
   proc_data_t *pdata = &__pdata[newIdx];

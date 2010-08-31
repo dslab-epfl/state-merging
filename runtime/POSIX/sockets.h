@@ -74,7 +74,7 @@ typedef struct socket {
   stream_buffer_t *listen;
 } socket_t;
 
-void _close_socket(socket_t *sock);
+int _close_socket(socket_t *sock);
 ssize_t _read_socket(socket_t *sock, void *buf, size_t count);
 ssize_t _write_socket(socket_t *sock, const void *buf, size_t count);
 int _stat_socket(socket_t *sock, struct stat *buf);

@@ -41,6 +41,8 @@
 #define SOCKET_BUFFER_SIZE  4096
 #define PIPE_BUFFER_SIZE    4096
 
+#define HAVE_FAULT_INJECTION    1
+
 // A model needs to be declared only when it's supposed to interface
 // an existing C library call.
 
@@ -66,8 +68,17 @@
 #define DEFINE_MODEL(type, name, ...) \
     type __klee_model_ ## name(__VA_ARGS__)
 
+
+#ifdef HAVE_FAULT_INJECTION
+
 #define INJECT_FAULT(name, ...) \
     __inject_fault(#name, ##__VA_ARGS__)
+
+#else
+
+#define INJECT_FAULT(name, ...)     0
+
+#endif
 
 int klee_get_errno(void);
 

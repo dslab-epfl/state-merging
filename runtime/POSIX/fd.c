@@ -94,6 +94,10 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
     return -1;
   }
 
+  if (INJECT_FAULT(read, EINTR)) {
+    return -1;
+  }
+
   if (fde->attr & FD_IS_FILE) {
     return _read_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
@@ -134,6 +138,10 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
   // Check for permissions
   if ((fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
     errno = EBADF;
+    return -1;
+  }
+
+  if (INJECT_FAULT(write, EINTR)) {
     return -1;
   }
 
@@ -183,20 +191,28 @@ DEFINE_MODEL(int, close, int fd) {
     return 0;
   }
 
+  if (INJECT_FAULT(close, EINTR)) {
+    return -1;
+  }
+
+  int res;
+
   // Check the type of the descriptor
   if (fde->attr & FD_IS_FILE) {
-    _close_file((file_t*)fde->io_object);
+    res = _close_file((file_t*)fde->io_object);
   } else if (fde->attr & FD_IS_PIPE) {
-    _close_pipe((pipe_end_t*)fde->io_object);
+    res = _close_pipe((pipe_end_t*)fde->io_object);
   } else if (fde->attr & FD_IS_SOCKET) {
-    _close_socket((socket_t*)fde->io_object);
+    res = _close_socket((socket_t*)fde->io_object);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;
   }
 
-  STATIC_LIST_CLEAR(__fdt, fd);
-  return 0;
+  if (res == 0)
+    STATIC_LIST_CLEAR(__fdt, fd);
+
+  return res;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -244,6 +260,10 @@ DEFINE_MODEL(int, dup3, int oldfd, int newfd, int flags) {
 
   if (newfd == oldfd) {
     errno = EINVAL;
+    return -1;
+  }
+
+  if (INJECT_FAULT(dup, EMFILE, EINTR)) {
     return -1;
   }
 
@@ -463,6 +483,10 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     }
 
     totalfds += res;
+  }
+
+  if (INJECT_FAULT(select, ENOMEM)) {
+    return -1;
   }
 
   if (timeout != NULL && totalfds == 0) {
