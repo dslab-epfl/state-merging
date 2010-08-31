@@ -614,7 +614,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
 void Executor::branch(ExecutionState &state, 
                       const std::vector< ref<Expr> > &conditions,
-                      std::vector<ExecutionState*> &result) {
+                      std::vector<ExecutionState*> &result, int reason) {
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
   assert(N);
@@ -631,7 +631,7 @@ void Executor::branch(ExecutionState &state,
     result.push_back(ns);
     es->ptreeNode->data = 0;
     std::pair<PTree::Node*,PTree::Node*> res = 
-      processTree->split(es->ptreeNode, ns, es);
+      processTree->split(es->ptreeNode, ns, es, reason);
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
 
@@ -689,7 +689,8 @@ void Executor::branch(ExecutionState &state,
 }
 
 Executor::StatePair 
-Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
+Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
+    int reason) {
   Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
     seedMap.find(&current);
@@ -891,7 +892,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     current.ptreeNode->data = 0;
     std::pair<PTree::Node*, PTree::Node*> res =
-      processTree->split(current.ptreeNode, falseState, trueState);
+      processTree->split(current.ptreeNode, falseState, trueState, reason);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
 
@@ -928,7 +929,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 }
 
 Executor::StatePair
-Executor::fork(ExecutionState &current) {
+Executor::fork(ExecutionState &current, int reason) {
   ExecutionState *lastState = &current;
   ExecutionState *newState = lastState->branch();
 
@@ -936,7 +937,7 @@ Executor::fork(ExecutionState &current) {
 
   lastState->ptreeNode->data = 0;
   std::pair<PTree::Node*,PTree::Node*> res =
-   processTree->split(lastState->ptreeNode, newState, lastState);
+   processTree->split(lastState->ptreeNode, newState, lastState, reason);
   newState->ptreeNode = res.first;
   lastState->ptreeNode = res.second;
 
@@ -1116,7 +1117,7 @@ void Executor::executeGetValue(ExecutionState &state,
       conditions.push_back(EqExpr::create(e, *vit));
 
     std::vector<ExecutionState*> branches;
-    branch(state, conditions, branches);
+    branch(state, conditions, branches, KLEE_FORK_INTERNAL);
     
     std::vector<ExecutionState*>::iterator bit = branches.begin();
     for (std::set< ref<Expr> >::iterator vit = values.begin(), 
@@ -1493,6 +1494,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
   case Instruction::Br: {
     BranchInst *bi = cast<BranchInst>(i);
+    int reason = KLEE_FORK_DEFAULT;
+
+    if (state.crtSpecialFork == i) {
+      reason = state.crtForkReason;
+      state.crtSpecialFork = NULL;
+    } else {
+      assert(!state.crtForkReason && "another branching instruction between a klee_branch and its corresponding 'if'");
+    }
+
     if (bi->isUnconditional()) {
       transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), state);
     } else {
@@ -1501,7 +1511,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
              "Wrong operand index!");
       ref<Expr> cond = eval(ki, 0, state).value;
       //C9HACK_DEBUG("Fork requested: " << (false ? "internal" : "external"), state);
-      Executor::StatePair branches = fork(state, cond, false);
+      Executor::StatePair branches = fork(state, cond, false, reason);
 
       if (branches.first) {
     	  fireControlFlowEvent(branches.first, ::cloud9::worker::BRANCH_TRUE);
@@ -1573,7 +1583,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         conditions.push_back(it->second);
       
       std::vector<ExecutionState*> branches;
-      branch(state, conditions, branches);
+      branch(state, conditions, branches, KLEE_FORK_DEFAULT);
         
       std::vector<ExecutionState*>::iterator bit = branches.begin();
       for (std::map<BasicBlock*, ref<Expr> >::iterator it = 
@@ -1682,7 +1692,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
         //C9HACK_DEBUG("Fork requested: " << (true ? "internal" : "external"), state);
-        StatePair res = fork(*free, EqExpr::create(v, value), true);
+        StatePair res = fork(*free, EqExpr::create(v, value), true, KLEE_FORK_INTERNAL);
         if (res.first) {
           uint64_t addr = value->getZExtValue();
           if (legalFunctions.count(addr)) {
@@ -2921,7 +2931,7 @@ void Executor::executeAlloc(ExecutionState &state,
       example = tmp;
     }
 
-    StatePair fixedSize = fork(state, EqExpr::create(example, size), true);
+    StatePair fixedSize = fork(state, EqExpr::create(example, size), true, KLEE_FORK_INTERNAL);
     
     if (fixedSize.second) { 
       // Check for exactly two values
@@ -2944,7 +2954,7 @@ void Executor::executeAlloc(ExecutionState &state,
         StatePair hugeSize = 
           fork(*fixedSize.second, 
                UltExpr::create(ConstantExpr::alloc(1<<31, W), size), 
-               true);
+               true, KLEE_FORK_INTERNAL);
         if (hugeSize.first) {
           klee_message("NOTE: found huge malloc, returing 0");
           bindLocal(target, *hugeSize.first, 
@@ -2973,7 +2983,7 @@ void Executor::executeAlloc(ExecutionState &state,
 void Executor::executeFree(ExecutionState &state,
                            ref<Expr> address,
                            KInstruction *target) {
-  StatePair zeroPointer = fork(state, Expr::createIsZero(address), true);
+  StatePair zeroPointer = fork(state, Expr::createIsZero(address), true, KLEE_FORK_INTERNAL);
   if (zeroPointer.first) {
     if (target)
       bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
@@ -3021,7 +3031,7 @@ void Executor::resolveExact(ExecutionState &state,
        it != ie; ++it) {
     ref<Expr> inBounds = EqExpr::create(p, it->first->getBaseExpr());
     
-    StatePair branches = fork(*unbound, inBounds, true);
+    StatePair branches = fork(*unbound, inBounds, true, KLEE_FORK_INTERNAL);
     
     if (branches.first)
       results.push_back(std::make_pair(*it, branches.first));
@@ -3169,7 +3179,7 @@ void Executor::schedule(ExecutionState &state, bool yield) {
       // Choose only enabled states, and, in the case of yielding, do not
       // reschedule the same thread
       if (it->second.enabled && (!yield || it != oldIt)) {
-        StatePair sp = fork(*lastState);
+        StatePair sp = fork(*lastState, KLEE_FORK_SCHEDULE);
 
         if (incPreemptions)
           sp.first->preemptions = state.preemptions + 1;
@@ -3203,7 +3213,7 @@ void Executor::executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist) {
     thread_uid_t tuid = *it++;
 
     if (it != wl.end()) {
-      StatePair sp = fork(*lastState);
+      StatePair sp = fork(*lastState, KLEE_FORK_SCHEDULE);
 
       sp.second->notifyOne(wlist, tuid);
 
@@ -3304,7 +3314,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     
-    StatePair branches = fork(*unbound, inBounds, true);
+    StatePair branches = fork(*unbound, inBounds, true, KLEE_FORK_INTERNAL);
     ExecutionState *bound = branches.first;
 
     // bound can be 0 on failure or overlapped 

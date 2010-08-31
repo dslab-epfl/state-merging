@@ -27,6 +27,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Type.h"
 #include "llvm/DerivedTypes.h"
+#include "llvm/InstrTypes.h"
 
 #include <errno.h>
 
@@ -71,6 +72,7 @@ HandlerInfo handlerInfo[] = {
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
   add("klee_assume", handleAssume, false),
+  add("klee_branch", handleBranch, true),
   add("klee_breakpoint", handleBreakpoint, false),
   add("klee_check_memory_access", handleCheckMemoryAccess, false),
   add("klee_get_valuef", handleGetValue, true),
@@ -589,7 +591,7 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
 
   Executor::StatePair zeroSize = executor.fork(state, 
                                                Expr::createIsZero(size), 
-                                               true);
+                                               true, KLEE_FORK_INTERNAL);
   
   if (zeroSize.first) { // size == 0
     executor.executeFree(*zeroSize.first, address, target);   
@@ -597,7 +599,7 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   if (zeroSize.second) { // size != 0
     Executor::StatePair zeroPointer = executor.fork(*zeroSize.second, 
                                                     Expr::createIsZero(address), 
-                                                    true);
+                                                    true, KLEE_FORK_INTERNAL);
     
     if (zeroPointer.first) { // address == 0
       executor.executeAlloc(*zeroPointer.first, size, false, target);
@@ -787,6 +789,40 @@ void SpecialFunctionHandler::handleThreadTerminate(ExecutionState &state,
   assert(arguments.empty() && "invalid number of arguments to klee_thread_terminate");
 
   executor.executeThreadExit(state);
+}
+
+void SpecialFunctionHandler::handleBranch(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_branch");
+
+  if (!isa<ConstantExpr>(arguments[1])) {
+    executor.terminateStateOnError(state, "symbolic reason in klee_branch", "user.err");
+    return;
+  }
+
+  // We must check that klee_branch is correctly used - the use case of the
+  // return value must be a comparison instruction
+  Instruction *inst = target->inst;
+
+  if (!inst->hasOneUse()) {
+    executor.terminateStateOnError(state, "klee_branch must be used once", "user.err");
+    return;
+  }
+
+  User *user = *inst->use_begin();
+
+  if (!isa<CmpInst>(user) || inst->getParent() != cast<Instruction>(user)->getParent()) {
+    executor.terminateStateOnError(state, "klee_branch must be used together with a comparison", "user.err");
+    return;
+  }
+
+  // We just bind the result to the first argument, and mark the reason
+
+  state.crtForkReason = cast<ConstantExpr>(arguments[1])->getZExtValue();
+  state.crtSpecialFork = cast<Instruction>(user);
+
+  executor.bindLocal(target, state, arguments[0]);
 }
 
 void SpecialFunctionHandler::handleProcessFork(ExecutionState &state,

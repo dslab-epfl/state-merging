@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define __KLEE_FORK_DEFAULT       0
+#define __KLEE_FORK_FAULTINJ      1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -179,6 +182,12 @@ extern "C" {
   static inline void klee_thread_notify_all(uint64_t wlist) {
     klee_thread_notify(wlist, 1);
   }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Misc
+  //////////////////////////////////////////////////////////////////////////////
+
+  uintptr_t klee_branch(uintptr_t expr, int reason);
 
 #ifdef __cplusplus
 }

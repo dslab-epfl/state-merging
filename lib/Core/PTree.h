@@ -31,7 +31,8 @@ namespace klee {
     
     std::pair<Node*,Node*> split(Node *n,
                                  const data_type &leftData,
-                                 const data_type &rightData);
+                                 const data_type &rightData,
+                                 int reason);
     void remove(Node *n);
 
     void dump(std::ostream &os);
@@ -42,8 +43,8 @@ namespace klee {
   public:
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
-    ref<Expr> condition;
 
+    int reasonCode;
   private:
     PTreeNode(PTreeNode *_parent, ExecutionState *_data);
     ~PTreeNode();

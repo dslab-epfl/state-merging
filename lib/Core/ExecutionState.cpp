@@ -58,6 +58,8 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     coveredNew(false),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0),
+    crtForkReason(KLEE_FORK_DEFAULT),
+    crtSpecialFork(NULL),
     wlistCounter(1),
     preemptions(0) {
 
