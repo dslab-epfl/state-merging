@@ -46,3 +46,7 @@ const char *__concretize_string(const char *s) {
 
   return s;
 }
+
+int __inject_fault(const char *fname, int errno, ...) {
+  return 0;
+}

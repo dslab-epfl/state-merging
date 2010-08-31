@@ -427,6 +427,10 @@ int socket(int domain, int type, int protocol) {
     return -1;
   }
 
+  if (INJECT_FAULT(socket, EACCES, EMFILE, ENFILE, ENOBUFS, ENOMEM)) {
+    return -1;
+  }
+
   // Now let's obtain a new file descriptor
   int fd;
   STATIC_LIST_ALLOC(__fdt, fd);

@@ -66,11 +66,16 @@
 #define DEFINE_MODEL(type, name, ...) \
     type __klee_model_ ## name(__VA_ARGS__)
 
+#define INJECT_FAULT(name, ...) \
+    __inject_fault(#name, ##__VA_ARGS__)
+
 int klee_get_errno(void);
 
 void *__concretize_ptr(const void *p);
 size_t __concretize_size(size_t s);
 const char *__concretize_string(const char *s);
+
+int __inject_fault(const char *fname, int errno, ...);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Basic Arrays
