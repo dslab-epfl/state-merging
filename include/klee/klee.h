@@ -188,6 +188,7 @@ extern "C" {
   //////////////////////////////////////////////////////////////////////////////
 
   uintptr_t klee_branch(uintptr_t expr, int reason);
+  int klee_fork(int reason);
 
 #ifdef __cplusplus
 }

@@ -72,7 +72,6 @@ HandlerInfo handlerInfo[] = {
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
   add("klee_assume", handleAssume, false),
-  add("klee_branch", handleBranch, true),
   add("klee_breakpoint", handleBreakpoint, false),
   add("klee_check_memory_access", handleCheckMemoryAccess, false),
   add("klee_get_valuef", handleGetValue, true),
@@ -105,6 +104,9 @@ HandlerInfo handlerInfo[] = {
 
   add("klee_thread_create", handleThreadCreate, false),
   add("klee_process_fork", handleProcessFork, true),
+
+  add("klee_branch", handleBranch, true),
+  add("klee_fork", handleFork, true),
 
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -823,6 +825,29 @@ void SpecialFunctionHandler::handleBranch(ExecutionState &state,
   state.crtSpecialFork = cast<Instruction>(user);
 
   executor.bindLocal(target, state, arguments[0]);
+}
+
+void SpecialFunctionHandler::handleFork(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_fork");
+
+  if (!isa<ConstantExpr>(arguments[0])) {
+    executor.terminateStateOnError(state, "symbolic reason in klee_fork", "user.err");
+    return;
+  }
+
+  int reason = cast<ConstantExpr>(arguments[0])->getZExtValue();
+
+  Executor::StatePair sp = executor.fork(state, reason);
+
+  // Return 1 in the original
+  executor.bindLocal(target, *sp.first, ConstantExpr::create(1,
+      executor.getWidthForLLVMType(target->inst->getType())));
+
+  // Return 0 otherwise
+  executor.bindLocal(target, *sp.second, ConstantExpr::create(0,
+      executor.getWidthForLLVMType(target->inst->getType())));
 }
 
 void SpecialFunctionHandler::handleProcessFork(ExecutionState &state,

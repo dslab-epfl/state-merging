@@ -86,6 +86,7 @@ namespace klee {
     HANDLER(handleDefineFixedObject);
     HANDLER(handleDelete);    
     HANDLER(handleDeleteArray);
+    HANDLER(handleFork);
     HANDLER(handleFree);
     HANDLER(handleGetContext);
     HANDLER(handleGetErrno);

@@ -8,6 +8,7 @@
 #include "common.h"
 
 #include <sys/types.h>
+#include <errno.h>
 
 #include <klee/klee.h>
 
@@ -47,6 +48,11 @@ const char *__concretize_string(const char *s) {
   return s;
 }
 
-int __inject_fault(const char *fname, int errno, ...) {
-  return 0;
+int __inject_fault(const char *fname, int eno, ...) {
+  if (!klee_fork(__KLEE_FORK_FAULTINJ)) {
+    return 0;
+  }
+
+  errno = eno;
+  return 1;
 }
