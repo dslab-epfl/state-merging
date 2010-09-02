@@ -32,6 +32,7 @@
 #include "llvm/Bitcode/ReaderWriter.h"
 
 #include "cloud9/worker/KleeCommon.h"
+#include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/Logger.h"
 
 #include <iostream>
@@ -47,31 +48,9 @@ namespace {
   InitEnv("init-env",
       cl::desc("Create custom environment.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"));
 
-
-  cl::opt<std::string>
-  InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
-
   cl::opt<bool>
   WarnAllExternals("warn-all-externals",
                    cl::desc("Give initial warning for all externals."));
-
-  enum LibcType {
-    NoLibc, UcLibc
-  };
-
-  cl::opt<LibcType>
-  Libc("libc",
-       cl::desc("Choose libc version (none by default)."),
-       cl::values(clEnumValN(NoLibc, "none", "Don't link in a libc"),
-          clEnumValN(UcLibc, "uclibc", "Link in uclibc (adapted for klee)"),
-          clEnumValEnd),
-       cl::init(NoLibc));
-
-
-  cl::opt<bool>
-  WithPOSIXRuntime("posix-runtime",
-        cl::desc("Link with POSIX runtime"),
-        cl::init(false));
 
   cl::opt<std::string>
   Environ("environ", cl::desc("Parse environ from given file (in \"env\" format)"));

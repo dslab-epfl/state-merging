@@ -73,11 +73,6 @@ namespace {
   CheckDivZero("check-div-zero", 
                cl::desc("Inject checks for division-by-zero"),
                cl::init(true));
-    
-  cl::opt<std::string>
-  OutputDir("output-dir", 
-            cl::desc("Directory to write results in (defaults to klee-out-N)"),
-            cl::init(""));
 
   // this is a fake entry, its automagically handled
   cl::list<std::string>
@@ -114,11 +109,6 @@ namespace {
   MakeConcreteSymbolic("make-concrete-symbolic",
                        cl::desc("Rate at which to make concrete reads symbolic (0=off)"),
                        cl::init(0));
-
-  cl::opt<unsigned>
-  StopAfterNTests("stop-after-n-tests",
-	     cl::desc("Stop execution after generating the given number of tests.  Extra tests corresponding to partially explored paths will also be dumped."),
-	     cl::init(0));
 
   cl::opt<bool>
   Watchdog("watchdog",
