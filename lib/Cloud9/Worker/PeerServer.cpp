@@ -71,7 +71,7 @@ PeerServer::~PeerServer() {
 }
 
 void PeerServer::startAccept() {
-	CLOUD9_INFO("Listening for peer connections on port" <<
+	CLOUD9_INFO("Listening for peer connections on port " <<
 			acceptor.local_endpoint().port());
 
 

@@ -83,6 +83,13 @@ public:
 		return ExecutionPathSetPin(new ExecutionPathSet());
 	}
 
+	static ExecutionPathSetPin getRootSet() {
+	  ExecutionPathSet *pSet = new ExecutionPathSet();
+	  pSet->paths.push_back(new ExecutionPath());
+
+	  return ExecutionPathSetPin(pSet);
+	}
+
 	static ExecutionPathSetPin parse(std::istream &is);
 };
 

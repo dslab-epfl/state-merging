@@ -60,6 +60,11 @@ cl::opt<bool>
 		InitEnv("init-env",
 				cl::desc("Create custom environment.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"));
 
+cl::opt<bool>
+        StandAlone("stand-alone",
+                cl::desc("Enable running a worker in stand alone mode"),
+                cl::init(false));
+
 
 cl::opt<std::string> Environ("environ", cl::desc(
 		"Parse environ from given file (in \"env\" format)"));
@@ -237,28 +242,36 @@ int main(int argc, char **argv, char **envp) {
 	theJobManager = new JobManager(mainModule, "main", pArgc, pArgv, envp);
 
 	if (ReplayPath.size() > 0) {
-		CLOUD9_INFO("Running in replay mode. No load balancer involved.");
+      CLOUD9_INFO("Running in replay mode. No load balancer involved.");
 
-		std::ifstream is(ReplayPath);
+      std::ifstream is(ReplayPath);
 
-		if (is.fail()) {
-			CLOUD9_EXIT("Could not open the replay file " << ReplayPath);
-		}
+      if (is.fail()) {
+          CLOUD9_EXIT("Could not open the replay file " << ReplayPath);
+      }
 
-		cloud9::ExecutionPathSetPin pathSet = cloud9::ExecutionPathSet::parse(is);
+      cloud9::ExecutionPathSetPin pathSet = cloud9::ExecutionPathSet::parse(is);
 
-		theJobManager->processJobs(pathSet);
+      theJobManager->replayJobs(pathSet);
+	} else if (StandAlone) {
+	  CLOUD9_INFO("Running in stand-alone mode. No load balancer involved.");
+
+	  theJobManager->processJobs(true, (int)MaxTime.getValue());
+
+	  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TimeOut, "Timeout");
+
+	  theJobManager->finalize();
 	} else {
-		CommManager commManager(theJobManager); // Handle outside communication
-		commManager.setup();
+      CommManager commManager(theJobManager); // Handle outside communication
+      commManager.setup();
 
-		theJobManager->processJobs((int)MaxTime.getValue()); // Blocking when no jobs are on the queue
+      theJobManager->processJobs(false, (int)MaxTime.getValue()); // Blocking when no jobs are on the queue
 
-		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TimeOut, "Timeout");
+      cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TimeOut, "Timeout");
 
-		// The order here matters, in order to avoid memory corruption
-		commManager.finalize();
-		theJobManager->finalize();
+      // The order here matters, in order to avoid memory corruption
+      commManager.finalize();
+      theJobManager->finalize();
 	}
 
 	delete theJobManager;

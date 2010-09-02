@@ -452,14 +452,20 @@ WorkerTree::Node *JobManager::getCurrentNode() {
 
 /* Job Manipulation Methods ***************************************************/
 
-void JobManager::processJobs(unsigned int timeOut) {
+void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
   if (timeOut > 0) {
     CLOUD9_INFO("Processing jobs with a timeout of " << timeOut << " seconds.");
   }
-  processLoop(true, true, timeOut);
+
+  if (standAlone) {
+    // We need to import the root job
+    importJobs(ExecutionPathSet::getRootSet(), NULL);
+  }
+
+  processLoop(true, !standAlone, timeOut);
 }
 
-void JobManager::processJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
+void JobManager::replayJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
   // First, we need to import the jobs in the manager
   importJobs(paths, NULL);
 
@@ -891,7 +897,7 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
       }
     }
 
-    CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc()->info->assemblyLine);
+    //CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc()->info->assemblyLine);
 
     if (state->collectProgress) {
       state->_instrProgress.push_back(state->getKleeState()->pc());

@@ -208,8 +208,8 @@ public:
 
   unsigned getModuleCRC() const;
 
-  void processJobs(unsigned int timeOut = 0);
-  void processJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
+  void processJobs(bool standAlone, unsigned int timeOut = 0);
+  void replayJobs(ExecutionPathSetPin paths, unsigned int timeOut = 0);
 
   void finalize();
 
