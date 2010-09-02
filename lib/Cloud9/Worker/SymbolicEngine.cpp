@@ -24,10 +24,22 @@ void SymbolicEngine::deregisterStateEventHandler(StateEventHandler *handler) {
 	seHandlers.erase(handler);
 }
 
-void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
-    klee::ExecutionState *parent, int index) {
+bool SymbolicEngine::fireStateBranching(klee::ExecutionState *state, int reason) {
+  int result = true;
 
-  fireHandler(boost::bind(&StateEventHandler::onStateBranched, _1, state, parent, index));
+  for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
+    StateEventHandler *h = *it;
+
+    result = result && h->onStateBranching(state, reason);
+  }
+
+  return result;
+}
+
+void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
+    klee::ExecutionState *parent, int index, int reason) {
+
+  fireHandler(boost::bind(&StateEventHandler::onStateBranched, _1, state, parent, index, reason));
 
   if (state) {
     cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalForkedStates);

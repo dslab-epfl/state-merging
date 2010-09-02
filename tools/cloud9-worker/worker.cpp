@@ -37,6 +37,7 @@
 
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/Support/ModuleUtil.h"
+#include "klee/Init.h"
 
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionTree.h"
@@ -76,272 +77,6 @@ extern cl::opt<double> MaxTime;
 
 JobManager *theJobManager = NULL;
 
-/*
- *
- */
-static Module* loadByteCode() {
-	ModuleProvider *mp = NULL;
-	std::string errorMsg;
-
-	if (MemoryBuffer *buffer = MemoryBuffer::getFileOrSTDIN(InputFile, &errorMsg)) {
-		mp = getBitcodeModuleProvider(buffer, getGlobalContext(), &errorMsg);
-		if (!mp)
-			delete buffer;
-	}
-
-	if (!mp) {
-		CLOUD9_EXIT("Error loading program " << InputFile.c_str() << ": " <<
-				errorMsg.c_str());
-	}
-
-	// Load every function in the module
-	Module *m = mp->materializeModule();
-	// Release the module from ModuleProvider control
-	mp->releaseModule();
-	delete mp;
-
-	if (!m) {
-		CLOUD9_EXIT("Unable to materialize the module");
-	}
-
-	return m;
-}
-
-static void initEnv(Module *mainModule) {
-
-	/*
-	 nArgcP = alloc oldArgc->getType()
-	 nArgvV = alloc oldArgv->getType()
-	 store oldArgc nArgcP
-	 store oldArgv nArgvP
-	 klee_init_environment(nArgcP, nArgvP)
-	 nArgc = load nArgcP
-	 nArgv = load nArgvP
-	 oldArgc->replaceAllUsesWith(nArgc)
-	 oldArgv->replaceAllUsesWith(nArgv)
-	 */
-
-	Function *mainFn = mainModule->getFunction("main");
-
-	if (mainFn->arg_size() < 2) {
-		CLOUD9_EXIT("Cannot handle ""--init-env"" when main() has less than two arguments.");
-	}
-
-	Instruction* firstInst = mainFn->begin()->begin();
-
-	Value* oldArgc = mainFn->arg_begin();
-	Value* oldArgv = ++mainFn->arg_begin();
-
-	AllocaInst* argcPtr = new AllocaInst(oldArgc->getType(), "argcPtr",
-			firstInst);
-	AllocaInst* argvPtr = new AllocaInst(oldArgv->getType(), "argvPtr",
-			firstInst);
-
-	/* Insert void klee_init_env(int* argc, char*** argv) */
-	std::vector<const Type*> params;
-	params.push_back(Type::getInt32Ty(getGlobalContext()));
-	params.push_back(Type::getInt32Ty(getGlobalContext()));
-	Function* initEnvFn = cast<Function> (mainModule->getOrInsertFunction(
-			"klee_init_env", Type::getVoidTy(getGlobalContext()),
-			argcPtr->getType(), argvPtr->getType(), NULL));
-	assert(initEnvFn);
-	std::vector<Value*> args;
-	args.push_back(argcPtr);
-	args.push_back(argvPtr);
-	Instruction* initEnvCall = CallInst::Create(initEnvFn, args.begin(),
-			args.end(), "", firstInst);
-	Value *argc = new LoadInst(argcPtr, "newArgc", firstInst);
-	Value *argv = new LoadInst(argvPtr, "newArgv", firstInst);
-
-	oldArgc->replaceAllUsesWith(argc);
-	oldArgv->replaceAllUsesWith(argv);
-
-	new StoreInst(oldArgc, argcPtr, initEnvCall);
-	new StoreInst(oldArgv, argvPtr, initEnvCall);
-}
-
-#ifndef KLEE_UCLIBC
-static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
-	CLOUD9_EXIT("Invalid libc, no uclibc support!");
-}
-#else
-static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
-	Function *f;
-	// force import of __uClibc_main
-	mainModule->getOrInsertFunction("__uClibc_main", FunctionType::get(
-			Type::getVoidTy(getGlobalContext()), std::vector<const Type*>(),
-			true));
-
-	// force various imports
-	if (WithPOSIXRuntime) {
-		const llvm::Type *i8Ty = Type::getInt8Ty(getGlobalContext());
-		mainModule->getOrInsertFunction("realpath",
-				PointerType::getUnqual(i8Ty), PointerType::getUnqual(i8Ty),
-				PointerType::getUnqual(i8Ty), NULL);
-		mainModule->getOrInsertFunction("getutent",
-				PointerType::getUnqual(i8Ty), NULL);
-		mainModule->getOrInsertFunction("__fgetc_unlocked", Type::getInt32Ty(
-				getGlobalContext()), PointerType::getUnqual(i8Ty), NULL);
-		mainModule->getOrInsertFunction("__fputc_unlocked", Type::getInt32Ty(
-				getGlobalContext()), Type::getInt32Ty(getGlobalContext()),
-				PointerType::getUnqual(i8Ty), NULL);
-	}
-
-	f = mainModule->getFunction("__ctype_get_mb_cur_max");
-	if (f)
-		f->setName("_stdlib_mb_cur_max");
-
-	// Strip of asm prefixes for 64 bit versions because they are not
-	// present in uclibc and we want to make sure stuff will get
-	// linked. In the off chance that both prefixed and unprefixed
-	// versions are present in the module, make sure we don't create a
-	// naming conflict.
-	for (Module::iterator fi = mainModule->begin(), fe = mainModule->end(); fi
-			!= fe;) {
-		Function *f = fi;
-		++fi;
-		const std::string &name = f->getName();
-
-		if(name.compare("__strdup") == 0 ) {
-		  if (Function *StrDup = mainModule->getFunction("strdup")) {
-		    f->replaceAllUsesWith(StrDup);
-		    f->eraseFromParent();
-		  } else {
-		    f->setName("strdup");
-		  }
-		  continue;
-		}
-
-		if(name.compare("vprintf") == 0) {
-		  f->deleteBody();
-		  continue;
-		}
-
-
-		if (name[0] == '\01') {
-			unsigned size = name.size();
-			if (name[size - 2] == '6' && name[size - 1] == '4') {
-				std::string unprefixed = name.substr(1);
-
-				// See if the unprefixed version exists.
-				if (Function *f2 = mainModule->getFunction(unprefixed)) {
-					f->replaceAllUsesWith(f2);
-					f->eraseFromParent();
-				} else {
-					f->setName(unprefixed);
-				}
-			}
-		}
-	}
-
-	mainModule = klee::linkWithLibrary(mainModule, getUclibcPath().append("/lib/libc.a"));
-	assert(mainModule && "unable to link with uclibc");
-
-	// more sighs, this is horrible but just a temp hack
-	//    f = mainModule->getFunction("__fputc_unlocked");
-	//    if (f) f->setName("fputc_unlocked");
-	//    f = mainModule->getFunction("__fgetc_unlocked");
-	//    if (f) f->setName("fgetc_unlocked");
-
-	Function *f2;
-	f = mainModule->getFunction("open");
-	f2 = mainModule->getFunction("__libc_open");
-	if (f2) {
-		if (f) {
-			f2->replaceAllUsesWith(f);
-			f2->eraseFromParent();
-		} else {
-			f2->setName("open");
-			assert(f2->getName() == "open");
-		}
-	}
-
-	f = mainModule->getFunction("fcntl");
-	f2 = mainModule->getFunction("__libc_fcntl");
-	if (f2) {
-		if (f) {
-			f2->replaceAllUsesWith(f);
-			f2->eraseFromParent();
-		} else {
-			f2->setName("fcntl");
-			assert(f2->getName() == "fcntl");
-		}
-	}
-
-	// XXX we need to rearchitect so this can also be used with
-	// programs externally linked with uclibc.
-
-	// We now need to swap things so that __uClibc_main is the entry
-	// point, in such a way that the arguments are passed to
-	// __uClibc_main correctly. We do this by renaming the user main
-	// and generating a stub function to call __uClibc_main. There is
-	// also an implicit cooperation in that runFunctionAsMain sets up
-	// the environment arguments to what uclibc expects (following
-	// argv), since it does not explicitly take an envp argument.
-	Function *userMainFn = mainModule->getFunction("main");
-	assert(userMainFn && "unable to get user main");
-	Function *uclibcMainFn = mainModule->getFunction("__uClibc_main");
-	assert(uclibcMainFn && "unable to get uclibc main");
-	userMainFn->setName("__user_main");
-
-	const FunctionType *ft = uclibcMainFn->getFunctionType();
-	assert(ft->getNumParams() == 7);
-
-	std::vector<const Type*> fArgs;
-	fArgs.push_back(ft->getParamType(1)); // argc
-	fArgs.push_back(ft->getParamType(2)); // argv
-	Function *stub = Function::Create(FunctionType::get(Type::getInt32Ty(
-			getGlobalContext()), fArgs, false),
-			GlobalVariable::ExternalLinkage, "main", mainModule);
-	BasicBlock *bb = BasicBlock::Create(getGlobalContext(), "entry", stub);
-
-	std::vector<llvm::Value*> args;
-	args.push_back(llvm::ConstantExpr::getBitCast(userMainFn, ft->getParamType(
-			0)));
-	args.push_back(stub->arg_begin()); // argc
-	args.push_back(++stub->arg_begin()); // argv
-	args.push_back(Constant::getNullValue(ft->getParamType(3))); // app_init
-	args.push_back(Constant::getNullValue(ft->getParamType(4))); // app_fini
-	args.push_back(Constant::getNullValue(ft->getParamType(5))); // rtld_fini
-	args.push_back(Constant::getNullValue(ft->getParamType(6))); // stack_end
-	CallInst::Create(uclibcMainFn, args.begin(), args.end(), "", bb);
-
-	new UnreachableInst(getGlobalContext(), bb);
-
-	return mainModule;
-}
-#endif
-
-static Module* prepareModule(Module *module) {
-	if (WithPOSIXRuntime)
-		InitEnv = true;
-
-	if (InitEnv) {
-		initEnv(module);
-	}
-
-	switch (Libc) {
-	case NoLibc:
-		break;
-	case UcLibc:
-		module = linkWithUclibc(module);
-		break;
-	}
-
-	llvm::sys::Path libraryDir(getKleeLibraryPath());
-
-	if (WithPOSIXRuntime) {
-		sys::Path path(libraryDir);
-		path.appendComponent("libkleeRuntimePOSIX.bca");
-		CLOUD9_INFO("Using model: " << path.c_str());
-
-		module = klee::linkWithLibrary(module, path.c_str());
-		assert(module && "unable to link with simple model");
-	}
-
-	return module;
-}
-
 // This is a temporary hack. If the running process has access to
 // externals then it can disable interrupts, which screws up the
 // normal "nice" watchdog termination process. We try to request the
@@ -367,16 +102,6 @@ extern "C" void haltExecution() {
 	theJobManager->requestTermination();
 }
 
-static std::string strip(std::string &in) {
-	unsigned len = in.size();
-	unsigned lead = 0, trail = len;
-	while (lead < len && isspace(in[lead]))
-		++lead;
-	while (trail > lead && isspace(in[trail - 1]))
-		--trail;
-	return in.substr(lead, trail - lead);
-}
-
 /*
  *
  */
@@ -384,45 +109,6 @@ static void parseArguments(int argc, char **argv) {
 	// TODO: Implement some filtering, or reading from a settings file, or
 	// from stdin
 	cl::ParseCommandLineOptions(argc, argv, "Cloud9 worker");
-}
-
-static void readProgramArguments(int &pArgc, char **&pArgv, char **&pEnvp, char **envp) {
-	if (Environ != "") {
-		std::vector<std::string> items;
-		std::ifstream f(Environ.c_str());
-		if (!f.good())
-			CLOUD9_EXIT("unable to open --environ file: " << Environ);
-		else
-			CLOUD9_INFO("Using custom environment variables from " << Environ);
-		while (!f.eof()) {
-			std::string line;
-			std::getline(f, line);
-			line = strip(line);
-			if (!line.empty())
-				items.push_back(line);
-		}
-		f.close();
-		pEnvp = new char *[items.size() + 1];
-		unsigned i = 0;
-		for (; i != items.size(); ++i)
-			pEnvp[i] = strdup(items[i].c_str());
-		pEnvp[i] = 0;
-	} else {
-		pEnvp = envp;
-	}
-
-	pArgc = InputArgv.size() + 1;
-	pArgv = new char *[pArgc];
-	for (unsigned i = 0; i < InputArgv.size() + 1; i++) {
-		std::string &arg = (i == 0 ? InputFile : InputArgv[i - 1]);
-		unsigned size = arg.size() + 1;
-		char *pArg = new char[size];
-
-		std::copy(arg.begin(), arg.end(), pArg);
-		pArg[size - 1] = 0;
-
-		pArgv[i] = pArg;
-	}
 }
 
 /*
@@ -539,13 +225,13 @@ int main(int argc, char **argv, char **envp) {
 	// Take care of Ctrl+C requests
 	sys::SetInterruptFunction(interrupt_handle);
 
-	Module *mainModule = loadByteCode();
-	mainModule = prepareModule(mainModule);
+	Module *mainModule = klee::loadByteCode();
+	mainModule = klee::prepareModule(mainModule);
 
 	int pArgc;
 	char **pArgv;
 	char **pEnvp;
-	readProgramArguments(pArgc, pArgv, pEnvp, envp);
+	klee::readProgramArguments(pArgc, pArgv, pEnvp, envp);
 
 	// Create the job manager
 	theJobManager = new JobManager(mainModule, "main", pArgc, pArgv, envp);

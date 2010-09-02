@@ -28,6 +28,7 @@ class Interpreter;
 class ExecutionState;
 class Searcher;
 class KModule;
+class KleeHandler;
 }
 
 namespace cloud9 {
@@ -36,7 +37,6 @@ namespace worker {
 
 class SymbolicState;
 class ExecutionJob;
-class KleeHandler;
 class StrategyPortfolio;
 class OracleStrategy;
 
@@ -49,7 +49,6 @@ private:
       char **argv, char **envp);
 
   void initKlee();
-  void initInstrumentation();
   void initBreakpoints();
   void initStatistics();
   void initStrategy();
@@ -65,7 +64,7 @@ private:
   klee::Interpreter *interpreter;
   SymbolicEngine *symbEngine;
 
-  KleeHandler *kleeHandler;
+  klee::KleeHandler *kleeHandler;
   klee::KModule *kleeModule;
 
   llvm::Function *mainFn;
@@ -214,8 +213,9 @@ public:
 
   void finalize();
 
+  virtual bool onStateBranching(klee::ExecutionState *state, int reason);
   virtual void onStateBranched(klee::ExecutionState *state,
-      klee::ExecutionState *parent, int index);
+      klee::ExecutionState *parent, int index, int reason);
   virtual void onStateDestroy(klee::ExecutionState *state);
   virtual void onControlFlowEvent(klee::ExecutionState *state,
       ControlFlowEvent event);

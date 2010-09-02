@@ -635,7 +635,7 @@ void Executor::branch(ExecutionState &state,
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
 
-    fireStateBranched(ns, es, 0);
+    fireStateBranched(ns, es, 0, reason);
   }
 
   // If necessary redistribute seeds to match conditions, killing
@@ -831,7 +831,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       }
     }
 
-    fireStateBranched(NULL, &current, 0);
+    fireStateBranched(NULL, &current, 0, reason);
 
     return StatePair(&current, (klee::ExecutionState*)NULL);
   } else if (res==Solver::False) {
@@ -841,7 +841,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       }
     }
 
-    fireStateBranched(NULL, &current, 1);
+    fireStateBranched(NULL, &current, 1, reason);
 
     return StatePair((klee::ExecutionState*)NULL, &current);
   } else {
@@ -897,9 +897,9 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
     trueState->ptreeNode = res.second;
 
     if (&current == falseState)
-    	fireStateBranched(trueState, falseState, 1);
+    	fireStateBranched(trueState, falseState, 1, reason);
     else
-    	fireStateBranched(falseState, trueState, 0);
+    	fireStateBranched(falseState, trueState, 0, reason);
 
     if (!isInternal) {
       if (pathWriter) {
@@ -941,7 +941,7 @@ Executor::fork(ExecutionState &current, int reason) {
   newState->ptreeNode = res.first;
   lastState->ptreeNode = res.second;
 
-  fireStateBranched(newState, lastState, 0);
+  fireStateBranched(newState, lastState, 0, reason);
   return StatePair(newState, lastState);
 }
 
@@ -3127,6 +3127,24 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
   state.scheduleNext(state.threads.find(pThread.tuid));
   bindLocal(ki, state, ConstantExpr::create(child.pid,
       getWidthForLLVMType(ki->inst->getType())));
+}
+
+void Executor::executeFork(ExecutionState &state, KInstruction *ki, int reason) {
+  // Check to see if we really should fork
+  if (fireStateBranching(&state, reason)) {
+    StatePair sp = fork(state, reason);
+
+    // Return 1 in the original
+    bindLocal(ki, *sp.first, ConstantExpr::create(1,
+        getWidthForLLVMType(ki->inst->getType())));
+
+    // Return 0 otherwise
+    bindLocal(ki, *sp.second, ConstantExpr::create(0,
+        getWidthForLLVMType(ki->inst->getType())));
+  } else {
+    bindLocal(ki, state, ConstantExpr::create(0,
+        getWidthForLLVMType(ki->inst->getType())));
+  }
 }
 
 

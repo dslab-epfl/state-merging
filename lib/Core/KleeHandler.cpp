@@ -5,7 +5,7 @@
  *      Author: stefan
  */
 
-#include "KleeHandler.h"
+#include "klee/KleeHandler.h"
 
 #include <iostream>
 #include <fstream>
@@ -16,7 +16,7 @@
 #include <dirent.h>
 
 // FIXME
-#include "../../Core/Common.h"
+#include "Common.h"
 #include "cloud9/worker/WorkerCommon.h"
 
 
@@ -29,8 +29,12 @@
 #include "llvm/System/Path.h"
 
 #include "cloud9/instrum/InstrumentationManager.h"
+#include "cloud9/instrum/LocalFileWriter.h"
 
 using namespace llvm;
+
+#define CLOUD9_STATS_FILE_NAME      "c9-stats.txt"
+#define CLOUD9_EVENTS_FILE_NAME     "c9-events.txt"
 
 namespace {
 
@@ -67,9 +71,7 @@ StopAfterNTests("stop-after-n-tests",
 	     cl::init(0));
 }
 
-namespace cloud9 {
-
-namespace worker {
+namespace klee {
 
 KleeHandler::KleeHandler(int argc, char **argv) :
 	m_interpreter(0), m_pathWriter(0), m_symPathWriter(0), m_infoFile(0),
@@ -140,6 +142,9 @@ KleeHandler::KleeHandler(int argc, char **argv) :
 	assert(klee_message_file);
 
 	m_infoFile = openOutputFile("info");
+
+    // Init Cloud9 instrumentation
+    initCloud9Instrumentation();
 }
 
 KleeHandler::~KleeHandler() {
@@ -148,6 +153,20 @@ KleeHandler::~KleeHandler() {
 	if (m_symPathWriter)
 		delete m_symPathWriter;
 	delete m_infoFile;
+}
+
+void KleeHandler::initCloud9Instrumentation() {
+    std::string statsFileName = getOutputFilename(CLOUD9_STATS_FILE_NAME);
+    std::string eventsFileName = getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
+
+    std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
+    std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
+    cloud9::instrum::InstrumentationWriter *writer =
+            new cloud9::instrum::LocalFileWriter(*instrStatsStream,
+                    *instrEventsStream);
+
+    cloud9::instrum::theInstrManager.registerWriter(writer);
+    cloud9::instrum::theInstrManager.start();
 }
 
 void KleeHandler::setInterpreter(Interpreter *i) {
@@ -400,8 +419,6 @@ void KleeHandler::getOutFiles(std::string path,
 			results.push_back(f);
 		}
 	}
-}
-
 }
 
 }

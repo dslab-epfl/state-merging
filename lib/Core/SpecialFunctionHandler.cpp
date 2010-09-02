@@ -839,15 +839,7 @@ void SpecialFunctionHandler::handleFork(ExecutionState &state,
 
   int reason = cast<ConstantExpr>(arguments[0])->getZExtValue();
 
-  Executor::StatePair sp = executor.fork(state, reason);
-
-  // Return 1 in the original
-  executor.bindLocal(target, *sp.first, ConstantExpr::create(1,
-      executor.getWidthForLLVMType(target->inst->getType())));
-
-  // Return 0 otherwise
-  executor.bindLocal(target, *sp.second, ConstantExpr::create(0,
-      executor.getWidthForLLVMType(target->inst->getType())));
+  executor.executeFork(state, target, reason);
 }
 
 void SpecialFunctionHandler::handleProcessFork(ExecutionState &state,

@@ -11,11 +11,7 @@
 #include "klee/Interpreter.h"
 #include "klee/Internal/ADT/TreeStream.h"
 
-using namespace klee;
-
-namespace cloud9 {
-
-namespace worker {
+namespace klee {
 
 class KleeHandler : public InterpreterHandler {
 private:
@@ -30,6 +26,8 @@ private:
   // used for writing .ktest files
   int m_argc;
   char **m_argv;
+
+  void initCloud9Instrumentation();
 
 public:
   KleeHandler(int argc, char **argv);
@@ -63,7 +61,6 @@ public:
 			  std::vector<std::string> &results);
 };
 
-}
 }
 
 #endif /* KLEEHANDLER_H_ */

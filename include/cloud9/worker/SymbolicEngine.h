@@ -39,8 +39,9 @@ public:
 	virtual ~StateEventHandler() {};
 
 public:
+	virtual bool onStateBranching(klee::ExecutionState *state, int reason) = 0;
 	virtual void onStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index) = 0;
+			klee::ExecutionState *parent, int index, int reason) = 0;
 	virtual void onStateDestroy(klee::ExecutionState *state) = 0;
 	virtual void onControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event) = 0;
@@ -66,8 +67,9 @@ private:
       }
 	}
 protected:
+	bool fireStateBranching(klee::ExecutionState *state, int reason);
 	void fireStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index);
+			klee::ExecutionState *parent, int index, int reason);
 	void fireStateDestroy(klee::ExecutionState *state);
 	void fireControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);

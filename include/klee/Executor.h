@@ -424,6 +424,8 @@ private:
   
   void executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist);
 
+  void executeFork(ExecutionState &state, KInstruction *ki, int reason);
+
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();
