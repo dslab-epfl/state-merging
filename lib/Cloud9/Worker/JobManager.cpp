@@ -28,6 +28,7 @@
 #include "cloud9/worker/ComplexStrategies.h"
 #include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/worker/OracleStrategy.h"
+#include "cloud9/worker/FIStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
@@ -332,7 +333,7 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
 }
 
 void JobManager::initStrategy() {
-  std::vector<JobSelectionStrategy*> strategies;
+  /*std::vector<JobSelectionStrategy*> strategies;
 
   switch (JobSelection) {
   case RandomSel:
@@ -361,7 +362,9 @@ void JobManager::initStrategy() {
 
   default:
     assert(0 && "undefined job selection strategy");
-  }
+  }*/
+
+  selStrategy = new FIStrategy(tree);
 
   // Wrap this in a batching strategy, to speed up things
   //selStrategy = new BatchingStrategy(selStrategy);

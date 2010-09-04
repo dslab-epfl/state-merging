@@ -16,7 +16,8 @@ enum ForkClass {
   KLEE_FORK_DEFAULT = 0,
   KLEE_FORK_FAULTINJ = 1,
   KLEE_FORK_SCHEDULE = 2,
-  KLEE_FORK_INTERNAL = 3
+  KLEE_FORK_INTERNAL = 3,
+  KLEE_FORK_MULTI = 4
 };
 
 struct ForkTag {
@@ -29,7 +30,7 @@ struct ForkTag {
   KFunction *location;
 
   ForkTag(ForkClass _fclass) :
-    forkClass(_fclass), fiVulnerable(false), location(0) { }
+    forkClass(_fclass), fiVulnerable(true), location(0) { }
 };
 
 }

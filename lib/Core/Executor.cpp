@@ -3152,12 +3152,12 @@ void Executor::executeFork(ExecutionState &state, KInstruction *ki, int reason) 
   if (fireStateBranching(&state, getForkTag(state, reason))) {
     StatePair sp = fork(state, reason);
 
-    // Return 1 in the original
-    bindLocal(ki, *sp.first, ConstantExpr::create(1,
+    // Return 0 in the original
+    bindLocal(ki, *sp.first, ConstantExpr::create(0,
         getWidthForLLVMType(ki->inst->getType())));
 
-    // Return 0 otherwise
-    bindLocal(ki, *sp.second, ConstantExpr::create(0,
+    // Return 1 otherwise
+    bindLocal(ki, *sp.second, ConstantExpr::create(1,
         getWidthForLLVMType(ki->inst->getType())));
   } else {
     bindLocal(ki, state, ConstantExpr::create(0,
@@ -3211,11 +3211,13 @@ void Executor::schedule(ExecutionState &state, bool yield) {
     ExecutionState::threads_ty::iterator it = state.nextThread(finalIt);
     ExecutionState *lastState = &state;
 
+    ForkClass forkClass = KLEE_FORK_SCHEDULE;
+
     while (it != finalIt) {
       // Choose only enabled states, and, in the case of yielding, do not
       // reschedule the same thread
       if (it->second.enabled && (!yield || it != oldIt)) {
-        StatePair sp = fork(*lastState, KLEE_FORK_SCHEDULE);
+        StatePair sp = fork(*lastState, forkClass);
 
         if (incPreemptions)
           sp.first->preemptions = state.preemptions + 1;
@@ -3223,6 +3225,10 @@ void Executor::schedule(ExecutionState &state, bool yield) {
         sp.first->scheduleNext(sp.first->threads.find(it->second.tuid));
 
         lastState = sp.first;
+
+        if (forkClass == KLEE_FORK_SCHEDULE) {
+          forkClass = KLEE_FORK_MULTI;   // Avoid appearing like multiple schedules
+        }
       }
 
       it = state.nextThread(it);
