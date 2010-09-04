@@ -139,7 +139,7 @@ void _deregister_events_pipe(pipe_end_t *pipe, wlist_id_t wlist, int events) {
 int pipe(int pipefd[2]) {
   int fdr, fdw;
 
-  fprintf(stderr, "Attempting to create a pipe\n");
+  klee_debug("Attempting to create a pipe\n");
 
   // Allocate the two file descriptors
   STATIC_LIST_ALLOC(__fdt, fdr);
@@ -189,6 +189,6 @@ int pipe(int pipefd[2]) {
 
   pipefd[0] = fdr; pipefd[1] = fdw;
 
-  fprintf(stderr, "Pipe created (%d, %d)\n", fdr, fdw);
+  klee_debug("Pipe created (%d, %d)\n", fdr, fdw);
   return 0;
 }

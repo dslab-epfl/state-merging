@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdarg.h>
 
 #define __KLEE_FORK_DEFAULT       0
 #define __KLEE_FORK_FAULTINJ      1
@@ -189,6 +190,10 @@ extern "C" {
 
   uintptr_t klee_branch(uintptr_t expr, int reason);
   int klee_fork(int reason);
+
+  // Because of limited support for calling external variadic functions,
+  // klee_debug accepts either a set of 32-bit integers, or a single 64-bit value.
+  void klee_debug(const char *format, ...);
 
 #ifdef __cplusplus
 }

@@ -255,7 +255,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     return -1;
   }
 
-  fprintf(stderr, "Attempting to open: %s\n", __concretize_string(pathname));
+  klee_debug("Attempting to open: %s\n", __concretize_string(pathname));
 
   // Obtain a new file descriptor
   int fd;
@@ -284,7 +284,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     }
 
     fde->attr |= FD_IS_CONCRETE;
-    fprintf(stderr, "Concrete file open (concrete fd: %d) - %d\n", fde->concrete_fd, fd);
+    klee_debug("Concrete file open (concrete fd: %d) - %d\n", fde->concrete_fd, fd);
     return fd;
   }
 
@@ -299,7 +299,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     STATIC_LIST_CLEAR(__fdt, fd);
     /* The result of using O_TRUNC with O_RDONLY is undefined, so we
    return error */
-    fprintf(stderr, "Undefined call to open(): O_TRUNC | O_RDONLY\n");
+    klee_warning("Undefined call to open(): O_TRUNC | O_RDONLY\n");
     errno = EACCES;
     return -1;
   }
@@ -308,7 +308,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
     STATIC_LIST_CLEAR(__fdt, fd);
     /* The result of using O_EXCL without O_CREAT is undefined, so
    we return error */
-    fprintf(stderr, "Undefined call to open(): O_EXCL w/o O_RDONLY\n");
+    klee_warning("Undefined call to open(): O_EXCL w/o O_RDONLY\n");
     errno = EACCES;
     return -1;
   }

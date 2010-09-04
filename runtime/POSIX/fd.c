@@ -89,7 +89,7 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
 
   // Check for permissions
   if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
-    fprintf(stderr, "Permission error (flags: %o)\n", fde->io_object->flags);
+    klee_debug("Permission error (flags: %o)\n", fde->io_object->flags);
     errno = EBADF;
     return -1;
   }
@@ -166,7 +166,7 @@ DEFINE_MODEL(int, close, int fd) {
     return -1;
   }
 
-  fprintf(stderr, "Closing FD %d (pid %d)\n", fd, getpid());
+  klee_debug("Closing FD %d (pid %d)\n", fd, getpid());
 
   fd_entry_t *fde = &__fdt[fd];
 
@@ -299,9 +299,9 @@ DEFINE_MODEL(int, dup3, int oldfd, int newfd, int flags) {
       fde->attr &= ~FD_CLOSE_ON_EXEC;
     }
   }
-  printf("New duplicate of %d: %d\n", oldfd, newfd);
+  klee_debug("New duplicate of %d: %d\n", oldfd, newfd);
   if (__fdt[newfd].attr & FD_IS_CONCRETE) {
-    printf("New concrete duplicate of %d: %d\n", __fdt[oldfd].concrete_fd, __fdt[newfd].concrete_fd);
+    klee_debug("New concrete duplicate of %d: %d\n", __fdt[oldfd].concrete_fd, __fdt[newfd].concrete_fd);
   }
   return newfd;
 }

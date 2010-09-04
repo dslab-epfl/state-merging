@@ -410,7 +410,7 @@ void _deregister_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int socket(int domain, int type, int protocol) {
-  fprintf(stderr, "Attempting to create a socket\n");
+  klee_debug("Attempting to create a socket\n");
   int base_type = type & ~(SOCK_NONBLOCK | SOCK_CLOEXEC);
   // Check the validity of the request
   switch (domain) {
@@ -475,7 +475,7 @@ int socket(int domain, int type, int protocol) {
 
   fde->io_object = (file_base_t*)sock;
 
-  fprintf(stderr, "Socket created: %d\n", fd);
+  klee_debug("Socket created: %d\n", fd);
   return fd;
 }
 
@@ -624,7 +624,7 @@ int listen(int sockfd, int backlog) {
     sock->listen = _stream_create(backlog*sizeof(socket_t*), 1);
   }
 
-  fprintf(stderr, "Socket %d is listening\n", sockfd);
+  klee_debug("Socket %d is listening\n", sockfd);
 
   return 0;
 }
@@ -936,7 +936,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   if (addr != NULL)
     _get_endpoint_name(local, local->remote_end, addr, addrlen);
 
-  fprintf(stderr, "Connected socket created: %d\n", fd);
+  klee_debug("Connected socket created: %d\n", fd);
 
   // Now return in our process
   return fd;
@@ -1154,7 +1154,7 @@ int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t
 // socketpair() ////////////////////////////////////////////////////////////////
 
 int socketpair(int domain, int type, int protocol, int sv[2]) {
-  fprintf(stderr, "Attempting to create a pair of UNIX sockets\n");
+  klee_debug("Attempting to create a pair of UNIX sockets\n");
   int base_type = type & ~(SOCK_CLOEXEC | SOCK_NONBLOCK);
 
   // Check the parameters
@@ -1278,7 +1278,7 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
 
   // Finalize
   sv[0] = fd1; sv[1] = fd2;
-  fprintf(stderr, "Socket pair created (%d, %d)\n", fd1, fd2);
+  klee_debug("Socket pair created (%d, %d)\n", fd1, fd2);
   return 0;
 }
 
@@ -1318,7 +1318,7 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
   int port = 0;
 
   if (service != NULL) {
-    fprintf(stderr, "Getting the port number for service '%s'\n", service);
+    klee_debug("Getting the port number for service '%s'\n", service);
     port = atoi(service);
     if (port == 0 && strcmp(service, "0") != 0) {
       klee_warning("service name not numeric, unsupported by model");
@@ -1333,7 +1333,7 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
 
   if (node != NULL) {
     if (strcmp(node, "localhost") != 0 && strcmp(node, DEFAULT_HOST_NAME) != 0) {
-      fprintf(stderr, "resolving '%s' to localhost\n", node);
+      klee_debug("resolving '%s' to localhost\n", node);
     }
   }
 

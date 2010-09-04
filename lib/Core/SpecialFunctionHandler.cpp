@@ -30,6 +30,7 @@
 #include "llvm/InstrTypes.h"
 
 #include <errno.h>
+#include <stdarg.h>
 
 using namespace llvm;
 using namespace klee;
@@ -107,6 +108,8 @@ HandlerInfo handlerInfo[] = {
 
   add("klee_branch", handleBranch, true),
   add("klee_fork", handleFork, true),
+
+  add("klee_debug", handleDebug, false),
 
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -502,6 +505,65 @@ void SpecialFunctionHandler::handleWarning(ExecutionState &state,
   std::string msg_str = readStringAtAddress(state, arguments[0]);
   klee_warning("%s: %s", state.stack().back().kf->function->getName().data(),
                msg_str.c_str());
+}
+
+void SpecialFunctionHandler::handleDebug(ExecutionState &state,
+                                           KInstruction *target,
+                                           std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() >= 1 && "invalid number of arguments to klee_debug");
+
+  std::string formatStr = readStringAtAddress(state, arguments[0]);
+
+  // XXX Ugly hack, need to use libffi here... Ashamed of myself
+
+  if (arguments.size() == 2 && arguments[1]->getWidth() == sizeof(long)*8) {
+    // Special case for displaying strings
+    if (!isa<ConstantExpr>(arguments[1])) {
+      executor.terminateStateOnError(state, "klee_debug needs a constant list of arguments", "user.err");
+      return;
+    }
+
+    fprintf(stderr, formatStr.c_str(), cast<ConstantExpr>(arguments[1])->getZExtValue());
+    return;
+  }
+
+  std::vector<int> args;
+
+  for (unsigned int i = 1; i < arguments.size(); i++) {
+    if (!isa<ConstantExpr>(arguments[i])) {
+      executor.terminateStateOnError(state, "klee_debug needs a constant list of arguments", "user.err");
+      return;
+    }
+
+    ref<ConstantExpr> arg = cast<ConstantExpr>(arguments[i]);
+
+    if (arg->getWidth() != sizeof(int)*8) {
+      executor.terminateStateOnError(state, "klee_debug works only with 32-bit arguments", "user.err");
+      return;
+    }
+
+    args.push_back((int)arg->getZExtValue());
+  }
+
+  switch (args.size()) {
+  case 0:
+    fprintf(stderr, "%s", formatStr.c_str());
+    break;
+  case 1:
+    fprintf(stderr, formatStr.c_str(), args[0]);
+    break;
+  case 2:
+    fprintf(stderr, formatStr.c_str(), args[0], args[1]);
+    break;
+  case 3:
+    fprintf(stderr, formatStr.c_str(), args[0], args[1], args[2]);
+    break;
+  default:
+    executor.terminateStateOnError(state, "klee_debug allows up to 3 arguments", "user.err");
+    return;
+  }
+
+  //vprintf(formatStr.c_str(), *((va_list*)cast<ConstantExpr>(arguments[1])->getZExtValue()));
 }
 
 void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
