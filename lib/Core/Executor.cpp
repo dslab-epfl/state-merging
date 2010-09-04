@@ -621,6 +621,8 @@ void Executor::branch(ExecutionState &state,
 
   stats::forks += N-1;
 
+  ForkTag tag = getForkTag(state, reason);
+
   // XXX do proper balance or keep random?
   result.push_back(&state);
   for (unsigned i=1; i<N; ++i) {
@@ -631,11 +633,11 @@ void Executor::branch(ExecutionState &state,
     result.push_back(ns);
     es->ptreeNode->data = 0;
     std::pair<PTree::Node*,PTree::Node*> res = 
-      processTree->split(es->ptreeNode, ns, es, reason);
+      processTree->split(es->ptreeNode, ns, es, tag);
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
 
-    fireStateBranched(ns, es, 0, reason);
+    fireStateBranched(ns, es, 0, tag);
   }
 
   // If necessary redistribute seeds to match conditions, killing
@@ -692,6 +694,8 @@ Executor::StatePair
 Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
     int reason) {
   Solver::Validity res;
+  ForkTag tag = getForkTag(current, reason);
+
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
     seedMap.find(&current);
   bool isSeeding = it != seedMap.end();
@@ -831,7 +835,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       }
     }
 
-    fireStateBranched(NULL, &current, 0, reason);
+    fireStateBranched(NULL, &current, 0, tag);
 
     return StatePair(&current, (klee::ExecutionState*)NULL);
   } else if (res==Solver::False) {
@@ -841,7 +845,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       }
     }
 
-    fireStateBranched(NULL, &current, 1, reason);
+    fireStateBranched(NULL, &current, 1, tag);
 
     return StatePair((klee::ExecutionState*)NULL, &current);
   } else {
@@ -892,14 +896,14 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
 
     current.ptreeNode->data = 0;
     std::pair<PTree::Node*, PTree::Node*> res =
-      processTree->split(current.ptreeNode, falseState, trueState, reason);
+      processTree->split(current.ptreeNode, falseState, trueState, tag);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
 
     if (&current == falseState)
-    	fireStateBranched(trueState, falseState, 1, reason);
+    	fireStateBranched(trueState, falseState, 1, tag);
     else
-    	fireStateBranched(falseState, trueState, 0, reason);
+    	fireStateBranched(falseState, trueState, 0, tag);
 
     if (!isInternal) {
       if (pathWriter) {
@@ -931,18 +935,30 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
 Executor::StatePair
 Executor::fork(ExecutionState &current, int reason) {
   ExecutionState *lastState = &current;
+  ForkTag tag = getForkTag(current, reason);
+
   ExecutionState *newState = lastState->branch();
 
   addedStates.insert(newState);
 
   lastState->ptreeNode->data = 0;
   std::pair<PTree::Node*,PTree::Node*> res =
-   processTree->split(lastState->ptreeNode, newState, lastState, reason);
+   processTree->split(lastState->ptreeNode, newState, lastState, tag);
   newState->ptreeNode = res.first;
   lastState->ptreeNode = res.second;
 
-  fireStateBranched(newState, lastState, 0, reason);
+  fireStateBranched(newState, lastState, 0, tag);
   return StatePair(newState, lastState);
+}
+
+ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
+  ForkTag tag((ForkClass)reason);
+
+  if (current.crtThreadIt != current.threads.end()) {
+    tag.location = current.stack().back().kf;
+  }
+
+  return tag;
 }
 
 void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
@@ -2458,6 +2474,8 @@ void Executor::stepInState(ExecutionState *state) {
 	KInstruction *ki = state->pc();
 	stepInstruction(*state);
 
+	//CLOUD9_DEBUG("Executing instruction: " << ki->info->assemblyLine);
+
 	resetTimers();
 	executeInstruction(*state, ki);
 	processTimers(state, MaxInstructionTime);
@@ -3131,7 +3149,7 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
 
 void Executor::executeFork(ExecutionState &state, KInstruction *ki, int reason) {
   // Check to see if we really should fork
-  if (fireStateBranching(&state, reason)) {
+  if (fireStateBranching(&state, getForkTag(state, reason))) {
     StatePair sp = fork(state, reason);
 
     // Return 1 in the original

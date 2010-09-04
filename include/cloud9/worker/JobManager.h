@@ -170,7 +170,7 @@ private:
   unsigned int countJobs(WorkerTree::Node *root);
 
   void updateTreeOnBranch(klee::ExecutionState *state,
-      klee::ExecutionState *parent, int index, int reason);
+      klee::ExecutionState *parent, int index, klee::ForkTag forkTag);
   void updateTreeOnDestroy(klee::ExecutionState *state);
 
   void updateCompressedTreeOnBranch(SymbolicState *state, SymbolicState *parent);
@@ -213,9 +213,9 @@ public:
 
   void finalize();
 
-  virtual bool onStateBranching(klee::ExecutionState *state, int reason);
+  virtual bool onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag);
   virtual void onStateBranched(klee::ExecutionState *state,
-      klee::ExecutionState *parent, int index, int reason);
+      klee::ExecutionState *parent, int index, klee::ForkTag forkTag);
   virtual void onStateDestroy(klee::ExecutionState *state);
   virtual void onControlFlowEvent(klee::ExecutionState *state,
       ControlFlowEvent event);

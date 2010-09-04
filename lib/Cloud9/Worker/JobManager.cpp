@@ -973,12 +973,12 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
 /* Symbolic Engine Callbacks **************************************************/
 
-bool JobManager::onStateBranching(klee::ExecutionState *state, int reason) {
+bool JobManager::onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
   return true; // For now...
 }
 
 void JobManager::onStateBranched(klee::ExecutionState *kState,
-    klee::ExecutionState *parent, int index, int reason) {
+    klee::ExecutionState *parent, int index, klee::ForkTag forkTag) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   assert(parent);
@@ -986,7 +986,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   //if (kState)
   //	CLOUD9_DEBUG("State branched: " << parent->getCloud9State()->getNode());
 
-  updateTreeOnBranch(kState, parent, index, reason);
+  updateTreeOnBranch(kState, parent, index, forkTag);
   updateCompressedTreeOnBranch(kState ? kState->getCloud9State() : NULL,
       parent->getCloud9State());
 
@@ -1102,9 +1102,9 @@ void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
 }
 
 void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
-    klee::ExecutionState *parent, int index, int reason) {
+    klee::ExecutionState *parent, int index, klee::ForkTag forkTag) {
   WorkerTree::NodePin pNodePin = parent->getCloud9State()->getNode();
-  (**pNodePin).forkReason = reason;
+  (**pNodePin).forkTag = forkTag;
 
   WorkerTree::Node *newNode, *oldNode;
 

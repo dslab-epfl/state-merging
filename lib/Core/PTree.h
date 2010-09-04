@@ -11,6 +11,7 @@
 #define __UTIL_PTREE_H__
 
 #include <klee/Expr.h>
+#include <klee/ForkTag.h>
 
 #include <utility>
 #include <cassert>
@@ -32,7 +33,7 @@ namespace klee {
     std::pair<Node*,Node*> split(Node *n,
                                  const data_type &leftData,
                                  const data_type &rightData,
-                                 int reason);
+                                 ForkTag forkTag);
     void remove(Node *n);
 
     void dump(std::ostream &os);
@@ -44,7 +45,7 @@ namespace klee {
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
 
-    int reasonCode;
+    ForkTag forkTag;
   private:
     PTreeNode(PTreeNode *_parent, ExecutionState *_data);
     ~PTreeNode();

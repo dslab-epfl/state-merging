@@ -14,6 +14,7 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
+#include "klee/ForkTag.h"
 #include "cloud9/Logger.h"
 
 #include "klee/Expr.h"

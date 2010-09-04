@@ -10,6 +10,7 @@
 
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/worker/ExecutionTrace.h"
+#include "klee/ForkTag.h"
 
 #include <vector>
 
@@ -33,15 +34,15 @@ private:
 	SymbolicState *symState;
 	ExecutionJob *job;
 	ExecutionTrace trace;
-	int forkReason;
+	klee::ForkTag forkTag;
 public:
-	WorkerNodeInfo() : symState(NULL), job(NULL), forkReason(0) { }
+	WorkerNodeInfo() : symState(NULL), job(NULL), forkTag(klee::KLEE_FORK_DEFAULT) { }
 
 	virtual ~WorkerNodeInfo() { }
 
 	SymbolicState* getSymbolicState() const { return symState; }
 	ExecutionJob* getJob() const { return job; }
-	int getForkReason() const { return forkReason; }
+	klee::ForkTag getForkTag() const { return forkTag; }
 
 	const ExecutionTrace &getTrace() const { return trace; }
 };

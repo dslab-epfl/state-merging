@@ -29,11 +29,11 @@ std::pair<PTreeNode*, PTreeNode*>
 PTree::split(Node *n, 
              const data_type &leftData, 
              const data_type &rightData,
-             int reason) {
+             ForkTag forkTag) {
   assert(n && !n->left && !n->right);
   n->left = new Node(n, leftData);
   n->right = new Node(n, rightData);
-  n->reasonCode = reason;
+  n->forkTag = forkTag;
 
   return std::make_pair(n->left, n->right);
 }
@@ -95,7 +95,7 @@ PTreeNode::PTreeNode(PTreeNode *_parent,
     left(0),
     right(0),
     data(_data),
-    reasonCode(KLEE_FORK_DEFAULT) {
+    forkTag(KLEE_FORK_DEFAULT) {
 }
 
 PTreeNode::~PTreeNode() {

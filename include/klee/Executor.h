@@ -18,6 +18,7 @@
 #include "klee/ExecutionState.h"
 #include "klee/Interpreter.h"
 #include "klee/Expr.h"
+#include "klee/ForkTag.h"
 #include "klee/util/Ref.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
@@ -286,6 +287,7 @@ private:
   // current state, and one of the states may be null.
   StatePair fork(ExecutionState &current, ref<Expr> condition, bool isInternal, int reason);
   StatePair fork(ExecutionState &current, int reason);
+  ForkTag getForkTag(ExecutionState &current, int reason);
 
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function

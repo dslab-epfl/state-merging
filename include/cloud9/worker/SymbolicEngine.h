@@ -8,6 +8,8 @@
 #ifndef SYMBOLICENGINE_H_
 #define SYMBOLICENGINE_H_
 
+#include "klee/ForkTag.h"
+
 #include <set>
 #include <string>
 
@@ -39,9 +41,9 @@ public:
 	virtual ~StateEventHandler() {};
 
 public:
-	virtual bool onStateBranching(klee::ExecutionState *state, int reason) = 0;
+	virtual bool onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) = 0;
 	virtual void onStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index, int reason) = 0;
+			klee::ExecutionState *parent, int index, klee::ForkTag forkTag) = 0;
 	virtual void onStateDestroy(klee::ExecutionState *state) = 0;
 	virtual void onControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event) = 0;
@@ -67,9 +69,9 @@ private:
       }
 	}
 protected:
-	bool fireStateBranching(klee::ExecutionState *state, int reason);
+	bool fireStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag);
 	void fireStateBranched(klee::ExecutionState *state,
-			klee::ExecutionState *parent, int index, int reason);
+			klee::ExecutionState *parent, int index, klee::ForkTag forkTag);
 	void fireStateDestroy(klee::ExecutionState *state);
 	void fireControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);

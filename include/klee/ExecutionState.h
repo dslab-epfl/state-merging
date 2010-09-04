@@ -63,12 +63,6 @@ std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
 typedef uint64_t wlist_id_t;
 
-// Fork reason codes
-#define KLEE_FORK_DEFAULT       0
-#define KLEE_FORK_FAULTINJ      1
-#define KLEE_FORK_SCHEDULE      2
-#define KLEE_FORK_INTERNAL      3
-
 class ExecutionState {
 	friend class ObjectState;
 
