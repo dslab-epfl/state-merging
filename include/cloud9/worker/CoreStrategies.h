@@ -23,9 +23,6 @@ namespace cloud9 {
 
 namespace worker {
 
-#define CLOUD9_CHOOSE_NEW_JOBS 0.8
-
-
 class ExecutionJob;
 class SymbolicEngine;
 class SymbolicState;

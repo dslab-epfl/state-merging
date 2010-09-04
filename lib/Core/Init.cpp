@@ -236,17 +236,7 @@ static const char *dontCareExternals[] = {
   "__isnan",
   "__signbit",
 };
-// Extra symbols we aren't going to warn about with klee-libc
-static const char *dontCareKlee[] = {
-  "__ctype_b_loc",
-  "__ctype_get_mb_cur_max",
 
-  // io system calls
-  "open",
-  "write",
-  "read",
-  "close",
-};
 // Extra symbols we aren't going to warn about with uclibc
 static const char *dontCareUclibc[] = {
   "__dso_handle",

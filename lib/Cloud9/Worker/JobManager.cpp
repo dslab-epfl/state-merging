@@ -986,7 +986,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   //if (kState)
   //	CLOUD9_DEBUG("State branched: " << parent->getCloud9State()->getNode());
 
-  updateTreeOnBranch(kState, parent, index);
+  updateTreeOnBranch(kState, parent, index, reason);
   updateCompressedTreeOnBranch(kState ? kState->getCloud9State() : NULL,
       parent->getCloud9State());
 
@@ -1102,8 +1102,9 @@ void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
 }
 
 void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
-    klee::ExecutionState *parent, int index) {
+    klee::ExecutionState *parent, int index, int reason) {
   WorkerTree::NodePin pNodePin = parent->getCloud9State()->getNode();
+  (**pNodePin).forkReason = reason;
 
   WorkerTree::Node *newNode, *oldNode;
 

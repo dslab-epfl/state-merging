@@ -33,13 +33,15 @@ private:
 	SymbolicState *symState;
 	ExecutionJob *job;
 	ExecutionTrace trace;
+	int forkReason;
 public:
-	WorkerNodeInfo() : symState(NULL), job(NULL) { }
+	WorkerNodeInfo() : symState(NULL), job(NULL), forkReason(0) { }
 
 	virtual ~WorkerNodeInfo() { }
 
 	SymbolicState* getSymbolicState() const { return symState; }
 	ExecutionJob* getJob() const { return job; }
+	int getForkReason() const { return forkReason; }
 
 	const ExecutionTrace &getTrace() const { return trace; }
 };

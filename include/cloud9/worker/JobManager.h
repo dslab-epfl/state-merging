@@ -170,7 +170,7 @@ private:
   unsigned int countJobs(WorkerTree::Node *root);
 
   void updateTreeOnBranch(klee::ExecutionState *state,
-      klee::ExecutionState *parent, int index);
+      klee::ExecutionState *parent, int index, int reason);
   void updateTreeOnDestroy(klee::ExecutionState *state);
 
   void updateCompressedTreeOnBranch(SymbolicState *state, SymbolicState *parent);
