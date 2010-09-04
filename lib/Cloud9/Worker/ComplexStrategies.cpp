@@ -45,10 +45,10 @@ void ComposedStrategy::onStateActivated(SymbolicState *state) {
 	}
 }
 
-void ComposedStrategy::onStateUpdated(SymbolicState *state) {
+void ComposedStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
 	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
 		JobSelectionStrategy *strat = *it;
-		strat->onStateUpdated(state);
+		strat->onStateUpdated(state, oldNode);
 	}
 }
 

@@ -747,9 +747,9 @@ void JobManager::fireDeactivateState(SymbolicState *state) {
   }
 }
 
-void JobManager::fireUpdateState(SymbolicState *state) {
+void JobManager::fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode) {
   if (state->_active) {
-    selStrategy->onStateUpdated(state);
+    selStrategy->onStateUpdated(state, oldNode);
   }
 }
 
@@ -873,8 +873,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
       }
     }
   } else {
-    // Just mark the state as updated
-    fireUpdateState((**nodePin).symState);
+    // Just mark the state as updated, no node progress
+    fireUpdateState((**nodePin).symState, nodePin.get());
   }
 }
 
@@ -986,6 +986,8 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   //if (kState)
   //	CLOUD9_DEBUG("State branched: " << parent->getCloud9State()->getNode());
 
+  WorkerTree::NodePin pNode = parent->getCloud9State()->getNode();
+
   updateTreeOnBranch(kState, parent, index, forkTag);
   updateCompressedTreeOnBranch(kState ? kState->getCloud9State() : NULL,
       parent->getCloud9State());
@@ -1009,7 +1011,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   SymbolicState *pState = parent->getCloud9State();
 
   if (pState->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
-    fireUpdateState(pState);
+    fireUpdateState(pState, pNode.get());
   } else {
     fireDeactivateState(pState);
   }

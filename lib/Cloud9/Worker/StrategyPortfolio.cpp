@@ -124,7 +124,7 @@ void StrategyPortfolio::onStateActivated(SymbolicState *state) {
 	state->_strategy = id;
 }
 
-void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
+void StrategyPortfolio::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
 	bool free = isStateFree(state);
 	strat_id_t id = 0;
 
@@ -135,7 +135,7 @@ void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 		for (strat_map::iterator it = stratMap.begin(); it != stratMap.end(); it++) {
 			JobSelectionStrategy *strat = it->second.strategy;
 
-			strat->onStateUpdated(state);
+			strat->onStateUpdated(state, oldNode);
 		}
 	} else {
 	    id = getStateStrategy(state);
@@ -154,7 +154,7 @@ void StrategyPortfolio::onStateUpdated(SymbolicState *state) {
 			JobSelectionStrategy *strat = stratMap[id].strategy;
 			assert(strat != NULL);
 
-			strat->onStateUpdated(state);
+			strat->onStateUpdated(state, oldNode);
 		}
 	}
 

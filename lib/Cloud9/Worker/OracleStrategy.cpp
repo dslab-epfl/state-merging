@@ -67,7 +67,7 @@ void OracleStrategy::onStateActivated(SymbolicState *state) {
   }
 }
 
-void OracleStrategy::onStateUpdated(SymbolicState *state) {
+void OracleStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
   if (!checkProgress(state)) {
     CLOUD9_DEBUG("State became invalid on the oracle, at instr position " << state->_instrPos);
     // Filter out the states that went off the road

@@ -41,7 +41,7 @@ public:
 	virtual void onRemovingJob(ExecutionJob *job) = 0;
 
 	virtual void onStateActivated(SymbolicState *state) = 0;
-	virtual void onStateUpdated(SymbolicState *state) = 0;
+	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) = 0;
 	virtual void onStateDeactivated(SymbolicState *state) = 0;
 };
 
@@ -58,7 +58,7 @@ public:
 	virtual void onRemovingJob(ExecutionJob *job) { };
 
 	virtual void onStateActivated(SymbolicState *state) { };
-	virtual void onStateUpdated(SymbolicState *state) { };
+	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { };
 	virtual void onStateDeactivated(SymbolicState *state) { };
 };
 
@@ -99,7 +99,7 @@ public:
 	virtual ~KleeStrategy();
 
 	virtual void onStateActivated(SymbolicState *state);
-	virtual void onStateUpdated(SymbolicState *state);
+	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
 	virtual void onStateDeactivated(SymbolicState *state);
 
 	virtual ExecutionJob* onNextJobSelection();

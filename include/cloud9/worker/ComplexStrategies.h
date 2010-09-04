@@ -29,7 +29,7 @@ public:
 	virtual void onRemovingJob(ExecutionJob *job);
 
 	virtual void onStateActivated(SymbolicState *state);
-	virtual void onStateUpdated(SymbolicState *state);
+	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
 	virtual void onStateDeactivated(SymbolicState *state);
 };
 

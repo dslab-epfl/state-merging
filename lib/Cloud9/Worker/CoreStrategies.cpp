@@ -133,7 +133,7 @@ void KleeStrategy::onStateActivated(SymbolicState *state) {
 	searcher->update(NULL, added, std::set<klee::ExecutionState*>());
 }
 
-void KleeStrategy::onStateUpdated(SymbolicState *state) {
+void KleeStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
 	searcher->update(state->getKleeState(),
 			std::set<klee::ExecutionState*>(), std::set<klee::ExecutionState*>());
 }

@@ -122,7 +122,7 @@ private:
 
   void fireActivateState(SymbolicState *state);
   void fireDeactivateState(SymbolicState *state);
-  void fireUpdateState(SymbolicState *state);
+  void fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode);
   void fireAddJob(ExecutionJob *job);
   void fireRemovingJob(ExecutionJob *job);
 
