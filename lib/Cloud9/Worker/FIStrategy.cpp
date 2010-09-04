@@ -13,13 +13,7 @@ namespace cloud9 {
 
 namespace worker {
 
-static bool compareStates(std::pair<SymbolicState*, unsigned> p1,
-      std::pair<SymbolicState*, unsigned> p2) {
-  return p1.second < p2.second;
-}
-
-FIStrategy::FIStrategy(WorkerTree *_workerTree) : workerTree(_workerTree),
-    interesting(&compareStates), uninteresting(&compareStates) {
+FIStrategy::FIStrategy(WorkerTree *_workerTree) : workerTree(_workerTree) {
 
 }
 
@@ -52,12 +46,41 @@ unsigned FIStrategy::countInjections(SymbolicState *s, WorkerTree::Node *root, b
 
 ExecutionJob* FIStrategy::onNextJobSelection() {
   if (interesting.size() > 0) {
-    return selectJob(workerTree, interesting.begin()->first);
+    CLOUD9_DEBUG("Selecting interesting state with FI counter " << interesting.begin()->first);
+
+    assert(interesting.begin()->second.size() > 0);
+    return selectJob(workerTree, *interesting.begin()->second.begin());
   } else if (uninteresting.size() > 0) {
-    return selectJob(workerTree, uninteresting.begin()->first);
+    CLOUD9_DEBUG("Selecting uninteresting state with FI counter " << uninteresting.begin()->first);
+
+    assert(uninteresting.begin()->second.size() > 0);
+    return selectJob(workerTree, *uninteresting.begin()->second.begin());
   } else {
+    CLOUD9_DEBUG("No more states to select...");
     return NULL;
   }
+}
+
+void FIStrategy::mapState(SymbolicState *state, unsigned count, bool isInt) {
+  if (isInt) {
+    interesting[count].insert(state);
+    CLOUD9_DEBUG("Interesting state mapped on " << count);
+  } else {
+    uninteresting[count].insert(state);
+    CLOUD9_DEBUG("Uninteresting state mapped on " << count);
+  }
+}
+
+void FIStrategy::unmapState(SymbolicState *state, unsigned count) {
+  unsigned res = 0;
+  res += interesting[count].erase(state);
+  res += uninteresting[count].erase(state);
+  assert(res == 1);
+
+  if (interesting[count].empty())
+    interesting.erase(count);
+  if (uninteresting[count].empty())
+    uninteresting.erase(count);
 }
 
 void FIStrategy::onStateActivated(SymbolicState *state) {
@@ -65,10 +88,7 @@ void FIStrategy::onStateActivated(SymbolicState *state) {
   unsigned count = countInjections(state, workerTree->getRoot(), isInt);
   fiCounters[state] = count;
 
-  if (isInt)
-    interesting.insert(std::make_pair(state, count));
-  else
-    uninteresting.insert(std::make_pair(state, count));
+  mapState(state, count, isInt);
 }
 
 void FIStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
@@ -79,33 +99,26 @@ void FIStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode)
   if (count == 0)
     return;
 
+  CLOUD9_DEBUG("State updated!");
+
   unsigned oldCount = fiCounters[state];
   count += oldCount;
 
   fiCounters[state] = count;
 
-  unsigned res = 0;
-  res += interesting.erase(std::make_pair(state, oldCount));
+  isInt = isInt && (interesting[count].count(state) > 0);
 
-  isInt = isInt && (res != 0);
-
-  res += uninteresting.erase(std::make_pair(state, oldCount));
-  assert(res == 1);
-
-  if (isInt)
-    interesting.insert(std::make_pair(state, count));
-  else
-    uninteresting.insert(std::make_pair(state, count));
+  unmapState(state, oldCount);
+  mapState(state, count, isInt);
 }
 
 void FIStrategy::onStateDeactivated(SymbolicState *state) {
+  CLOUD9_DEBUG("Removing state...");
+
   unsigned count = fiCounters[state];
   fiCounters.erase(state);
 
-  unsigned res = 0;
-  res += interesting.erase(std::make_pair(state, count));
-  res += uninteresting.erase(std::make_pair(state, count));
-  assert(res == 1);
+  unmapState(state, count);
 }
 
 }
