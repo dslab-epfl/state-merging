@@ -55,22 +55,10 @@ using namespace llvm;
 using namespace cloud9::worker;
 
 namespace {
-
-cl::opt<bool>
-		InitEnv("init-env",
-				cl::desc("Create custom environment.  Options that can be passed as arguments to the programs are: --sym-argv <max-len>  --sym-argvs <min-argvs> <max-argvs> <max-len> + file model options"));
-
 cl::opt<bool>
         StandAlone("stand-alone",
                 cl::desc("Enable running a worker in stand alone mode"),
                 cl::init(false));
-
-
-cl::opt<std::string> Environ("environ", cl::desc(
-		"Parse environ from given file (in \"env\" format)"));
-
-cl::list<std::string> InputArgv(cl::ConsumeAfter, cl::desc(
-		"<program arguments>..."));
 
 cl::opt<std::string> ReplayPath("c9-replay-path", cl::desc(
 		"Instead of executing jobs, just do a replay of a path. No load balancer involved."));

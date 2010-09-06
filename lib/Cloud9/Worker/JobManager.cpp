@@ -88,9 +88,6 @@ cl::opt<bool> OptimizeModule("optimize", cl::desc("Optimize before execution"));
 cl::opt<bool> CheckDivZero("check-div-zero", cl::desc(
   "Inject checks for division-by-zero"), cl::init(true));
 
-cl::opt<bool> WarnAllExternals("warn-all-externals", cl::desc(
-  "Give initial warning for all externals."));
-
 cl::list<unsigned int> CodeBreakpoints("c9-code-bp", cl::desc(
   "Breakpoints in the LLVM assembly file"));
 
@@ -113,6 +110,10 @@ cl::opt<std::string>
 cl::opt<double>
   JobQuanta("c9-job-quanta", cl::desc("The maximum quantum of time for a job"),
   cl::init(1.0));
+
+cl::opt<bool>
+  InjectFaults("c9-fault-inj", cl::desc("Fork at fault injection points"),
+      cl::init(false));
 
 }
 
@@ -977,7 +978,12 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 /* Symbolic Engine Callbacks **************************************************/
 
 bool JobManager::onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
-  return true; // For now...
+  switch (forkTag.forkClass) {
+  case KLEE_FORK_FAULTINJ:
+    return InjectFaults;
+  default:
+    return true;
+  }
 }
 
 void JobManager::onStateBranched(klee::ExecutionState *kState,

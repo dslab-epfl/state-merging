@@ -105,7 +105,12 @@ void KModule::readVulnerablePoints(std::istream &is) {
     std::string fileName = callSite.substr(0, splitPoint);
     std::string lineNoStr = callSite.substr(splitPoint+1);
     unsigned lineNo = atoi(lineNoStr.c_str());
-    assert(lineNo > 0);
+
+    if (lineNo == 0) {
+      // Skipping this
+      continue;
+
+    }
 
     vulnerablePoints[fnName].insert(std::make_pair(fileName, lineNo));
   }
@@ -119,14 +124,25 @@ bool KModule::isVulnerablePoint(KInstruction *kinst) {
   if (!target)
     return false;
 
+  std::string targetName = target->getNameStr();
+
+  if (targetName.find("__klee_model_") == 0)
+    targetName = targetName.substr(strlen("__klee_model_"));
+
   if (vulnerablePoints.count(target->getNameStr()) == 0)
     return false;
 
-  program_point_t cpoint = std::make_pair(kinst->info->file, kinst->info->line);
+  std::string sourceFile = kinst->info->file;
+  size_t lastSepPos = sourceFile.rfind('/');
+  if (lastSepPos != std::string::npos)
+    sourceFile = sourceFile.substr(lastSepPos + 1);
+
+  program_point_t cpoint = std::make_pair(sourceFile, kinst->info->line);
 
   if (vulnerablePoints[target->getNameStr()].count(cpoint) == 0)
     return false;
 
+  CLOUD9_DEBUG("Found vulnerable point!");
   return true;
 }
 

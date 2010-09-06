@@ -523,7 +523,9 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
       return;
     }
 
-    fprintf(stderr, formatStr.c_str(), cast<ConstantExpr>(arguments[1])->getZExtValue());
+    std::string paramStr = readStringAtAddress(state, arguments[1]);
+
+    fprintf(stderr, formatStr.c_str(), paramStr.c_str());
     return;
   }
 
