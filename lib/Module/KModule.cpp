@@ -38,6 +38,9 @@
 #include "llvm/Transforms/Scalar.h"
 
 #include <sstream>
+#include <fstream>
+#include <string>
+#include <cstdlib>
 
 using namespace llvm;
 using namespace klee;
@@ -80,6 +83,51 @@ namespace {
   cl::opt<bool>
   DebugPrintEscapingFunctions("debug-print-escaping-functions",
                               cl::desc("Print functions whose address is taken."));
+
+  cl::opt<std::string>
+  VulnerableSites("vulnerable-sites",
+      cl::desc("A file describing vulnerable sites in the tested program"));
+}
+
+void KModule::readVulnerablePoints(std::istream &is) {
+  std::string fnName;
+  std::string callSite;
+
+  while (!is.eof()) {
+    is >> fnName >> callSite;
+
+    if (is.eof())
+      break;
+
+    size_t splitPoint = callSite.find(':');
+    assert(splitPoint != std::string::npos);
+
+    std::string fileName = callSite.substr(0, splitPoint);
+    std::string lineNoStr = callSite.substr(splitPoint+1);
+    unsigned lineNo = atoi(lineNoStr.c_str());
+    assert(lineNo > 0);
+
+    vulnerablePoints[fnName].insert(std::make_pair(fileName, lineNo));
+  }
+}
+
+bool KModule::isVulnerablePoint(KInstruction *kinst) {
+  CallInst *callInst = dyn_cast<CallInst>(kinst->inst);
+  assert(callInst);
+
+  Function *target = callInst->getCalledFunction();
+  if (!target)
+    return false;
+
+  if (vulnerablePoints.count(target->getNameStr()) == 0)
+    return false;
+
+  program_point_t cpoint = std::make_pair(kinst->info->file, kinst->info->line);
+
+  if (vulnerablePoints[target->getNameStr()].count(cpoint) == 0)
+    return false;
+
+  return true;
 }
 
 KModule::KModule(Module *_module) 
@@ -89,6 +137,7 @@ KModule::KModule(Module *_module)
     kleeMergeFn(0),
     infos(0),
     constantTable(0) {
+
 }
 
 KModule::~KModule() {
@@ -244,6 +293,13 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
         }
       }
     }
+  }
+
+  if (VulnerableSites != "") {
+    std::ifstream fs(VulnerableSites);
+    assert(!fs.fail());
+
+    readVulnerablePoints(fs);
   }
 
   // Inject checks prior to optimization... we also perform the
@@ -427,6 +483,11 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
       ki->info = &infos->getInfo(ki->inst);
+
+      if (ki->inst->getOpcode() == Instruction::Call) {
+        KCallInstruction* kCallI = dynamic_cast<KCallInstruction*>(ki);
+        kCallI->vulnerable = isVulnerablePoint(ki);
+      }
     }
 
     functions.push_back(kf);
@@ -520,6 +581,9 @@ KFunction::KFunction(llvm::Function *_function,
       case Instruction::InsertValue:
       case Instruction::ExtractValue:
         ki = new KGEPInstruction(); break;
+      case Instruction::Call:
+        ki = new KCallInstruction();
+        break;
       default:
         ki = new KInstruction(); break;
       }

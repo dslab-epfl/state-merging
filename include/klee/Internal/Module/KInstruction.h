@@ -57,6 +57,11 @@ namespace klee {
     /// insturction.
     uint64_t offset;
   };
+
+  struct KCallInstruction: KInstruction {
+    bool vulnerable;    // Whether the result of this call is unchecked, and
+                        // thus may lead to further errors
+  };
 }
 
 #endif

@@ -15,6 +15,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <istream>
 
 namespace llvm {
   class BasicBlock;
@@ -100,6 +101,15 @@ namespace klee {
     KConstant* getKConstant(llvm::Constant *c);
 
     Cell *constantTable;
+
+  private:
+    typedef std::pair<std::string, int> program_point_t;
+    typedef std::map<std::string, std::set<program_point_t> >vpoints_t;
+
+    vpoints_t   vulnerablePoints;
+
+    void readVulnerablePoints(std::istream &is);
+    bool isVulnerablePoint(KInstruction *kinst);
 
   public:
     KModule(llvm::Module *_module);

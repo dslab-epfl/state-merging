@@ -262,7 +262,7 @@ namespace {
   ForkOnSchedule("fork-on-schedule", 
 		 cl::desc("fork when various schedules are possible (defaul=disabled)"),
 		 cl::init(false));
-  
+
 }
 
 
@@ -954,8 +954,28 @@ Executor::fork(ExecutionState &current, int reason) {
 ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
   ForkTag tag((ForkClass)reason);
 
-  if (current.crtThreadIt != current.threads.end()) {
-    tag.location = current.stack().back().kf;
+  if (current.crtThreadIt == current.threads.end())
+    return tag;
+
+  tag.location = current.stack().back().kf;
+
+  if (tag.forkClass == KLEE_FORK_FAULTINJ) {
+    tag.fiVulnerable = false;
+    // Check to see whether we are in a vulnerable call
+
+    for (ExecutionState::stack_ty::iterator it = current.stack().begin();
+        it != current.stack().end(); it++) {
+      if (!it->caller)
+        continue;
+
+      KCallInstruction *callInst = dynamic_cast<KCallInstruction*>((KInstruction*)it->caller);
+      assert(callInst);
+
+      if (callInst->vulnerable) {
+        tag.fiVulnerable = true;
+        break;
+      }
+    }
   }
 
   return tag;
