@@ -181,7 +181,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   for (std::vector<KFunction*>::iterator it = km->functions.begin(), 
          ie = km->functions.end(); it != ie; ++it) {
     KFunction *kf = *it;
-    kf->trackCoverage = 1;
+    //kf->trackCoverage = 1;
 
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];

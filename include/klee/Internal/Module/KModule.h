@@ -104,12 +104,19 @@ namespace klee {
 
   private:
     typedef std::pair<std::string, int> program_point_t;
-    typedef std::map<std::string, std::set<program_point_t> >vpoints_t;
+    typedef std::map<std::string, std::set<program_point_t> > vpoints_t;
 
     vpoints_t   vulnerablePoints;
 
     void readVulnerablePoints(std::istream &is);
     bool isVulnerablePoint(KInstruction *kinst);
+
+    typedef std::set<std::string>  cov_list_t;
+
+    cov_list_t  coverableFiles;
+
+    void readCoverableFiles(std::istream &is);
+    bool isFunctionCoverable(KFunction *kf);
 
   public:
     KModule(llvm::Module *_module);

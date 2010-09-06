@@ -45,6 +45,8 @@
 using namespace llvm;
 using namespace klee;
 
+using llvm::sys::Path;
+
 namespace {
   enum SwitchImplType {
     eSwitchTypeSimple,
@@ -87,6 +89,10 @@ namespace {
   cl::opt<std::string>
   VulnerableSites("vulnerable-sites",
       cl::desc("A file describing vulnerable sites in the tested program"));
+
+  cl::opt<std::string>
+  CoverableModules("coverable-modules",
+      cl::desc("A file containing the list of source files to check for coverage"));
 }
 
 void KModule::readVulnerablePoints(std::istream &is) {
@@ -132,17 +138,45 @@ bool KModule::isVulnerablePoint(KInstruction *kinst) {
   if (vulnerablePoints.count(target->getNameStr()) == 0)
     return false;
 
-  std::string sourceFile = kinst->info->file;
-  size_t lastSepPos = sourceFile.rfind('/');
-  if (lastSepPos != std::string::npos)
-    sourceFile = sourceFile.substr(lastSepPos + 1);
-
-  program_point_t cpoint = std::make_pair(sourceFile, kinst->info->line);
+  Path sourceFile(kinst->info->file);
+  program_point_t cpoint = std::make_pair(sourceFile.getLast(), kinst->info->line);
 
   if (vulnerablePoints[target->getNameStr()].count(cpoint) == 0)
     return false;
 
   CLOUD9_DEBUG("Found vulnerable point!");
+  return true;
+}
+
+void KModule::readCoverableFiles(std::istream &is) {
+  std::string fileName;
+
+  while (!is.eof()) {
+    is >> fileName;
+
+    if (is.eof())
+      break;
+
+    coverableFiles.insert(fileName);
+  }
+}
+
+bool KModule::isFunctionCoverable(KFunction *kf) {
+  Path fileName;
+
+  for (unsigned int i = 0; i < kf->numInstructions; i++) {
+    if (kf->instructions[i]->info->file.empty())
+      continue;
+
+    fileName = Path(kf->instructions[i]->info->file);
+  }
+
+  if (fileName.isEmpty())
+    return false;
+
+  if (coverableFiles.count(fileName.getLast()) == 0)
+    return false;
+
   return true;
 }
 
@@ -316,6 +350,13 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     assert(!fs.fail());
 
     readVulnerablePoints(fs);
+  }
+
+  if (CoverableModules != "") {
+    std::ifstream fs(CoverableModules);
+    assert(!fs.fail());
+
+    readCoverableFiles(fs);
   }
 
   // Inject checks prior to optimization... we also perform the
@@ -505,6 +546,8 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
         kCallI->vulnerable = isVulnerablePoint(ki);
       }
     }
+
+    kf->trackCoverage = isFunctionCoverable(kf);
 
     functions.push_back(kf);
     functionMap.insert(std::make_pair(it, kf));
