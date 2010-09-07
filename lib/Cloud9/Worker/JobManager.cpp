@@ -802,7 +802,7 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
     currentTime = klee::util::getUserTime();
   }
 
-  CLOUD9_DEBUG("Batched " << count << " jobs");
+  //CLOUD9_DEBUG("Batched " << count << " jobs");
 }
 
 void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,

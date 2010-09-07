@@ -87,6 +87,11 @@ int sigignore(int sig) {
   return 0;
 }
 
+unsigned int alarm(unsigned int seconds) {
+  klee_warning_once("silently ignoring");
+  return 0;
+}
+
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
      __attribute__((weak));
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {

@@ -379,9 +379,9 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
     Value *modelF = mainModule->getNamedValue(newName);
 
     if (modelF != NULL) {
-      CLOUD9_DEBUG("Patching " << fName.str());
-      modelF->getType()->dump();
-      f->getType()->dump();
+      //CLOUD9_DEBUG("Patching " << fName.str());
+      //modelF->getType()->dump();
+      //f->getType()->dump();
       modelF->replaceAllUsesWith(f);
     }
   }
@@ -397,7 +397,7 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
 
     StringRef newName = fName.substr(strlen("__klee_original_"));
 
-    CLOUD9_DEBUG("Patching " << fName.str());
+    //CLOUD9_DEBUG("Patching " << fName.str());
 
     Value *originalF = mainModule->getNamedValue(newName);
 
@@ -420,17 +420,17 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
 }
 
 static void __fix_linkage(llvm::Module *mainModule, std::string libcSymName, std::string libcAliasName) {
-  CLOUD9_DEBUG("Fixing linkage for " << libcSymName);
+  //CLOUD9_DEBUG("Fixing linkage for " << libcSymName);
   Function *libcSym = mainModule->getFunction(libcSymName);
   if (libcSym == NULL)
     return;
 
   Value *libcAlias = mainModule->getNamedValue(libcAliasName);
   if (libcAlias != NULL) {
-    CLOUD9_DEBUG("Found the alias");
+    //CLOUD9_DEBUG("Found the alias");
     libcSym->replaceAllUsesWith(libcAlias);
     if (dyn_cast_or_null<GlobalAlias>(libcAlias)) {
-      CLOUD9_DEBUG("Fixing back the alias");
+      //CLOUD9_DEBUG("Fixing back the alias");
       dyn_cast_or_null<GlobalAlias>(libcAlias)->setAliasee(libcSym);
     }
   } else {

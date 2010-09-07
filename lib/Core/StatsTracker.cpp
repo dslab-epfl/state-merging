@@ -849,6 +849,9 @@ void StatsTracker::computeCodeCoverage(bool global) {
 
   for (std::vector<KFunction*>::iterator it = km->functions.begin();
       it != km->functions.end(); it++) {
+    if (!(*it)->trackCoverage)
+      continue;
+
     std::pair<unsigned, unsigned> cov = computeCodeCoverage(*it, global);
 
     count += cov.first;
