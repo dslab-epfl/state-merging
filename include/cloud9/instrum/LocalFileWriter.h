@@ -21,16 +21,20 @@ class LocalFileWriter: public InstrumentationWriter {
 private:
 	std::ostream &statsStream;
 	std::ostream &eventsStream;
-
+	std::ostream &coverageStream;
 
 public:
-	LocalFileWriter(std::ostream &statsStream, std::ostream &eventsStream);
+	LocalFileWriter(std::ostream &statsStream, std::ostream &eventsStream,
+	    std::ostream &coverageStream);
 	virtual ~LocalFileWriter();
 
 	void writeStatistics(InstrumentationManager::TimeStamp &time,
-			InstrumentationManager::StatisticsData &stats);
+			InstrumentationManager::statistics_t &stats);
 
-	void writeEvents(InstrumentationManager::EventsData &events);
+	void writeEvents(InstrumentationManager::events_t &events);
+
+    virtual void writeCoverage(InstrumentationManager::TimeStamp &time,
+        InstrumentationManager::coverage_t &coverage);
 };
 
 }

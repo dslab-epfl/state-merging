@@ -27,6 +27,7 @@ namespace klee {
   class InstructionInfoTable;
   class InterpreterHandler;
   struct KInstruction;
+  struct KFunction;
   struct StackFrame;
 
   class StatsTracker {
@@ -54,6 +55,8 @@ namespace klee {
     void writeStatsHeader();
     void writeStatsLine();
     void writeIStats();
+
+    std::pair<unsigned, unsigned> computeCodeCoverage(KFunction *kf, bool global);
 
   public:
     StatsTracker(Executor &_executor, std::string _objectFilename,
@@ -84,6 +87,8 @@ namespace klee {
     double elapsed();
 
     void computeReachableUncovered();
+
+    void computeCodeCoverage(bool global);
   };
 
   uint64_t computeMinDistToUncovered(const KInstruction *ki,

@@ -35,6 +35,7 @@ using namespace llvm;
 
 #define CLOUD9_STATS_FILE_NAME      "c9-stats.txt"
 #define CLOUD9_EVENTS_FILE_NAME     "c9-events.txt"
+#define CLOUD9_COVERAGE_FILE_NAME   "c9-coverage.txt"
 
 namespace {
 
@@ -158,12 +159,15 @@ KleeHandler::~KleeHandler() {
 void KleeHandler::initCloud9Instrumentation() {
     std::string statsFileName = getOutputFilename(CLOUD9_STATS_FILE_NAME);
     std::string eventsFileName = getOutputFilename(CLOUD9_EVENTS_FILE_NAME);
+    std::string coverageFileName = getOutputFilename(CLOUD9_COVERAGE_FILE_NAME);
 
     std::ostream *instrStatsStream = new std::ofstream(statsFileName.c_str());
     std::ostream *instrEventsStream = new std::ofstream(eventsFileName.c_str());
+    std::ostream *instrCovStream = new std::ofstream(coverageFileName.c_str());
+
     cloud9::instrum::InstrumentationWriter *writer =
             new cloud9::instrum::LocalFileWriter(*instrStatsStream,
-                    *instrEventsStream);
+                    *instrEventsStream, *instrCovStream);
 
     cloud9::instrum::theInstrManager.registerWriter(writer);
     cloud9::instrum::theInstrManager.start();

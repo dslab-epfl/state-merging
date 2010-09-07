@@ -39,6 +39,7 @@ void InstrumentationManager::instrumThreadControl() {
 			CLOUD9_INFO("Instrumentation interrupted. Stopping.");
 			writeStatistics();
 			writeEvents();
+			writeCoverage();
 			break;
 		}
 
@@ -46,19 +47,21 @@ void InstrumentationManager::instrumThreadControl() {
 
 		writeStatistics();
 		writeEvents();
+		writeCoverage();
 	}
 }
 
 
 InstrumentationManager::InstrumentationManager() :
-		referenceTime(now()), timer(service, boost::posix_time::seconds(InstrUpdateRate)), terminated(false) {
+		referenceTime(now()), covUpdated(false),
+		timer(service, boost::posix_time::seconds(InstrUpdateRate)), terminated(false) {
 
 }
 
 InstrumentationManager::~InstrumentationManager() {
 	stop();
 
-	for (WriterSet::iterator it = writers.begin(); it != writers.end(); it++) {
+	for (writer_set_t::iterator it = writers.begin(); it != writers.end(); it++) {
 		InstrumentationWriter *writer = *it;
 
 		delete writer;
@@ -81,7 +84,7 @@ void InstrumentationManager::stop() {
 void InstrumentationManager::writeStatistics() {
 	TimeStamp stamp = now() - referenceTime;
 
-	for (WriterSet::iterator it = writers.begin(); it != writers.end(); it++) {
+	for (writer_set_t::iterator it = writers.begin(); it != writers.end(); it++) {
 		InstrumentationWriter *writer = *it;
 
 		writer->writeStatistics(stamp, stats);
@@ -90,15 +93,35 @@ void InstrumentationManager::writeStatistics() {
 
 void InstrumentationManager::writeEvents() {
 	boost::unique_lock<boost::mutex> lock(eventsMutex);
-	EventsData eventsCopy = events;
+	events_t eventsCopy = events;
 	events.clear();
 	lock.unlock();
 
-	for (WriterSet::iterator it = writers.begin(); it != writers.end(); it++) {
+	for (writer_set_t::iterator it = writers.begin(); it != writers.end(); it++) {
 		InstrumentationWriter *writer = *it;
 
 		writer->writeEvents(eventsCopy);
 	}
+}
+
+void InstrumentationManager::writeCoverage() {
+  boost::unique_lock<boost::mutex> lock(coverageMutex);
+  if (!covUpdated) {
+    lock.unlock();
+    return;
+  }
+
+  coverage_t coverageCopy = coverage;
+  covUpdated = false;
+  lock.unlock();
+
+  TimeStamp stamp = now() - referenceTime;
+
+  for (writer_set_t::iterator it = writers.begin(); it != writers.end(); it++) {
+    InstrumentationWriter *writer = *it;
+
+    writer->writeCoverage(stamp, coverageCopy);
+  }
 }
 
 std::string InstrumentationManager::stampToString(TimeStamp stamp) {

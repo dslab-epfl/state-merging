@@ -20,8 +20,10 @@ public:
 	virtual ~InstrumentationWriter() { };
 
 	virtual void writeStatistics(InstrumentationManager::TimeStamp &time,
-			InstrumentationManager::StatisticsData &stats) = 0;
-	virtual void writeEvents(InstrumentationManager::EventsData &events) = 0;
+			InstrumentationManager::statistics_t &stats) = 0;
+	virtual void writeCoverage(InstrumentationManager::TimeStamp &time,
+	    InstrumentationManager::coverage_t &coverage) = 0;
+	virtual void writeEvents(InstrumentationManager::events_t &events) = 0;
 };
 
 }

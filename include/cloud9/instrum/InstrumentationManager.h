@@ -61,11 +61,12 @@ enum Events {
 class InstrumentationManager {
 public:
 	typedef sys::TimeValue TimeStamp;
-	typedef unordered_map<int,int> StatisticsData;
-	typedef vector<pair<TimeStamp, pair<int, string> > > EventsData;
+	typedef unordered_map<int,int> statistics_t;
+	typedef vector<pair<TimeStamp, pair<int, string> > > events_t;
 
+	typedef map<string, std::pair<unsigned, unsigned> > coverage_t;
 private:
-	typedef set<InstrumentationWriter*> WriterSet;
+	typedef set<InstrumentationWriter*> writer_set_t;
 
 	TimeStamp referenceTime;
 
@@ -73,12 +74,16 @@ private:
 		return TimeStamp::now();
 	}
 
-	StatisticsData stats;
-	EventsData events;
+	statistics_t stats;
+	events_t events;
 
-	WriterSet writers;
+	writer_set_t writers;
+
+	coverage_t coverage;
+	bool covUpdated;
 
 	boost::mutex eventsMutex;
+	boost::mutex coverageMutex;
 	boost::thread instrumThread;
 
 	boost::asio::io_service service;
@@ -90,6 +95,7 @@ private:
 
 	void writeStatistics();
 	void writeEvents();
+	void writeCoverage();
 
 	InstrumentationManager();
 
@@ -125,6 +131,13 @@ public:
 
 	void decStatistic(Statistics id, int value = 1) {
 		stats[id] -= value;
+	}
+
+	void updateCoverage(string tag, std::pair<unsigned, unsigned> value) {
+	  boost::lock_guard<boost::mutex> lock(coverageMutex);
+
+	  coverage[tag] = value;
+	  covUpdated = true;
 	}
 
 	static InstrumentationManager &getManager() {

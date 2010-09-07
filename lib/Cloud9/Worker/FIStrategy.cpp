@@ -46,17 +46,17 @@ unsigned FIStrategy::countInjections(SymbolicState *s, WorkerTree::Node *root, b
 
 ExecutionJob* FIStrategy::onNextJobSelection() {
   if (interesting.size() > 0) {
-    CLOUD9_DEBUG("Selecting interesting state with FI counter " << interesting.begin()->first);
+    //CLOUD9_DEBUG("Selecting interesting state with FI counter " << interesting.begin()->first);
 
     assert(interesting.begin()->second.size() > 0);
     return selectJob(workerTree, *interesting.begin()->second.begin());
   } else if (uninteresting.size() > 0) {
-    CLOUD9_DEBUG("Selecting uninteresting state with FI counter " << uninteresting.begin()->first);
+    //CLOUD9_DEBUG("Selecting uninteresting state with FI counter " << uninteresting.begin()->first);
 
     assert(uninteresting.begin()->second.size() > 0);
     return selectJob(workerTree, *uninteresting.begin()->second.begin());
   } else {
-    CLOUD9_DEBUG("No more states to select...");
+    //CLOUD9_DEBUG("No more states to select...");
     return NULL;
   }
 }
@@ -64,10 +64,10 @@ ExecutionJob* FIStrategy::onNextJobSelection() {
 void FIStrategy::mapState(SymbolicState *state, unsigned count, bool isInt) {
   if (isInt) {
     interesting[count].insert(state);
-    CLOUD9_DEBUG("Interesting state mapped on " << count);
+    //CLOUD9_DEBUG("Interesting state mapped on " << count);
   } else {
     uninteresting[count].insert(state);
-    CLOUD9_DEBUG("Uninteresting state mapped on " << count);
+    //CLOUD9_DEBUG("Uninteresting state mapped on " << count);
   }
 }
 
@@ -99,7 +99,7 @@ void FIStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode)
   if (count == 0)
     return;
 
-  CLOUD9_DEBUG("State updated!");
+  //CLOUD9_DEBUG("State updated!");
 
   unsigned oldCount = fiCounters[state];
   count += oldCount;
@@ -113,7 +113,7 @@ void FIStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode)
 }
 
 void FIStrategy::onStateDeactivated(SymbolicState *state) {
-  CLOUD9_DEBUG("Removing state...");
+  //CLOUD9_DEBUG("Removing state...");
 
   unsigned count = fiCounters[state];
   fiCounters.erase(state);

@@ -38,6 +38,8 @@
 #include "llvm/System/Process.h"
 #include "llvm/System/Path.h"
 
+#include "cloud9/instrum/InstrumentationManager.h"
+
 #include <iostream>
 #include <fstream>
 
@@ -71,6 +73,11 @@ namespace {
   IStatsWriteInterval("istats-write-interval",
                       cl::desc("Approximate number of seconds between istats writes (default: 10.0)"),
                       cl::init(10.));
+
+  cl::opt<double>
+  CoverageUpdateInterval("cov-update-interval",
+      cl::desc("Approx. no. of secs between coverage updates (default: 5.0)"),
+      cl::init(5.0));
 
   /*
   cl::opt<double>
@@ -116,6 +123,15 @@ namespace klee {
     ~WriteStatsTimer() {}
     
     void run() { statsTracker->writeStatsLine(); }
+  };
+
+  class UpdateCoverageTimer: public Executor::Timer {
+    StatsTracker *statsTracker;
+  public:
+    UpdateCoverageTimer(StatsTracker *_statsTracker) : statsTracker(_statsTracker) {}
+    ~UpdateCoverageTimer() { }
+
+    void run() { statsTracker->computeCodeCoverage(false); }
   };
 
   class UpdateReachableTimer : public Executor::Timer {
@@ -220,6 +236,8 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
 
     executor.addTimer(new WriteIStatsTimer(this), IStatsWriteInterval);
   }
+
+  executor.addTimer(new UpdateCoverageTimer(this), CoverageUpdateInterval);
 }
 
 StatsTracker::~StatsTracker() {  
@@ -821,4 +839,34 @@ void StatsTracker::computeReachableUncovered() {
       currentFrameMinDist = computeMinDistToUncovered(kii, currentFrameMinDist);
     }
   }
+}
+
+void StatsTracker::computeCodeCoverage(bool global) {
+  CLOUD9_DEBUG("Computing code coverage...");
+  KModule *km = executor.kmodule;
+  unsigned count = 0;
+  unsigned grandTotal = 0;
+
+  for (std::vector<KFunction*>::iterator it = km->functions.begin();
+      it != km->functions.end(); it++) {
+    std::pair<unsigned, unsigned> cov = computeCodeCoverage(*it, global);
+
+    count += cov.first;
+    grandTotal += cov.second;
+  }
+
+  cloud9::instrum::theInstrManager.updateCoverage("<global>", std::make_pair(count, grandTotal));
+}
+
+std::pair<unsigned, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf, bool global) {
+  unsigned count = 0;
+
+  for (unsigned i = 0; i < kf->numInstructions; i++) {
+    unsigned id = kf->instructions[i]->info->id;
+
+    count += theStatisticManager->getIndexedValue(global ? stats::globallyCoveredInstructions :
+        stats::locallyCoveredInstructions, id);
+  }
+
+  return std::make_pair(count, kf->numInstructions);
 }
