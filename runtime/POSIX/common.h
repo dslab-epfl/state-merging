@@ -59,6 +59,9 @@
   __DECLARE_MODEL(type, name, ##__VA_ARGS__)
 #endif
 
+#define FORCE_IMPORT(name) \
+  __attribute__((used)) static const void* __usage_ ## name = (void*) &name;
+
 #define CALL_UNDERLYING(name, ...) \
     __klee_original_ ## name(__VA_ARGS__);
 
