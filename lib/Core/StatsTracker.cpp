@@ -76,8 +76,8 @@ namespace {
 
   cl::opt<double>
   CoverageUpdateInterval("cov-update-interval",
-      cl::desc("Approx. no. of secs between coverage updates (default: 5.0)"),
-      cl::init(5.0));
+      cl::desc("Approx. no. of secs between coverage updates (default: 3.0)"),
+      cl::init(3.0));
 
   /*
   cl::opt<double>
@@ -870,6 +870,8 @@ std::pair<unsigned, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf, b
     count += theStatisticManager->getIndexedValue(global ? stats::globallyCoveredInstructions :
         stats::locallyCoveredInstructions, id);
   }
+
+  cloud9::instrum::theInstrManager.updateCoverage(kf->function->getNameStr(), std::make_pair(count, kf->numInstructions));
 
   return std::make_pair(count, kf->numInstructions);
 }

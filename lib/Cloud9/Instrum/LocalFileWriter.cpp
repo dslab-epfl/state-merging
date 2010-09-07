@@ -64,8 +64,10 @@ void LocalFileWriter::writeCoverage(InstrumentationManager::TimeStamp &time,
       coverageStream << it->second.first;
     }
 
-    coverageStream << endl;
+
   }
+
+  coverageStream << endl;
 }
 
 
