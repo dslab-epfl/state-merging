@@ -145,7 +145,6 @@ bool KModule::isVulnerablePoint(KInstruction *kinst) {
   if (vulnerablePoints[target->getNameStr()].count(cpoint) == 0)
     return false;
 
-  CLOUD9_DEBUG("Found vulnerable point!");
   return true;
 }
 
