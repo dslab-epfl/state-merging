@@ -106,7 +106,7 @@ void FIStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode)
 
   fiCounters[state] = count;
 
-  isInt = isInt && (interesting[count].count(state) > 0);
+  isInt = isInt && (interesting.count(oldCount) > 0 && interesting[oldCount].count(state) > 0);
 
   unmapState(state, oldCount);
   mapState(state, count, isInt);
