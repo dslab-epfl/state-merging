@@ -61,7 +61,9 @@ void LoadBalancer::registerProgramParams(const std::string &programName,
 
 void LoadBalancer::checkProgramParams(const std::string &programName,
     unsigned crc, unsigned statIDCount) {
-  assert(this->programCRC == crc);
+  if (this->programCRC != crc) {
+    CLOUD9_DEBUG("CRC check failure! Ignoring, though...");
+  }
 
   assert(this->programName == programName);
   assert(this->statIDCount == statIDCount);

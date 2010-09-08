@@ -529,15 +529,24 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
 
   /* Build shadow structures */
 
-  infos = new InstructionInfoTable(module);  
+  infos = new InstructionInfoTable(module);
+
+  std::map<std::string, Function*> fnList;
   
   for (Module::iterator it = module->begin(), ie = module->end();
-       it != ie; ++it) {
+         it != ie; ++it) {
     if (it->isDeclaration())
       continue;
 
-    KFunction *kf = new KFunction(it, this);
+    fnList[it->getNameStr()] = it;
+  }
+
+  for (std::map<std::string, Function*>::iterator it = fnList.begin();
+      it != fnList.end(); it++) {
+    Function *fn = it->second;
     
+    KFunction *kf = new KFunction(fn, this);
+
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
       ki->info = &infos->getInfo(ki->inst);
@@ -551,7 +560,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     kf->trackCoverage = isFunctionCoverable(kf);
 
     functions.push_back(kf);
-    functionMap.insert(std::make_pair(it, kf));
+    functionMap.insert(std::make_pair(fn, kf));
   }
 
   /* Compute various interesting properties */
