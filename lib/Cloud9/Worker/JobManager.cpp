@@ -1056,10 +1056,11 @@ void JobManager::onBreakpoint(klee::ExecutionState *kState,
   if (collectTraces) {
     (**node).trace.appendEntry(new BreakpointEntry(id));
   }
-
+#if 0
   if (id == 42) {
     kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
   }
+#endif
 }
 
 void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
