@@ -39,6 +39,7 @@
 #include "llvm/System/Path.h"
 
 #include "cloud9/instrum/InstrumentationManager.h"
+#include "cloud9/worker/WorkerCommon.h"
 
 #include <iostream>
 #include <fstream>
@@ -131,7 +132,7 @@ namespace klee {
     UpdateCoverageTimer(StatsTracker *_statsTracker) : statsTracker(_statsTracker) {}
     ~UpdateCoverageTimer() { }
 
-    void run() { statsTracker->computeCodeCoverage(false); }
+    void run() { statsTracker->computeCodeCoverage(); }
   };
 
   class UpdateReachableTimer : public Executor::Timer {
@@ -841,10 +842,11 @@ void StatsTracker::computeReachableUncovered() {
   }
 }
 
-void StatsTracker::computeCodeCoverage(bool global) {
+void StatsTracker::computeCodeCoverage() {
   CLOUD9_DEBUG("Computing code coverage...");
   KModule *km = executor.kmodule;
-  unsigned count = 0;
+  unsigned localCount = 0;
+  unsigned globalCount = 0;
   unsigned grandTotal = 0;
 
   for (std::vector<KFunction*>::iterator it = km->functions.begin();
@@ -852,26 +854,32 @@ void StatsTracker::computeCodeCoverage(bool global) {
     if (!(*it)->trackCoverage)
       continue;
 
-    std::pair<unsigned, unsigned> cov = computeCodeCoverage(*it, global);
+    std::pair<std::pair<unsigned, unsigned>, unsigned> cov = computeCodeCoverage(*it);
 
-    count += cov.first;
+    localCount += cov.first.first;
+    globalCount += cov.first.second;
+
     grandTotal += cov.second;
   }
 
-  cloud9::instrum::theInstrManager.updateCoverage("<global>", std::make_pair(count, grandTotal));
+  cloud9::instrum::theInstrManager.updateCoverage("<local>", std::make_pair(localCount, grandTotal));
+  cloud9::instrum::theInstrManager.updateCoverage("<global>", std::make_pair(globalCount, grandTotal));
 }
 
-std::pair<unsigned, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf, bool global) {
-  unsigned count = 0;
+std::pair<std::pair<unsigned, unsigned>, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf) {
+  unsigned localCount = 0;
+  unsigned globalCount = 0;
 
   for (unsigned i = 0; i < kf->numInstructions; i++) {
     unsigned id = kf->instructions[i]->info->id;
 
-    count += theStatisticManager->getIndexedValue(global ? stats::globallyCoveredInstructions :
-        stats::locallyCoveredInstructions, id);
+    localCount += theStatisticManager->getIndexedValue(stats::locallyCoveredInstructions, id);
+    globalCount += theStatisticManager->getIndexedValue(stats::globallyCoveredInstructions, id);
   }
 
-  cloud9::instrum::theInstrManager.updateCoverage(kf->function->getNameStr(), std::make_pair(count, kf->numInstructions));
+  cloud9::instrum::theInstrManager.updateCoverage(kf->function->getNameStr(),
+      std::make_pair(UseGlobalCoverage ? globalCount : localCount, kf->numInstructions));
 
-  return std::make_pair(count, kf->numInstructions);
+  return std::make_pair(std::make_pair(localCount, globalCount), kf->numInstructions);
 }
+

@@ -56,7 +56,7 @@ namespace klee {
     void writeStatsLine();
     void writeIStats();
 
-    std::pair<unsigned, unsigned> computeCodeCoverage(KFunction *kf, bool global);
+    std::pair<std::pair<unsigned, unsigned>, unsigned> computeCodeCoverage(KFunction *kf);
 
   public:
     StatsTracker(Executor &_executor, std::string _objectFilename,
@@ -88,7 +88,7 @@ namespace klee {
 
     void computeReachableUncovered();
 
-    void computeCodeCoverage(bool global);
+    void computeCodeCoverage();
   };
 
   uint64_t computeMinDistToUncovered(const KInstruction *ki,

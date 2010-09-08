@@ -50,7 +50,7 @@ void CommManager::lbCommunicationControl() {
 
 	CLOUD9_INFO("Connected to the load balancer");
 
-	try {
+	//try {
 		CLOUD9_INFO("Registering worker with the load balancer...");
 		lbConnection.registerWorker();
 
@@ -66,9 +66,9 @@ void CommManager::lbCommunicationControl() {
 			lbConnection.sendUpdates();
 		}
 
-	} catch (boost::system::system_error &) {
+	//} catch (boost::system::system_error &) {
 		// Silently ignore
-	}
+	//}
 }
 
 CommManager::CommManager(JobManager *jm) : jobManager(jm), terminated(false) {
