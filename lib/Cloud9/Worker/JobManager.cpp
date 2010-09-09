@@ -334,7 +334,7 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
 }
 
 void JobManager::initStrategy() {
-  /*std::vector<JobSelectionStrategy*> strategies;
+  std::vector<JobSelectionStrategy*> strategies;
 
   switch (JobSelection) {
   case RandomSel:
@@ -363,9 +363,9 @@ void JobManager::initStrategy() {
 
   default:
     assert(0 && "undefined job selection strategy");
-  }*/
+  }
 
-  selStrategy = new FIStrategy(tree);
+  //selStrategy = new FIStrategy(tree);
 
   // Wrap this in a batching strategy, to speed up things
   //selStrategy = new BatchingStrategy(selStrategy);
