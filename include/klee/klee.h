@@ -188,11 +188,14 @@ extern "C" {
   // Misc
   //////////////////////////////////////////////////////////////////////////////
 
+  uint64_t klee_get_time(void);
+  void klee_set_time(uint64_t value);
+
   uintptr_t klee_branch(uintptr_t expr, int reason);
   int klee_fork(int reason);
 
   // Because of limited support for calling external variadic functions,
-  // klee_debug accepts either a set of 32-bit integers, or a single 64-bit value.
+  // klee_debug accepts either a set of 32-bit integers, or a single 64-bit value (char*).
   void klee_debug(const char *format, ...);
 
 #ifdef __cplusplus

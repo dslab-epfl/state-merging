@@ -956,7 +956,8 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
       }
     }
 
-    //CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc()->info->assemblyLine);
+    if (exhaust)
+      CLOUD9_DEBUG("Stepping in instruction " << state->getKleeState()->pc()->info->assemblyLine);
 
     if (state->collectProgress) {
       state->_instrProgress.push_back(state->getKleeState()->pc());

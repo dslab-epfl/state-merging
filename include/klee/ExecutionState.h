@@ -81,6 +81,7 @@ private:
   cloud9::worker::SymbolicState *c9State;
 
   void setupMain(KFunction *kf);
+  void setupTime();
 public:
   /* System-level parameters */
   Executor *executor;
@@ -131,6 +132,7 @@ public:
   wlists_ty waitingLists;
   wlist_id_t wlistCounter;
 
+  uint64_t stateTime;
 
   AddressSpace::cow_domain_t cowDomain;
 

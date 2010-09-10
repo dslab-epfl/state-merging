@@ -30,6 +30,7 @@
 #include <map>
 #include <set>
 #include <stdarg.h>
+#include <sys/time.h>
 
 using namespace llvm;
 using namespace klee;
@@ -65,6 +66,8 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     preemptions(0) {
 
   setupMain(kf);
+  setupTime();
+
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
@@ -80,7 +83,15 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
 
   setupMain(NULL);
 
+}
 
+void ExecutionState::setupTime() {
+  // Setting up the state time
+  struct timeval tv;
+  int result = gettimeofday(&tv, NULL);
+  assert(result == 0);
+
+  stateTime = tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
 void ExecutionState::setupMain(KFunction *kf) {

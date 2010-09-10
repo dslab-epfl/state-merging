@@ -92,6 +92,7 @@ namespace klee {
     HANDLER(handleGetContext);
     HANDLER(handleGetErrno);
     HANDLER(handleGetObjSize);
+    HANDLER(handleGetTime);
     HANDLER(handleGetValue);
     HANDLER(handleGetWList);
     HANDLER(handleIsSymbolic);
@@ -112,6 +113,7 @@ namespace klee {
     HANDLER(handleReportError);
     HANDLER(handleRevirtObjects);
     HANDLER(handleSetForking);
+    HANDLER(handleSetTime);
     HANDLER(handleSilentExit);
     HANDLER(handleStackTrace);
     HANDLER(handleThreadCreate);

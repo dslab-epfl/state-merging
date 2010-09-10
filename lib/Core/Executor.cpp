@@ -2497,7 +2497,10 @@ void Executor::stepInState(ExecutionState *state) {
 	//CLOUD9_DEBUG("Executing instruction: " << ki->info->assemblyLine);
 
 	resetTimers();
+
 	executeInstruction(*state, ki);
+	state->stateTime++; // Each instruction takes one unit of time
+
 	processTimers(state, MaxInstructionTime);
 
 	if (MaxMemory) {

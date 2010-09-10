@@ -111,6 +111,9 @@ HandlerInfo handlerInfo[] = {
 
   add("klee_debug", handleDebug, false),
 
+  add("klee_get_time", handleGetTime, true),
+  add("klee_set_time", handleSetTime, false),
+
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
   add("valloc", handleValloc, true),
@@ -770,6 +773,28 @@ void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
         executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))))
       return;
   }
+}
+
+void SpecialFunctionHandler::handleGetTime(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_get_time");
+
+  executor.bindLocal(target, state, ConstantExpr::create(state.stateTime,
+      executor.getWidthForLLVMType(target->inst->getType())));
+}
+
+void SpecialFunctionHandler::handleSetTime(ExecutionState &state,
+                    KInstruction *target,
+                    std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_set_time");
+
+  if (!isa<ConstantExpr>(arguments[0])) {
+    executor.terminateStateOnError(state, "klee_set_time requires a constant argument", "user.err");
+    return;
+  }
+
+  state.stateTime = cast<ConstantExpr>(arguments[0])->getZExtValue();
 }
 
 void SpecialFunctionHandler::handleGetWList(ExecutionState &state,
