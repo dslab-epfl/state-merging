@@ -142,6 +142,22 @@ bool JobManager::isExportableJob(WorkerTree::Node *node) {
   return true;
 }
 
+bool JobManager::isValidJob(WorkerTree::Node *node) {
+  assert(node->layerExists(WORKER_LAYER_JOBS));
+  while (node != NULL) {
+    if (node->layerExists(WORKER_LAYER_STATES)) {
+      if ((**node).getSymbolicState() != NULL)
+        return true;
+      else
+        return false;
+    } else {
+      node = node->getParent();
+    }
+  }
+
+  return false;
+}
+
 void JobManager::serializeInstructionTrace(std::ostream &s,
     WorkerTree::Node *node) {
   std::vector<int> path;
@@ -274,7 +290,7 @@ void JobManager::serializeExecutionTrace(std::ostream &os, SymbolicState *state)
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
     char **argv, char **envp) :
-  terminationRequest(false), currentJob(NULL), replaying(false), jobCount(0), traceCounter(0) {
+  terminationRequest(false), jobCount(0), currentJob(NULL), replaying(false), traceCounter(0) {
 
   tree = new WorkerTree();
   cTree = new CompressedTree();
@@ -527,7 +543,8 @@ void JobManager::processLoop(bool allowGrowth, bool blocking,
 
 ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
     unsigned int timeOut) {
-  ExecutionJob *job = selStrategy->onNextJobSelection();
+  ExecutionJob *job = selectNextJob();
+  assert(job != NULL || jobCount == 0);
 
   while (job == NULL) {
     CLOUD9_INFO("No jobs in the queue, waiting for...");
@@ -547,7 +564,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
     } else
       CLOUD9_INFO("More jobs available. Resuming exploration...");
 
-    job = selStrategy->onNextJobSelection();
+    job = selectNextJob();
 
     if (job != NULL)
       cloud9::instrum::theInstrManager.recordEvent(
@@ -559,6 +576,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
 
 ExecutionJob* JobManager::selectNextJob() {
   ExecutionJob *job = selStrategy->onNextJobSelection();
+  assert(job != NULL || jobCount == 0);
 
   return job;
 }
@@ -587,7 +605,7 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
 
 }
 
-void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
+void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool invalid) {
   WorkerTree::Node *node = job->getNode().get();
 
   job->removing = true;
@@ -609,10 +627,12 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates) {
   }
 
   fireRemovingJob(job);
-
   delete job;
 
   jobCount--;
+  if (invalid) {
+    cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalDroppedJobs);
+  }
 }
 
 void JobManager::selectJobs(WorkerTree::Node *root,
@@ -648,6 +668,8 @@ void JobManager::importJobs(ExecutionPathSetPin paths,
 
   CLOUD9_DEBUG("Importing " << paths->count() << " jobs");
 
+  unsigned droppedCount = 0;
+
   for (unsigned int i = 0; i < nodes.size(); i++) {
     WorkerTree::Node *crtNode = nodes[i];
     assert(crtNode->getCount(WORKER_LAYER_JOBS) == 0
@@ -656,18 +678,28 @@ void JobManager::importJobs(ExecutionPathSetPin paths,
         && "Job before the state frontier");
 
     if (crtNode->getCount(WORKER_LAYER_JOBS) > 0) {
-      CLOUD9_INFO("Discarding job as being obsolete: " << *crtNode);
+      CLOUD9_INFO("BUG! Discarding job as being obsolete: " << *crtNode);
     } else {
       // The exploration job object gets a pin on the node, thus
       // ensuring it will be released automatically after it's no
       // longer needed
       ExecutionJob *job = new ExecutionJob(crtNode, true);
 
-      if (strategies != NULL)
-        job->_strategy = (*strategies)[i];
+      if (!isValidJob(crtNode)) {
+        droppedCount++;
 
-      jobs.push_back(job);
+        delete job;
+      } else {
+        if (strategies != NULL)
+          job->_strategy = (*strategies)[i];
+
+        jobs.push_back(job);
+      }
     }
+  }
+
+  if (droppedCount > 0) {
+    CLOUD9_DEBUG("BUG! " << droppedCount << " jobs dropped before being imported.");
   }
 
   submitJobs(jobs.begin(), jobs.end(), true);
@@ -715,7 +747,7 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
     job->exported = true;
     job->removing = true;
 
-    finalizeJob(job, true);
+    finalizeJob(job, true, false);
   }
 
   cloud9::instrum::theInstrManager.incStatistic(
@@ -808,6 +840,7 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
 void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
     ExecutionJob *job, bool spawnNew) {
   WorkerTree::NodePin nodePin = job->getNode(); // Keep the node around until we finish with it
+  WorkerTree::Node *brokenNode = NULL;
 
   currentJob = job;
 
@@ -819,7 +852,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
     cloud9::instrum::theInstrManager.recordEvent(
         cloud9::instrum::JobExecutionState, "startReplay");
 
-    replayPath(lock, nodePin.get());
+    replayPath(lock, nodePin.get(), brokenNode);
 
     cloud9::instrum::theInstrManager.recordEvent(
         cloud9::instrum::JobExecutionState, "endReplay");
@@ -835,21 +868,21 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
   job->imported = false;
 
   if ((**nodePin).symState == NULL) {
+    assert(brokenNode != NULL);
+
     CLOUD9_INFO("Job canceled before start");
-    cloud9::instrum::theInstrManager.incStatistic(
-        cloud9::instrum::TotalDroppedJobs);
   } else {
     stepInNode(lock, nodePin.get(), false);
   }
 
   currentJob = NULL;
 
-  if ((**nodePin).symState == NULL) {
+  if ((**nodePin).symState == NULL && !brokenNode) {
     // Save the job strategy - it is inherited by the new jobs
     unsigned int strategy = job->_strategy;
 
     // Job finished here, need to remove it
-    finalizeJob(job, false);
+    finalizeJob(job, false, false);
 
     cloud9::instrum::theInstrManager.incStatistic(
         cloud9::instrum::TotalProcJobs);
@@ -876,10 +909,32 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
             cloud9::instrum::TotalTreePaths, nodes.size() - 1);
       }
     }
-  } else {
+  } else if ((**nodePin).symState != NULL) {
     // Just mark the state as updated, no node progress
     fireUpdateState((**nodePin).symState, nodePin.get());
+  } else {
+    cleanInvalidJobs(brokenNode);
   }
+}
+
+void JobManager::cleanInvalidJobs(WorkerTree::Node *rootNode) {
+  std::vector<WorkerTree::Node*> jobNodes;
+
+  tree->getLeaves(WORKER_LAYER_JOBS, rootNode, jobNodes);
+
+  CLOUD9_DEBUG("BUG! Cleaning " << jobNodes.size() << " broken jobs.");
+
+  for (std::vector<WorkerTree::Node*>::iterator it = jobNodes.begin();
+      it != jobNodes.end(); it++) {
+    WorkerTree::Node *node = *it;
+    assert(!node->layerExists(WORKER_LAYER_STATES));
+
+    ExecutionJob *job = (**node).job;
+    assert(job != NULL);
+
+    finalizeJob(job, false, true);
+  }
+
 }
 
 void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
@@ -925,10 +980,11 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
 }
 
 void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
-    WorkerTree::Node *pathEnd) {
+    WorkerTree::Node *pathEnd, WorkerTree::Node *&brokenEnd) {
   std::vector<int> path;
 
   WorkerTree::Node *crtNode = pathEnd;
+  brokenEnd = NULL;
 
   //CLOUD9_DEBUG("Replaying path: " << *crtNode);
 
@@ -938,10 +994,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
     crtNode = crtNode->getParent();
   }
 
-  if (crtNode == NULL) {
-    CLOUD9_ERROR("Cannot find the seed execution state.");
-    return;
-  }
+  assert(crtNode != NULL);
 
   std::reverse(path.begin(), path.end());
 
@@ -960,6 +1013,12 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
       stepInNode(lock, crtNode, true);
     }
 
+    if (crtNode->getChild(WORKER_LAYER_JOBS, 1-path[i]) &&
+        !crtNode->getChild(WORKER_LAYER_STATES, 1-path[i])) {
+      // Broken replays...
+      cleanInvalidJobs(crtNode->getChild(WORKER_LAYER_JOBS, 1-path[i]));
+    }
+
     crtNode = crtNode->getChild(WORKER_LAYER_JOBS, path[i]);
     assert(crtNode != NULL);
   }
@@ -969,6 +1028,9 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
   if (!crtNode->layerExists(WORKER_LAYER_STATES)) {
     assert((**crtNode).symState == NULL);
     CLOUD9_ERROR("Replay broken, NULL state at the end of the path.");
+
+    brokenEnd = crtNode;
+
     if (BreakOnReplayBroken) {
       fireBreakpointHit(crtNode->getParent());
     }

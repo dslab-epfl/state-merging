@@ -127,7 +127,7 @@ private:
   void fireRemovingJob(ExecutionJob *job);
 
   void submitJob(ExecutionJob* job, bool activateStates);
-  void finalizeJob(ExecutionJob *job, bool deactivateStates);
+  void finalizeJob(ExecutionJob *job, bool deactivateStates, bool invalid);
 
   template<typename JobIterator>
   void submitJobs(JobIterator begin, JobIterator end, bool activateStates) {
@@ -148,6 +148,7 @@ private:
 
   static bool isJob(WorkerTree::Node *node);
   bool isExportableJob(WorkerTree::Node *node);
+  bool isValidJob(WorkerTree::Node *node);
 
   void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job,
       bool spawnNew);
@@ -157,7 +158,8 @@ private:
   void stepInNode(boost::unique_lock<boost::mutex> &lock,
       WorkerTree::Node *node, bool exhaust);
   void replayPath(boost::unique_lock<boost::mutex> &lock,
-      WorkerTree::Node *pathEnd);
+      WorkerTree::Node *pathEnd, WorkerTree::Node *&brokenEnd);
+  void cleanInvalidJobs(WorkerTree::Node *rootNode);
 
   void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
