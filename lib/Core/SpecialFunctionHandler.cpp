@@ -475,7 +475,12 @@ void SpecialFunctionHandler::handlePrintExpr(ExecutionState &state,
          "invalid number of arguments to klee_print_expr");
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  std::cerr << msg_str << ":" << arguments[1] << "\n";
+  std::cerr << msg_str << ":" << arguments[1] << std::endl;
+
+  for (ConstraintManager::constraint_iterator it = state.constraints().begin();
+      it != state.constraints().end(); it++) {
+    std::cerr << *it << std::endl;
+  }
 }
 
 void SpecialFunctionHandler::handleSetForking(ExecutionState &state,

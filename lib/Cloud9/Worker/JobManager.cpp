@@ -956,8 +956,8 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
       }
     }
 
-    if (exhaust)
-      fprintf(stderr, "%d ", state->getKleeState()->pc()->info->assemblyLine);
+    //if (replaying)
+    //  fprintf(stderr, "%d ", state->getKleeState()->pc()->info->assemblyLine);
 
     if (state->collectProgress) {
       state->_instrProgress.push_back(state->getKleeState()->pc());
@@ -1006,9 +1006,20 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
   // Perform the replay work
   for (unsigned int i = 0; i < path.size(); i++) {
     if (!crtNode->layerExists(WORKER_LAYER_STATES)) {
+      if (crtNode->getParent() &&
+          crtNode->getParent()->getChild(WORKER_LAYER_STATES, 1-crtNode->getIndex())) {
+        CLOUD9_DEBUG("Replay broken because of different branch taken");
+
+        WorkerTree::Node *node = crtNode->getParent()->getChild(WORKER_LAYER_STATES, 1-crtNode->getIndex());
+        if ((**node).getSymbolicState()) {
+          (**node).getSymbolicState()->getKleeState()->dumpStack(std::cout);
+        }
+      }
       // We have a broken replay
       break;
     }
+
+
 
     if ((**crtNode).symState != NULL) {
       stepInNode(lock, crtNode, true);
@@ -1094,6 +1105,11 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   assert(kState);
+
+  if (replaying) {
+    CLOUD9_DEBUG("State destroyed during replay");
+    kState->dumpStack(std::cout);
+  }
 
   SymbolicState *state = kState->getCloud9State();
 
