@@ -32,7 +32,7 @@ public:
     gap(ADDRESS_POOL_GAP), align(ADDRESS_POOL_ALIGN) { }
 
   AddressPool() :
-    startAddress(ADDRESS_POOL_SIZE), size(ADDRESS_POOL_SIZE),
+    startAddress(ADDRESS_POOL_START), size(ADDRESS_POOL_SIZE),
     currentAddress(startAddress),
     gap(ADDRESS_POOL_GAP), align(ADDRESS_POOL_ALIGN) { }
 

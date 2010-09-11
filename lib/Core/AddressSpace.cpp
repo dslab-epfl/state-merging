@@ -317,11 +317,6 @@ bool AddressSpace::resolve(ExecutionState &state,
 // then its concrete cache byte isn't being used) but is just a hack.
 
 void AddressSpace::copyOutConcretes(AddressPool *pool) {
-  // Map the state address space into the Executor process space
-  void *startAddress = mmap((void*)pool->getStartAddress(), pool->getSize(),
-      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  assert(startAddress == (void*)pool->getStartAddress());
-
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); 
        it != ie; ++it) {
     const MemoryObject *mo = it->first;
@@ -355,9 +350,6 @@ bool AddressSpace::copyInConcretes(AddressPool *pool) {
       }
     }
   }
-
-  int result = munmap((void*)pool->getStartAddress(), pool->getSize());
-  assert(result == 0);
 
   return true;
 }

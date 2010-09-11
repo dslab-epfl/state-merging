@@ -96,10 +96,10 @@ void ExecutionState::setupAddressPool() {
       PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   assert(startAddress != MAP_FAILED);
 
-  addressPool = AddressPool((uint64_t)startAddress, addressPool.getSize()); // Correct the address
+  //CLOUD9_DEBUG("Address pool starts at " << startAddress <<
+  //   " although it was requested at " << addressPool.getStartAddress());
 
-  int result = munmap((void*)addressPool.getStartAddress(), addressPool.getSize());
-  assert(result == 0);
+  addressPool = AddressPool((uint64_t)startAddress, addressPool.getSize()); // Correct the address
 }
 
 void ExecutionState::setupMain(KFunction *kf) {
