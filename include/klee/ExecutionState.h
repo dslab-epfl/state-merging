@@ -22,6 +22,7 @@
 
 #include "klee/Threading.h"
 #include "klee/MultiProcess.h"
+#include "klee/AddressPool.h"
 
 #include <map>
 #include <set>
@@ -82,6 +83,7 @@ private:
 
   void setupMain(KFunction *kf);
   void setupTime();
+  void setupAddressPool();
 public:
   /* System-level parameters */
   Executor *executor;
@@ -134,6 +136,7 @@ public:
 
   uint64_t stateTime;
 
+  AddressPool addressPool;
   AddressSpace::cow_domain_t cowDomain;
 
   Thread& createThread(thread_id_t tid, KFunction *kf);

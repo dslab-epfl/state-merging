@@ -534,7 +534,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
                      << " (use will result in out of bounds access)\n";
       }
 
-      MemoryObject *mo = memory->allocate(size, false, true, i);
+      MemoryObject *mo = memory->allocate(&state, size, false, true, i);
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(i, mo));
       globalAddresses.insert(std::make_pair(i, mo->getBaseExpr()));
@@ -575,7 +575,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       }
 
       if (!mo)
-        mo = memory->allocate(size, false, true, &*i);
+        mo = memory->allocate(&state, size, false, true, &*i);
       if(!mo)
 	klee_message("cannot allocate memory for global %s", i->getNameStr().c_str());
       assert(mo && "out of memory");
@@ -1306,7 +1306,7 @@ void Executor::executeCall(ExecutionState &state,
         }
       }
 
-      MemoryObject *mo = sf.varargs = memory->allocate(size, true, false, 
+      MemoryObject *mo = sf.varargs = memory->allocate(&state, size, true, false,
                                                        state.prevPC()->inst);
       if (!mo) {
         terminateStateOnExecError(state, "out of memory (varargs)");
@@ -2829,7 +2829,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     }
   }
 
-  state.addressSpace().copyOutConcretes();
+  state.addressSpace().copyOutConcretes(&state.addressPool);
 
   if (!SuppressExternalWarnings) {
     std::ostringstream os;
@@ -2854,7 +2854,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
-  if (!state.addressSpace().copyInConcretes()) {
+  if (!state.addressSpace().copyInConcretes(&state.addressPool)) {
     terminateStateOnError(state, "external modified read-only object",
                           "external.err");
     return;
@@ -2921,7 +2921,7 @@ void Executor::executeAlloc(ExecutionState &state,
                             const ObjectState *reallocFrom) {
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
-    MemoryObject *mo = memory->allocate(CE->getZExtValue(), isLocal, false, 
+    MemoryObject *mo = memory->allocate(&state, CE->getZExtValue(), isLocal, false,
                                         state.prevPC()->inst);
     if (!mo) {
       bindLocal(target, state, 
@@ -3528,7 +3528,7 @@ void Executor::initRootState(ExecutionState *state,
 		arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
 
 		if (++ai != ae) {
-			argvMO = memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
+			argvMO = memory->allocate(state, (argc + 1 + envc + 1 + 1) * NumPtrBytes,
 					false, true, f->begin()->begin());
 
 			arguments.push_back(argvMO->getBaseExpr());
@@ -3568,7 +3568,7 @@ void Executor::initRootState(ExecutionState *state,
 				char *s = i < argc ? argv[i] : envp[i - (argc + 1)];
 				int j, len = strlen(s);
 
-				arg = memory->allocate(len + 1, false, true, state->pc()->inst);
+				arg = memory->allocate(state, len + 1, false, true, state->pc()->inst);
 				ObjectState *os = bindObjectInState(*state, arg, false);
 				for (j = 0; j < len + 1; j++)
 					os->write8(j, s[j]);

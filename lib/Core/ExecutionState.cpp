@@ -15,6 +15,7 @@
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
 #include "klee/ForkTag.h"
+#include "klee/AddressPool.h"
 #include "cloud9/Logger.h"
 
 #include "klee/Expr.h"
@@ -31,6 +32,7 @@
 #include <set>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <sys/mman.h>
 
 using namespace llvm;
 using namespace klee;
@@ -67,7 +69,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
 
   setupMain(kf);
   setupTime();
-
+  setupAddressPool();
 }
 
 ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> > &assumptions)
@@ -86,12 +88,18 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
 }
 
 void ExecutionState::setupTime() {
-  // Setting up the state time
-  struct timeval tv;
-  int result = gettimeofday(&tv, NULL);
-  assert(result == 0);
+  stateTime = 1284138206L * 1000000L; // Yeah, ugly, but what else? :)
+}
 
-  stateTime = tv.tv_sec * 1000000 + tv.tv_usec;
+void ExecutionState::setupAddressPool() {
+  void *startAddress = mmap((void*)addressPool.getStartAddress(), addressPool.getSize(),
+      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  assert(startAddress != MAP_FAILED);
+
+  addressPool = AddressPool((uint64_t)startAddress, addressPool.getSize()); // Correct the address
+
+  int result = munmap((void*)addressPool.getStartAddress(), addressPool.getSize());
+  assert(result == 0);
 }
 
 void ExecutionState::setupMain(KFunction *kf) {

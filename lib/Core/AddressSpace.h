@@ -20,6 +20,7 @@ namespace klee {
   class MemoryObject;
   class ObjectState;
   class TimingSolver;
+  class AddressPool;
 
   template<class T> class ref;
 
@@ -124,7 +125,7 @@ namespace klee {
 
     /// Copy the concrete values of all managed ObjectStates into the
     /// actual system memory location they were allocated at.
-    void copyOutConcretes();
+    void copyOutConcretes(AddressPool *pool);
 
     /// Copy the concrete values of all managed ObjectStates back from
     /// the actual system memory location they were allocated
@@ -134,7 +135,7 @@ namespace klee {
     ///
     /// \retval true The copy succeeded. 
     /// \retval false The copy failed because a read-only object was modified.
-    bool copyInConcretes();
+    bool copyInConcretes(AddressPool *pool);
   };
 } // End klee namespace
 
