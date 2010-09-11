@@ -1587,9 +1587,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       unsigned index = si->findCaseValue(ci);
       transferToBasicBlock(si->getSuccessor(index), si->getParent(), state);
     } else {
-      std::map<BasicBlock*, ref<Expr> > targets;
+      std::vector<std::pair<BasicBlock*, ref<Expr> > > targets;
+
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
-      for (unsigned i=1; i<cases; ++i) {
+
+      for (unsigned i = 1; i < cases; ++i) {
         ref<Expr> value = evalConstant(si->getCaseValue(i));
         ref<Expr> match = EqExpr::create(cond, value);
         isDefault = AndExpr::create(isDefault, Expr::createIsZero(match));
@@ -1597,23 +1599,42 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         bool success = solver->mayBeTrue(state, match, result);
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
+
         if (result) {
-          std::map<BasicBlock*, ref<Expr> >::iterator it =
-            targets.insert(std::make_pair(si->getSuccessor(i),
-                                          ConstantExpr::alloc(0, Expr::Bool))).first;
-          //CLOUD9_DEBUG("Instruction Switch (OrExpr::Create): " << state);
-          it->second = OrExpr::create(match, it->second);
+          unsigned k = 0;
+          for (k = 0; k < targets.size(); k++) {
+            if (targets[k].first == si->getSuccessor(i)) {
+              targets[k].second = OrExpr::create(match, targets[k].second);
+              break;
+            }
+          }
+
+          if (k == targets.size()) {
+            targets.push_back(std::make_pair(si->getSuccessor(i), match));
+          }
         }
       }
+
       bool res;
       bool success = solver->mayBeTrue(state, isDefault, res);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
-      if (res)
-        targets.insert(std::make_pair(si->getSuccessor(0), isDefault));
+      if (res) {
+        unsigned k = 0;
+        for (k = 0; k < targets.size(); k++) {
+          if (targets[k].first == si->getSuccessor(0)) {
+            targets[k].second = OrExpr::create(isDefault, targets[k].second);
+            break;
+          }
+        }
+
+        if (k == targets.size()) {
+          targets.push_back(std::make_pair(si->getSuccessor(0), isDefault));
+        }
+      }
       
       std::vector< ref<Expr> > conditions;
-      for (std::map<BasicBlock*, ref<Expr> >::iterator it = 
+      for (std::vector<std::pair<BasicBlock*, ref<Expr> > >::iterator it =
              targets.begin(), ie = targets.end();
            it != ie; ++it)
         conditions.push_back(it->second);
@@ -1622,7 +1643,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       branch(state, conditions, branches, KLEE_FORK_DEFAULT);
         
       std::vector<ExecutionState*>::iterator bit = branches.begin();
-      for (std::map<BasicBlock*, ref<Expr> >::iterator it = 
+      for (std::vector<std::pair<BasicBlock*, ref<Expr> > >::iterator it =
              targets.begin(), ie = targets.end();
            it != ie; ++it) {
         ExecutionState *es = *bit;
