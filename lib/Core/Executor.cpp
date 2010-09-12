@@ -724,6 +724,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       bool success = solver->getValue(current, condition, value);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
+      CLOUD9_INFO("NONDETERMINISM! New constraint added!");
       addConstraint(current, EqExpr::create(value, condition));
       condition = value;
     }      
