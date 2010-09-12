@@ -6,15 +6,18 @@
  * LICENSE: Please view LICENSE file in the home dir of this Program
  ********************************************************************/
 // -*- c++ -*-
+
+#include "cloud9/instrum/Timing.h"
+#include "cloud9/Logger.h"
+
 #include "AST.h"
+
 #include "ASTUtil.h"
 #include "../simplifier/bvsolver.h"
 
 #include <math.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 
-#include "cloud9/Logger.h"
+using cloud9::instrum::Timer;
 
 
 namespace BEEV {
@@ -106,25 +109,12 @@ namespace BEEV {
       PrintStats(newS.stats);
       return false;
     }
-    
-    struct rusage start, end;
-    int res = getrusage(RUSAGE_THREAD, &start);
-    assert(res == 0);
 
     //PrintActivityLevels_Of_SATVars("Before SAT:",newS);
     //ChangeActivityLevels_Of_SATVars(newS);
     //PrintActivityLevels_Of_SATVars("Before SAT and after initial bias:",newS);
     newS.solve();
     //PrintActivityLevels_Of_SATVars("After SAT",newS);
-
-    res = getrusage(RUSAGE_THREAD, &end);
-    assert(res == 0);
-
-    struct timeval diff;
-    timersub(&end.ru_stime, &start.ru_stime, &diff);
-    double t = (double)diff.tv_sec + (double)diff.tv_usec / 1000000.0;
-
-    CLOUD9_DEBUG("SAT solving complete: " << t << " sec (" << diff.tv_usec << " usec)");
 
     PrintStats(newS.stats);
     if (newS.okay())

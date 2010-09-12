@@ -34,6 +34,7 @@
 #include "cloud9/ExecutionTree.h"
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/instrum/LocalFileWriter.h"
+#include "cloud9/instrum/Timing.h"
 
 #include "llvm/Function.h"
 #include "llvm/Module.h"

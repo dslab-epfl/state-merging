@@ -23,6 +23,9 @@
 
 #include "llvm/System/Process.h"
 
+#include "cloud9/instrum/Timing.h"
+#include "cloud9/Logger.h"
+
 
 #define vc_bvBoolExtract IAMTHESPAWNOFSATAN
 
@@ -42,6 +45,8 @@
 
 using namespace klee;
 using namespace llvm;
+
+using cloud9::instrum::Timer;
 
 /***/
 
@@ -737,7 +742,12 @@ STPSolverImpl::computeInitialValues(const Query &query,
     success = runAndGetCexForked(vc, builder, stp_e, objects, values, 
                                  hasSolution, timeout);
   } else {
+    Timer t;
+    t.start();
     runAndGetCex(vc, builder, stp_e, objects, values, hasSolution);
+    t.stop();
+
+    CLOUD9_DEBUG("SMT solving complete: " << t);
     success = true;
   }
   
