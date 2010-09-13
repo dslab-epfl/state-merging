@@ -144,6 +144,11 @@ KleeHandler::KleeHandler(int argc, char **argv) :
 
 	m_infoFile = openOutputFile("info");
 
+	std::ostream *pidFile = openOutputFile("pid");
+	assert(pidFile != NULL);
+	*pidFile << getpid();
+	delete pidFile;
+
     // Init Cloud9 instrumentation
     initCloud9Instrumentation();
 }
