@@ -53,6 +53,7 @@ private:
   LBTree *tree;
 
   boost::asio::deadline_timer timer;
+  unsigned worryTimeOut;
 
   std::string programName;
   unsigned statIDCount;

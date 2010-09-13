@@ -28,7 +28,13 @@ cl::opt<unsigned int> TimerRate("timer-rate", cl::desc(
     cl::init(1));
 
 cl::opt<unsigned int> WorkerTimeOut("worker-tout",
-    cl::desc("Timeout for worker updates"), cl::init(300));
+    cl::desc("Timeout for worker updates"), cl::init(600));
+
+cl::opt<unsigned int> WorkerWorry("worker-worry",
+    cl::desc("Timeout after which we worry for a worker (advertise for it)"), cl::init(60));
+
+cl::opt<unsigned int> WorryRate("worry-rate",
+    cl::desc("Worry advertising rate"), cl::init(10));
 }
 
 namespace cloud9 {
@@ -36,7 +42,7 @@ namespace cloud9 {
 namespace lb {
 
 LoadBalancer::LoadBalancer(boost::asio::io_service &service) :
-  timer(service), nextWorkerID(1), rounds(0) {
+  timer(service), worryTimeOut(0), nextWorkerID(1), rounds(0) {
   tree = new LBTree();
 
   timer.expires_from_now(boost::posix_time::seconds(TimerRate));
@@ -220,6 +226,9 @@ void LoadBalancer::displayStatistics() {
 
 void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
   std::vector<worker_id_t> timedOut;
+  std::vector<worker_id_t> worries;
+
+  worryTimeOut += TimerRate;
 
   for (std::map<worker_id_t, Worker*>::iterator wIt = workers.begin();
       wIt != workers.end(); wIt++) {
@@ -230,11 +239,21 @@ void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
     if (worker->lastReportTime > WorkerTimeOut) {
       CLOUD9_WRK_INFO(worker, "Worker timed out. Destroying");
       timedOut.push_back(worker->id);
+    } else if (worker->lastReportTime > WorkerWorry) {
+      worries.push_back(worker->id);
     }
   }
 
   for (unsigned int i = 0; i < timedOut.size(); i++) {
     deregisterWorker(timedOut[i]);
+  }
+
+  if (worryTimeOut >= WorryRate) {
+    worryTimeOut = 0;
+
+    for (unsigned int i = 0; i < worries.size(); i++) {
+      CLOUD9_INFO("Still waiting for a report from worker " << worries[i]);
+    }
   }
 
   timer.expires_at(timer.expires_at() + boost::posix_time::seconds(TimerRate));
