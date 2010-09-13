@@ -836,7 +836,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       }
     }
 
-    fireStateBranched(NULL, &current, 0, tag);
+    //fireStateBranched(NULL, &current, 0, tag);
 
     return StatePair(&current, (klee::ExecutionState*)NULL);
   } else if (res==Solver::False) {
@@ -846,7 +846,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
       }
     }
 
-    fireStateBranched(NULL, &current, 1, tag);
+    //fireStateBranched(NULL, &current, 1, tag);
 
     return StatePair((klee::ExecutionState*)NULL, &current);
   } else {

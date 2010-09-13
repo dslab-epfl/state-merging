@@ -56,25 +56,6 @@ public:
 
 typedef ExecutionTree<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Four layered, binary tree
 
-
-class CompressedNodeInfo {
-  friend class JobManager;
-  friend class SymbolicState;
-private:
-  SymbolicState *symState;
-public:
-  CompressedNodeInfo() : symState(NULL) { }
-
-  SymbolicState *getSymbolicState() const { return symState; }
-};
-
-#define COMPRESSED_LAYER_COUNT      2
-
-#define COMPRESSED_LAYER_STATES     0
-#define COMPRESSED_LAYER_ACTIVE     1
-
-typedef ExecutionTree<CompressedNodeInfo, COMPRESSED_LAYER_COUNT, 2> CompressedTree; // Single layered, complete binary tree
-
 }
 
 }

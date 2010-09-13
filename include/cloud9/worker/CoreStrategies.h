@@ -78,10 +78,9 @@ public:
 class RandomPathStrategy: public BasicStrategy {
 private:
   WorkerTree *tree;
-  CompressedTree *cTree;
 public:
-  RandomPathStrategy(WorkerTree *t, CompressedTree *ct) :
-    tree(t), cTree(ct) { };
+  RandomPathStrategy(WorkerTree *t) :
+    tree(t) { };
 
   virtual ~RandomPathStrategy() { };
 

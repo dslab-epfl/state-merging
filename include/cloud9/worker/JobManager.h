@@ -73,7 +73,6 @@ private:
    * Symbolic tree
    */
   WorkerTree* tree;
-  CompressedTree *cTree;
 
   boost::condition_variable jobsAvailabe;
   boost::mutex jobsMutex;
