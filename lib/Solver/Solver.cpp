@@ -24,6 +24,7 @@
 #include "llvm/System/Process.h"
 
 #include "cloud9/instrum/Timing.h"
+#include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/Logger.h"
 
 
@@ -746,6 +747,7 @@ STPSolverImpl::computeInitialValues(const Query &query,
     t.start();
     runAndGetCex(vc, builder, stp_e, objects, values, hasSolution);
     t.stop();
+    cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
 
     CLOUD9_DEBUG("SMT solving complete: " << t);
     success = true;

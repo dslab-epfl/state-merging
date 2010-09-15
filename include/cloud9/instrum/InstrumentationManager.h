@@ -10,6 +10,8 @@
 
 #include "llvm/System/Process.h"
 
+#include "cloud9/instrum/Timing.h"
+
 #include <set>
 #include <vector>
 #include <unordered_map>
@@ -55,7 +57,10 @@ enum Events {
 	TestCase = 0,
 	ErrorCase = 1,
 	JobExecutionState = 2,
-	TimeOut = 3
+	TimeOut = 3,
+	InstructionBatch = 4,
+	ReplayBatch = 5,
+	SMTSolve = 6
 };
 
 class InstrumentationManager {
@@ -114,6 +119,14 @@ public:
 	void recordEvent(Events id, string value) {
 		boost::lock_guard<boost::mutex> lock(eventsMutex);
 		events.push_back(make_pair(now() - referenceTime, make_pair(id, value)));
+	}
+
+	void recordEvent(Events id, Timer &timer) {
+	  ostringstream os;
+	  os << timer;
+	  os.flush();
+
+	  recordEvent(id, os.str());
 	}
 
 	void setStatistic(Statistics id, int value) {

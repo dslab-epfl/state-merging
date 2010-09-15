@@ -69,6 +69,7 @@
 #include <iomanip>
 
 using llvm::sys::TimeValue;
+using cloud9::instrum::Timer;
 using namespace llvm;
 
 namespace klee {
@@ -801,6 +802,9 @@ void JobManager::fireRemovingJob(ExecutionJob *job) {
 
 void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
       ExecutionJob *origJob, bool spawnNew) {
+  Timer timer;
+  timer.start();
+
   WorkerTree::NodePin nodePin = origJob->getNode();
 
   if ((**nodePin).getSymbolicState() == NULL) {
@@ -829,6 +833,11 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
 
     currentTime = klee::util::getUserTime();
   }
+
+  timer.stop();
+
+  cloud9::instrum::theInstrManager.recordEvent(
+      cloud9::instrum::InstructionBatch, timer);
 
   //CLOUD9_DEBUG("Batched " << count << " jobs");
 }
@@ -978,6 +987,9 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
 
 void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
     WorkerTree::Node *pathEnd, WorkerTree::Node *&brokenEnd) {
+  Timer timer;
+  timer.start();
+
   std::vector<int> path;
 
   WorkerTree::Node *crtNode = pathEnd;
@@ -1043,6 +1055,9 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
       fireBreakpointHit(crtNode->getParent());
     }
   }
+
+  timer.stop();
+  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ReplayBatch, timer);
 }
 
 /* Symbolic Engine Callbacks **************************************************/
