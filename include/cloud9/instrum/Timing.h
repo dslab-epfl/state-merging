@@ -10,6 +10,7 @@
 
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <time.h>
 
 #include <ostream>
 #include <cassert>
@@ -20,12 +21,10 @@ namespace instrum {
 
 class Timer {
 private:
-  struct timeval startUserTime;
-  struct timeval startSystemTime;
+  struct timeval startThreadTime;
   struct timeval startRealTime;
 
-  struct timeval endUserTime;
-  struct timeval endSystemTime;
+  struct timeval endThreadTime;
   struct timeval endRealTime;
 
   double getTime(const struct timeval &start, const struct timeval &end) const {
@@ -35,10 +34,16 @@ private:
     return ((double)res.tv_sec + (double)res.tv_usec/1000000.0);
   }
 
+  void convert(struct timeval &dst, struct timespec &src) {
+    dst.tv_sec = src.tv_sec;
+    dst.tv_usec = src.tv_nsec / 1000;
+  }
+
 public:
   Timer() { }
   ~Timer() { }
 
+#if 0
   void start() {
     int res = gettimeofday(&startRealTime, 0);
     assert(res == 0);
@@ -47,8 +52,7 @@ public:
     res = getrusage(RUSAGE_THREAD, &ru);
     assert(res == 0);
 
-    startUserTime = ru.ru_utime;
-    startSystemTime = ru.ru_stime;
+    timeradd(&ru.ru_utime, &ru.ru_stime, &startThreadTime);
   }
 
   void stop() {
@@ -59,18 +63,44 @@ public:
     res = getrusage(RUSAGE_THREAD, &ru);
     assert(res == 0);
 
-    endUserTime = ru.ru_utime;
-    endSystemTime = ru.ru_stime;
+    timeradd(&ru.ru_utime, &ru.ru_stime, &endThreadTime);
+  }
+#else
+  void start() {
+    struct timespec tp;
+
+    int res = clock_gettime(CLOCK_REALTIME, &tp);
+    assert(res == 0);
+
+    convert(startRealTime, tp);
+
+    res = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp);
+    assert(res == 0);
+
+    convert(startThreadTime, tp);
   }
 
-  double getUserTime() const { return getTime(startUserTime, endUserTime); }
-  double getSystemTime() const { return getTime(startSystemTime, endSystemTime); }
+  void stop() {
+    struct timespec tp;
+
+    int res = clock_gettime(CLOCK_REALTIME, &tp);
+    assert(res == 0);
+
+    convert(endRealTime, tp);
+
+    res = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tp);
+    assert(res == 0);
+
+    convert(endThreadTime, tp);
+  }
+#endif
+
+  double getThreadTime() const { return getTime(startThreadTime, endThreadTime); }
   double getRealTime() const { return getTime(startRealTime, endRealTime); }
 };
 
 static inline std::ostream &operator<<(std::ostream &os, const Timer &timer) {
-  os << "User: " << timer.getUserTime() <<
-       " System: " << timer.getSystemTime() <<
+  os << "Thread: " << timer.getThreadTime() <<
        " Real: " << timer.getRealTime();
 
   return os;
