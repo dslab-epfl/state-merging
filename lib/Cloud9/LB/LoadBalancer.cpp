@@ -37,12 +37,15 @@ cl::opt<unsigned int> WorryRate("worry-rate",
     cl::desc("Worry advertising rate"), cl::init(10));
 }
 
+cl::opt<unsigned int> BalanceTimeOut("balance-tout",
+    cl::desc("The duration of the load balancing process"), cl::init(0));
+
 namespace cloud9 {
 
 namespace lb {
 
 LoadBalancer::LoadBalancer(boost::asio::io_service &service) :
-  timer(service), worryTimeOut(0), nextWorkerID(1), rounds(0) {
+  timer(service), worryTimer(0), balanceTimer(0), nextWorkerID(1), rounds(0) {
   tree = new LBTree();
 
   timer.expires_from_now(boost::posix_time::seconds(TimerRate));
@@ -203,7 +206,9 @@ void LoadBalancer::analyze(worker_id_t id) {
 
   if (rounds == BalanceRate) {
     rounds = 0;
-    analyzeBalance();
+
+    if (BalanceTimeOut == 0 || balanceTimer <= BalanceTimeOut)
+      analyzeBalance();
   }
 }
 
@@ -228,7 +233,7 @@ void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
   std::vector<worker_id_t> timedOut;
   std::vector<worker_id_t> worries;
 
-  worryTimeOut += TimerRate;
+  // Handling worker reply timeouts...
 
   for (std::map<worker_id_t, Worker*>::iterator wIt = workers.begin();
       wIt != workers.end(); wIt++) {
@@ -248,8 +253,24 @@ void LoadBalancer::periodicCheck(const boost::system::error_code& error) {
     deregisterWorker(timedOut[i]);
   }
 
-  if (worryTimeOut >= WorryRate) {
-    worryTimeOut = 0;
+  // Handling load balancing timeout...
+
+  if (BalanceTimeOut > 0) {
+    if (balanceTimer <= BalanceTimeOut) {
+      balanceTimer += TimerRate;
+
+      if (balanceTimer > BalanceTimeOut) {
+        CLOUD9_INFO("LOAD BALANCING DISABLED");
+      }
+    }
+  }
+
+  // Handling worry timeout...
+
+  worryTimer += TimerRate;
+
+  if (worryTimer >= WorryRate) {
+    worryTimer = 0;
 
     for (unsigned int i = 0; i < worries.size(); i++) {
       CLOUD9_INFO("Still waiting for a report from worker " << worries[i]);
