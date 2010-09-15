@@ -749,7 +749,7 @@ STPSolverImpl::computeInitialValues(const Query &query,
     t.stop();
     cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
 
-    CLOUD9_DEBUG("SMT solving complete: " << t);
+    //CLOUD9_DEBUG("SMT solving complete: " << t);
     success = true;
   }
   

@@ -15,6 +15,8 @@
 #include "ASTUtil.h"
 #include "../simplifier/bvsolver.h"
 
+#include "cloud9/instrum/InstrumentationManager.h"
+
 #include <math.h>
 
 using cloud9::instrum::Timer;
@@ -113,7 +115,12 @@ namespace BEEV {
     //PrintActivityLevels_Of_SATVars("Before SAT:",newS);
     //ChangeActivityLevels_Of_SATVars(newS);
     //PrintActivityLevels_Of_SATVars("Before SAT and after initial bias:",newS);
+    Timer t;
+    t.start();
     newS.solve();
+    t.stop();
+
+    cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SATSolve, t);
     //PrintActivityLevels_Of_SATVars("After SAT",newS);
 
     PrintStats(newS.stats);

@@ -12,6 +12,8 @@
 
 #include <iomanip>
 #include <boost/io/ios_state.hpp>
+#include <boost/thread.hpp>
+#include <boost/asio.hpp>
 
 using namespace llvm;
 
@@ -25,6 +27,18 @@ namespace cloud9 {
 
 namespace instrum {
 
+class IOServices {
+public:
+  boost::asio::io_service service;
+  boost::asio::deadline_timer timer;
+
+  boost::mutex eventsMutex;
+  boost::mutex coverageMutex;
+  boost::thread instrumThread;
+public:
+  IOServices() : timer(service, boost::posix_time::seconds(InstrUpdateRate)) { }
+};
+
 InstrumentationManager &theInstrManager = InstrumentationManager::getManager();
 
 void InstrumentationManager::instrumThreadControl() {
@@ -33,7 +47,7 @@ void InstrumentationManager::instrumThreadControl() {
 
 	for (;;) {
 		boost::system::error_code code;
-		timer.wait(code);
+		ioServices->timer.wait(code);
 
 		if (terminated) {
 			CLOUD9_INFO("Instrumentation interrupted. Stopping.");
@@ -43,7 +57,7 @@ void InstrumentationManager::instrumThreadControl() {
 			break;
 		}
 
-		timer.expires_at(timer.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
+		ioServices->timer.expires_at(ioServices->timer.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
 
 		writeStatistics();
 		writeEvents();
@@ -53,9 +67,9 @@ void InstrumentationManager::instrumThreadControl() {
 
 
 InstrumentationManager::InstrumentationManager() :
-		referenceTime(now()), covUpdated(false),
-		timer(service, boost::posix_time::seconds(InstrUpdateRate)), terminated(false) {
+		referenceTime(now()), stats(MAX_STATISTICS), covUpdated(false), terminated(false) {
 
+  ioServices = new IOServices();
 }
 
 InstrumentationManager::~InstrumentationManager() {
@@ -66,18 +80,20 @@ InstrumentationManager::~InstrumentationManager() {
 
 		delete writer;
 	}
+
+	delete ioServices;
 }
 
 void InstrumentationManager::start() {
-	instrumThread = boost::thread(&InstrumentationManager::instrumThreadControl, this);
+	ioServices->instrumThread = boost::thread(&InstrumentationManager::instrumThreadControl, this);
 }
 
 void InstrumentationManager::stop() {
-	if (instrumThread.joinable()) {
+	if (ioServices->instrumThread.joinable()) {
 		terminated = true;
-		timer.cancel();
+		ioServices->timer.cancel();
 
-		instrumThread.join();
+		ioServices->instrumThread.join();
 	}
 }
 
@@ -92,7 +108,7 @@ void InstrumentationManager::writeStatistics() {
 }
 
 void InstrumentationManager::writeEvents() {
-	boost::unique_lock<boost::mutex> lock(eventsMutex);
+	boost::unique_lock<boost::mutex> lock(ioServices->eventsMutex);
 	events_t eventsCopy = events;
 	events.clear();
 	lock.unlock();
@@ -105,7 +121,7 @@ void InstrumentationManager::writeEvents() {
 }
 
 void InstrumentationManager::writeCoverage() {
-  boost::unique_lock<boost::mutex> lock(coverageMutex);
+  boost::unique_lock<boost::mutex> lock(ioServices->coverageMutex);
   if (!covUpdated) {
     lock.unlock();
     return;
@@ -122,6 +138,18 @@ void InstrumentationManager::writeCoverage() {
 
     writer->writeCoverage(stamp, coverageCopy);
   }
+}
+
+void InstrumentationManager::recordEvent(Events id, string value) {
+    boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+    events.push_back(make_pair(now() - referenceTime, make_pair(id, value)));
+}
+
+void InstrumentationManager::updateCoverage(string tag, std::pair<unsigned, unsigned> value) {
+  boost::lock_guard<boost::mutex> lock(ioServices->coverageMutex);
+
+  coverage[tag] = value;
+  covUpdated = true;
 }
 
 std::string InstrumentationManager::stampToString(TimeStamp stamp) {

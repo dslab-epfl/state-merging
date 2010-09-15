@@ -8,6 +8,7 @@
 #include "cloud9/instrum/LocalFileWriter.h"
 
 #include <iostream>
+#include <boost/io/ios_state.hpp>
 
 
 namespace cloud9 {
@@ -27,10 +28,11 @@ void LocalFileWriter::writeStatistics(InstrumentationManager::TimeStamp &time,
 		InstrumentationManager::statistics_t &stats) {
 	statsStream << time;
 
-	for (InstrumentationManager::statistics_t::iterator it = stats.begin();
-			it != stats.end(); it++) {
+	for (unsigned i = 0; i < stats.size(); i++) {
+	  if (stats[i] == 0)
+	    continue;
 
-		statsStream << ' ' << (*it).first << '=' << (*it).second;
+	  statsStream << ' ' << i << '=' << stats[i];
 	}
 
 	statsStream << endl;

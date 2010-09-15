@@ -14,12 +14,10 @@
 
 #include <set>
 #include <vector>
-#include <unordered_map>
 #include <utility>
 #include <cassert>
-
-#include <boost/thread.hpp>
-#include <boost/asio.hpp>
+#include <sstream>
+#include <map>
 
 
 namespace cloud9 {
@@ -50,7 +48,9 @@ enum Statistics {
 
 	CurrentJobCount = 11,
 	CurrentActiveStateCount = 18,
-	CurrentStateCount = 19
+	CurrentStateCount = 19,
+
+	MAX_STATISTICS = 21
 };
 
 enum Events {
@@ -60,13 +60,18 @@ enum Events {
 	TimeOut = 3,
 	InstructionBatch = 4,
 	ReplayBatch = 5,
-	SMTSolve = 6
+	SMTSolve = 6,
+	SATSolve = 7,
+
+	MAX_EVENTS = 8
 };
+
+class IOServices;
 
 class InstrumentationManager {
 public:
 	typedef sys::TimeValue TimeStamp;
-	typedef unordered_map<int,int> statistics_t;
+	typedef vector<int> statistics_t;
 	typedef vector<pair<TimeStamp, pair<int, string> > > events_t;
 
 	typedef map<string, std::pair<unsigned, unsigned> > coverage_t;
@@ -87,12 +92,7 @@ private:
 	coverage_t coverage;
 	bool covUpdated;
 
-	boost::mutex eventsMutex;
-	boost::mutex coverageMutex;
-	boost::thread instrumThread;
-
-	boost::asio::io_service service;
-	boost::asio::deadline_timer timer;
+	IOServices *ioServices;
 
 	bool terminated;
 
@@ -116,11 +116,7 @@ public:
 	void start();
 	void stop();
 
-	void recordEvent(Events id, string value) {
-		boost::lock_guard<boost::mutex> lock(eventsMutex);
-		events.push_back(make_pair(now() - referenceTime, make_pair(id, value)));
-	}
-
+	void recordEvent(Events id, string value);
 	void recordEvent(Events id, Timer &timer) {
 	  ostringstream os;
 	  os << timer;
@@ -146,12 +142,7 @@ public:
 		stats[id] -= value;
 	}
 
-	void updateCoverage(string tag, std::pair<unsigned, unsigned> value) {
-	  boost::lock_guard<boost::mutex> lock(coverageMutex);
-
-	  coverage[tag] = value;
-	  covUpdated = true;
-	}
+	void updateCoverage(string tag, std::pair<unsigned, unsigned> value);
 
 	static InstrumentationManager &getManager() {
 		static InstrumentationManager manager;
