@@ -902,7 +902,12 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
       for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin(); it
           != nodes.end(); it++) {
         WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
-        assert((**node).symState != NULL);
+
+        if ((**node).symState == NULL) {
+          assert(node->getParent() == NULL);
+          continue;
+        }
+
         ExecutionJob *newJob = new ExecutionJob(node, false);
         newJob->_strategy = strategy;
 
