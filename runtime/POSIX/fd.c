@@ -172,13 +172,14 @@ DEFINE_MODEL(int, close, int fd) {
 
   if (fde->attr & FD_IS_CONCRETE) {
     //fprintf(stderr, "Closing concrete fd: %d\n", fde->concrete_fd);
-    int res = CALL_UNDERLYING(close, fde->concrete_fd);
-    if (res == -1)
-      errno = klee_get_errno();
-    else
-      STATIC_LIST_CLEAR(__fdt, fd);
+    //int res = CALL_UNDERLYING(close, fde->concrete_fd);
+    //if (res == -1)
+    //  errno = klee_get_errno();
+    //else
 
-    return res;
+    STATIC_LIST_CLEAR(__fdt, fd);
+
+    return 0;
   }
 
   // Decrement the underlying IO object refcount
