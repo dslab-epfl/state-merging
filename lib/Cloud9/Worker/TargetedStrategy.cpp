@@ -48,15 +48,19 @@ void TargetedStrategy::insertState(SymbolicState *state,
     cont.second.push_back(state);
     cont.first[state] = cont.second.size() - 1;
   }
+  assert(cont.first.size() == cont.second.size());
 }
 
 void TargetedStrategy::removeState(SymbolicState *state,
     state_container_t &cont) {
   if (cont.first.count(state) > 0) {
+    cont.first[cont.second.back()] = cont.first[state];
     cont.second[cont.first[state]] = cont.second.back();
     cont.second.pop_back();
+
     cont.first.erase(state);
   }
+  assert(cont.first.size() == cont.second.size());
 }
 
 ExecutionJob* TargetedStrategy::onNextJobSelection() {
