@@ -9,6 +9,7 @@
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/StrategyPortfolio.h"
+#include "cloud9/worker/TargetedStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Protocols.h"
 
@@ -103,6 +104,13 @@ void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
   }
 
   CLOUD9_DEBUG("[" << total << "] jobs reported to the load balancer");
+
+  TargetedStrategy *tStrategy = dynamic_cast<TargetedStrategy*>(jobManager->getStrategy());
+
+  if (tStrategy) {
+    CLOUD9_DEBUG("Interesting: [" << tStrategy->getInterestingCount() <<
+        "] Uninteresting: [" << tStrategy->getUninterestingCount() << "]");
+  }
 
   if (paths->count() > 0 || data.size() == 0) {
     assert(paths->count() == data.size());

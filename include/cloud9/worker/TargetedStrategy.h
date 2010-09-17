@@ -44,6 +44,9 @@ public:
   virtual void onStateActivated(SymbolicState *state);
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
   virtual void onStateDeactivated(SymbolicState *state);
+
+  unsigned getInterestingCount() const { return interestingStates.first.size(); }
+  unsigned getUninterestingCount() const { return uninterestingStates.first.size(); }
 };
 
 }
