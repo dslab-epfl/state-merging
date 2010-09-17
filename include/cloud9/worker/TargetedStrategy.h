@@ -19,6 +19,8 @@ namespace cloud9 {
 namespace worker {
 
 class TargetedStrategy: public BasicStrategy {
+public:
+  typedef std::set<std::string> interests_t;
 private:
   typedef std::map<SymbolicState*, unsigned> state_set_t;
   typedef std::vector<SymbolicState*> state_vector_t;
@@ -30,11 +32,21 @@ private:
   state_container_t interestingStates;
   state_container_t uninterestingStates;
 
+  interests_t localInterests;
+
+  char adoptionRate;
+
   SymbolicState *selectRandom(state_container_t &container);
   void insertState(SymbolicState *state, state_container_t &container);
   void removeState(SymbolicState *state, state_container_t &container);
 
-  bool isInteresting(klee::ForkTag forkTag);
+  bool isInteresting(klee::ForkTag forkTag, interests_t &interests);
+  bool isInteresting(SymbolicState *state, interests_t &interests);
+  void adoptStates();
+
+  unsigned int selectForExport(state_container_t &container,
+      interests_t &interests, std::vector<SymbolicState*> &states,
+      unsigned int maxCount);
 public:
   TargetedStrategy(WorkerTree *_workerTree);
   virtual ~TargetedStrategy() { }
@@ -47,6 +59,12 @@ public:
 
   unsigned getInterestingCount() const { return interestingStates.first.size(); }
   unsigned getUninterestingCount() const { return uninterestingStates.first.size(); }
+
+  void updateInterests(interests_t &interests);
+  unsigned int selectForExport(interests_t &interests,
+      std::vector<SymbolicState*> &states, unsigned int maxCount);
+
+  static interests_t anything;
 };
 
 }
