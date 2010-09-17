@@ -62,8 +62,9 @@ enum Events {
 	ReplayBatch = 5,
 	SMTSolve = 6,
 	SATSolve = 7,
+	ConstraintSolve = 8,
 
-	MAX_EVENTS = 8
+	MAX_EVENTS = 9
 };
 
 class IOServices;
