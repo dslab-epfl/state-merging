@@ -35,16 +35,12 @@ private:
 			ExecutionPathSetPin paths,
 			std::vector<int> counts);
 
-	void reInvestJobs(unsigned int newStrat, unsigned int oldStrat,
-			unsigned int maxCount);
-
 	void processResponse(LBResponseMessage &response);
 
 	void updateLogPrefix();
 
 	void sendJobStatistics(WorkerReportMessage &message);
 	void sendCoverageUpdates(WorkerReportMessage &message);
-	void sendStrategyUpdates(WorkerReportMessage &message);
 
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);

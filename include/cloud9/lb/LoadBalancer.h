@@ -10,7 +10,6 @@
 
 #include "cloud9/lb/TreeNodeInfo.h"
 #include "cloud9/lb/Worker.h"
-#include "cloud9/lb/StrategyStatistic.h"
 
 #include <set>
 #include <map>
@@ -32,18 +31,6 @@ public:
 public:
   TransferRequest(worker_id_t from, worker_id_t to) :
     fromID(from), toID(to) {
-  }
-};
-
-class InvestmentRequest {
-public:
-  strat_id_t fromID;
-  strat_id_t toID;
-
-  unsigned int count;
-public:
-  InvestmentRequest(strat_id_t from, strat_id_t to, unsigned int _count) :
-    fromID(from), toID(to), count(_count) {
   }
 };
 
@@ -69,7 +56,6 @@ private:
 
   std::set<worker_id_t> reqDetails;
   std::map<worker_id_t, TransferRequest*> reqTransfer;
-  std::map<worker_id_t, std::vector<InvestmentRequest*> > reqsInvest;
 
   // TODO: Restructure this to a more intuitive representation with
   // global coverage + coverage deltas
@@ -78,8 +64,6 @@ private:
 
   TransferRequest *computeTransfer(worker_id_t fromID, worker_id_t toID,
       unsigned count);
-
-  void computeGlobalPortfolioStats(strat_stat_map &portfolioStats);
 
   void analyzeBalance();
 
@@ -109,8 +93,6 @@ public:
   void updateWorkerStatNodes(worker_id_t id,
       std::vector<LBTree::Node*> &newNodes);
   void updateWorkerStats(worker_id_t id, std::vector<int> &stats);
-
-  void updateStrategyPortfolioStats(worker_id_t id, strat_stat_map &stats);
 
   void updateCoverageData(worker_id_t id, const cov_update_t &data);
 
@@ -148,17 +130,6 @@ public:
     }
 
     return NULL;
-  }
-
-  void requestAndResetInvestments(worker_id_t id, std::vector<
-      InvestmentRequest*> &invs) {
-    if (reqsInvest[id].size() > 0) {
-      invs.assign(reqsInvest[id].begin(), reqsInvest[id].end());
-
-      reqsInvest[id].clear();
-    } else {
-      invs.clear();
-    }
   }
 };
 

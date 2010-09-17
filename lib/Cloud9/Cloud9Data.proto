@@ -25,19 +25,6 @@ message StatisticUpdate {
 	repeated StatisticData data = 2;
 }
 
-message StrategyPortfolioData {
-	required uint32 strategy = 1;
-	required uint32 performance = 2;
-	required uint32 allocation = 3;
-}
-
-
-message StrategyPortfolioResponse {
-	required uint32 oldStrategy = 3;
-	required uint32 newStrategy = 1;
-	required uint32 nrJobs = 2;
-}
-
 message WorkerReportMessage {
 	message Registration {
 		required string address = 1;
@@ -57,10 +44,6 @@ message WorkerReportMessage {
 	message NodeDataUpdate {
 		repeated uint32 data = 1;
 	}
-
-	message StrategyPortfolioUpdate {
-		repeated StrategyPortfolioData data = 1;
-	}
 	
 	required uint32 id = 1;
 	
@@ -69,7 +52,6 @@ message WorkerReportMessage {
 	optional Registration registration = 4;
 		
 	repeated StatisticUpdate localUpdates = 5;
-	optional StrategyPortfolioUpdate strategyPortfolioUpdate = 6;
 }
 
 message LBResponseMessage {
@@ -82,7 +64,7 @@ message LBResponseMessage {
 	
 	message JobSeed {
 		required ExecutionPathSet path_set = 1;
-		repeated uint32 strategies = 2;
+		//repeated uint32 strategies = 2;
 	}
 	
 	required uint32 id = 1;
@@ -94,11 +76,9 @@ message LBResponseMessage {
 	required bool more_details = 4;
 	
 	repeated StatisticUpdate globalUpdates = 5;
-
-	repeated StrategyPortfolioResponse strategyPortfolioResponse = 6;
 }
 
 message PeerTransferMessage {
 	required ExecutionPathSet path_set = 1;
-	repeated uint32 strategies = 2;
+	//repeated uint32 strategies = 2;
 }

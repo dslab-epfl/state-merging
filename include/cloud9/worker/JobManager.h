@@ -37,7 +37,6 @@ namespace worker {
 
 class SymbolicState;
 class ExecutionJob;
-class StrategyPortfolio;
 class OracleStrategy;
 
 class JobManager: public StateEventHandler {
@@ -53,7 +52,6 @@ private:
   void initStatistics();
   void initStrategy();
 
-  StrategyPortfolio *createStrategyPortfolio();
   OracleStrategy *createOracleStrategy();
 
   void initRootState(llvm::Function *f, int argc, char **argv, char **envp);
@@ -256,10 +254,9 @@ public:
   /*
    * Job import/export methods
    */
-  void importJobs(ExecutionPathSetPin paths,
-      std::vector<unsigned int> *strategies);
+  void importJobs(ExecutionPathSetPin paths);
   ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
-      std::vector<int> &counts, std::vector<unsigned int> *strategies);
+      std::vector<int> &counts);
 };
 
 }

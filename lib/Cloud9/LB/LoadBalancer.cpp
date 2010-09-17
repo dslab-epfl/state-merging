@@ -108,7 +108,6 @@ void LoadBalancer::deregisterWorker(worker_id_t id) {
 
   reqDetails.erase(id);
   reqTransfer.erase(id);
-  reqsInvest.erase(id);
 }
 
 void LoadBalancer::updateWorkerStatNodes(worker_id_t id, std::vector<
@@ -298,23 +297,6 @@ void LoadBalancer::updateCoverageData(worker_id_t id, const cov_update_t &data) 
       wIt->second->globalCoverageUpdates[it->first] = true;
     }
   }
-}
-
-void LoadBalancer::updateStrategyPortfolioStats(worker_id_t id,
-    strat_stat_map &stats) {
-  Worker *worker = workers[id];
-  assert(worker);
-
-  for (strat_stat_map::iterator it = stats.begin(); it != stats.end(); it++) {
-    StrategyStatistic &stat = it->second;
-
-    worker->localPortfolioStats[it->first] = stat; // Replace it
-
-  }
-}
-
-void LoadBalancer::computeGlobalPortfolioStats(strat_stat_map &portfolioStats) {
-  // TODO Find an aggregation formula, e.g. sum of performances, weighted by allocations
 }
 
 void LoadBalancer::getAndResetCoverageUpdates(worker_id_t id,

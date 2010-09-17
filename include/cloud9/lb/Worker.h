@@ -9,7 +9,6 @@
 #define WORKER_H_
 
 #include "cloud9/lb/TreeNodeInfo.h"
-#include "cloud9/lb/StrategyStatistic.h"
 
 #include <vector>
 #include <map>
@@ -46,14 +45,12 @@ private:
 
   std::vector<char> globalCoverageUpdates;
 
-  strat_stat_map localPortfolioStats;
-
   unsigned int totalJobs;
 
   unsigned int lastReportTime;
 
   Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0) {
-    StrategyStatistic::initPortfolioStat(localPortfolioStats);
+
   }
 public:
   virtual ~Worker() {

@@ -36,9 +36,6 @@ private:
 
 	bool _active;
 
-	bool _free;
-	unsigned int _strategy;
-
 	std::vector<klee::KInstruction*> _instrProgress;
 	unsigned int _instrPos;
 
@@ -62,7 +59,7 @@ public:
 		kleeState(state),
 		nodePin(WORKER_LAYER_STATES),
 		_active(false),
-		_free(false), _strategy(0), _instrPos(0),
+		_instrPos(0),
 		collectProgress(false) {
       kleeState->setCloud9State(this);
 	}
@@ -89,8 +86,6 @@ private:
 	bool exported;
 	bool removing;
 
-	unsigned int _strategy;
-
 	void bindToNode(WorkerTree::Node *node) {
 		assert(!nodePin && node);
 
@@ -106,11 +101,11 @@ private:
 	}
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
-		exported(false), removing(false), _strategy(0) {}
+		exported(false), removing(false) {}
 
 	ExecutionJob(WorkerTree::Node *node, bool _imported) :
 		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
-		removing(false), _strategy(0) {
+		removing(false) {
 
 		bindToNode(node);
 

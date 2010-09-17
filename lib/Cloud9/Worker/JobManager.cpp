@@ -26,7 +26,6 @@
 #include "cloud9/worker/KleeCommon.h"
 #include "cloud9/worker/CoreStrategies.h"
 #include "cloud9/worker/ComplexStrategies.h"
-#include "cloud9/worker/StrategyPortfolio.h"
 #include "cloud9/worker/OracleStrategy.h"
 #include "cloud9/worker/FIStrategy.h"
 #include "cloud9/worker/TargetedStrategy.h"
@@ -388,19 +387,6 @@ void JobManager::initStrategy() {
   //selStrategy = new BatchingStrategy(selStrategy);
 }
 
-StrategyPortfolio *JobManager::createStrategyPortfolio() {
-  std::map<unsigned int, JobSelectionStrategy*> strategies;
-
-  strategies[RANDOM_PATH_STRATEGY] = new RandomPathStrategy(tree);
-  strategies[WEIGHTED_RANDOM_STRATEGY] = new WeightedRandomStrategy(
-      WeightedRandomStrategy::CoveringNew, tree, symbEngine);
-  strategies[RANDOM_STRATEGY] = new RandomStrategy();
-
-  StrategyPortfolio *result = new StrategyPortfolio(this, strategies);
-
-  return result;
-}
-
 OracleStrategy *JobManager::createOracleStrategy() {
   std::vector<unsigned int> goalPath;
 
@@ -480,7 +466,7 @@ void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
 
   if (standAlone) {
     // We need to import the root job
-    importJobs(ExecutionPathSet::getRootSet(), NULL);
+    importJobs(ExecutionPathSet::getRootSet());
   }
 
   processLoop(true, !standAlone, timeOut);
@@ -488,7 +474,7 @@ void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
 
 void JobManager::replayJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
   // First, we need to import the jobs in the manager
-  importJobs(paths, NULL);
+  importJobs(paths);
 
   // Then we execute them, but only them (non blocking, don't allow growth),
   // until the queue is exhausted
@@ -658,8 +644,7 @@ unsigned int JobManager::countJobs(WorkerTree::Node *root) {
   return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
-void JobManager::importJobs(ExecutionPathSetPin paths,
-    std::vector<unsigned int> *strategies) {
+void JobManager::importJobs(ExecutionPathSetPin paths) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   std::vector<WorkerTree::Node*> nodes;
@@ -691,9 +676,6 @@ void JobManager::importJobs(ExecutionPathSetPin paths,
 
         delete job;
       } else {
-        if (strategies != NULL)
-          job->_strategy = (*strategies)[i];
-
         jobs.push_back(job);
       }
     }
@@ -712,7 +694,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths,
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
-    std::vector<int> &counts, std::vector<unsigned int> *strategies) {
+    std::vector<int> &counts) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   std::vector<WorkerTree::Node*> roots;
@@ -730,9 +712,6 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
   for (std::vector<ExecutionJob*>::iterator it = jobs.begin(); it != jobs.end(); it++) {
     ExecutionJob *job = *it;
     jobRoots.push_back(job->getNode().get());
-
-    if (strategies != NULL)
-      strategies->push_back(job->_strategy);
   }
 
   // Do this before de-registering the jobs, in order to keep the nodes pinned
@@ -884,8 +863,6 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
   currentJob = NULL;
 
   if ((**nodePin).symState == NULL && !brokenNode) {
-    // Save the job strategy - it is inherited by the new jobs
-    unsigned int strategy = job->_strategy;
 
     // Job finished here, need to remove it
     finalizeJob(job, false, false);
@@ -910,7 +887,6 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
         }
 
         ExecutionJob *newJob = new ExecutionJob(node, false);
-        newJob->_strategy = strategy;
 
         submitJob(newJob, false);
       }
