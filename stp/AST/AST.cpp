@@ -23,14 +23,14 @@ namespace BEEV {
   //in the SAT solver. deprecated.
   bool variable_activity_optimize = false;
   //run STP in optimized mode
-  bool optimize = true;
+  bool optimize = false;
   //do sat refinement, i.e. underconstraint the problem, and feed to
   //SAT. if this works, great. else, add a set of suitable constraints
   //to re-constraint the problem correctly, and call SAT again, until
   //all constraints have been added.
-  bool arrayread_refinement = true;
+  bool arrayread_refinement = false;
   //flag to control write refinement
-  bool arraywrite_refinement = true;
+  bool arraywrite_refinement = false;
   //check the counterexample against the original input to STP
   bool check_counterexample = false;
   //construct the counterexample in terms of original variable based
