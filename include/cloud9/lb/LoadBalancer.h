@@ -47,6 +47,8 @@ private:
   unsigned statIDCount;
   unsigned programCRC;
 
+  std::set<std::string> targets;
+
   worker_id_t nextWorkerID;
 
   unsigned rounds;

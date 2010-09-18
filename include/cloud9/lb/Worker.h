@@ -47,9 +47,15 @@ private:
 
   unsigned int totalJobs;
 
+  std::set<std::string> interests;
+  bool updatedInterests;
+
+  std::map<std::string, unsigned int> jobsBreakdown;
+
+
   unsigned int lastReportTime;
 
-  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0) {
+  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0), updatedInterests(false) {
 
   }
 public:
