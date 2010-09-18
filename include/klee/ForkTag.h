@@ -8,9 +8,9 @@
 #ifndef FORKTAG_H_
 #define FORKTAG_H_
 
-namespace klee {
+#include <string>
 
-class KFunction;
+namespace klee {
 
 enum ForkClass {
   KLEE_FORK_DEFAULT = 0,
@@ -27,10 +27,10 @@ struct ForkTag {
   bool fiVulnerable;
 
   // The location in the code where the fork was decided (it can be NULL)
-  KFunction *location;
+  std::string functionName;
 
   ForkTag(ForkClass _fclass) :
-    forkClass(_fclass), fiVulnerable(false), location(0) { }
+    forkClass(_fclass), fiVulnerable(false) { }
 };
 
 }

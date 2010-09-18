@@ -22,30 +22,30 @@ class TargetedStrategy: public BasicStrategy {
 public:
   typedef std::set<std::string> interests_t;
 private:
-  typedef std::map<SymbolicState*, unsigned> state_set_t;
-  typedef std::vector<SymbolicState*> state_vector_t;
+  typedef std::map<ExecutionJob*, unsigned> job_set_t;
+  typedef std::vector<ExecutionJob*> job_vector_t;
 
-  typedef std::pair<state_set_t, state_vector_t> state_container_t;
+  typedef std::pair<job_set_t, job_vector_t> job_container_t;
 
   WorkerTree *workerTree;
 
-  state_container_t interestingStates;
-  state_container_t uninterestingStates;
+  job_container_t interestingJobs;
+  job_container_t uninterestingJobs;
 
   interests_t localInterests;
 
   char adoptionRate;
 
-  SymbolicState *selectRandom(state_container_t &container);
-  void insertState(SymbolicState *state, state_container_t &container);
-  void removeState(SymbolicState *state, state_container_t &container);
+  ExecutionJob *selectRandom(job_container_t &container);
+  void insertJob(ExecutionJob *job, job_container_t &container);
+  void removeJob(ExecutionJob *job, job_container_t &container);
 
   bool isInteresting(klee::ForkTag forkTag, interests_t &interests);
-  bool isInteresting(SymbolicState *state, interests_t &interests);
-  void adoptStates();
+  bool isInteresting(ExecutionJob *job, interests_t &interests);
+  void adoptJobs();
 
-  unsigned int selectForExport(state_container_t &container,
-      interests_t &interests, std::vector<SymbolicState*> &states,
+  unsigned int selectForExport(job_container_t &container,
+      interests_t &interests, std::vector<ExecutionJob*> &jobs,
       unsigned int maxCount);
 public:
   TargetedStrategy(WorkerTree *_workerTree);
@@ -53,16 +53,15 @@ public:
 
   virtual ExecutionJob* onNextJobSelection();
 
-  virtual void onStateActivated(SymbolicState *state);
-  virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
-  virtual void onStateDeactivated(SymbolicState *state);
+  virtual void onJobAdded(ExecutionJob *job);
+  virtual void onRemovingJob(ExecutionJob *job);
 
-  unsigned getInterestingCount() const { return interestingStates.first.size(); }
-  unsigned getUninterestingCount() const { return uninterestingStates.first.size(); }
+  unsigned getInterestingCount() const { return interestingJobs.first.size(); }
+  unsigned getUninterestingCount() const { return uninterestingJobs.first.size(); }
 
   void updateInterests(interests_t &interests);
   unsigned int selectForExport(interests_t &interests,
-      std::vector<SymbolicState*> &states, unsigned int maxCount);
+      std::vector<ExecutionJob*> &jobs, unsigned int maxCount);
 
   static interests_t anything;
 };

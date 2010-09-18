@@ -958,7 +958,7 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
   if (current.crtThreadIt == current.threads.end())
     return tag;
 
-  tag.location = current.stack().back().kf;
+  tag.functionName = current.stack().back().kf->function->getNameStr();
 
   if (tag.forkClass == KLEE_FORK_FAULTINJ) {
     tag.fiVulnerable = false;

@@ -10,6 +10,7 @@
 
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "klee/ExecutionState.h"
+#include "klee/ForkTag.h"
 
 #include <ostream>
 
@@ -28,7 +29,6 @@ namespace worker {
  */
 class SymbolicState {
 	friend class JobManager;
-	friend class StrategyPortfolio;
 	friend class OracleStrategy;
 private:
 	klee::ExecutionState *kleeState;
@@ -78,13 +78,14 @@ public:
  */
 class ExecutionJob {
 	friend class JobManager;
-	friend class StrategyPortfolio;
 private:
 	WorkerTree::NodePin nodePin;
 
 	bool imported;
 	bool exported;
 	bool removing;
+
+	klee::ForkTag forkTag;
 
 	void bindToNode(WorkerTree::Node *node) {
 		assert(!nodePin && node);
@@ -101,11 +102,11 @@ private:
 	}
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
-		exported(false), removing(false) {}
+		exported(false), removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {}
 
 	ExecutionJob(WorkerTree::Node *node, bool _imported) :
 		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
-		removing(false) {
+		removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {
 
 		bindToNode(node);
 
@@ -118,6 +119,8 @@ public:
 	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
+
+	klee::ForkTag getForkTag() const { return forkTag; }
 
 	bool isImported() const { return imported; }
 	bool isExported() const { return exported; }
