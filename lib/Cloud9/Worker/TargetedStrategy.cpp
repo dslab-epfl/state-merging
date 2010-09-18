@@ -15,6 +15,10 @@
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Internal/Module/KModule.h"
 
+#define DEFAULT_ADOPTION_RATE       10
+#define DEFAULT_EXPLOSION_SIZE      500
+#define DEFAULT_WORKING_SET_SIZE    1000
+
 using namespace klee;
 
 namespace cloud9 {
@@ -24,7 +28,10 @@ namespace worker {
 TargetedStrategy::interests_t TargetedStrategy::anything = interests_t();
 
 TargetedStrategy::TargetedStrategy(WorkerTree *_workerTree) :
-    workerTree(_workerTree), adoptionRate(10) {
+    workerTree(_workerTree),
+    adoptionRate(DEFAULT_ADOPTION_RATE),
+    explosionLimitSize(DEFAULT_EXPLOSION_SIZE),
+    workingSetSize(DEFAULT_WORKING_SET_SIZE) {
 
 }
 
@@ -54,7 +61,7 @@ void TargetedStrategy::adoptJobs() {
     ExecutionJob *job = selectRandom(uninterestingJobs);
 
     removeJob(job, uninterestingJobs);
-    insertJob(job, interestingJobs);
+    insertInterestingJob(job, workingSet, interestingJobs);
   }
 }
 
@@ -64,6 +71,38 @@ ExecutionJob *TargetedStrategy::selectRandom(job_container_t &cont) {
   int index = klee::theRNG.getInt32() % cont.second.size();
 
   return cont.second[index];
+}
+
+void TargetedStrategy::insertInterestingJob(ExecutionJob *job,
+    job_container_t &wset, job_container_t &others) {
+  if (wset.second.size() < explosionLimitSize) {
+    insertJob(job, wset);
+    return;
+  }
+
+  if (wset.second.size() < workingSetSize) {
+    bool decision = klee::theRNG.getBool();
+
+    if (decision) {
+      insertJob(job, wset);
+      return;
+    }
+  }
+
+  insertJob(job, others);
+}
+
+void TargetedStrategy::removeInterestingJob(ExecutionJob *job,
+    job_container_t &wset, job_container_t &others) {
+  removeJob(job, wset);
+  removeJob(job, others);
+
+  if (wset.second.size() < explosionLimitSize && others.second.size() > 0) {
+    ExecutionJob *job = selectRandom(others);
+
+    removeJob(job, others);
+    insertJob(job, wset);
+  }
 }
 
 void TargetedStrategy::insertJob(ExecutionJob *job,
@@ -88,27 +127,27 @@ void TargetedStrategy::removeJob(ExecutionJob *job,
 }
 
 ExecutionJob* TargetedStrategy::onNextJobSelection() {
-  if (interestingJobs.first.size() == 0) {
+  if (workingSet.first.size() == 0) {
     if (uninterestingJobs.first.size() == 0)
       return NULL;
 
     adoptJobs();
   }
 
-  ExecutionJob *job = selectRandom(interestingJobs);
+  ExecutionJob *job = selectRandom(workingSet);
   return job;
 }
 
 void TargetedStrategy::onJobAdded(ExecutionJob *job) {
   if (isInteresting(job, localInterests)) {
-    insertJob(job, interestingJobs);
+    insertInterestingJob(job, workingSet, interestingJobs);
   } else {
     insertJob(job, uninterestingJobs);
   }
 }
 
 void TargetedStrategy::onRemovingJob(ExecutionJob *job) {
-  removeJob(job, interestingJobs);
+  removeInterestingJob(job, workingSet, interestingJobs);
   removeJob(job, uninterestingJobs);
 }
 
@@ -116,6 +155,7 @@ void TargetedStrategy::updateInterests(interests_t &_interests) {
   localInterests = _interests;
 
   // Now we need to rehash states
+  job_container_t newWorkingSet;
   job_container_t newInteresting;
   job_container_t newUninteresting;
 
@@ -123,7 +163,7 @@ void TargetedStrategy::updateInterests(interests_t &_interests) {
     ExecutionJob *job = interestingJobs.second[i];
 
     if (isInteresting(job, localInterests))
-      insertJob(job, newInteresting);
+      insertInterestingJob(job, newWorkingSet, newInteresting);
     else
       insertJob(job, newUninteresting);
   }
@@ -132,11 +172,12 @@ void TargetedStrategy::updateInterests(interests_t &_interests) {
     ExecutionJob *job = uninterestingJobs.second[i];
 
     if (isInteresting(job, localInterests))
-      insertJob(job, newInteresting);
+      insertInterestingJob(job, newWorkingSet, newInteresting);
     else
       insertJob(job, newUninteresting);
   }
 
+  workingSet = newWorkingSet;
   interestingJobs = newInteresting;
   uninterestingJobs = newUninteresting;
 }

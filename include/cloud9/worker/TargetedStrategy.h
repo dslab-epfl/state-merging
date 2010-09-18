@@ -29,6 +29,7 @@ private:
 
   WorkerTree *workerTree;
 
+  job_container_t workingSet;
   job_container_t interestingJobs;
   job_container_t uninterestingJobs;
 
@@ -36,7 +37,14 @@ private:
 
   char adoptionRate;
 
+  unsigned int explosionLimitSize;
+  unsigned int workingSetSize;
+
   ExecutionJob *selectRandom(job_container_t &container);
+
+  void insertInterestingJob(ExecutionJob *job, job_container_t &wset, job_container_t &others);
+  void removeInterestingJob(ExecutionJob *job, job_container_t &wset, job_container_t &others);
+
   void insertJob(ExecutionJob *job, job_container_t &container);
   void removeJob(ExecutionJob *job, job_container_t &container);
 
@@ -56,7 +64,7 @@ public:
   virtual void onJobAdded(ExecutionJob *job);
   virtual void onRemovingJob(ExecutionJob *job);
 
-  unsigned getInterestingCount() const { return interestingJobs.first.size(); }
+  unsigned getInterestingCount() const { return workingSet.first.size() + interestingJobs.first.size(); }
   unsigned getUninterestingCount() const { return uninterestingJobs.first.size(); }
 
   void updateInterests(interests_t &interests);
