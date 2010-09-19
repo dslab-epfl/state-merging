@@ -22,8 +22,6 @@ namespace cloud9 {
 
 namespace worker {
 
-#define TRACE_SIZE  64
-
 /*
  *
  */
@@ -87,19 +85,18 @@ private:
 
 	klee::ForkTag forkTag;
 
-	void bindToNode(WorkerTree::Node *node) {
-		assert(!nodePin && node);
+    void rebindToNode(WorkerTree::Node *node) {
+        if (nodePin) {
+            (**nodePin).job = NULL;
+        }
 
-		nodePin = node->pin(WORKER_LAYER_JOBS);
-		(**node).job = this;
-	}
-
-	void unbind() {
-		if (nodePin) {
-			(**nodePin).job = NULL;
-			nodePin.reset();
-		}
-	}
+        if (node) {
+            nodePin = node->pin(WORKER_LAYER_JOBS);
+            (**node).job = this;
+        } else {
+            nodePin.reset();
+        }
+    }
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
 		exported(false), removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {}
@@ -108,14 +105,14 @@ public:
 		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
 		removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {
 
-		bindToNode(node);
+		rebindToNode(node);
 
 		//CLOUD9_DEBUG("Created job at " << *node);
 	}
 
 	virtual ~ExecutionJob() {
 		//CLOUD9_DEBUG("Destroyed job at " << nodePin);
-		unbind();
+		rebindToNode(NULL);
 	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }

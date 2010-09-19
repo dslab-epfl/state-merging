@@ -862,44 +862,10 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
 
   currentJob = NULL;
 
-  if ((**nodePin).symState == NULL && !brokenNode) {
-
-    // Job finished here, need to remove it
-    finalizeJob(job, false, false);
-
-    cloud9::instrum::theInstrManager.incStatistic(
-        cloud9::instrum::TotalProcJobs);
-
-    // Spawn new jobs if there are states left
-    if (nodePin->layerExists(WORKER_LAYER_STATES)) {
-      std::vector<WorkerTree::Node*> nodes;
-      tree->getLeaves(WORKER_LAYER_STATES, nodePin.get(), nodes);
-
-      //CLOUD9_DEBUG("New jobs: " << nodes.size());
-
-      for (std::vector<WorkerTree::Node*>::iterator it = nodes.begin(); it
-          != nodes.end(); it++) {
-        WorkerTree::Node *node = tree->getNode(WORKER_LAYER_JOBS, *it);
-
-        if ((**node).symState == NULL) {
-          assert(node->getParent() == NULL);
-          continue;
-        }
-
-        ExecutionJob *newJob = new ExecutionJob(node, false);
-
-        submitJob(newJob, false);
-      }
-
-      if (nodes.size() > 0) {
-        cloud9::instrum::theInstrManager.incStatistic(
-            cloud9::instrum::TotalTreePaths, nodes.size() - 1);
-      }
-    }
-  } else if ((**nodePin).symState != NULL) {
+  if ((**nodePin).symState != NULL) {
     // Just mark the state as updated, no node progress
     fireUpdateState((**nodePin).symState, nodePin.get());
-  } else {
+  } else if (brokenNode != NULL) {
     cleanInvalidJobs(brokenNode);
   }
 }
@@ -1193,16 +1159,43 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
   oldNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), 1 - index);
   parent->getCloud9State()->rebindToNode(oldNode);
 
-  if (kState) {
-    newNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), index);
-    SymbolicState *state = new SymbolicState(kState);
-    state->rebindToNode(newNode);
+  newNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), index);
+  SymbolicState *state = new SymbolicState(kState);
+  state->rebindToNode(newNode);
 
+  if (!replaying) {
+    ExecutionJob *job = (**pNodePin).getJob();
+    assert(job != NULL);
+
+    oldNode = tree->getNode(WORKER_LAYER_JOBS, oldNode);
+    job->rebindToNode(oldNode);
+
+    newNode = tree->getNode(WORKER_LAYER_JOBS, newNode);
+    ExecutionJob *newJob = new ExecutionJob(newNode, false);
+
+    submitJob(newJob, false);
+
+    cloud9::instrum::theInstrManager.incStatistic(
+                cloud9::instrum::TotalTreePaths);
   }
 }
 
 void JobManager::updateTreeOnDestroy(klee::ExecutionState *kState) {
   SymbolicState *state = kState->getCloud9State();
+
+  if (!replaying) {
+    WorkerTree::Node *node = state->getNode().get();
+
+    ExecutionJob *job = (**node).getJob();
+
+    assert(job != NULL);
+    // Job finished here, need to remove it
+    finalizeJob(job, false, false);
+
+    cloud9::instrum::theInstrManager.incStatistic(
+        cloud9::instrum::TotalProcJobs);
+  }
+
   state->rebindToNode(NULL);
 
   kState->setCloud9State(NULL);
