@@ -182,18 +182,18 @@ DEFINE_MODEL(int, close, int fd) {
     return 0;
   }
 
+  if (INJECT_FAULT(close, EINTR)) {
+    return -1;
+  }
+
   // Decrement the underlying IO object refcount
   assert(fde->io_object->refcount > 0);
-  fde->io_object->refcount--;
 
-  if (fde->io_object->refcount > 0) {
+  if (fde->io_object->refcount > 1) {
+    fde->io_object->refcount--;
     // Just clear this FD
     STATIC_LIST_CLEAR(__fdt, fd);
     return 0;
-  }
-
-  if (INJECT_FAULT(close, EINTR)) {
-    return -1;
   }
 
   int res;
