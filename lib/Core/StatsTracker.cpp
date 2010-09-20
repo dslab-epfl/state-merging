@@ -843,7 +843,6 @@ void StatsTracker::computeReachableUncovered() {
 }
 
 void StatsTracker::computeCodeCoverage() {
-  CLOUD9_DEBUG("Computing code coverage...");
   KModule *km = executor.kmodule;
   unsigned localCount = 0;
   unsigned globalCount = 0;
@@ -864,6 +863,8 @@ void StatsTracker::computeCodeCoverage() {
 
   cloud9::instrum::theInstrManager.updateCoverage("<local>", std::make_pair(localCount, grandTotal));
   cloud9::instrum::theInstrManager.updateCoverage("<global>", std::make_pair(globalCount, grandTotal));
+
+  CLOUD9_DEBUG("Code coverage is " << localCount << "/" << grandTotal << " (local) and " << globalCount << "/" << grandTotal << " (global)...");
 }
 
 std::pair<std::pair<unsigned, unsigned>, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf) {
