@@ -13,6 +13,7 @@
 #endif
 #include "fd.h"
 #include "multiprocess.h"
+#include "misc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -227,6 +228,8 @@ usage: (klee_init_env) [options] [program arguments]\n\
 
   klee_init_fds(sym_files, sym_file_len, 
 		sym_stdout_flag);
+
+  klee_init_mmap();
 
   klee_breakpoint(42);
 }

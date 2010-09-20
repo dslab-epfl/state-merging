@@ -38,6 +38,8 @@
 
 #define MAX_PENDING_CONN    4
 
+#define MAX_MMAPS           4
+
 #define SOCKET_BUFFER_SIZE  4096
 #define PIPE_BUFFER_SIZE    4096
 

@@ -5,12 +5,17 @@
  *      Author: stefan
  */
 
+#include "misc.h"
+
 #include <sched.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <assert.h>
 
 #include <klee/klee.h>
 
@@ -69,6 +74,99 @@ int settimeofday(const struct timeval *tv, const struct timezone *tz) {
   if (tz) {
     klee_warning("ignoring timezone set request");
   }
+
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// mmap Operations
+////////////////////////////////////////////////////////////////////////////////
+
+mmap_block_t __mmaps[MAX_MMAPS];
+
+void klee_init_mmap(void) {
+  STATIC_LIST_INIT(__mmaps);
+}
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  if (!(flags & MAP_ANONYMOUS)) {
+    klee_warning("unsupported file-backed mapping");
+
+    errno = EINVAL;
+    return MAP_FAILED;
+  }
+
+  int pagesize = getpagesize();
+
+  if ((length & (pagesize - 1)) || (fd >= 0)) {
+    errno = EINVAL;
+    return MAP_FAILED;
+  }
+
+  if ((prot & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
+    klee_warning("unsupported read- or write-only mapping, going on anyway");
+  }
+
+  if (INJECT_FAULT(mmap, ENOMEM)) {
+    return MAP_FAILED;
+  }
+
+  // We try allocating the memory
+  void *result = malloc(length);
+
+  if (!result) {
+    errno = ENOMEM;
+    return MAP_FAILED;
+  }
+
+  // Now we create the mapping
+  unsigned int idx;
+  STATIC_LIST_ALLOC(__mmaps, idx);
+
+  if (idx == MAX_MMAPS) {
+    free(result);
+
+    errno = ENOMEM;
+    return MAP_FAILED;
+  }
+
+  __mmaps[idx].addr = result;
+  __mmaps[idx].length = length;
+  __mmaps[idx].prot = prot;
+  __mmaps[idx].flags = flags;
+
+  if (flags & MAP_SHARED) {
+    klee_make_shared(result, length);
+  }
+
+  return result;
+}
+
+void *mmap2(void *addr, size_t length, int prot, int flags, int fd, off_t pgoffset) {
+  return mmap(addr, length, prot, flags, fd, pgoffset * getpagesize());
+}
+
+int munmap(void *addr, size_t length) {
+  unsigned idx;
+  for (idx = 0; idx < MAX_MMAPS; idx++) {
+    if (!STATIC_LIST_CHECK(__mmaps, idx))
+      continue;
+
+    if (__mmaps[idx].addr == addr)
+      break;
+  }
+
+  if (idx == MAX_MMAPS) {
+    klee_warning("inexistent mapping or unsupported fragment unmapping");
+    errno = EINVAL;
+    return -1;
+  }
+
+  assert(__mmaps[idx].addr);
+
+  free(__mmaps[idx].addr);
+
+  STATIC_LIST_CLEAR(__mmaps, idx);
 
   return 0;
 }
