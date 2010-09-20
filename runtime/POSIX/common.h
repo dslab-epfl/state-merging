@@ -23,6 +23,8 @@
 #define MAX_THREADS         16
 #define MAX_PROCESSES       8
 
+#define MAX_SEMAPHORES      8
+
 #define MAX_EVENTS          4
 
 #define MAX_FDS             64

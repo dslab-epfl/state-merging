@@ -10,6 +10,8 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
 
 #include "common.h"
 
@@ -27,6 +29,10 @@ typedef uint64_t wlist_id_t;
 #define STATIC_MUTEX_VALUE      0
 #define STATIC_CVAR_VALUE       0
 
+////////////////////////////////////////////////////////////////////////////////
+// System Wide Data Structures
+////////////////////////////////////////////////////////////////////////////////
+
 typedef struct {
   wlist_id_t wlist;
   wlist_id_t children_wlist;
@@ -41,6 +47,29 @@ typedef struct {
 } proc_data_t;
 
 extern proc_data_t __pdata[MAX_PROCESSES];
+
+typedef struct {
+  // Taken from the semaphore specs
+  unsigned short semval;
+  unsigned short semzcnt;
+  unsigned short semncnt;
+  pid_t sempid;
+} sem_t;
+
+typedef struct {
+  struct semid_ds descriptor;
+  sem_t *sems;
+
+  char allocated;
+} sem_set_t;
+
+extern sem_set_t __sems[MAX_SEMAPHORES];
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Process Specific Data Structures
+////////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
   wlist_id_t wlist;

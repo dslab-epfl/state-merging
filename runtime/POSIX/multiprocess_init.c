@@ -17,10 +17,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 proc_data_t __pdata[MAX_PROCESSES];
+sem_set_t __sems[MAX_SEMAPHORES];
+
+static void klee_init_semaphores(void) {
+  STATIC_LIST_INIT(__sems);
+  klee_make_shared(__sems, sizeof(__sems));
+}
 
 void klee_init_processes(void) {
   STATIC_LIST_INIT(__pdata);
-  klee_make_shared(&__pdata, sizeof(__pdata));
+  klee_make_shared(__pdata, sizeof(__pdata));
 
   proc_data_t *pdata = &__pdata[PID_TO_INDEX(DEFAULT_PROCESS)];
   pdata->allocated = 1;
@@ -29,6 +35,8 @@ void klee_init_processes(void) {
   pdata->umask = DEFAULT_UMASK;
   pdata->wlist = klee_get_wlist();
   pdata->children_wlist = klee_get_wlist();
+
+  klee_init_semaphores();
 
   klee_init_threads();
 }
