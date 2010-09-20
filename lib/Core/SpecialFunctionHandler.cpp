@@ -260,21 +260,25 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
   ref<ConstantExpr> address = cast<ConstantExpr>(addressExpr);
   if (!state.addressSpace().resolveOne(address, op))
     assert(0 && "XXX out of bounds / multiple resolution unhandled");
-  bool res;
-  assert(executor.solver->mustBeTrue(state, 
-                                     EqExpr::create(address, 
-                                                    op.first->getBaseExpr()),
-                                     res) &&
-         res &&
-         "XXX interior pointer unhandled");
+
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
 
   char *buf = new char[mo->size];
+  unsigned ioffset = 0;
+
+  ref<Expr> offset_expr = SubExpr::create(address, op.first->getBaseExpr());
+  if (isa<ConstantExpr>(offset_expr)) {
+	  ref<ConstantExpr> value = cast<ConstantExpr>(offset_expr.get());
+  	  ioffset = value.get()->getZExtValue();
+  } else
+	  assert(0 && "Error: invalid interior pointer");
+
+  assert(ioffset < mo->size);
 
   unsigned i;
-  for (i = 0; i < mo->size - 1; i++) {
-    ref<Expr> cur = os->read8(i);
+  for (i = 0; i < mo->size - ioffset - 1; i++) {
+    ref<Expr> cur = os->read8(i + ioffset);
     cur = executor.toUnique(state, cur);
     assert(isa<ConstantExpr>(cur) && 
            "hit symbolic char while reading concrete string");
