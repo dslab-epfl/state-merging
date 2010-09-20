@@ -4,6 +4,16 @@
 #
 PREPARE=prepare
 
+function replace_util {
+        sed -i 's| '$1'$|'" $2 |" $3
+        sed -i 's| '$1' |'" $2 |" $3
+        sed -i 's|='$1'$|'"=$2 |" $3
+        sed -i 's|='$1' |'"=$2 |" $3
+        sed -i 's|="'$1'|'"=\"$2|" $3
+}
+
+
+
 echo "makefile prepare script"
 echo "-----------------------"
 echo ""
@@ -36,9 +46,11 @@ then
 		echo "llvm-gcc is not in the PATH! Please fix that and make sure \"which llvm-gcc\" returns its path!"
 		exit 1
 	fi
-	export LLVM_LIB_SEARCH_PATH=$(dirname $(which llvm-gcc))/../lib64:$LD_LIBRARY_PATH
+	export LLVM_LIB_SEARCH_PATH=$(dirname $(which llvm-gcc))/../lib64
+	export_command="\texport LLVM_LIB_SEARCH_PATH=$LLVM_LIB_SEARCH_PATH; \n"
+else
+	export_command=""
 fi
-echo "LLVM_LIB_SEARCH_PATH is set to $LLVM_LIB_SEARCH_PATH"
 echo 
 
 #
@@ -78,9 +90,9 @@ echo ""
 echo "1. Tweaking FD_ZERO and FD_SET inline assembly"
 for ext in c C cc CC cpp CPP 
 do
-	for a in `grep 'FD_' $SOURCE_DIR/.. -R -n | grep '\.'$ext':' | sed 's/\.'$ext':.*/\.'$ext'/' | uniq`
+	for a in `grep 'FD_' $SOURCE_DIR -R -n | grep '\.'$ext':' | sed 's/\.'$ext':.*/\.'$ext'/' | uniq`
 	do 
-		if [ ! -f $a ]
+		if [ ! -f $a.bak ]
 		then
 			echo -e "\ttweaking: $a"
 			mv $a $a.bak
@@ -104,29 +116,26 @@ echo "3. Tweaking Makefiles"
 for a in `find $MAKEFILE_DIR/ -name "Makefile" -or -name "libtool"`
 do 
 	echo -e "\ttweaking: $a -- `cat $a | grep '^LIBS'`"
-	sed -i 's| gcc$|'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's| gcc |'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's|=gcc$|'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's|=gcc |'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's| g++$|'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's| g++ |'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's|=g++$|'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's|=g++ |'" $CLOUD9_ROOT/scripts/klee-gcc |" $a
-	sed -i 's| ld$| llvm-ld |' $a
-	sed -i 's| ld | llvm-ld |' $a
-	sed -i 's|=ld$|=llvm-ld |' $a
-	sed -i 's|=ld |=llvm-ld |' $a
-	sed -i 's| ar$| llvm-ar |' $a
-	sed -i 's| ar | llvm-ar |' $a
-	sed -i 's|=ar$|=llvm-ar |' $a
-	sed -i 's|=ar |=llvm-ar |' $a
-	sed -i 's| ranlib | llvm-ranlib |' $a
-	sed -i 's| ranlib$| llvm-ranlib |' $a
-	sed -i 's|=ranlib |=llvm-ranlib |' $a
-	sed -i 's|=ranlib$|=llvm-ranlib |' $a
+	replace_util gcc             $CLOUD9_ROOT/scripts/klee-gcc $a
+	replace_util `which gcc`     $CLOUD9_ROOT/scripts/klee-gcc $a
+
+	replace_util g++             $CLOUD9_ROOT/scripts/klee-gcc $a
+	replace_util `which g++`     $CLOUD9_ROOT/scripts/klee-gcc $a
+	
+	replace_util ld              llvm-ld $a
+	replace_util `which ld`      llvm-ld $a
+
+	replace_util ar              llvm-ar $a
+	replace_util `which ar`      llvm-ar $a
+
+	replace_util ranlib          ranlib $a
+	replace_util `which ranlib`  ranlib $a
+
+	# tweak libtool to get rid of the usless tag error
+	sed -i 's/if test -z "$tagname"; then/if false; then/' $a
 done
 
 # 4. Final message
 echo
-echo "After you checked the LIBS are correctly set, use \"make\" to build to LLVM!"
+echo -e "After you checked the LIBS are correctly set, use:\n\n"$export_command"\tmake CC=$CLOUD9_ROOT/scripts/klee-gcc CXX=$CLOUD9_ROOT/scripts/klee-gcc AR=llvm-ar RANLIB=llvm-ranlib\n\nto build to LLVM!"
 echo
