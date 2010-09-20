@@ -164,6 +164,12 @@ int munmap(void *addr, size_t length) {
 
   assert(__mmaps[idx].addr);
 
+  if (__mmaps[idx].length != length) {
+    klee_warning("unsupported fragment unmapping");
+    errno = EINVAL;
+    return -1;
+  }
+
   free(__mmaps[idx].addr);
 
   STATIC_LIST_CLEAR(__mmaps, idx);
