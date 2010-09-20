@@ -24,15 +24,8 @@ typedef uint64_t wlist_id_t;
 #define PID_TO_INDEX(pid)   ((pid) - 2)
 #define INDEX_TO_PID(idx)   ((idx) + 2)
 
-#define DEFAULT_MUTEX   0
-
-#define MUTEX_TO_INDEX(mtx) ((mtx) - 1)
-#define INDEX_TO_MUTEX(idx) ((idx) + 1)
-
-#define DEFAULT_CONDVAR 0
-
-#define COND_TO_INDEX(cond) ((cond) - 1)
-#define INDEX_TO_COND(idx)  ((idx) + 1)
+#define STATIC_MUTEX_VALUE      0
+#define STATIC_CVAR_VALUE       0
 
 typedef struct {
   wlist_id_t wlist;
@@ -72,16 +65,12 @@ typedef struct {
 typedef struct {
   wlist_id_t wlist;
 
-  char allocated;
-  unsigned int mutex;
+  mutex_data_t *mutex;
   unsigned int queued;
 } condvar_data_t;
 
 typedef struct {
   thread_data_t threads[MAX_THREADS];
-
-  mutex_data_t mutexes[MAX_MUTEXES];
-  condvar_data_t condvars[MAX_CONDVARS];
 } tsync_data_t;
 
 extern tsync_data_t __tsync;

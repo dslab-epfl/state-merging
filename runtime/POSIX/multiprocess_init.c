@@ -41,8 +41,6 @@ tsync_data_t __tsync;
 
 void klee_init_threads(void) {
   STATIC_LIST_INIT(__tsync.threads);
-  STATIC_LIST_INIT(__tsync.mutexes);
-  STATIC_LIST_INIT(__tsync.condvars);
 
   // Thread initialization
   thread_data_t *def_data = &__tsync.threads[DEFAULT_THREAD];
