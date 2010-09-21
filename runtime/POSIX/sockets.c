@@ -942,6 +942,25 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   return fd;
 }
 
+int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
+  int connsockfd = accept(sockfd, addr, addrlen);
+
+  if (connsockfd == -1)
+    return -1;
+
+  fd_entry_t *fde = &__fdt[connsockfd];
+
+  if (flags & SOCK_CLOEXEC) {
+    fde->attr |= FD_CLOSE_ON_EXEC;
+  }
+
+  if (flags & SOCK_NONBLOCK) {
+    fde->io_object->flags |= O_NONBLOCK;
+  }
+
+  return connsockfd;
+}
+
 // shutdown() //////////////////////////////////////////////////////////////////
 
 static void _shutdown(socket_t *sock, int how) {
