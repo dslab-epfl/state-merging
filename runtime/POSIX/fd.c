@@ -99,11 +99,22 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
   }
 
   if (fde->attr & FD_IS_FILE) {
+    if (INJECT_FAULT(read, EIO)) {
+      return -1;
+    }
+
     return _read_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
     return _read_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
-    return _read_socket((socket_t*)fde->io_object, buf, count);
+    socket_t *sock = (socket_t*)fde->io_object;
+
+    if (sock->status == SOCK_STATUS_CONNECTED &&
+        INJECT_FAULT(read, ECONNRESET)) {
+      return -1;
+    }
+
+    return _read_socket(sock, buf, count);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;
@@ -147,11 +158,22 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
 
   // Mkay, let's do it
   if (fde->attr & FD_IS_FILE) {
+    if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
+      return -1;
+    }
+
     return _write_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
     return _write_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
-    return _write_socket((socket_t*)fde->io_object, buf, count);
+    socket_t *sock = (socket_t*)fde->io_object;
+
+    if (sock->status == SOCK_STATUS_CONNECTED &&
+        INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
+      return -1;
+    }
+
+    return _write_socket(sock, buf, count);
   } else {
     assert(0 && "Invalid file descriptor");
     return -1;

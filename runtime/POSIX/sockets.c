@@ -241,10 +241,6 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
     return 0;
   }
 
-  if (INJECT_FAULT(read, ECONNRESET)) {
-    return -1;
-  }
-
   if (sock->__bdata.flags & O_NONBLOCK) {
     if (_stream_is_empty(sock->in) && !sock->in->closed) {
       errno = EAGAIN;
@@ -288,10 +284,6 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
 
   if (count == 0) {
     return 0;
-  }
-
-  if (INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
-    return -1;
   }
 
   if (sock->__bdata.flags & O_NONBLOCK) {
@@ -772,7 +764,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
 
-  if (INJECT_FAULT(sockfd, EACCES, EPERM, ECONNREFUSED)) {
+  if (INJECT_FAULT(connect, EACCES, EPERM, ECONNREFUSED)) {
     return -1;
   }
 

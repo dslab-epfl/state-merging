@@ -133,10 +133,6 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 ////////////////////////////////////////////////////////////////////////////////
 
 ssize_t _read_file(file_t *file, void *buf, size_t count) {
-  if (INJECT_FAULT(read, EIO)) {
-    return -1;
-  }
-
   ssize_t res = _block_read(&file->storage->contents, buf, count, file->offset);
   assert(res >= 0);
 
@@ -147,10 +143,6 @@ ssize_t _read_file(file_t *file, void *buf, size_t count) {
 }
 
 ssize_t _write_file(file_t *file, const void *buf, size_t count) {
-  if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
-    return -1;
-  }
-
   ssize_t res = _block_write(&file->storage->contents, buf, count, file->offset);
   assert(res >= 0);
 
