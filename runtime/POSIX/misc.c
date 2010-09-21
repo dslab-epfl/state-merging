@@ -96,9 +96,7 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     return MAP_FAILED;
   }
 
-  int pagesize = getpagesize();
-
-  if ((length & (pagesize - 1)) || (fd >= 0)) {
+  if (fd >= 0) {
     errno = EINVAL;
     return MAP_FAILED;
   }
