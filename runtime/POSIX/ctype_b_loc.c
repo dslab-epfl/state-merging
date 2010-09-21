@@ -20,6 +20,7 @@ void main() {
  *
  */
 #include <string.h>
+#include <stdlib.h>
 
 unsigned short *locale = NULL; 
 
