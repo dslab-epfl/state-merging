@@ -1041,31 +1041,7 @@ ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
     return -1;
   }
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
-
-  size_t count = 0;
-  size_t i;
-  for (i = 0; i < msg->msg_iovlen; i++) {
-    if (msg->msg_iov[i].iov_len == 0)
-      continue;
-
-    // If we have something written, but now we blocked, we just return
-    // what we have
-    if (count > 0 && _is_blocking_socket(sock, EVENT_WRITE))
-      return count;
-
-    ssize_t res = _write_socket(sock, msg->msg_iov[i].iov_base,
-        msg->msg_iov[i].iov_len);
-
-    if (res == 0 || res == -1) {
-      assert(count == 0);
-      return res;
-    }
-
-    count += res;
-  }
-
-  return count;
+  return _gather_write(sockfd, msg->msg_iov, msg->msg_iovlen);
 }
 
 ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
@@ -1083,29 +1059,7 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
     return -1;
   }
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
-
-  size_t count = 0;
-  size_t i;
-  for (i = 0; i < msg->msg_iovlen; i++) {
-    if (msg->msg_iov[i].iov_len == 0)
-      continue;
-
-    if (count > 0 && _is_blocking_socket(sock, EVENT_READ))
-      return count;
-
-    ssize_t res = _read_socket(sock, msg->msg_iov[i].iov_base,
-        msg->msg_iov[i].iov_len);
-
-    if (res == 0 || res == -1) {
-      assert(count == 0);
-      return res;
-    }
-
-    count += res;
-  }
-
-  return count;
+  return _scatter_read(sockfd, msg->msg_iov, msg->msg_iovlen);
 }
 
 // {get,set}sockopt() //////////////////////////////////////////////////////////

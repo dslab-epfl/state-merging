@@ -17,6 +17,7 @@
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -57,6 +58,117 @@ void __close_fds(void) {
 
     close(fd);
   }
+}
+
+static int _is_blocking(int fd, int event) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
+    return 0;
+  }
+
+  switch (event) {
+  case EVENT_READ:
+    if ((__fdt[fd].io_object->flags & O_ACCMODE) == O_WRONLY) {
+      return 0;
+    }
+    break;
+  case EVENT_WRITE:
+    if ((__fdt[fd].io_object->flags & O_ACCMODE) == O_RDONLY) {
+      return 0;
+    }
+    break;
+  default:
+    assert(0 && "invalid event");
+  }
+
+  if (__fdt[fd].attr & FD_IS_FILE) {
+    return 0; // A file never blocks in our model
+  } else if (__fdt[fd].attr & FD_IS_PIPE) {
+    return _is_blocking_pipe((pipe_end_t*)__fdt[fd].io_object, event);
+  } else if (__fdt[fd].attr & FD_IS_SOCKET) {
+    return _is_blocking_socket((socket_t*)__fdt[fd].io_object, event);
+  } else {
+    assert(0 && "invalid fd");
+  }
+}
+
+static ssize_t _clean_read(int fd, void *buf, size_t count) {
+  fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_FILE) {
+    return _read_file((file_t*)fde->io_object, buf, count);
+  } else if (fde->attr & FD_IS_PIPE) {
+    return _read_pipe((pipe_end_t*)fde->io_object, buf, count);
+  } else if (fde->attr & FD_IS_SOCKET) {
+    return _read_socket((socket_t*)fde->io_object, buf, count);
+  } else {
+    assert(0 && "Invalid file descriptor");
+  }
+}
+
+static ssize_t _clean_write(int fd, const void *buf, size_t count) {
+  fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_FILE) {
+    return _write_file((file_t*)fde->io_object, buf, count);
+  } else if (fde->attr & FD_IS_PIPE) {
+    return _write_pipe((pipe_end_t*)fde->io_object, buf, count);
+  } else if (fde->attr & FD_IS_SOCKET) {
+    return _write_socket((socket_t*)fde->io_object, buf, count);
+  } else {
+    assert(0 && "Invalid file descriptor");
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt) {
+  size_t count = 0;
+
+  int i;
+  for (i = 0; i < iovcnt; i++) {
+    if (iov[i].iov_len == 0)
+      continue;
+
+    if (count > 0 && _is_blocking(fd, EVENT_READ))
+      return count;
+
+    ssize_t res = _clean_read(fd, iov[i].iov_base, iov[i].iov_len);
+
+    if (res == 0 || res == -1) {
+      assert(count == 0);
+      return res;
+    }
+
+    count += res;
+  }
+
+  return count;
+}
+
+ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt) {
+  size_t count = 0;
+
+  int i;
+  for (i = 0; i < iovcnt; i++) {
+    if (iov[i].iov_len == 0)
+      continue;
+
+    // If we have something written, but now we blocked, we just return
+    // what we have
+    if (count > 0 && _is_blocking(fd, EVENT_WRITE))
+      return count;
+
+    ssize_t res = _clean_write(fd, iov[i].iov_base, iov[i].iov_len);
+
+    if (res == 0 || res == -1) {
+      assert(count == 0);
+      return res;
+    }
+
+    count += res;
+  }
+
+  return count;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,7 +229,6 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
     return _read_socket(sock, buf, count);
   } else {
     assert(0 && "Invalid file descriptor");
-    return -1;
   }
 }
 
@@ -176,8 +287,19 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
     return _write_socket(sock, buf, count);
   } else {
     assert(0 && "Invalid file descriptor");
-    return -1;
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_MODEL(ssize_t, readv, int fd, const struct iovec *iov, int iovcnt) {
+  return -1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt) {
+  return -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -264,7 +386,6 @@ DEFINE_MODEL(int, fstat, int fd, struct stat *buf) {
     return _stat_socket((socket_t*)fde->io_object, buf);
   } else {
     assert(0 && "Invalid file descriptor");
-    return -1;
   }
 }
 
@@ -405,39 +526,6 @@ static int _validate_fd_set(int nfds, fd_set *fds) {
   }
 
   return res;
-}
-
-// XXX These functions could be refactored into implementations per object
-
-static int _is_blocking(int fd, int event) {
-  if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
-    return 0;
-  }
-
-  switch (event) {
-  case EVENT_READ:
-    if ((__fdt[fd].io_object->flags & O_ACCMODE) == O_WRONLY) {
-      return 0;
-    }
-    break;
-  case EVENT_WRITE:
-    if ((__fdt[fd].io_object->flags & O_ACCMODE) == O_RDONLY) {
-      return 0;
-    }
-    break;
-  default:
-    assert(0 && "invalid event");
-  }
-
-  if (__fdt[fd].attr & FD_IS_FILE) {
-    return 0; // A file never blocks in our model
-  } else if (__fdt[fd].attr & FD_IS_PIPE) {
-    return _is_blocking_pipe((pipe_end_t*)__fdt[fd].io_object, event);
-  } else if (__fdt[fd].attr & FD_IS_SOCKET) {
-    return _is_blocking_socket((socket_t*)__fdt[fd].io_object, event);
-  } else {
-    assert(0 && "invalid fd");
-  }
 }
 
 static int _register_events(int fd, wlist_id_t wlist, int events) {

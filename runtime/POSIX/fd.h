@@ -10,6 +10,8 @@
 
 #include "common.h"
 
+#include <sys/uio.h>
+
 #define FD_IS_CONCRETE      (1 << 0)    // The calls get forwarded to the underlying implementation
 #define FD_IS_DUMMY         (1 << 1)    // The data read is symbolic, and the data written is discarded
 #define FD_IS_FILE          (1 << 3)    // The fd points to a disk file
@@ -73,6 +75,9 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 
 void __adjust_fds_on_fork(void);
 void __close_fds(void);
+
+ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt);
+ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt);
 
 
 #endif /* FD_H_ */

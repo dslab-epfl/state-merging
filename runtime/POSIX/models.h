@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/vfs.h>
+#include <sys/uio.h>
 #include <fcntl.h>
 
 DECLARE_MODEL(int, stat, const char *path, struct stat *buf);
@@ -59,5 +60,7 @@ DECLARE_MODEL(int, access, const char *pathname, int mode);
 DECLARE_MODEL(ssize_t, read, int fd, void *buf, size_t count);
 DECLARE_MODEL(ssize_t, write, int fd, const void *buf, size_t count);
 
+DECLARE_MODEL(ssize_t, readv, int fd, const struct iovec *iov, int iovcnt);
+DECLARE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt);
 
 #endif /* UNDERLYING_H_ */
