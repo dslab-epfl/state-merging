@@ -17,7 +17,8 @@ enum ForkClass {
   KLEE_FORK_FAULTINJ = 1,
   KLEE_FORK_SCHEDULE = 2,
   KLEE_FORK_INTERNAL = 3,
-  KLEE_FORK_MULTI = 4
+  KLEE_FORK_MULTI = 4,
+  KLEE_FORK_TIMEOUT = 5
 };
 
 struct ForkTag {
