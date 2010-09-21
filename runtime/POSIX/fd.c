@@ -28,6 +28,10 @@
 
 #include <klee/klee.h>
 
+// For multiplexing multiple syscalls into a single _read/_write op. set
+#define _IO_TYPE_SCATTER_GATHER  0x1
+#define _IO_TYPE_POSITIONAL      0x2
+
 ////////////////////////////////////////////////////////////////////////////////
 // Internal routines
 ////////////////////////////////////////////////////////////////////////////////
@@ -175,7 +179,7 @@ ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt) {
 // FD specific POSIX routines
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
+static ssize_t _read(int fd, int type, ...) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -184,6 +188,19 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
+    if (type & _IO_TYPE_SCATTER_GATHER) {
+      klee_warning("unsupported concrete scatter gather");
+
+      errno = EINVAL;
+      return -1;
+    }
+
+    va_list ap;
+    va_start(ap, type);
+    void *buf = va_arg(ap, void*);
+    size_t count = va_arg(ap, size_t);
+    va_end(ap);
+
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
     /* XXX In terms of looking for bugs we really should do this check
@@ -214,10 +231,6 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
     if (INJECT_FAULT(read, EIO)) {
       return -1;
     }
-
-    return _read_file((file_t*)fde->io_object, buf, count);
-  } else if (fde->attr & FD_IS_PIPE) {
-    return _read_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
     socket_t *sock = (socket_t*)fde->io_object;
 
@@ -225,16 +238,39 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
         INJECT_FAULT(read, ECONNRESET)) {
       return -1;
     }
-
-    return _read_socket(sock, buf, count);
-  } else {
-    assert(0 && "Invalid file descriptor");
   }
+
+  // Now perform the real thing
+  if (type & _IO_TYPE_SCATTER_GATHER) {
+    va_list ap;
+    va_start(ap, type);
+    struct iovec *iov = va_arg(ap, struct iovec*);
+    int iovcnt = va_arg(ap, int);
+    va_end(ap);
+
+    return _scatter_read(fd, iov, iovcnt);
+  } else {
+    va_list ap;
+    va_start(ap, type);
+    void *buf = va_arg(ap, void*);
+    size_t count = va_arg(ap, size_t);
+    va_end(ap);
+
+    return _clean_read(fd, buf, count);
+  }
+}
+
+DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
+  return _read(fd, 0, buf, count);
+}
+
+DEFINE_MODEL(ssize_t, readv, int fd, const struct iovec *iov, int iovcnt) {
+  return _read(fd, _IO_TYPE_SCATTER_GATHER, iov, iovcnt);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
+static ssize_t _write(int fd, int type, ...) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     errno = EBADF;
     return -1;
@@ -243,6 +279,19 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
 
   if (fde->attr & FD_IS_CONCRETE) {
+    if (type & _IO_TYPE_SCATTER_GATHER) {
+      klee_warning("unsupported concrete scatter gather");
+
+      errno = EINVAL;
+      return -1;
+    }
+
+    va_list ap;
+    va_start(ap, type);
+    void *buf = va_arg(ap, void*);
+    size_t count = va_arg(ap, size_t);
+    va_end(ap);
+
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
     /* XXX In terms of looking for bugs we really should do this check
@@ -267,15 +316,10 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
     return -1;
   }
 
-  // Mkay, let's do it
   if (fde->attr & FD_IS_FILE) {
     if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
       return -1;
     }
-
-    return _write_file((file_t*)fde->io_object, buf, count);
-  } else if (fde->attr & FD_IS_PIPE) {
-    return _write_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
     socket_t *sock = (socket_t*)fde->io_object;
 
@@ -283,23 +327,33 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
         INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
       return -1;
     }
+  }
 
-    return _write_socket(sock, buf, count);
+  if (type & _IO_TYPE_SCATTER_GATHER) {
+    va_list ap;
+    va_start(ap, type);
+    struct iovec *iov = va_arg(ap, struct iovec*);
+    int iovcnt = va_arg(ap, int);
+    va_end(ap);
+
+    return _gather_write(fd, iov, iovcnt);
   } else {
-    assert(0 && "Invalid file descriptor");
+    va_list ap;
+    va_start(ap, type);
+    void *buf = va_arg(ap, void*);
+    size_t count = va_arg(ap, size_t);
+    va_end(ap);
+
+    return _clean_write(fd, buf, count);
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-DEFINE_MODEL(ssize_t, readv, int fd, const struct iovec *iov, int iovcnt) {
-  return -1;
+DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
+  return _write(fd, 0, buf, count);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 DEFINE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt) {
-  return -1;
+  return _write(fd, _IO_TYPE_SCATTER_GATHER, iov, iovcnt);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
