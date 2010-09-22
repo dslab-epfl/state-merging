@@ -3185,6 +3185,8 @@ void Executor::executeProcessExit(ExecutionState &state) {
         state.waitingLists[wlist].erase(thrIt->first);
         if (state.waitingLists[wlist].size() == 0)
           state.waitingLists.erase(wlist);
+
+        thrIt->second.waitingList = 0;
       }
     }
   }

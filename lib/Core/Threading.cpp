@@ -59,7 +59,7 @@ StackFrame::~StackFrame() {
 /* Thread class methods */
 
 Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
-  enabled(true) {
+  enabled(true), waitingList(0) {
 
   tuid = std::make_pair(tid, pid);
 
