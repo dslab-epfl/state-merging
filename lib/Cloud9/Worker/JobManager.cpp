@@ -351,7 +351,7 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
 
 void JobManager::initStrategy() {
   std::vector<JobSelectionStrategy*> strategies;
-  /*
+
   switch (JobSelection) {
   case RandomSel:
     selStrategy = new RandomStrategy();
@@ -368,10 +368,6 @@ void JobManager::initStrategy() {
     selStrategy = new TimeMultiplexedStrategy(strategies);
     CLOUD9_INFO("Using weighted random job selection strategy");
     break;
-  case PortfolioSel:
-    selStrategy = createStrategyPortfolio();
-    CLOUD9_INFO("Using the strategy portfolio");
-    break;
   case OracleSel:
     selStrategy = createOracleStrategy();
     CLOUD9_INFO("Using the oracle");
@@ -379,9 +375,9 @@ void JobManager::initStrategy() {
 
   default:
     assert(0 && "undefined job selection strategy");
-  }*/
+  }
 
-  selStrategy = new TargetedStrategy(tree);
+  //selStrategy = new TargetedStrategy(tree);
 
   // Wrap this in a batching strategy, to speed up things
   //selStrategy = new BatchingStrategy(selStrategy);
@@ -1067,6 +1063,8 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
     CLOUD9_DEBUG("State destroyed during replay");
     kState->dumpStack(std::cout);
   }
+
+  //CLOUD9_DEBUG("State destroyed");
 
   SymbolicState *state = kState->getCloud9State();
 

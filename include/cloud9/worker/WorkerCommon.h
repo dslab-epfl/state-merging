@@ -28,7 +28,6 @@ enum JobSelectionType {
 	RandomSel,
 	RandomPathSel,
 	CoverageOptimizedSel,
-	PortfolioSel,
 	OracleSel
 };
 
