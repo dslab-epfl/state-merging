@@ -2762,35 +2762,33 @@ void Executor::terminateStateOnError(ExecutionState &state,
   std::string message = messaget.str();
   static std::set< std::pair<Instruction*, std::string> > emittedErrors;
 
-  if (state.crtThreadIt == state.threads.end()) {
-    CLOUD9_DEBUG("Error case lost");
-  } else {
-    const InstructionInfo &ii = *state.prevPC()->info;
+  assert(state.crtThreadIt != state.threads.end());
 
-    if (EmitAllErrors ||
-        emittedErrors.insert(std::make_pair(state.prevPC()->inst, message)).second) {
-      if (ii.file != "") {
-        klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
-      } else {
-        klee_message("ERROR: %s", message.c_str());
-      }
-      if (!EmitAllErrors)
-        klee_message("NOTE: now ignoring this error at this location");
+  const InstructionInfo &ii = *state.prevPC()->info;
 
-      std::ostringstream msg;
-      msg << "Error: " << message << "\n";
-      if (ii.file != "") {
-        msg << "File: " << ii.file << "\n";
-        msg << "Line: " << ii.line << "\n";
-      }
-      msg << "Stack: \n";
-      state.dumpStack(msg);
-  
-      std::string info_str = info.str();
-      if (info_str != "")
-        msg << "Info: \n" << info_str;
-      interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+  if (EmitAllErrors ||
+      emittedErrors.insert(std::make_pair(state.prevPC()->inst, message)).second) {
+    if (ii.file != "") {
+      klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
+    } else {
+      klee_message("ERROR: %s", message.c_str());
     }
+    if (!EmitAllErrors)
+      klee_message("NOTE: now ignoring this error at this location");
+
+    std::ostringstream msg;
+    msg << "Error: " << message << "\n";
+    if (ii.file != "") {
+      msg << "File: " << ii.file << "\n";
+      msg << "Line: " << ii.line << "\n";
+    }
+    msg << "Stack: \n";
+    state.dumpStack(msg);
+
+    std::string info_str = info.str();
+    if (info_str != "")
+      msg << "Info: \n" << info_str;
+    interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
   }
     
   terminateState(state);
@@ -3148,13 +3146,17 @@ void Executor::executeThreadExit(ExecutionState &state) {
     klee_message("terminating state");
     terminateStateOnExit(state);
     return;
-  } else {
-    assert(state.threads.size() > 1);
-    state.terminateThread();
   }
 
-  schedule(state, false);
+  assert(state.threads.size() > 1);
 
+  ExecutionState::threads_ty::iterator thrIt = state.crtThreadIt;
+  thrIt->second.enabled = false;
+
+  if (!schedule(state, false))
+    return;
+
+  state.terminateThread(thrIt);
 }
 
 void Executor::executeProcessExit(ExecutionState &state) {
@@ -3165,9 +3167,32 @@ void Executor::executeProcessExit(ExecutionState &state) {
 
   CLOUD9_DEBUG("Terminating " << state.crtProcess().threads.size() << " threads of the current process...");
 
-  state.terminateProcess(state.crtProcessIt);
+  ExecutionState::processes_ty::iterator procIt = state.crtProcessIt;
 
-  schedule(state, false);
+  // Disable all the threads of the current process
+  for (std::set<thread_uid_t>::iterator it = procIt->second.threads.begin();
+      it != procIt->second.threads.end(); it++) {
+    ExecutionState::threads_ty::iterator thrIt = state.threads.find(*it);
+
+    if (thrIt->second.enabled) {
+      // Disable any enabled thread
+      thrIt->second.enabled = false;
+    } else {
+      // If the thread is disabled, remove it from any waiting list
+      wlist_id_t wlist = thrIt->second.waitingList;
+
+      if (wlist > 0) {
+        state.waitingLists[wlist].erase(thrIt->first);
+        if (state.waitingLists[wlist].size() == 0)
+          state.waitingLists.erase(wlist);
+      }
+    }
+  }
+
+  if (!schedule(state, false))
+    return;
+
+  state.terminateProcess(procIt);
 }
 
 void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
@@ -3211,7 +3236,7 @@ void Executor::executeFork(ExecutionState &state, KInstruction *ki, int reason) 
 }
 
 
-void Executor::schedule(ExecutionState &state, bool yield) {
+bool Executor::schedule(ExecutionState &state, bool yield) {
 
   int enabledCount = 0;
   for(ExecutionState::threads_ty::iterator it = state.threads.begin();
@@ -3225,16 +3250,16 @@ void Executor::schedule(ExecutionState &state, bool yield) {
   //    enabledCount << " enabled) in " << state.processes.size() << " processes ...");
 
   if (enabledCount == 0) {
-      klee_message("terminating state");
-      return terminateStateOnError(state, " ******** hang (possible deadlock?)", "user.err");
-    }
+    terminateStateOnError(state, " ******** hang (possible deadlock?)", "user.err");
+    return false;
+  }
   
   bool forkSchedule = false;
   bool incPreemptions = false;
 
   ExecutionState::threads_ty::iterator oldIt = state.crtThreadIt;
 
-  if(state.crtThreadIt == state.threads.end() || !state.crtThread().enabled || yield) {
+  if(!state.crtThread().enabled || yield) {
     ExecutionState::threads_ty::iterator it = state.nextThread(state.crtThreadIt);
 
     while (!it->second.enabled)
@@ -3279,6 +3304,8 @@ void Executor::schedule(ExecutionState &state, bool yield) {
       it = state.nextThread(it);
     }
   }
+
+  return true;
 }
 
 void Executor::executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist) {

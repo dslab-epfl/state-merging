@@ -141,7 +141,6 @@ public:
 
   Thread& createThread(thread_id_t tid, KFunction *kf);
   Process& forkProcess(process_id_t pid);
-  void terminateThread() { terminateThread(crtThreadIt); }
   void terminateThread(threads_ty::iterator it);
   void terminateProcess(processes_ty::iterator it);
 
@@ -161,13 +160,10 @@ public:
 
   void scheduleNext(threads_ty::iterator it) {
     //CLOUD9_DEBUG("New thread scheduled: " << it->second.tid << " (pid: " << it->second.pid << ")");
-    if (it == threads.end()) {
-      crtThreadIt = threads.end();
-      crtProcessIt = processes.end();
-    } else {
-      crtThreadIt = it;
-      crtProcessIt = processes.find(crtThreadIt->second.getPid());
-    }
+    assert(it != threads.end());
+
+    crtThreadIt = it;
+    crtProcessIt = processes.find(crtThreadIt->second.getPid());
   }
 
   wlist_id_t getWaitingList() { return wlistCounter++; }

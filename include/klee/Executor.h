@@ -422,7 +422,7 @@ private:
   void executeProcessFork(ExecutionState &state, KInstruction *ki,
       process_id_t pid);
   
-  void schedule(ExecutionState &state, bool yield);
+  bool schedule(ExecutionState &state, bool yield);
   
   void executeThreadNotifyOne(ExecutionState &state, wlist_id_t wlist);
 

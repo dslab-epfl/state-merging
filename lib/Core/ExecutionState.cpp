@@ -165,12 +165,11 @@ void ExecutionState::terminateThread(threads_ty::iterator thrIt) {
   Process &proc = processes.find(thrIt->second.getPid())->second;
 
   assert(proc.threads.size() > 1);
+  assert(thrIt != crtThreadIt); // We assume the scheduler found a new thread first
+  assert(!thrIt->second.enabled);
+  assert(thrIt->second.waitingList == 0);
 
   proc.threads.erase(thrIt->second.tuid);
-
-  if (thrIt == crtThreadIt) {
-    scheduleNext(threads.end());
-  }
 
   threads.erase(thrIt);
 
@@ -181,11 +180,18 @@ void ExecutionState::terminateProcess(processes_ty::iterator procIt) {
 
   assert(processes.size() > 1);
 
+  // Delete all process threads
   for (std::set<thread_uid_t>::iterator it = procIt->second.threads.begin();
       it != procIt->second.threads.end(); it++) {
-    threads.erase(threads.find(*it));
+    threads_ty::iterator thrIt = threads.find(*it);
+    assert(thrIt != crtThreadIt);
+    assert(!thrIt->second.enabled);
+    assert(thrIt->second.waitingList == 0);
+
+    threads.erase(thrIt);
   }
 
+  // Update the process hierarchy
   if (procIt->second.ppid != 1) {
     Process &parent = processes.find(procIt->second.ppid)->second;
 
@@ -200,14 +206,13 @@ void ExecutionState::terminateProcess(processes_ty::iterator procIt) {
     }
   }
 
+  // Update the state COW domain
   AddressSpace::cow_domain_t::iterator it =
       std::find(cowDomain.begin(), cowDomain.end(), &procIt->second.addressSpace);
   assert(it != cowDomain.end());
   cowDomain.erase(it);
 
-  if (procIt == crtProcessIt) {
-    scheduleNext(threads.end());
-  }
+  assert(procIt != crtProcessIt);
 
   processes.erase(procIt);
 }
