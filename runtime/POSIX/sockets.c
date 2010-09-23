@@ -1334,10 +1334,6 @@ void freeaddrinfo(struct addrinfo *res) {
   }
 }
 
-const char *gai_strerror(int errcode) {
-  return "gai model error";
-}
-
 // getnameinfo() ///////////////////////////////////////////////////////////////
 
 int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,

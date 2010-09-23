@@ -127,6 +127,7 @@ HandlerInfo handlerInfo[] = {
   add("_Znaj", handleNewArray, true),
   // operator new(unsigned int)
   add("_Znwj", handleNew, true),
+  add("_ZnamRKSt9nothrow_t", handleNew, true),
 
   // FIXME-64: This is wrong for 64-bit long...
 
@@ -134,6 +135,7 @@ HandlerInfo handlerInfo[] = {
   add("_Znam", handleNewArray, true),
   // operator new(unsigned long)
   add("_Znwm", handleNew, true),
+  add("_ZnwmRKSt9nothrow_t", handleNew, true)
 
 #undef addDNR
 #undef add  
@@ -367,7 +369,7 @@ void SpecialFunctionHandler::handleNew(ExecutionState &state,
                          KInstruction *target,
                          std::vector<ref<Expr> > &arguments) {
   // XXX should type check args
-  assert(arguments.size()==1 && "invalid number of arguments to new");
+  assert(arguments.size()>=1 && "invalid number of arguments to new");
 
   executor.executeAlloc(state, arguments[0], false, target);
 }
