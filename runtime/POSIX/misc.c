@@ -89,19 +89,46 @@ void klee_init_mmap(void) {
   STATIC_LIST_INIT(__mmaps);
 }
 
+static int _mmap_prepopulate(void *addr, size_t length, int fd, off_t offset) {
+  off_t origpos = CALL_MODEL(lseek, fd, SEEK_CUR, 0);
+
+  if (origpos == -1)
+    goto invalid;
+
+  off_t newpos = CALL_MODEL(lseek, fd, SEEK_SET, offset);
+  if (newpos == -1)
+    goto invalid;
+
+  size_t remaining = length;
+  char *dest = addr;
+
+  while (remaining > 0) {
+    ssize_t res = read(fd, dest, remaining);
+
+    if (res > 0) {
+      dest += res;
+      remaining -= res;
+    } else if (res == 0) {
+      // Could not read everything, it's OK
+      break;
+    } else {
+      goto invalid;
+    }
+  }
+
+  CALL_MODEL(lseek, fd, SEEK_SET, origpos);
+
+  return 0;
+
+invalid:
+  if (origpos >= 0)
+    CALL_MODEL(lseek, fd, SEEK_SET, origpos);
+
+  errno = EINVAL;
+  return -1;
+}
+
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
-  if (!(flags & MAP_ANONYMOUS)) {
-    klee_warning("unsupported file-backed mapping");
-
-    errno = EINVAL;
-    return MAP_FAILED;
-  }
-
-  if (fd >= 0) {
-    errno = EINVAL;
-    return MAP_FAILED;
-  }
-
   if ((prot & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
     klee_warning("unsupported read- or write-only mapping, going on anyway");
   }
@@ -116,6 +143,25 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   if (!result) {
     errno = ENOMEM;
     return MAP_FAILED;
+  }
+
+  memset(result, 0, length);
+
+  // We pre-populate the mapping
+  if (flags & MAP_ANONYMOUS) {
+    if (fd >= 0) {
+      free(result);
+
+      errno = EINVAL;
+      return MAP_FAILED;
+    }
+  } else {
+    int res = _mmap_prepopulate(result, length, fd, offset);
+
+    if (res == -1) {
+      free(result);
+      return MAP_FAILED;
+    }
   }
 
   // Now we create the mapping
@@ -209,7 +255,7 @@ DEFINE_MODEL(const int32_t **, __ctype_tolower_loc, void) {
 
   const int32_t **locale = CALL_UNDERLYING(__ctype_tolower_loc);
 
-  memcpy(cached, &((*locale)[-128]), 384);
+  memcpy(cached, &((*locale)[-128]), 384*sizeof(int32_t));
 
   tolower_locale = &cached[128];
 
@@ -227,7 +273,7 @@ DEFINE_MODEL(const unsigned short **, __ctype_b_loc, void) {
 
   const unsigned short **locale = CALL_UNDERLYING(__ctype_b_loc);
 
-  memcpy(cached, &((*locale)[-128]), 384);
+  memcpy(cached, &((*locale)[-128]), 384*sizeof(unsigned short));
 
   b_locale = &cached[128];
 
