@@ -25,6 +25,10 @@ void SymbolicEngine::deregisterStateEventHandler(StateEventHandler *handler) {
 }
 
 bool SymbolicEngine::fireStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
+  if (seHandlers.size() == 0)
+    return false;
+
+
   int result = true;
 
   for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
