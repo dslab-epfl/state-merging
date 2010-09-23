@@ -6,6 +6,7 @@
  */
 
 #include "misc.h"
+#include "models.h"
 
 #include <sched.h>
 #include <unistd.h>
@@ -193,4 +194,42 @@ int getrusage(int who, struct rusage *usage) {
   memset(usage, 0, sizeof(*usage)); // XXX Refine this as further needed
 
   return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static const int32_t *tolower_locale = NULL;
+
+DEFINE_MODEL(const int32_t **, __ctype_tolower_loc, void) {
+  if (tolower_locale != NULL)
+    return &tolower_locale;
+
+  int32_t *cached = (int32_t*)malloc(384*sizeof(int32_t));
+  klee_make_shared(cached, 384*sizeof(int32_t));
+
+  const int32_t **locale = CALL_UNDERLYING(__ctype_tolower_loc);
+
+  memcpy(cached, &((*locale)[-128]), 384);
+
+  tolower_locale = &cached[128];
+
+  return &tolower_locale;
+}
+
+static const unsigned short *b_locale = NULL;
+
+DEFINE_MODEL(const unsigned short **, __ctype_b_loc, void) {
+  if (b_locale != NULL)
+    return &b_locale;
+
+  unsigned short *cached = (unsigned short*)malloc(384*sizeof(unsigned short));
+  klee_make_shared(cached, 384*sizeof(unsigned short));
+
+  const unsigned short **locale = CALL_UNDERLYING(__ctype_b_loc);
+
+  memcpy(cached, &((*locale)[-128]), 384);
+
+  b_locale = &cached[128];
+
+  return &b_locale;
 }

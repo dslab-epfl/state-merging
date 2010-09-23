@@ -16,6 +16,7 @@
 #include <sys/vfs.h>
 #include <sys/uio.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 DECLARE_MODEL(int, stat, const char *path, struct stat *buf);
 DECLARE_MODEL(int, fstat, int fd, struct stat *buf);
@@ -62,5 +63,8 @@ DECLARE_MODEL(ssize_t, write, int fd, const void *buf, size_t count);
 
 DECLARE_MODEL(ssize_t, readv, int fd, const struct iovec *iov, int iovcnt);
 DECLARE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt);
+
+DECLARE_MODEL(const int32_t **, __ctype_tolower_loc, void);
+DECLARE_MODEL(const unsigned short **, __ctype_b_loc, void);
 
 #endif /* UNDERLYING_H_ */
