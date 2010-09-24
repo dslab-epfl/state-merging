@@ -486,8 +486,7 @@ int setrlimit64(__rlimit_resource_t resource, const struct rlimit64 *rlim) {
 pid_t setsid(void) __attribute__((weak));
 pid_t setsid(void) {
   klee_warning("ignoring (EPERM)");
-  errno = EPERM;
-  return -1;
+  return 0;
 }
 
 int settimeofday(const struct timeval *tv, const struct timezone *tz) __attribute__((weak));
