@@ -116,6 +116,7 @@ namespace klee {
     HANDLER(handleSetTime);
     HANDLER(handleSilentExit);
     HANDLER(handleStackTrace);
+    HANDLER(handleSyscall);
     HANDLER(handleThreadCreate);
     HANDLER(handleThreadNotify);
     HANDLER(handleThreadPreempt);

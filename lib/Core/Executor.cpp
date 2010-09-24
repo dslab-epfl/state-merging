@@ -2811,6 +2811,14 @@ void Executor::callExternalFunction(ExecutionState &state,
   if (specialFunctionHandler->handle(state, function, target, arguments))
     return;
   
+  callUnmodelledFunction(state, target, function, arguments);
+}
+
+void Executor::callUnmodelledFunction(ExecutionState &state,
+                            KInstruction *target,
+                            llvm::Function *function,
+                            std::vector<ref<Expr> > &arguments) {
+
   if (NoExternals && !okExternals.count(function->getName())) {
     std::cerr << "KLEE:ERROR: Calling not-OK external function : " 
                << function->getNameStr() << "\n";
@@ -2857,7 +2865,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     for (unsigned i=0; i<arguments.size(); i++) {
       os << arguments[i];
       if (i != arguments.size()-1)
-	os << ", ";
+    os << ", ";
     }
     os << ")";
     

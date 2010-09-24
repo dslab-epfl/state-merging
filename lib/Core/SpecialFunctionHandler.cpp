@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <stdarg.h>
+#include <sys/syscall.h>
 
 using namespace llvm;
 using namespace klee;
@@ -135,7 +136,9 @@ HandlerInfo handlerInfo[] = {
   add("_Znam", handleNewArray, true),
   // operator new(unsigned long)
   add("_Znwm", handleNew, true),
-  add("_ZnwmRKSt9nothrow_t", handleNew, true)
+  add("_ZnwmRKSt9nothrow_t", handleNew, true),
+
+  add("syscall", handleSyscall, true)
 
 #undef addDNR
 #undef add  
@@ -1095,5 +1098,36 @@ void SpecialFunctionHandler::handleMarkGlobal(ExecutionState &state,
     const MemoryObject *mo = it->first.first;
     assert(!mo->isLocal);
     mo->isGlobal = true;
+  }
+}
+
+void SpecialFunctionHandler::handleSyscall(ExecutionState &state,
+                            KInstruction *target,
+                            std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() >= 1 && "invalid number of arguments to syscall");
+
+  if (ConstantExpr *syscallNo = dyn_cast<ConstantExpr>(arguments[0])) {
+    switch(syscallNo->getZExtValue()) {
+    /* Signal syscalls */
+    case SYS_rt_sigaction:
+    case SYS_sigaltstack:
+    case SYS_signalfd:
+    case SYS_signalfd4:
+    case SYS_rt_sigpending:
+    case SYS_rt_sigprocmask:
+    case SYS_rt_sigreturn:
+    case SYS_rt_sigsuspend:
+      CLOUD9_DEBUG("Blocked syscall " << syscallNo->getZExtValue());
+      executor.bindLocal(target, state, ConstantExpr::create(0,
+            executor.getWidthForLLVMType(target->inst->getType())));
+      break;
+    default:
+      executor.callUnmodelledFunction(state, target,
+          executor.kmodule->module->getFunction("syscall"),
+          arguments);
+      break;
+    }
+  } else {
+    executor.terminateStateOnError(state, "syscall requires a concrete syscall number", "user.err");
   }
 }
