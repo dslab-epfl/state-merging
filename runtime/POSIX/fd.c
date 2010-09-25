@@ -36,6 +36,11 @@
 // Internal routines
 ////////////////////////////////////////////////////////////////////////////////
 
+#define _FD_SET(n, p)    ((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
+#define _FD_CLR(n, p)    ((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
+#define _FD_ISSET(n, p)  ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
+#define _FD_ZERO(p)  memset((char *)(p), '\0', sizeof(*(p)))
+
 void __adjust_fds_on_fork(void) {
   // Increment the ref. counters for all the open files pointed by the FDT.
   int fd;
@@ -64,9 +69,36 @@ void __close_fds(void) {
   }
 }
 
+static int __is_concrete_blocking(int concretefd, int event) {
+  fd_set fds;
+  _FD_ZERO(&fds);
+  _FD_SET(concretefd, &fds);
+
+  struct timeval timeout;
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 0;
+
+  int res;
+
+  switch(event) {
+  case EVENT_READ:
+    res = CALL_UNDERLYING(select, concretefd+1, &fds, NULL, NULL, &timeout);
+    return (res == 0);
+  case EVENT_WRITE:
+    res = CALL_UNDERLYING(select, concretefd+1, NULL, &fds, NULL, &timeout);
+    return (res == 0);
+  default:
+      assert(0 && "invalid event");
+  }
+}
+
 static int _is_blocking(int fd, int event) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     return 0;
+  }
+
+  if (__fdt[fd].attr & FD_IS_CONCRETE) {
+    return __is_concrete_blocking(__fdt[fd].concrete_fd, event);
   }
 
   switch (event) {
@@ -98,6 +130,20 @@ static int _is_blocking(int fd, int event) {
 static ssize_t _clean_read(int fd, void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
 
+  if (fde->attr & FD_IS_CONCRETE) {
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
+    /* XXX In terms of looking for bugs we really should do this check
+      before concretization, at least once the routine has been fixed
+      to properly work with symbolics. */
+    klee_check_memory_access(buf, count);
+
+    int res = CALL_UNDERLYING(read, fde->concrete_fd, buf, count);
+    if (res == -1)
+     errno = klee_get_errno();
+    return res;
+  }
+
   if (fde->attr & FD_IS_FILE) {
     return _read_file((file_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_PIPE) {
@@ -111,6 +157,21 @@ static ssize_t _clean_read(int fd, void *buf, size_t count) {
 
 static ssize_t _clean_write(int fd, const void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
+
+  if (fde->attr & FD_IS_CONCRETE) {
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
+    /* XXX In terms of looking for bugs we really should do this check
+      before concretization, at least once the routine has been fixed
+      to properly work with symbolics. */
+    klee_check_memory_access(buf, count);
+
+    int res = CALL_UNDERLYING(write, fde->concrete_fd, buf, count);
+    if (res == -1)
+      errno = klee_get_errno();
+
+    return res;
+  }
 
   if (fde->attr & FD_IS_FILE) {
     return _write_file((file_t*)fde->io_object, buf, count);
@@ -187,56 +248,33 @@ static ssize_t _read(int fd, int type, ...) {
 
   fd_entry_t *fde = &__fdt[fd];
 
-  if (fde->attr & FD_IS_CONCRETE) {
-    if (type & _IO_TYPE_SCATTER_GATHER) {
-      klee_warning("unsupported concrete scatter gather");
-
-      errno = EINVAL;
-      return -1;
-    }
-
-    va_list ap;
-    va_start(ap, type);
-    void *buf = va_arg(ap, void*);
-    size_t count = va_arg(ap, size_t);
-    va_end(ap);
-
-    buf = __concretize_ptr(buf);
-    count = __concretize_size(count);
-    /* XXX In terms of looking for bugs we really should do this check
-       before concretization, at least once the routine has been fixed
-       to properly work with symbolics. */
-    klee_check_memory_access(buf, count);
-
-    int res = CALL_UNDERLYING(read, fde->concrete_fd, buf, count);
-    if (res == -1)
-      errno = klee_get_errno();
-    return res;
-  }
-
   //fprintf(stderr, "Reading %lu bytes of data from FD %d\n", count, fd);
 
   // Check for permissions
-  if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
-    klee_debug("Permission error (flags: %o)\n", fde->io_object->flags);
-    errno = EBADF;
-    return -1;
+  if (!(fde->attr & FD_IS_CONCRETE)) {
+    if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
+      klee_debug("Permission error (flags: %o)\n", fde->io_object->flags);
+      errno = EBADF;
+      return -1;
+    }
   }
 
   if (INJECT_FAULT(read, EINTR)) {
     return -1;
   }
 
-  if (fde->attr & FD_IS_FILE) {
-    if (INJECT_FAULT(read, EIO)) {
-      return -1;
-    }
-  } else if (fde->attr & FD_IS_SOCKET) {
-    socket_t *sock = (socket_t*)fde->io_object;
+  if (!(fde->attr & FD_IS_CONCRETE)) {
+    if (fde->attr & FD_IS_FILE) {
+      if (INJECT_FAULT(read, EIO)) {
+        return -1;
+      }
+    } else if (fde->attr & FD_IS_SOCKET) {
+      socket_t *sock = (socket_t*)fde->io_object;
 
-    if (sock->status == SOCK_STATUS_CONNECTED &&
-        INJECT_FAULT(read, ECONNRESET)) {
-      return -1;
+      if (sock->status == SOCK_STATUS_CONNECTED &&
+          INJECT_FAULT(read, ECONNRESET)) {
+        return -1;
+      }
     }
   }
 
@@ -278,54 +316,30 @@ static ssize_t _write(int fd, int type, ...) {
 
   fd_entry_t *fde = &__fdt[fd];
 
-  if (fde->attr & FD_IS_CONCRETE) {
-    if (type & _IO_TYPE_SCATTER_GATHER) {
-      klee_warning("unsupported concrete scatter gather");
-
-      errno = EINVAL;
+  // Check for permissions
+  if (!(fde->attr & FD_IS_CONCRETE)) {
+    if ((fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
+      errno = EBADF;
       return -1;
     }
-
-    va_list ap;
-    va_start(ap, type);
-    void *buf = va_arg(ap, void*);
-    size_t count = va_arg(ap, size_t);
-    va_end(ap);
-
-    buf = __concretize_ptr(buf);
-    count = __concretize_size(count);
-    /* XXX In terms of looking for bugs we really should do this check
-      before concretization, at least once the routine has been fixed
-      to properly work with symbolics. */
-    klee_check_memory_access(buf, count);
-
-    int res = CALL_UNDERLYING(write, fde->concrete_fd, buf, count);
-    if (res == -1)
-      errno = klee_get_errno();
-
-    return res;
-  }
-
-  // Check for permissions
-  if ((fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
-    errno = EBADF;
-    return -1;
   }
 
   if (INJECT_FAULT(write, EINTR)) {
     return -1;
   }
 
-  if (fde->attr & FD_IS_FILE) {
-    if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
-      return -1;
-    }
-  } else if (fde->attr & FD_IS_SOCKET) {
-    socket_t *sock = (socket_t*)fde->io_object;
+  if (!(fde->attr & FD_IS_CONCRETE)) {
+    if (fde->attr & FD_IS_FILE) {
+      if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
+        return -1;
+      }
+    } else if (fde->attr & FD_IS_SOCKET) {
+      socket_t *sock = (socket_t*)fde->io_object;
 
-    if (sock->status == SOCK_STATUS_CONNECTED &&
-        INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
-      return -1;
+      if (sock->status == SOCK_STATUS_CONNECTED &&
+          INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
+        return -1;
+      }
     }
   }
 
@@ -354,6 +368,22 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
 
 DEFINE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt) {
   return _write(fd, _IO_TYPE_SCATTER_GATHER, iov, iovcnt);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)out_fd)) {
+    errno = EBADF;
+    return -1;
+  }
+
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)in_fd)) {
+    errno = EBADF;
+    return -1;
+  }
+
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -553,11 +583,6 @@ DEFINE_MODEL(int, dup, int oldfd) {
 
 // select() ////////////////////////////////////////////////////////////////////
 
-#define _FD_SET(n, p)    ((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
-#define _FD_CLR(n, p)    ((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
-#define _FD_ISSET(n, p)  ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
-#define _FD_ZERO(p)  memset((char *)(p), '\0', sizeof(*(p)))
-
 static int _validate_fd_set(int nfds, fd_set *fds) {
   int res = 0;
 
@@ -610,8 +635,9 @@ static void _deregister_events(int fd, wlist_id_t wlist, int events) {
 }
 
 // XXX Maybe we should break this into more pieces?
-int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
-    struct timeval *timeout) {
+DEFINE_MODEL(int, select, int nfds, fd_set *readfds, fd_set *writefds,
+    fd_set *exceptfds, struct timeval *timeout) {
+
   if (nfds < 0 || nfds > FD_SETSIZE) {
     errno = EINVAL;
     return -1;
@@ -770,11 +796,6 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 
   return res;
 }
-
-#undef _FD_SET
-#undef _FD_CLR
-#undef _FD_ISSET
-#undef _FD_ZERO
 
 ////////////////////////////////////////////////////////////////////////////////
 

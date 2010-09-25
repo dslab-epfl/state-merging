@@ -67,4 +67,7 @@ DECLARE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt);
 DECLARE_MODEL(const int32_t **, __ctype_tolower_loc, void);
 DECLARE_MODEL(const unsigned short **, __ctype_b_loc, void);
 
+DECLARE_MODEL(int, select, int nfds, fd_set *readfds, fd_set *writefds,
+    fd_set *exceptfds, struct timeval *timeout)
+
 #endif /* UNDERLYING_H_ */
