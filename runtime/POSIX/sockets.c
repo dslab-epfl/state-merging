@@ -192,8 +192,19 @@ int _close_socket(socket_t *sock) {
           free(remote);
 
       } else {
-        if (remote->wlist)
-          klee_thread_notify_all(remote->wlist);
+        assert(remote->conn_wlist > 0);
+        klee_thread_notify_all(remote->conn_wlist);
+
+        _event_queue_notify(remote->conn_evt_queue);
+        _event_queue_finalize(remote->conn_evt_queue);
+        free(remote->conn_evt_queue);
+
+        remote->conn_evt_queue = NULL;
+        remote->conn_wlist = 0;
+        remote->status = SOCK_STATUS_CREATED;
+
+        __release_end_point(remote->remote_end);
+        sock->remote_end = NULL;
       }
     }
 
@@ -201,8 +212,13 @@ int _close_socket(socket_t *sock) {
   }
 
   if (sock->status == SOCK_STATUS_CONNECTING) {
-    if (sock->wlist)
-      klee_thread_notify_all(sock->wlist);
+    assert(sock->conn_wlist > 0);
+
+    klee_thread_notify_all(sock->conn_wlist);
+    _event_queue_notify(sock->conn_evt_queue);
+
+    _event_queue_finalize(sock->conn_evt_queue);
+    free(sock->conn_evt_queue);
   }
 
   // Now clean-up the endpoints
@@ -377,6 +393,10 @@ int _register_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
 
   if (sock->status == SOCK_STATUS_LISTENING) {
     return _stream_register_event(sock->listen, wlist);
+  }
+
+  if (sock->status == SOCK_STATUS_CONNECTING) {
+    return _event_queue_register(sock->conn_evt_queue, wlist);
   }
 
   // We should never reach here
@@ -726,21 +746,23 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
   sock->status = SOCK_STATUS_CONNECTING;
 
+  // We queue ourselves in the list...
   ssize_t res = _stream_write(remote->listen, (char*)&sock, sizeof(socket_t*));
   assert(res == sizeof(socket_t*));
-  sock->__bdata.queued++;
+  sock->__bdata.queued++; // Now we're also referenced by the dest. socket
+
+  sock->conn_wlist = klee_get_wlist();
+  sock->conn_evt_queue = (event_queue_t*)malloc(sizeof(event_queue_t));
+  _event_queue_init(sock->conn_evt_queue, MAX_EVENTS, 1);
 
   if (sock->__bdata.flags & O_NONBLOCK) {
     errno = EINPROGRESS;
     return -1;
   }
 
-  // We queue ourselves in the list...
-  sock->wlist = klee_get_wlist();
-
   // ... and we wait for a notification
   sock->__bdata.queued++;
-  klee_thread_sleep(sock->wlist);
+  klee_thread_sleep(sock->conn_wlist);
   sock->__bdata.queued--;
 
   if (sock->status == SOCK_STATUS_CLOSING) {
@@ -836,14 +858,14 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   }
 
   assert(remote->status == SOCK_STATUS_CONNECTING);
+  assert(remote->conn_wlist > 0);
 
-  if (remote->wlist) {
-    // XXX BUG We should also create an event queue for a connecting socket,
-    // in order to be able to wake up any select() waiting for a socket
-    // to become connected.
-    klee_thread_notify_all(remote->wlist);
-    remote->wlist = 0;
-  }
+  klee_thread_notify_all(remote->conn_wlist);
+  _event_queue_notify(remote->conn_evt_queue);
+  remote->conn_wlist = 0;
+  _event_queue_finalize(remote->conn_evt_queue);
+  free(remote->conn_evt_queue);
+  remote->conn_evt_queue = NULL;
 
   int failure = 0;
   // Get a new local port for the connection

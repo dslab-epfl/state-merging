@@ -68,7 +68,10 @@ typedef struct socket {
   // For TCP connections
   stream_buffer_t *out;     // The output buffer
   stream_buffer_t *in;      // The input buffer
-  wlist_id_t wlist;         // The waiting list for the connected notif.
+
+  // For connecting sockets
+  event_queue_t *conn_evt_queue;
+  wlist_id_t conn_wlist;         // The waiting list for the connected notif.
 
   // For TCP listening
   stream_buffer_t *listen;
