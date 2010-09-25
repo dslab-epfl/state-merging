@@ -199,12 +199,15 @@ ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt) {
 
     ssize_t res = _clean_read(fd, iov[i].iov_base, iov[i].iov_len);
 
-    if (res == 0 || res == -1) {
+    if (res == -1) {
       assert(count == 0);
       return res;
     }
 
     count += res;
+
+    if ((size_t)res < iov[i].iov_len)
+      break;
   }
 
   return count;
@@ -225,12 +228,15 @@ ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt) {
 
     ssize_t res = _clean_write(fd, iov[i].iov_base, iov[i].iov_len);
 
-    if (res == 0 || res == -1) {
+    if (res == -1) {
       assert(count == 0);
       return res;
     }
 
     count += res;
+
+    if ((size_t)res < iov[i].iov_len)
+      break;
   }
 
   return count;
