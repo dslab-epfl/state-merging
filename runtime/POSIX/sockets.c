@@ -1022,7 +1022,8 @@ int shutdown(int sockfd, int how) {
 ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
   CHECK_IS_SOCKET(sockfd);
 
-  if (flags != 0) {
+  // XXX: Ignore the MSG_NOSIGNAL flag since we don't support signals anyway
+  if ((flags != 0) && (flags != MSG_NOSIGNAL)) {
     klee_warning("send() flags unsupported for now");
     errno = EINVAL;
     return -1;
@@ -1102,6 +1103,15 @@ int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optl
       }
 
       *((int*)optval) = (sock->status == SOCK_STATUS_LISTENING);
+      *optlen = sizeof(int);
+      break;
+    case SO_ERROR:
+      if (*optlen < sizeof(int)) {
+        errno = EINVAL;
+        return -1;
+      }
+      // XXX: We currently do not support any of the possible socket errors
+      *((int*)optval) = 0;
       *optlen = sizeof(int);
       break;
     default:
