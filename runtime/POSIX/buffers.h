@@ -13,6 +13,27 @@
 #include "common.h"
 #include "multiprocess.h"
 
+////////////////////////////////////////////////////////////////////////////////
+// Event Queue Utility
+////////////////////////////////////////////////////////////////////////////////
+
+typedef struct {
+  wlist_id_t *queue;
+  unsigned int count;
+} event_queue_t;
+
+void _event_queue_init(event_queue_t *q, unsigned count, int shared);
+void _event_queue_finalize(event_queue_t *q);
+
+int _event_queue_register(event_queue_t *q, wlist_id_t wlist);
+int _event_queue_clear(event_queue_t *q, wlist_id_t wlist);
+
+void _event_queue_notify(event_queue_t *q);
+
+////////////////////////////////////////////////////////////////////////////////
+// Stream Buffers
+////////////////////////////////////////////////////////////////////////////////
+
 #define EVENT_READ  (1 << 0)
 #define EVENT_WRITE (1 << 1)
 
@@ -24,7 +45,7 @@ typedef struct {
   size_t start;
   size_t size;
 
-  wlist_id_t evt_queue[MAX_EVENTS];
+  event_queue_t evt_queue;
   wlist_id_t empty_wlist;
   wlist_id_t full_wlist;
 
@@ -50,6 +71,10 @@ static inline int _stream_is_empty(stream_buffer_t *buff) {
 static inline int _stream_is_full(stream_buffer_t *buff) {
   return (buff->size == buff->max_size);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Block Buffers
+////////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
   char *contents;

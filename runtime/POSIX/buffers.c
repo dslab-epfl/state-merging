@@ -14,6 +14,59 @@
 #include <klee/klee.h>
 
 ////////////////////////////////////////////////////////////////////////////////
+// Event Queue Utility
+////////////////////////////////////////////////////////////////////////////////
+
+void _event_queue_init(event_queue_t *q, unsigned count, int shared) {
+  q->queue = (wlist_id_t*)malloc(count * sizeof(wlist_id_t));
+
+  memset(q->queue, 0, count * sizeof(wlist_id_t));
+
+  if (shared)
+    klee_make_shared(q->queue, count * sizeof(wlist_id_t));
+
+  q->count = count;
+}
+
+void _event_queue_finalize(event_queue_t *q) {
+  free(q->queue);
+}
+
+int _event_queue_register(event_queue_t *q, wlist_id_t wlist) {
+  unsigned i;
+  for (i = 0; i < q->count; i++) {
+    if (q->queue[i] == 0) {
+      q->queue[i] = wlist;
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
+int _event_queue_clear(event_queue_t *q, wlist_id_t wlist) {
+  unsigned i;
+  for (i = 0; i < q->count; i++) {
+    if (q->queue[i] == wlist) {
+      q->queue[i] = 0;
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
+void _event_queue_notify(event_queue_t *q) {
+  unsigned i;
+  for (i = 0; i < q->count; i++) {
+    if (q->queue[i] > 0)
+      klee_thread_notify_all(q->queue[i]);
+  }
+
+  memset(q->queue, 0, q->count*sizeof(wlist_id_t));
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Stream Buffers
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,15 +77,7 @@ void __notify_event(stream_buffer_t *buff, char event) {
   if (event & EVENT_WRITE)
     klee_thread_notify_all(buff->full_wlist);
 
-  unsigned int i;
-  for (i = 0; i < MAX_EVENTS; i++) {
-    if (!ARRAY_CHECK(buff->evt_queue, i))
-      continue;
-
-    klee_thread_notify_all(buff->evt_queue[i]);
-  }
-
-  ARRAY_INIT(buff->evt_queue);
+  _event_queue_notify(&buff->evt_queue);
 }
 
 stream_buffer_t *_stream_create(size_t max_size, int shared) {
@@ -46,7 +91,7 @@ stream_buffer_t *_stream_create(size_t max_size, int shared) {
   buff->queued = 0;
   buff->empty_wlist = klee_get_wlist();
   buff->full_wlist = klee_get_wlist();
-  ARRAY_INIT(buff->evt_queue);
+  _event_queue_init(&buff->evt_queue, MAX_EVENTS, shared);
 
   if (shared) {
     klee_make_shared(buff, sizeof(stream_buffer_t));
@@ -60,6 +105,7 @@ void _stream_destroy(stream_buffer_t *buff) {
   __notify_event(buff, EVENT_READ | EVENT_WRITE);
 
   free(buff->contents);
+  _event_queue_finalize(&buff->evt_queue);
 
   if (buff->queued == 0) {
     free(buff);
@@ -164,27 +210,11 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
 }
 
 int _stream_register_event(stream_buffer_t *buff, wlist_id_t wlist) {
-  unsigned int idx;
-  ARRAY_ALLOC(buff->evt_queue, idx);
-
-  if (idx == MAX_EVENTS)
-    return -1;
-
-  buff->evt_queue[idx] = wlist;
-
-  return 0;
+  return _event_queue_register(&buff->evt_queue, wlist);
 }
 
 int _stream_clear_event(stream_buffer_t *buff, wlist_id_t wlist) {
-  unsigned int idx;
-  for (idx = 0; idx < MAX_EVENTS; idx++) {
-    if (buff->evt_queue[idx] == wlist) {
-      ARRAY_CLEAR(buff->evt_queue, idx);
-      return 0;
-    }
-  }
-
-  return -1;
+  return _event_queue_clear(&buff->evt_queue, wlist);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
