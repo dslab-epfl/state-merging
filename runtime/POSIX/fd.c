@@ -383,7 +383,100 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
     return -1;
   }
 
+  fd_entry_t *out_fde = &__fdt[out_fd];
+  fd_entry_t *in_fde = &__fdt[in_fd];
 
+  // Checking for permissions
+  if (!(out_fde->attr & FD_IS_CONCRETE)) {
+    if ((out_fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
+      klee_debug("Permission error (flags: %o)\n", out_fde->io_object->flags);
+      errno = EBADF;
+      return -1;
+    }
+  }
+
+  if (!(in_fde->attr & FD_IS_CONCRETE)) {
+    if ((in_fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
+      klee_debug("Permission error (flags: %o)\n", in_fde->io_object->flags);
+      errno = EBADF;
+      return -1;
+    }
+  }
+
+  if (INJECT_FAULT(sendfile, ENOMEM, EIO)) {
+    return -1;
+  }
+
+  if (offset != NULL) {
+    if (lseek(in_fd, *offset, SEEK_SET) < 0)
+      return -1;
+  }
+
+  off_t origpos = lseek(in_fd, 0, SEEK_CUR);
+
+  // Now we do the actual transfer
+  char buffer[SENDFILE_BUFFER_SIZE];
+
+  size_t wtotal = 0; // Total bytes transferred
+  size_t rtotal = 0; // Total bytes read
+
+  size_t rpos = 0;
+  size_t wpos = 0;
+  ssize_t res = 0;
+
+  while (count > 0) {
+    if (_is_blocking(out_fd, EVENT_WRITE) && wtotal > 0) {
+      break;
+    }
+
+    if (rpos - wpos == 0) {
+      if (_is_blocking(in_fd, EVENT_READ) && wtotal > 0) {
+        break;
+      }
+
+      res = _clean_read(in_fd, buffer,
+          (count > SENDFILE_BUFFER_SIZE) ? SENDFILE_BUFFER_SIZE : count);
+
+      if (res <= 0) {
+        // We don't assert anything here, since reads can be undone
+        break;
+      }
+
+      rpos = res;
+      wpos = 0;
+      rtotal += res;
+    }
+
+    res = _clean_write(out_fd, &buffer[wpos], rpos - wpos);
+    if (res <= 0) {
+      if (res == -1)
+        assert(wtotal == 0);
+      break;
+    }
+
+    wtotal += res;
+    count -= res;
+    wpos += res;
+  }
+
+  assert(wtotal <= rtotal);
+
+  if (res < 0) {
+    // Error, need to undo everything
+    int _errno = errno;
+    lseek(in_fd, origpos, SEEK_SET);
+
+    errno = _errno;
+    return -1;
+  }
+
+  if (offset)
+    lseek(in_fd, origpos + wtotal, SEEK_SET);
+  else
+    lseek(in_fd, origpos, SEEK_SET);
+
+
+  return wtotal;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

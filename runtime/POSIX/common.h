@@ -39,8 +39,9 @@
 
 #define MAX_MMAPS           4
 
-#define SOCKET_BUFFER_SIZE  4096
-#define PIPE_BUFFER_SIZE    4096
+#define SOCKET_BUFFER_SIZE      4096
+#define PIPE_BUFFER_SIZE        4096
+#define SENDFILE_BUFFER_SIZE    256
 
 #define HAVE_FAULT_INJECTION    1
 
