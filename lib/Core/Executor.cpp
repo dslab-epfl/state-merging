@@ -195,6 +195,9 @@ namespace {
   NamedSeedMatching("named-seed-matching",
                     cl::desc("Use names to match symbolic objects to inputs."));
 
+  cl::opt<bool>
+  DebugCallHistory("debug-call-history", cl::init(false));
+
   cl::opt<double>
   MaxStaticForkPct("max-static-fork-pct", cl::init(1.));
   cl::opt<double>
@@ -1191,9 +1194,11 @@ void Executor::executeCall(ExecutionState &state,
                            std::vector< ref<Expr> > &arguments) {
   fireControlFlowEvent(&state, ::cloud9::worker::CALL);
 
-  //if (f) {
-  //  CLOUD9_DEBUG("Executing call: " << f->getNameStr());
-  //}
+  if (f && DebugCallHistory) {
+    unsigned depth = state.stack().size();
+
+    CLOUD9_DEBUG("Call: " << (std::string(" ") * depth) << f->getNameStr());
+  }
 
   Instruction *i = NULL;
   if (ki)
@@ -3284,6 +3289,13 @@ bool Executor::schedule(ExecutionState &state, bool yield) {
       forkSchedule = true;
       incPreemptions = true;
     }
+  }
+
+  if (DebugCallHistory) {
+    CLOUD9_DEBUG("Context Switch: --- TID: " << state.crtThread().tuid.first <<
+        " PID: " << state.crtThread().tuid.second << " -----------------------");
+    unsigned int depth = state.stack().size() - 1;
+    CLOUD9_DEBUG("Call: " << (std::string(" ") * depth) << state.stack().back().kf->function->getNameStr());
   }
 
   if (forkSchedule) {

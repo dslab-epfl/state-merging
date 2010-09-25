@@ -89,6 +89,14 @@ std::string Logger::getStackTrace() {
 	return cloud9::GetStackTrace(2, 8);
 }
 
+}
 
+std::string operator*(const std::string input, unsigned int n) {
+  std::string result;
 
+  for (unsigned int i = 0; i < n; i++) {
+    result.append(input);
+  }
+
+  return result;
 }

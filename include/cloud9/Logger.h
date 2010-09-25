@@ -94,4 +94,6 @@ public:
 
 }
 
+std::string operator*(const std::string input, unsigned int n);
+
 #endif /* LOGGER_H_ */
