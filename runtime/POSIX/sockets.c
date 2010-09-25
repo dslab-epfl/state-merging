@@ -753,6 +753,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
   sock->conn_wlist = klee_get_wlist();
   sock->conn_evt_queue = (event_queue_t*)malloc(sizeof(event_queue_t));
+  klee_make_shared(sock->conn_evt_queue, sizeof(event_queue_t));
   _event_queue_init(sock->conn_evt_queue, MAX_EVENTS, 1);
 
   if (sock->__bdata.flags & O_NONBLOCK) {
