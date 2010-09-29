@@ -28,7 +28,8 @@ enum JobSelectionType {
 	RandomSel,
 	RandomPathSel,
 	CoverageOptimizedSel,
-	OracleSel
+	OracleSel,
+	FaultInjSel
 };
 
 extern std::string InputFile;

@@ -372,7 +372,10 @@ void JobManager::initStrategy() {
     selStrategy = createOracleStrategy();
     CLOUD9_INFO("Using the oracle");
     break;
-
+  case FaultInjSel:
+    selStrategy = new FIStrategy(tree);
+    CLOUD9_INFO("Using the fault injection strategy");
+    break;
   default:
     assert(0 && "undefined job selection strategy");
   }
@@ -1009,9 +1012,9 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 bool JobManager::onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
   switch (forkTag.forkClass) {
   case KLEE_FORK_FAULTINJ:
-    return InjectFaults;
+    return JobSelection == FaultInjSel;
   default:
-    return true;
+    return false;
   }
 }
 
