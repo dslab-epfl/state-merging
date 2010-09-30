@@ -17,6 +17,9 @@
 // Event Queue Utility
 ////////////////////////////////////////////////////////////////////////////////
 
+#define EVENT_READ  (1 << 0)
+#define EVENT_WRITE (1 << 1)
+
 typedef struct {
   wlist_id_t *queue;
   unsigned int count;
@@ -34,8 +37,9 @@ void _event_queue_notify(event_queue_t *q);
 // Stream Buffers
 ////////////////////////////////////////////////////////////////////////////////
 
-#define EVENT_READ  (1 << 0)
-#define EVENT_WRITE (1 << 1)
+#define BUFFER_STATUS_DESTROYING        (1<<0)
+#define BUFFER_STATUS_CLOSED            (1<<1)
+#define BUFFER_STATUS_SYM_READS         (1<<2)
 
 // A basic producer-consumer data structure
 typedef struct {
@@ -50,8 +54,7 @@ typedef struct {
   wlist_id_t full_wlist;
 
   unsigned int queued;
-  char destroying;
-  char closed;
+  unsigned short status;
 } stream_buffer_t;
 
 stream_buffer_t *_stream_create(size_t max_size, int shared);
@@ -70,6 +73,10 @@ static inline int _stream_is_empty(stream_buffer_t *buff) {
 
 static inline int _stream_is_full(stream_buffer_t *buff) {
   return (buff->size == buff->max_size);
+}
+
+static inline int _stream_is_closed(stream_buffer_t *buff) {
+  return (buff->status & BUFFER_STATUS_CLOSED);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

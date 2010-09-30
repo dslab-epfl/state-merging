@@ -86,8 +86,6 @@ stream_buffer_t *_stream_create(size_t max_size, int shared) {
   memset(buff, 0, sizeof(stream_buffer_t));
   buff->contents = (char*) malloc(max_size);
   buff->max_size = max_size;
-  buff->closed = 0;
-  buff->destroying = 0;
   buff->queued = 0;
   buff->empty_wlist = klee_get_wlist();
   buff->full_wlist = klee_get_wlist();
@@ -110,14 +108,14 @@ void _stream_destroy(stream_buffer_t *buff) {
   if (buff->queued == 0) {
     free(buff);
   } else {
-    buff->destroying = 1;
+    buff->status |= BUFFER_STATUS_DESTROYING;
   }
 }
 
 void _stream_close(stream_buffer_t *buff) {
   __notify_event(buff, EVENT_READ | EVENT_WRITE);
 
-  buff->closed = 1;
+  buff->status |= BUFFER_STATUS_CLOSED;
 }
 
 ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
@@ -126,7 +124,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
   }
 
   while (buff->size == 0) {
-    if (buff->closed) {
+    if (buff->status & BUFFER_STATUS_CLOSED) {
       return 0;
     }
 
@@ -134,7 +132,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
     klee_thread_sleep(buff->empty_wlist);
     buff->queued--;
 
-    if (buff->destroying) {
+    if (buff->status & BUFFER_STATUS_DESTROYING) {
       if (buff->queued == 0)
         free(buff);
 
@@ -144,6 +142,10 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
 
   if (buff->size < count)
     count = buff->size;
+
+  if (buff->status & BUFFER_STATUS_SYM_READS) {
+    count = __fork_values(1, count, __KLEE_FORK_DEFAULT);
+  }
 
   if (buff->start + count > buff->max_size) {
     size_t overflow = (buff->start + count) % buff->max_size;
@@ -167,7 +169,7 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
     return 0;
   }
 
-  if (buff->closed) {
+  if (buff->status & BUFFER_STATUS_CLOSED) {
     return 0;
   }
 
@@ -176,14 +178,14 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
     klee_thread_sleep(buff->full_wlist);
     buff->queued--;
 
-    if (buff->destroying) {
+    if (buff->status & BUFFER_STATUS_DESTROYING) {
       if (buff->queued == 0)
         free(buff);
 
       return -1;
     }
 
-    if (buff->closed) {
+    if (buff->status & BUFFER_STATUS_CLOSED) {
       return 0;
     }
   }

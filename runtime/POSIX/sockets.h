@@ -81,6 +81,7 @@ int _close_socket(socket_t *sock);
 ssize_t _read_socket(socket_t *sock, void *buf, size_t count);
 ssize_t _write_socket(socket_t *sock, const void *buf, size_t count);
 int _stat_socket(socket_t *sock, struct stat *buf);
+int _ioctl_socket(socket_t *sock, unsigned long request, char *argp);
 
 int _is_blocking_socket(socket_t *sock, int event);
 int _register_events_socket(socket_t *sock, wlist_id_t wlist, int events);

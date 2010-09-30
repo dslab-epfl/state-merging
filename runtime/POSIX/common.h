@@ -20,6 +20,16 @@
 
 #include <string.h>
 
+////////////////////////////////////////////////////////////////////////////////
+// IOCtl Codes
+////////////////////////////////////////////////////////////////////////////////
+
+#define KLEE_SIO_SYMREADS   0xfff00     // Enable symbolic reads for a socket
+
+////////////////////////////////////////////////////////////////////////////////
+// System Limits
+////////////////////////////////////////////////////////////////////////////////
+
 #define MAX_THREADS         16
 #define MAX_PROCESSES       8
 
@@ -42,6 +52,7 @@
 #define SOCKET_BUFFER_SIZE      4096
 #define PIPE_BUFFER_SIZE        4096
 #define SENDFILE_BUFFER_SIZE    256
+
 
 #define HAVE_FAULT_INJECTION    1
 
@@ -90,6 +101,8 @@ int klee_get_errno(void);
 void *__concretize_ptr(const void *p);
 size_t __concretize_size(size_t s);
 const char *__concretize_string(const char *s);
+
+int __fork_values(int min, int max, int reason);
 
 int __inject_fault(const char *fname, int errno, ...);
 

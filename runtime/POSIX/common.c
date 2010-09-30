@@ -9,6 +9,7 @@
 
 #include <sys/types.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <klee/klee.h>
 
@@ -55,4 +56,17 @@ int __inject_fault(const char *fname, int eno, ...) {
 
   errno = eno;
   return 1;
+}
+
+int __fork_values(int min, int max, int reason) {
+  assert(max >= min);
+
+  int i;
+  for (i = min; i < max; i++) {
+    if (!klee_fork(reason)) {
+      return i;
+    }
+  }
+
+  return i;
 }

@@ -258,7 +258,7 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
   }
 
   if (sock->__bdata.flags & O_NONBLOCK) {
-    if (_stream_is_empty(sock->in) && !sock->in->closed) {
+    if (_stream_is_empty(sock->in) && !_stream_is_closed(sock->in)) {
       errno = EAGAIN;
       return -1;
     }
@@ -292,7 +292,7 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
     return -1;
   }
 
-  if (sock->out == NULL || sock->out->closed) {
+  if (sock->out == NULL || _stream_is_closed(sock->out)) {
     // The socket is shut down for writing
     errno = EPIPE;
     return -1;
@@ -303,7 +303,7 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
   }
 
   if (sock->__bdata.flags & O_NONBLOCK) {
-    if (_stream_is_full(sock->out) & !sock->out->closed) {
+    if (_stream_is_full(sock->out) & !_stream_is_closed(sock->out)) {
       errno = EAGAIN;
       return -1;
     }
@@ -335,6 +335,24 @@ int _stat_socket(socket_t *sock, struct stat *buf) {
   assert(0 && "not implemented");
 }
 
+// ioctl() /////////////////////////////////////////////////////////////////////
+
+int _ioctl_socket(socket_t *sock, unsigned long request, char *argp) {
+  switch (request) {
+  case KLEE_SIO_SYMREADS:
+    if (sock->status != SOCK_STATUS_CONNECTED || sock->out == NULL) {
+      errno = EINVAL;
+      return -1;
+    }
+
+    sock->out->status |= BUFFER_STATUS_SYM_READS;
+    return 0;
+  default:
+    errno = EINVAL;
+    return -1;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 int _is_blocking_socket(socket_t *sock, int event) {
@@ -355,9 +373,9 @@ int _is_blocking_socket(socket_t *sock, int event) {
   if (sock->status == SOCK_STATUS_CONNECTED) {
     switch (event) {
     case EVENT_READ:
-      return sock->in && _stream_is_empty(sock->in) && !sock->in->closed;
+      return sock->in && _stream_is_empty(sock->in) && !_stream_is_closed(sock->in);
     case EVENT_WRITE:
-      return sock->out && _stream_is_full(sock->out) && !sock->out->closed;
+      return sock->out && _stream_is_full(sock->out) && !_stream_is_closed(sock->out);
     default:
       assert(0 && "invalid event");
     }
@@ -366,7 +384,7 @@ int _is_blocking_socket(socket_t *sock, int event) {
   if (sock->status == SOCK_STATUS_LISTENING) {
     switch (event) {
     case EVENT_READ:
-      assert (!sock->listen->closed && "invalid socket state");
+      assert (!_stream_is_closed(sock->listen) && "invalid socket state");
       return _stream_is_empty(sock->listen);
     case EVENT_WRITE:
       return 0;
@@ -981,7 +999,7 @@ int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
 static void _shutdown(socket_t *sock, int how) {
   if ((how == SHUT_RD || how == SHUT_RDWR) && sock->in != NULL) {
     // Shutting down the reading part...
-    if (sock->in->closed) {
+    if (_stream_is_closed(sock->in)) {
       _stream_destroy(sock->in);
     } else {
       _stream_close(sock->in);
@@ -992,7 +1010,7 @@ static void _shutdown(socket_t *sock, int how) {
 
   if ((how == SHUT_WR || how == SHUT_RDWR) && sock->out != NULL) {
     // Shutting down the writing part...
-    if (sock->out->closed) {
+    if (_stream_is_closed(sock->out)) {
       _stream_destroy(sock->out);
     } else {
       _stream_close(sock->out);

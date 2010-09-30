@@ -23,7 +23,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 int _close_pipe(pipe_end_t *pipe) {
-  if (!pipe->buffer->closed) {
+  if (!_stream_is_closed(pipe->buffer)) {
     _stream_close(pipe->buffer);
   } else {
     _stream_destroy(pipe->buffer);
@@ -43,7 +43,8 @@ ssize_t _read_pipe(pipe_end_t *pipe, void *buf, size_t count) {
     return 0;
 
   if (pipe->__bdata.flags & O_NONBLOCK) {
-    if (_stream_is_empty(pipe->buffer) && !pipe->buffer->closed) {
+    if (_stream_is_empty(pipe->buffer) && !_stream_is_closed(pipe->buffer)) {
+
       errno = EAGAIN;
       return -1;
     }
@@ -69,7 +70,7 @@ ssize_t _read_pipe(pipe_end_t *pipe, void *buf, size_t count) {
 }
 
 ssize_t _write_pipe(pipe_end_t *pipe, const void *buf, size_t count) {
-  if (pipe->buffer->closed) {
+  if (_stream_is_closed(pipe->buffer)) {
     errno = EPIPE;
     return -1;
   }
@@ -78,7 +79,7 @@ ssize_t _write_pipe(pipe_end_t *pipe, const void *buf, size_t count) {
     return 0;
 
   if (pipe->__bdata.flags & O_NONBLOCK) {
-    if (_stream_is_full(pipe->buffer) && !pipe->buffer->closed) {
+    if (_stream_is_full(pipe->buffer) && !_stream_is_closed(pipe->buffer)) {
       errno = EAGAIN;
       return -1;
     }
@@ -116,9 +117,9 @@ int _stat_pipe(pipe_end_t *pipe, struct stat *buf) {
 int _is_blocking_pipe(pipe_end_t *pipe, int event) {
   switch (event) {
   case EVENT_READ:
-    return _stream_is_empty(pipe->buffer) && !pipe->buffer->closed;
+    return _stream_is_empty(pipe->buffer) && !_stream_is_closed(pipe->buffer);
   case EVENT_WRITE:
-    return _stream_is_full(pipe->buffer) && !pipe->buffer->closed;
+    return _stream_is_full(pipe->buffer) && !_stream_is_closed(pipe->buffer);
   default:
     assert(0 && "invalid event");
   }

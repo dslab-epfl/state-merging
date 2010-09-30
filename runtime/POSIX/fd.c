@@ -499,6 +499,7 @@ DEFINE_MODEL(int, close, int fd) {
 
   if (fde->attr & FD_IS_CONCRETE) {
     //fprintf(stderr, "Closing concrete fd: %d\n", fde->concrete_fd);
+    // XXX We should find a way to clean up closed file descriptors...
     //int res = CALL_UNDERLYING(close, fde->concrete_fd);
     //if (res == -1)
     //  errno = klee_get_errno();
@@ -982,26 +983,29 @@ DEFINE_MODEL(int, ioctl, int fd, unsigned long request, ...) {
     return -1;
   }
 
-  // For now, this works only on concrete FDs
-  if (!(__fdt[fd].attr & FD_IS_CONCRETE)) {
-    klee_warning("symbolic file, ioctl() unsupported (ENOTTY)");
-    errno = ENOTTY;
-    return -1;
-  }
+  fd_entry_t *fde = &__fdt[fd];
 
-  char *argp;
   va_list ap;
 
   va_start(ap, request);
-  argp = va_arg(ap, char*);
+  char *argp = va_arg(ap, char*);
 
   va_end(ap);
 
-  int ret = CALL_UNDERLYING(ioctl, __fdt[fd].concrete_fd, request, argp);
-
-  if (ret == -1) {
-    errno = klee_get_errno();
+  // For now, this works only on concrete FDs
+  if (fde->attr & FD_IS_CONCRETE) {
+    int res = CALL_UNDERLYING(ioctl, __fdt[fd].concrete_fd, request, argp);
+    if (res == -1) {
+      errno = klee_get_errno();
+    }
+    return res;
   }
 
-  return ret;
+  if (fde->attr & FD_IS_SOCKET) {
+    return _ioctl_socket((socket_t*)fde->io_object, request, argp);
+  } else {
+    klee_warning("ioctl operation not supported on symbolic file descriptors");
+    errno = EINVAL;
+    return -1;
+  }
 }
