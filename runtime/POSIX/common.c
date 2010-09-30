@@ -58,15 +58,20 @@ int __inject_fault(const char *fname, int eno, ...) {
   return 1;
 }
 
-int __fork_values(int min, int max, int reason) {
+unsigned __fork_values(unsigned min, unsigned max, int reason) {
   assert(max >= min);
 
-  int i;
-  for (i = min; i < max; i++) {
+  unsigned i;
+  for (i = min; i < max;) {
     if (!klee_fork(reason)) {
       return i;
     }
+
+    if (i == 0)
+      i++;
+    else
+      i <<= 1;
   }
 
-  return i;
+  return max;
 }

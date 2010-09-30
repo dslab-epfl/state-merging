@@ -102,7 +102,7 @@ void *__concretize_ptr(const void *p);
 size_t __concretize_size(size_t s);
 const char *__concretize_string(const char *s);
 
-int __fork_values(int min, int max, int reason);
+unsigned __fork_values(unsigned min, unsigned max, int reason);
 
 int __inject_fault(const char *fname, int errno, ...);
 
