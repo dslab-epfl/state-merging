@@ -3234,7 +3234,7 @@ void Executor::executeProcessFork(ExecutionState &state, KInstruction *ki,
 
 void Executor::executeFork(ExecutionState &state, KInstruction *ki, int reason) {
   // Check to see if we really should fork
-  if (fireStateBranching(&state, getForkTag(state, reason))) {
+  if (reason == KLEE_FORK_DEFAULT || fireStateBranching(&state, getForkTag(state, reason))) {
     StatePair sp = fork(state, reason);
 
     // Return 0 in the original
