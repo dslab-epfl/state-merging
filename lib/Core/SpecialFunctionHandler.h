@@ -80,13 +80,13 @@ namespace klee {
     HANDLER(handleAssertFail);
     HANDLER(handleAssume);
     HANDLER(handleBranch);
-    HANDLER(handleBreakpoint);
     HANDLER(handleCalloc);
     HANDLER(handleCheckMemoryAccess);
     HANDLER(handleDebug);
     HANDLER(handleDefineFixedObject);
     HANDLER(handleDelete);    
     HANDLER(handleDeleteArray);
+    HANDLER(handleEvent);
     HANDLER(handleFork);
     HANDLER(handleFree);
     HANDLER(handleGetContext);

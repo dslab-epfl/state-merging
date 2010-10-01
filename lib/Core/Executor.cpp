@@ -3088,8 +3088,9 @@ void Executor::executeFree(ExecutionState &state,
   }
 }
 
-void Executor::executeBreakpoint(ExecutionState &state, unsigned int id) {
-  fireBreakpoint(&state, id);
+void Executor::executeEvent(ExecutionState &state, unsigned int type,
+    long int value) {
+  fireEvent(&state, type, value);
 }
 
 void Executor::resolveExact(ExecutionState &state,

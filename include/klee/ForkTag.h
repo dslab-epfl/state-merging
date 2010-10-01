@@ -8,18 +8,11 @@
 #ifndef FORKTAG_H_
 #define FORKTAG_H_
 
+#include "klee/Constants.h"
+
 #include <string>
 
 namespace klee {
-
-enum ForkClass {
-  KLEE_FORK_DEFAULT = 0,
-  KLEE_FORK_FAULTINJ = 1,
-  KLEE_FORK_SCHEDULE = 2,
-  KLEE_FORK_INTERNAL = 3,
-  KLEE_FORK_MULTI = 4,
-  KLEE_FORK_TIMEOUT = 5
-};
 
 struct ForkTag {
   ForkClass forkClass;

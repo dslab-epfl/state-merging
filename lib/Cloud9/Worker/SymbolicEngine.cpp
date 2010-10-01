@@ -89,8 +89,9 @@ void SymbolicEngine::fireOutOfResources(klee::ExecutionState *destroyedState) {
 	}
 }
 
-void SymbolicEngine::fireBreakpoint(klee::ExecutionState *state, unsigned int id) {
-  fireHandler(boost::bind(&StateEventHandler::onBreakpoint, _1, state, id));
+void SymbolicEngine::fireEvent(klee::ExecutionState *state, unsigned int type,
+    long int value) {
+  fireHandler(boost::bind(&StateEventHandler::onEvent, _1, state, type, value));
 }
 
 

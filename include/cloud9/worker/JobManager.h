@@ -221,8 +221,8 @@ public:
   virtual void onDebugInfo(klee::ExecutionState *state,
       const std::string &message);
   virtual void onOutOfResources(klee::ExecutionState *destroyedState);
-  virtual void onBreakpoint(klee::ExecutionState *state,
-          unsigned int id);
+  virtual void onEvent(klee::ExecutionState *state,
+          unsigned int type, long int value);
 
   /*
    * Statistics methods

@@ -17,6 +17,8 @@
 #define __KLEE_FORK_DEFAULT       0
 #define __KLEE_FORK_FAULTINJ      1
 
+#define __KLEE_EVENT_BREAKPOINT   10
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -38,7 +40,7 @@ extern "C" {
   /// output files, etc.
   void klee_make_symbolic(void *addr, size_t nbytes, const char *name);
 
-  void klee_breakpoint(unsigned int id);
+  void klee_event(unsigned int type, long int value);
 
   /// klee_range - Construct a symbolic value in the signed interval
   /// [begin,end).

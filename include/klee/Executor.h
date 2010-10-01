@@ -70,8 +70,6 @@ namespace klee {
   class TimingSolver;
   class TreeStreamWriter;
 
-  enum ESD_LOCK_TYPE {LOCK, UNLOCK};
-
   /// \todo Add a context object to keep track of data only live
   /// during an instruction step. Should contain addedStates,
   /// removedStates, and haltExecution, among others.
@@ -277,7 +275,8 @@ private:
   void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo,
       bool shared=false);
 
-  void executeBreakpoint(ExecutionState &state, unsigned int id);
+  void executeEvent(ExecutionState &state, unsigned int type,
+      long int value);
 
   /// Create a new state where each input condition has been added as
   /// a constraint and return the results. The input state is included

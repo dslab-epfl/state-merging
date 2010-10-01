@@ -74,7 +74,7 @@ HandlerInfo handlerInfo[] = {
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
   add("klee_assume", handleAssume, false),
-  add("klee_breakpoint", handleBreakpoint, false),
+  add("klee_event", handleEvent, false),
   add("klee_check_memory_access", handleCheckMemoryAccess, false),
   add("klee_get_valuef", handleGetValue, true),
   add("klee_get_valued", handleGetValue, true),
@@ -1070,18 +1070,20 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
   }
 }
 
-void SpecialFunctionHandler::handleBreakpoint(ExecutionState &state,
+void SpecialFunctionHandler::handleEvent(ExecutionState &state,
                                                 KInstruction *target,
                                                 std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 1 && "invalid number of arguments to klee_breakpoint");
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_event");
 
-  if (ConstantExpr *id = dyn_cast<ConstantExpr>(arguments[0])) {
-    executor.executeBreakpoint(state, (unsigned int)id->getZExtValue());
-  } else {
-    executor.terminateStateOnError(state,
-                                   "klee_breakpoint requires a constant arg",
-                                   "user.err");
+  if (!isa<ConstantExpr>(arguments[0]) || !isa<ConstantExpr>(arguments[1])) {
+    executor.terminateStateOnError(state, "klee_event requires a constant arg", "user.err");
   }
+
+  ref<ConstantExpr> type = cast<ConstantExpr>(arguments[0]);
+  ref<ConstantExpr> value = cast<ConstantExpr>(arguments[1]);
+
+  executor.executeEvent(state, (unsigned int)type->getZExtValue(),
+      (long int)value->getZExtValue());
 }
 
 void SpecialFunctionHandler::handleMarkGlobal(ExecutionState &state,

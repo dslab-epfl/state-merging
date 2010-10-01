@@ -49,8 +49,8 @@ public:
 			ControlFlowEvent event) = 0;
 	virtual void onDebugInfo(klee::ExecutionState *state,
 			const std::string &message) = 0;
-	virtual void onBreakpoint(klee::ExecutionState *state,
-	    unsigned int id) = 0;
+	virtual void onEvent(klee::ExecutionState *state,
+	    unsigned int type, long int value) = 0;
 	virtual void onOutOfResources(klee::ExecutionState *destroyedState) = 0;
 
 };
@@ -77,7 +77,7 @@ protected:
 			ControlFlowEvent event);
 	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);
 	void fireOutOfResources(klee::ExecutionState *destroyedState);
-	void fireBreakpoint(klee::ExecutionState *state, unsigned int id);
+	void fireEvent(klee::ExecutionState *state, unsigned int type, long int value);
 public:
 	SymbolicEngine() {};
 	virtual ~SymbolicEngine() {};

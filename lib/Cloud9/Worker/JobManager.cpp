@@ -55,6 +55,7 @@
 #include "klee/util/ExprPPrinter.h"
 #include "klee/KleeHandler.h"
 #include "klee/Init.h"
+#include "klee/Constants.h"
 
 #include "../../Core/Common.h"
 
@@ -184,7 +185,7 @@ void JobManager::serializeInstructionTrace(std::ostream &s,
         }
         count++;
       } else if (BreakpointEntry *brkEntry = dynamic_cast<BreakpointEntry*>(*it)) {
-        if (!enabled && brkEntry->getID() == 42) {
+        if (!enabled && brkEntry->getID() == 42) { // XXX This is ugly
           CLOUD9_DEBUG("Starting to serialize. Skipped " << count << " instructions.");
           enabled = true;
         }
@@ -1085,18 +1086,23 @@ void JobManager::onOutOfResources(klee::ExecutionState *destroyedState) {
   CLOUD9_INFO("Executor ran out of resources. Dropping state.");
 }
 
-void JobManager::onBreakpoint(klee::ExecutionState *kState,
-          unsigned int id) {
+void JobManager::onEvent(klee::ExecutionState *kState,
+          unsigned int type, long int value) {
   WorkerTree::Node *node = kState->getCloud9State()->getNode().get();
 
-  if (collectTraces) {
-    (**node).trace.appendEntry(new BreakpointEntry(id));
-  }
+  switch (type) {
+  case KLEE_EVENT_BREAKPOINT:
+    if (collectTraces) {
+      (**node).trace.appendEntry(new BreakpointEntry(value));
+    }
 #if 0
-  if (id == 42) {
-    kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
-  }
+    if (value == KLEE_BRK_START_TRACING) {
+      kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
+    }
 #endif
+    break;
+  }
+
 }
 
 void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
