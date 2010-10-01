@@ -31,7 +31,7 @@ private:
 
   StackTrace() { } // Cannot construct directly
 public:
-  void dump(std::ostream &out);
+  void dump(std::ostream &out) const;
 };
 
 }

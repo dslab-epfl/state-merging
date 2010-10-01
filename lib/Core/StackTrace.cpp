@@ -19,10 +19,10 @@ using namespace llvm;
 
 namespace klee {
 
-void StackTrace::dump(std::ostream &out) {
+void StackTrace::dump(std::ostream &out) const {
   unsigned idx = 0;
 
-  for (stack_t::iterator it = contents.begin(); it != contents.end(); it++) {
+  for (stack_t::const_iterator it = contents.begin(); it != contents.end(); it++) {
     Function *f = it->first.first->function;
     const InstructionInfo &ii = *it->first.second->info;
 

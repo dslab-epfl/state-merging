@@ -285,6 +285,50 @@ void JobManager::serializeExecutionTrace(std::ostream &os, SymbolicState *state)
   serializeExecutionTrace(os, node);
 }
 
+void JobManager::processTestCase(SymbolicState *state) {
+  std::vector<EventEntry*> eventEntries;
+
+  // First, collect the event entries
+  std::vector<int> path;
+
+  tree->buildPath(WORKER_LAYER_STATES, state->getNode().get(), tree->getRoot(), path);
+
+  const WorkerTree::Node *crtNode = tree->getRoot();
+
+  for (unsigned int i = 0; i <= path.size(); i++) {
+    const ExecutionTrace &trace = (**crtNode).getTrace();
+
+    for (ExecutionTrace::const_iterator it = trace.getEntries().begin();
+        it != trace.getEntries().end(); it++) {
+
+      if (EventEntry *eventEntry = dynamic_cast<EventEntry*>(*it)) {
+        eventEntries.push_back(eventEntry);
+      }
+    }
+
+    if (i < path.size()) {
+      crtNode = crtNode->getChild(WORKER_LAYER_STATES, path[i]);
+      assert(crtNode);
+    }
+  }
+
+  if (eventEntries.size() == 0)
+    return;
+
+  std::ostream *f = kleeHandler->openTestFile("events");
+
+  if (f) {
+    for (std::vector<EventEntry*>::iterator it = eventEntries.begin();
+        it != eventEntries.end(); it++) {
+      EventEntry *event = *it;
+      *f << "Event: " << event->getType() << " Value: " << event->getValue() << std::endl;
+      event->getStackTrace().dump(*f);
+      *f << std::endl;
+    }
+    delete f;
+  }
+}
+
 /*******************************************************************************
  * JOB MANAGER METHODS
  ******************************************************************************/
@@ -1071,6 +1115,10 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState, bool silenced) {
   //CLOUD9_DEBUG("State destroyed");
 
   SymbolicState *state = kState->getCloud9State();
+
+  if (!silenced) {
+    processTestCase(state);
+  }
 
   if (DumpInstrTraces) {
     dumpInstructionTrace(state->getNode().get());

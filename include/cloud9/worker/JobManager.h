@@ -117,6 +117,8 @@ private:
   void serializeExecutionTrace(std::ostream &os, WorkerTree::Node *node);
   void serializeExecutionTrace(std::ostream &os, SymbolicState *state);
 
+  void processTestCase(SymbolicState *state);
+
   void fireActivateState(SymbolicState *state);
   void fireDeactivateState(SymbolicState *state);
   void fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode);

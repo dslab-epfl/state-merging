@@ -47,7 +47,11 @@ public:
   std::string getOutputFilename(const std::string &filename);
   std::ostream *openOutputFile(const std::string &filename);
   std::string getTestFilename(const std::string &suffix, unsigned id);
+
   std::ostream *openTestFile(const std::string &suffix, unsigned id);
+  std::ostream *openTestFile(const std::string &suffix) {
+    return openTestFile(suffix, m_testIndex+1);
+  }
 
   // load a .out file
   static void loadOutFile(std::string name,
