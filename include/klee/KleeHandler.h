@@ -50,7 +50,7 @@ public:
 
   std::ostream *openTestFile(const std::string &suffix, unsigned id);
   std::ostream *openTestFile(const std::string &suffix) {
-    return openTestFile(suffix, m_testIndex+1);
+    return openTestFile(suffix, m_testIndex);
   }
 
   // load a .out file
