@@ -86,6 +86,7 @@ stream_buffer_t *_stream_create(size_t max_size, int shared) {
   memset(buff, 0, sizeof(stream_buffer_t));
   buff->contents = (char*) malloc(max_size);
   buff->max_size = max_size;
+  buff->max_rsize = max_size;
   buff->queued = 0;
   buff->empty_wlist = klee_get_wlist();
   buff->full_wlist = klee_get_wlist();
@@ -142,9 +143,12 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
 
   if (buff->size < count)
     count = buff->size;
+  if (buff->max_rsize < count)
+    count = buff->max_rsize;
 
   if (buff->status & BUFFER_STATUS_SYM_READS) {
     count = __fork_values(1, count, __KLEE_FORK_DEFAULT);
+    klee_event(__KLEE_EVENT_PKT_FRAGMENT, count);
   }
 
   if (buff->start + count > buff->max_size) {

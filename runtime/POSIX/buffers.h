@@ -45,6 +45,7 @@ void _event_queue_notify(event_queue_t *q);
 typedef struct {
   char *contents;
   size_t max_size;
+  size_t max_rsize;
 
   size_t start;
   size_t size;
@@ -77,6 +78,16 @@ static inline int _stream_is_full(stream_buffer_t *buff) {
 
 static inline int _stream_is_closed(stream_buffer_t *buff) {
   return (buff->status & BUFFER_STATUS_CLOSED);
+}
+
+static inline void _stream_set_rsize(stream_buffer_t *buff, size_t rsize) {
+  if (rsize == 0)
+    rsize = 1;
+
+  if (rsize > buff->max_size)
+    rsize = buff->max_size;
+
+  buff->max_rsize = rsize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

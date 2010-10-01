@@ -348,6 +348,14 @@ int _ioctl_socket(socket_t *sock, unsigned long request, char *argp) {
 
     sock->out->status |= BUFFER_STATUS_SYM_READS;
     return 0;
+  case KLEE_SIO_READCAP:
+    if (sock->status != SOCK_STATUS_CONNECTED || sock->out == NULL) {
+      errno = ENOTTY;
+      return-1;
+    }
+
+    _stream_set_rsize(sock->out, (size_t)argp);
+    return 0;
   case FIONREAD:
     if (sock->status != SOCK_STATUS_CONNECTED || sock->in == NULL) {
       *((int*)argp) = 0;
