@@ -551,37 +551,35 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
 /***/
 
+StackTrace ExecutionState::getStackTrace() const {
+  StackTrace result;
 
-void ExecutionState::dumpStack(std::ostream &out) const {
-  unsigned idx = 0;
   const KInstruction *target = prevPC();
+
   for (ExecutionState::stack_ty::const_reverse_iterator
          it = stack().rbegin(), ie = stack().rend();
        it != ie; ++it) {
+
     const StackFrame &sf = *it;
+
+    StackTrace::position_t position = std::make_pair(sf.kf, target);
+    std::vector<ref<Expr> > arguments;
+
     Function *f = sf.kf->function;
-    const InstructionInfo &ii = *target->info;
-    out << "\t#" << idx++ 
-        << " " << std::setw(8) << std::setfill('0') << ii.assemblyLine
-        << " in " << f->getNameStr() << " (";
-    // Yawn, we could go up and print varargs if we wanted to.
     unsigned index = 0;
     for (Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
          ai != ae; ++ai) {
-      if (ai!=f->arg_begin()) out << ", ";
 
-      out << ai->getNameStr();
-      // XXX should go through function
-      ref<Expr> value = sf.locals[sf.kf->getArgRegister(index++)].value; 
-      if (isa<ConstantExpr>(value))
-        out << "=" << value;
+      ref<Expr> value = sf.locals[sf.kf->getArgRegister(index++)].value;
+      arguments.push_back(value);
     }
-    out << ")";
-    if (ii.file != "")
-      out << " at " << ii.file << ":" << ii.line;
-    out << "\n";
+
+    result.contents.push_back(std::make_pair(position, arguments));
+
     target = sf.caller;
   }
+
+  return result;
 }
 
 }

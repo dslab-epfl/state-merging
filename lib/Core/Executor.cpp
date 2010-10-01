@@ -2788,7 +2788,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
       msg << "Line: " << ii.line << "\n";
     }
     msg << "Stack: \n";
-    state.dumpStack(msg);
+    state.getStackTrace().dump(msg);
 
     std::string info_str = info.str();
     if (info_str != "")

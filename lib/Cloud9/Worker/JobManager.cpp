@@ -967,7 +967,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
         WorkerTree::Node *node = crtNode->getParent()->getChild(WORKER_LAYER_STATES, 1-crtNode->getIndex());
         if ((**node).getSymbolicState()) {
-          (**node).getSymbolicState()->getKleeState()->dumpStack(std::cout);
+          (**node).getSymbolicState()->getKleeState()->getStackTrace().dump(std::cout);
         }
       }
       // We have a broken replay
@@ -1064,7 +1064,7 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState) {
 
   if (replaying) {
     CLOUD9_DEBUG("State destroyed during replay");
-    kState->dumpStack(std::cout);
+    kState->getStackTrace().dump(std::cout);
   }
 
   //CLOUD9_DEBUG("State destroyed");

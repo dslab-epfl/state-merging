@@ -23,6 +23,7 @@
 #include "klee/Threading.h"
 #include "klee/MultiProcess.h"
 #include "klee/AddressPool.h"
+#include "klee/StackTrace.h"
 
 #include <map>
 #include <set>
@@ -245,7 +246,7 @@ public:
   cloud9::worker::SymbolicState *getCloud9State() const { return c9State; }
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
 
-  void dumpStack(std::ostream &out) const;
+  StackTrace getStackTrace() const;
 };
 
 }

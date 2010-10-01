@@ -511,7 +511,7 @@ void SpecialFunctionHandler::handleSetForking(ExecutionState &state,
 void SpecialFunctionHandler::handleStackTrace(ExecutionState &state,
                                               KInstruction *target,
                                               std::vector<ref<Expr> > &arguments) {
-  state.dumpStack(std::cout);
+  state.getStackTrace().dump(std::cout);
 }
 
 void SpecialFunctionHandler::handleWarning(ExecutionState &state,
