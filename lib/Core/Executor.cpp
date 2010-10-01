@@ -681,7 +681,7 @@ void Executor::branch(ExecutionState &state,
     if (OnlyReplaySeeds) {
       for (unsigned i=0; i<N; ++i) {
         if (!seedMap.count(result[i])) {
-          terminateState(*result[i]);
+          terminateState(*result[i], true);
           result[i] = NULL;
         }
       } 
@@ -2715,8 +2715,8 @@ std::string Executor::getAddressInfo(ExecutionState &state,
   return info.str();
 }
 
-bool Executor::terminateState(ExecutionState &state) {
-	fireStateDestroy(&state);
+bool Executor::terminateState(ExecutionState &state, bool silenced) {
+	fireStateDestroy(&state, silenced);
 
 	if (replayOut && replayPosition != replayOut->numObjects) {
 		klee_warning_once(replayOut,
@@ -2747,17 +2747,23 @@ bool Executor::terminateState(ExecutionState &state) {
 void Executor::terminateStateEarly(ExecutionState &state, 
                                    const Twine &message) {
   if (!OnlyOutputStatesCoveringNew || state.coveredNew ||
-      (AlwaysOutputSeeds && seedMap.count(&state)))
+      (AlwaysOutputSeeds && seedMap.count(&state))) {
     interpreterHandler->processTestCase(state, (message + "\n").str().c_str(),
                                         "early");
-  terminateState(state);
+    terminateState(state, false);
+  } else {
+    terminateState(state, true);
+  }
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || 
-      (AlwaysOutputSeeds && seedMap.count(&state)))
+      (AlwaysOutputSeeds && seedMap.count(&state))) {
     interpreterHandler->processTestCase(state, 0, 0);
-  terminateState(state);
+    terminateState(state, false);
+  } else {
+    terminateState(state, true);
+  }
 }
 
 void Executor::terminateStateOnError(ExecutionState &state,
@@ -2794,9 +2800,10 @@ void Executor::terminateStateOnError(ExecutionState &state,
     if (info_str != "")
       msg << "Info: \n" << info_str;
     interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+    terminateState(state, false);
+  } else {
+    terminateState(state, true);
   }
-    
-  terminateState(state);
 }
 
 // XXX shoot me

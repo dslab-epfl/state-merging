@@ -312,7 +312,7 @@ void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
                                               std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
 
-  executor.terminateState(state);
+  executor.terminateState(state, true);
 }
 
 void SpecialFunctionHandler::handleAliasFunction(ExecutionState &state,

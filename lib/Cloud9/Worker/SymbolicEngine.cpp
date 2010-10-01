@@ -51,12 +51,12 @@ void SymbolicEngine::fireStateBranched(klee::ExecutionState *state,
   }
 }
 
-void SymbolicEngine::fireStateDestroy(klee::ExecutionState *state) {
+void SymbolicEngine::fireStateDestroy(klee::ExecutionState *state, bool silenced) {
 
   for (handlers_t::iterator it = seHandlers.begin(); it != seHandlers.end(); it++) {
     StateEventHandler *h = *it;
 
-    h->onStateDestroy(state);
+    h->onStateDestroy(state, silenced);
   }
 
   cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalFinishedStates);

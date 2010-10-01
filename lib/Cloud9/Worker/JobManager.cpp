@@ -1058,7 +1058,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 
 }
 
-void JobManager::onStateDestroy(klee::ExecutionState *kState) {
+void JobManager::onStateDestroy(klee::ExecutionState *kState, bool silenced) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   assert(kState);
@@ -1100,6 +1100,9 @@ void JobManager::onEvent(klee::ExecutionState *kState,
       kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
     }
 #endif
+    break;
+  default:
+    (**node).trace.appendEntry(new EventEntry(kState->getStackTrace(), type, value));
     break;
   }
 

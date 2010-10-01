@@ -44,7 +44,7 @@ public:
 	virtual bool onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) = 0;
 	virtual void onStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index, klee::ForkTag forkTag) = 0;
-	virtual void onStateDestroy(klee::ExecutionState *state) = 0;
+	virtual void onStateDestroy(klee::ExecutionState *state, bool silenced) = 0;
 	virtual void onControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event) = 0;
 	virtual void onDebugInfo(klee::ExecutionState *state,
@@ -72,7 +72,7 @@ protected:
 	bool fireStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag);
 	void fireStateBranched(klee::ExecutionState *state,
 			klee::ExecutionState *parent, int index, klee::ForkTag forkTag);
-	void fireStateDestroy(klee::ExecutionState *state);
+	void fireStateDestroy(klee::ExecutionState *state, bool silenced);
 	void fireControlFlowEvent(klee::ExecutionState *state,
 			ControlFlowEvent event);
 	void fireDebugInfo(klee::ExecutionState *state, const std::string &message);

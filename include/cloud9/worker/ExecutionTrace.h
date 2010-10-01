@@ -8,6 +8,7 @@
 #ifndef EXECUTIONTRACE_H_
 #define EXECUTIONTRACE_H_
 
+#include "klee/StackTrace.h"
 
 #include <vector>
 #include <string>
@@ -92,6 +93,22 @@ public:
 	ConstraintLogEntry(klee::ExecutionState *state);
 
 	virtual ~ConstraintLogEntry() { }
+};
+
+class EventEntry: public ExecutionTraceEntry {
+private:
+  klee::StackTrace stackTrace;
+  unsigned int type;
+  long int value;
+public:
+  EventEntry(klee::StackTrace _stackTrace, unsigned int _type, long int _value) :
+    stackTrace(_stackTrace), type(_type), value(_value) {
+
+  }
+
+  const klee::StackTrace &getStackTrace() const { return stackTrace; }
+  unsigned int getType() const { return type; }
+  long int getValue() const { return value; }
 };
 
 class ExecutionTrace {

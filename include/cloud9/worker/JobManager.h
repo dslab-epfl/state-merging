@@ -215,7 +215,7 @@ public:
   virtual bool onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag);
   virtual void onStateBranched(klee::ExecutionState *state,
       klee::ExecutionState *parent, int index, klee::ForkTag forkTag);
-  virtual void onStateDestroy(klee::ExecutionState *state);
+  virtual void onStateDestroy(klee::ExecutionState *state, bool silenced);
   virtual void onControlFlowEvent(klee::ExecutionState *state,
       ControlFlowEvent event);
   virtual void onDebugInfo(klee::ExecutionState *state,
