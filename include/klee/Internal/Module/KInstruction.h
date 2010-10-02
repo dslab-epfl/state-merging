@@ -42,6 +42,7 @@ namespace klee {
     /// Destination register index.
     unsigned dest;
 
+    bool originallyCovered;
   public:
     virtual ~KInstruction(); 
   };

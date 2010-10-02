@@ -94,6 +94,10 @@ namespace {
   cl::opt<std::string>
   CoverableModules("coverable-modules",
       cl::desc("A file containing the list of source files to check for coverage"));
+
+  cl::opt<std::string>
+  InitialCoverage("initial-coverage",
+      cl::desc("A file containing initial coverage values"));
 }
 
 void KModule::readVulnerablePoints(std::istream &is) {
@@ -103,7 +107,7 @@ void KModule::readVulnerablePoints(std::istream &is) {
   while (!is.eof()) {
     is >> fnName >> callSite;
 
-    if (is.eof())
+    if (is.eof() && (fnName.length() == 0 || (callSite.length() == 0)))
       break;
 
     size_t splitPoint = callSite.find(':');
@@ -154,7 +158,7 @@ void KModule::readCoverableFiles(std::istream &is) {
   while (!is.eof()) {
     is >> fileName;
 
-    if (is.eof())
+    if (is.eof() && fileName.length() == 0)
       break;
 
     coverableFiles.insert(fileName);
@@ -178,6 +182,20 @@ bool KModule::isFunctionCoverable(KFunction *kf) {
     return false;
 
   return true;
+}
+
+void KModule::readInitialCoverage(std::istream &is) {
+  std::string sourceFile;
+  int lineNo;
+
+  while (!is.eof()) {
+    is >> sourceFile >> lineNo;
+
+    if (is.eof() && sourceFile.length() == 0)
+      break;
+
+    coveredLines.insert(std::make_pair(sourceFile, lineNo));
+  }
 }
 
 KModule::KModule(Module *_module) 
@@ -357,6 +375,13 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     assert(!fs.fail());
 
     readCoverableFiles(fs);
+  }
+
+  if (InitialCoverage != "") {
+    std::ifstream fs(InitialCoverage);
+    assert(!fs.fail());
+
+    readInitialCoverage(fs);
   }
 
   // Inject checks prior to optimization... we also perform the
@@ -554,6 +579,12 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
         KCallInstruction* kCallI = dynamic_cast<KCallInstruction*>(ki);
         kCallI->vulnerable = isVulnerablePoint(ki);
       }
+
+      Path sourceFile(ki->info->file);
+      program_point_t pPoint = std::make_pair(sourceFile.getLast(),
+          ki->info->line);
+
+      ki->originallyCovered = coveredLines.count(pPoint) > 0;
     }
 
     kf->trackCoverage = isFunctionCoverable(kf);
