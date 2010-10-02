@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 void klee_make_symbolic(void *addr, size_t nbytes, const char *name) __attribute__((weak));
+void klee_event(unsigned int type, long int value) __attribute__((weak));
 
 #define KLEE_SIO_SYMREADS   0xfff00     // Enable symbolic reads for a socket
 #define KLEE_SIO_READCAP    0xfff01     // Set a maximum cap for reading from the stream
