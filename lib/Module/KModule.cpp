@@ -107,7 +107,7 @@ void KModule::readVulnerablePoints(std::istream &is) {
   while (!is.eof()) {
     is >> fnName >> callSite;
 
-    if (is.eof() && (fnName.length() == 0 || (callSite.length() == 0)))
+    if (is.eof() && (fnName.length() == 0 || callSite.length() == 0))
       break;
 
     size_t splitPoint = callSite.find(':');
@@ -153,15 +153,27 @@ bool KModule::isVulnerablePoint(KInstruction *kinst) {
 }
 
 void KModule::readCoverableFiles(std::istream &is) {
-  std::string fileName;
+  std::string name;
 
   while (!is.eof()) {
-    is >> fileName;
+    is >> name;
 
-    if (is.eof() && fileName.length() == 0)
+    if (is.eof() && name.length() == 0)
       break;
 
-    coverableFiles.insert(fileName);
+    if (name.length() == 1) {
+      if (name == "S") {
+        is >> name;
+        coverableFiles.insert(name);
+      } else if (name == "F") {
+        is >> name;
+        exceptedFunctions.insert(name);
+      } else {
+        coverableFiles.insert(name);
+      }
+    } else {
+      coverableFiles.insert(name);
+    }
   }
 }
 
@@ -181,15 +193,19 @@ bool KModule::isFunctionCoverable(KFunction *kf) {
   if (coverableFiles.count(fileName.getLast()) == 0)
     return false;
 
+  if (exceptedFunctions.count(kf->function->getNameStr()) > 0)
+    return false;
+
   return true;
 }
 
 void KModule::readInitialCoverage(std::istream &is) {
   std::string sourceFile;
   int lineNo;
+  int execCount;
 
   while (!is.eof()) {
-    is >> sourceFile >> lineNo;
+    is >> sourceFile >> lineNo >> execCount;
 
     if (is.eof() && sourceFile.length() == 0)
       break;

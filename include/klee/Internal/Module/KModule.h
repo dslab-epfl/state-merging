@@ -115,6 +115,7 @@ namespace klee {
     typedef std::set<std::string>  cov_list_t;
 
     cov_list_t  coverableFiles;
+    cov_list_t  exceptedFunctions;
 
     void readCoverableFiles(std::istream &is);
     bool isFunctionCoverable(KFunction *kf);

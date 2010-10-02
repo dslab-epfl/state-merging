@@ -206,9 +206,15 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
       if (OutputIStats) {
         unsigned id = ki->info->id;
         theStatisticManager->setIndex(id);
-        if (kf->trackCoverage && instructionIsCoverable(ki->inst))
-          ++stats::locallyUncoveredInstructions;
-          ++stats::globallyUncoveredInstructions;
+        if (kf->trackCoverage && instructionIsCoverable(ki->inst)) {
+          if (ki->originallyCovered) {
+            ++stats::locallyCoveredInstructions;
+            ++stats::globallyCoveredInstructions;
+          } else {
+            ++stats::locallyUncoveredInstructions;
+            ++stats::globallyUncoveredInstructions;
+          }
+        }
       }
       
       if (kf->trackCoverage) {
