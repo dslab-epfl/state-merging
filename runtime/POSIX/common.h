@@ -8,6 +8,8 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include "config.h"
+
 #include <sys/types.h>
 
 #ifdef __USE_MISC
@@ -33,35 +35,10 @@
 
 #define __KLEE_EVENT_PKT_FRAGMENT   1337
 
+
 ////////////////////////////////////////////////////////////////////////////////
-// System Limits
+// Model Infrastructure
 ////////////////////////////////////////////////////////////////////////////////
-
-#define MAX_THREADS         16
-#define MAX_PROCESSES       8
-
-#define MAX_SEMAPHORES      8
-
-#define MAX_EVENTS          4
-
-#define MAX_FDS             64
-#define MAX_FILES           16
-
-#define MAX_PATH_LEN        75
-
-#define MAX_PORTS           32
-#define MAX_UNIX_EPOINTS    32
-
-#define MAX_PENDING_CONN    4
-
-#define MAX_MMAPS           4
-
-#define SOCKET_BUFFER_SIZE      4096
-#define PIPE_BUFFER_SIZE        4096
-#define SENDFILE_BUFFER_SIZE    256
-
-
-#define HAVE_FAULT_INJECTION    1
 
 // A model needs to be declared only when it's supposed to interface
 // an existing C library call.
@@ -116,6 +93,8 @@ int __inject_fault(const char *fname, int errno, ...);
 ////////////////////////////////////////////////////////////////////////////////
 // Basic Arrays
 ////////////////////////////////////////////////////////////////////////////////
+
+// XXX Remove this, since it's unused?
 
 #define ARRAY_INIT(arr) \
   do { memset(&arr, 0, sizeof(arr)); } while (0)

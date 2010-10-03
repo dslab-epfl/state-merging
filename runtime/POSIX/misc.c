@@ -244,6 +244,7 @@ int getrusage(int who, struct rusage *usage) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef HAVE_SYMBOLIC_CTYPE
 static const int32_t *tolower_locale = NULL;
 
 DEFINE_MODEL(const int32_t **, __ctype_tolower_loc, void) {
@@ -279,3 +280,4 @@ DEFINE_MODEL(const unsigned short **, __ctype_b_loc, void) {
 
   return &b_locale;
 }
+#endif
