@@ -1046,6 +1046,8 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
     if (BreakOnReplayBroken) {
       fireBreakpointHit(crtNode->getParent());
     }
+  } else {
+    assert((**crtNode).symState != NULL);
   }
 
   timer.stop();
