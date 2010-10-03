@@ -1077,6 +1077,7 @@ void SpecialFunctionHandler::handleEvent(ExecutionState &state,
 
   if (!isa<ConstantExpr>(arguments[0]) || !isa<ConstantExpr>(arguments[1])) {
     executor.terminateStateOnError(state, "klee_event requires a constant arg", "user.err");
+    return;
   }
 
   ref<ConstantExpr> type = cast<ConstantExpr>(arguments[0]);

@@ -148,7 +148,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
 
   if (buff->status & BUFFER_STATUS_SYM_READS) {
     count = __fork_values(1, count, __KLEE_FORK_DEFAULT);
-    klee_event(__KLEE_EVENT_PKT_FRAGMENT, count);
+    klee_event(__KLEE_EVENT_PKT_FRAGMENT, __concretize_size(count));
   }
 
   if (buff->start + count > buff->max_size) {
