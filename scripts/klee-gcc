@@ -37,7 +37,7 @@ def main():
         is_cpp = False
 
         for arg in sys.argv[1:]:
-            if arg in ['-Werror']:
+            if arg.startswith("-W"):
                 continue
 
             if modify_next_param:
