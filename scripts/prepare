@@ -104,16 +104,8 @@ do
 	done
 done
 
-# 2. Tweak the -DXYZDIR=\"/path/to/file/" -s that break the build when replaced in the executable
-echo "2. Tweaking -DXYZDIR for correct replacement in the executable"
-for file in `find $MAKEFILE_DIR -name Makefile`
-do
-	echo -e "\ttweaking: $file"
-	sed -i 's|-D\([^=]*\)=\\"$(\([^\ ]*\))\\"|'\''-D\1=\\"$(\2)\\"'\''|g' $file
-done
-
-# 3. Tweak the compiler
-echo "3. Tweaking Makefiles"
+# 2. Tweak the compiler
+echo "2. Tweaking Makefiles"
 for a in `find $MAKEFILE_DIR/ -name "Makefile" -or -name "libtool"`
 do 
 	echo -e "\ttweaking: $a -- `cat $a | grep '^LIBS'`"

@@ -45,6 +45,9 @@ def main():
                 modify_next_param = False
             else:
                 command += " " 
+		if arg.startswith("-D"):
+			arg=arg.replace('"', '\\""')
+			arg=arg.replace('=\\""', '="\\"')
                 command += arg
         
             if arg.endswith(".C") or arg.endswith(".cpp") or arg.endswith(".cc") or arg.endswith(".CC"):
