@@ -231,7 +231,7 @@ void _block_init(block_buffer_t *buff, size_t max_size) {
   memset(buff, 0, sizeof(block_buffer_t));
   buff->contents = (char*)malloc(max_size);
   buff->max_size = max_size;
-  buff->size = 0;
+  buff->size = max_size;
 }
 
 void _block_finalize(block_buffer_t *buff) {

@@ -339,10 +339,16 @@ DEFINE_MODEL(int, creat, const char *pathname, mode_t mode) {
 }
 
 int _close_file(file_t *file) {
-  assert(file->__bdata.refcount == 0);
 
   if (INJECT_FAULT(close, EIO))
     return -1;
+
+  // XXX: Fds for symbolic files are shared -- don't free them
+  if ((file->__bdata.flags && FD_IS_CONCRETE)==0) {
+    klee_warning("Shared symbolic file fd not closed!"); 
+    return 0;
+  } else
+    assert(file->__bdata.refcount == 0);
 
   free(file);
 
