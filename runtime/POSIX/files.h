@@ -26,11 +26,14 @@ typedef struct {
 } filesystem_t;
 
 extern filesystem_t __fs;
+extern disk_file_t __stdin_file;
 
 typedef struct {
   file_base_t __bdata;
 
   off_t offset;
+
+  int concrete_fd;
   disk_file_t *storage;
 } file_t;       // The open file structure
 
@@ -43,6 +46,16 @@ int _close_file(file_t *file);
 ssize_t _read_file(file_t *file, void *buf, size_t count);
 ssize_t _write_file(file_t *file, const void *buf, size_t count);
 int _stat_file(file_t *file, struct stat *buf);
+int _ioctl_file(file_t *file, unsigned long request, char *argp);
+
+int _is_blocking_file(file_t *file, int event);
+
+static inline int _file_is_concrete(file_t *file) {
+  return file->concrete_fd >= 0;
+}
+
+int _open_concrete(int concrete_fd, int flags);
+int _open_symbolic(disk_file_t *dfile, int flags);
 
 
 #endif /* FILES_H_ */

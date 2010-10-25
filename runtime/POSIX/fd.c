@@ -36,26 +36,14 @@
 // Internal routines
 ////////////////////////////////////////////////////////////////////////////////
 
-#define _FD_SET(n, p)    ((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
-#define _FD_CLR(n, p)    ((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
-#define _FD_ISSET(n, p)  ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
-#define _FD_ZERO(p)  memset((char *)(p), '\0', sizeof(*(p)))
-
 void __adjust_fds_on_fork(void) {
   // Increment the ref. counters for all the open files pointed by the FDT.
   int fd;
   for (fd = 0; fd < MAX_FDS; fd++) {
     if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd))
       continue;
-    if (__fdt[fd].attr & FD_IS_CONCRETE) {
-      //printf("Duplicating fd %d: old concrete - %d ", fd, __fdt[fd].concrete_fd);
-      __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
-          F_DUPFD, 0L);
-      assert(__fdt[fd].concrete_fd != -1);
-      //printf("new concrete - %d\n", __fdt[fd].concrete_fd);
-    } else {
-      __fdt[fd].io_object->refcount++;
-    }
+
+    __fdt[fd].io_object->refcount++;
   }
 }
 
@@ -69,36 +57,11 @@ void __close_fds(void) {
   }
 }
 
-static int __is_concrete_blocking(int concretefd, int event) {
-  fd_set fds;
-  _FD_ZERO(&fds);
-  _FD_SET(concretefd, &fds);
 
-  struct timeval timeout;
-  timeout.tv_sec = 0;
-  timeout.tv_usec = 0;
-
-  int res;
-
-  switch(event) {
-  case EVENT_READ:
-    res = CALL_UNDERLYING(select, concretefd+1, &fds, NULL, NULL, &timeout);
-    return (res == 0);
-  case EVENT_WRITE:
-    res = CALL_UNDERLYING(select, concretefd+1, NULL, &fds, NULL, &timeout);
-    return (res == 0);
-  default:
-      assert(0 && "invalid event");
-  }
-}
 
 static int _is_blocking(int fd, int event) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {
     return 0;
-  }
-
-  if (__fdt[fd].attr & FD_IS_CONCRETE) {
-    return __is_concrete_blocking(__fdt[fd].concrete_fd, event);
   }
 
   switch (event) {
@@ -117,7 +80,7 @@ static int _is_blocking(int fd, int event) {
   }
 
   if (__fdt[fd].attr & FD_IS_FILE) {
-    return 0; // A file never blocks in our model
+    return _is_blocking_file((file_t*)__fdt[fd].io_object, event);
   } else if (__fdt[fd].attr & FD_IS_PIPE) {
     return _is_blocking_pipe((pipe_end_t*)__fdt[fd].io_object, event);
   } else if (__fdt[fd].attr & FD_IS_SOCKET) {
@@ -129,20 +92,6 @@ static int _is_blocking(int fd, int event) {
 
 static ssize_t _clean_read(int fd, void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
-
-  if (fde->attr & FD_IS_CONCRETE) {
-    buf = __concretize_ptr(buf);
-    count = __concretize_size(count);
-    /* XXX In terms of looking for bugs we really should do this check
-      before concretization, at least once the routine has been fixed
-      to properly work with symbolics. */
-    klee_check_memory_access(buf, count);
-
-    int res = CALL_UNDERLYING(read, fde->concrete_fd, buf, count);
-    if (res == -1)
-     errno = klee_get_errno();
-    return res;
-  }
 
   if (fde->attr & FD_IS_FILE) {
     return _read_file((file_t*)fde->io_object, buf, count);
@@ -157,21 +106,6 @@ static ssize_t _clean_read(int fd, void *buf, size_t count) {
 
 static ssize_t _clean_write(int fd, const void *buf, size_t count) {
   fd_entry_t *fde = &__fdt[fd];
-
-  if (fde->attr & FD_IS_CONCRETE) {
-    buf = __concretize_ptr(buf);
-    count = __concretize_size(count);
-    /* XXX In terms of looking for bugs we really should do this check
-      before concretization, at least once the routine has been fixed
-      to properly work with symbolics. */
-    klee_check_memory_access(buf, count);
-
-    int res = CALL_UNDERLYING(write, fde->concrete_fd, buf, count);
-    if (res == -1)
-      errno = klee_get_errno();
-
-    return res;
-  }
 
   if (fde->attr & FD_IS_FILE) {
     return _write_file((file_t*)fde->io_object, buf, count);
@@ -257,30 +191,26 @@ static ssize_t _read(int fd, int type, ...) {
   //fprintf(stderr, "Reading %lu bytes of data from FD %d\n", count, fd);
 
   // Check for permissions
-  if (!(fde->attr & FD_IS_CONCRETE)) {
-    if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
-      klee_debug("Permission error (flags: %o)\n", fde->io_object->flags);
-      errno = EBADF;
-      return -1;
-    }
+  if ((fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
+    klee_debug("Permission error (flags: %o)\n", fde->io_object->flags);
+    errno = EBADF;
+    return -1;
   }
 
   if (INJECT_FAULT(read, EINTR)) {
     return -1;
   }
 
-  if (!(fde->attr & FD_IS_CONCRETE)) {
-    if (fde->attr & FD_IS_FILE) {
-      if (INJECT_FAULT(read, EIO)) {
-        return -1;
-      }
-    } else if (fde->attr & FD_IS_SOCKET) {
-      socket_t *sock = (socket_t*)fde->io_object;
+  if (fde->attr & FD_IS_FILE) {
+    if (INJECT_FAULT(read, EIO)) {
+      return -1;
+    }
+  } else if (fde->attr & FD_IS_SOCKET) {
+    socket_t *sock = (socket_t*)fde->io_object;
 
-      if (sock->status == SOCK_STATUS_CONNECTED &&
-          INJECT_FAULT(read, ECONNRESET)) {
-        return -1;
-      }
+    if (sock->status == SOCK_STATUS_CONNECTED &&
+        INJECT_FAULT(read, ECONNRESET)) {
+      return -1;
     }
   }
 
@@ -323,29 +253,25 @@ static ssize_t _write(int fd, int type, ...) {
   fd_entry_t *fde = &__fdt[fd];
 
   // Check for permissions
-  if (!(fde->attr & FD_IS_CONCRETE)) {
-    if ((fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
-      errno = EBADF;
-      return -1;
-    }
+  if ((fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
+    errno = EBADF;
+    return -1;
   }
 
   if (INJECT_FAULT(write, EINTR)) {
     return -1;
   }
 
-  if (!(fde->attr & FD_IS_CONCRETE)) {
-    if (fde->attr & FD_IS_FILE) {
-      if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
-        return -1;
-      }
-    } else if (fde->attr & FD_IS_SOCKET) {
-      socket_t *sock = (socket_t*)fde->io_object;
+  if (fde->attr & FD_IS_FILE) {
+    if (INJECT_FAULT(write, EIO, EFBIG, ENOSPC)) {
+      return -1;
+    }
+  } else if (fde->attr & FD_IS_SOCKET) {
+    socket_t *sock = (socket_t*)fde->io_object;
 
-      if (sock->status == SOCK_STATUS_CONNECTED &&
-          INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
-        return -1;
-      }
+    if (sock->status == SOCK_STATUS_CONNECTED &&
+        INJECT_FAULT(write, ECONNRESET, ENOMEM)) {
+      return -1;
     }
   }
 
@@ -393,20 +319,16 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
   fd_entry_t *in_fde = &__fdt[in_fd];
 
   // Checking for permissions
-  if (!(out_fde->attr & FD_IS_CONCRETE)) {
-    if ((out_fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
-      klee_debug("Permission error (flags: %o)\n", out_fde->io_object->flags);
-      errno = EBADF;
-      return -1;
-    }
+  if ((out_fde->io_object->flags & O_ACCMODE) == O_RDONLY) {
+    klee_debug("Permission error (flags: %o)\n", out_fde->io_object->flags);
+    errno = EBADF;
+    return -1;
   }
 
-  if (!(in_fde->attr & FD_IS_CONCRETE)) {
-    if ((in_fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
-      klee_debug("Permission error (flags: %o)\n", in_fde->io_object->flags);
-      errno = EBADF;
-      return -1;
-    }
+  if ((in_fde->io_object->flags & O_ACCMODE) == O_WRONLY) {
+    klee_debug("Permission error (flags: %o)\n", in_fde->io_object->flags);
+    errno = EBADF;
+    return -1;
   }
 
   if (INJECT_FAULT(sendfile, ENOMEM, EIO)) {
@@ -497,19 +419,6 @@ DEFINE_MODEL(int, close, int fd) {
 
   fd_entry_t *fde = &__fdt[fd];
 
-  if (fde->attr & FD_IS_CONCRETE) {
-    //fprintf(stderr, "Closing concrete fd: %d\n", fde->concrete_fd);
-    // XXX We should find a way to clean up closed file descriptors...
-    //int res = CALL_UNDERLYING(close, fde->concrete_fd);
-    //if (res == -1)
-    //  errno = klee_get_errno();
-    //else
-
-    STATIC_LIST_CLEAR(__fdt, fd);
-
-    return 0;
-  }
-
   if (INJECT_FAULT(close, EINTR)) {
     return -1;
   }
@@ -554,14 +463,6 @@ DEFINE_MODEL(int, fstat, int fd, struct stat *buf) {
 
   fd_entry_t *fde = &__fdt[fd];
 
-  if (fde->attr & FD_IS_CONCRETE) {
-    int res = CALL_UNDERLYING(fstat, fde->concrete_fd, buf);
-
-    if (res == -1)
-      errno = klee_get_errno();
-    return res;
-  }
-
   if (fde->attr & FD_IS_FILE) {
     return _stat_file((file_t*)fde->io_object, buf);
   } else if (fde->attr & FD_IS_PIPE) {
@@ -596,41 +497,21 @@ DEFINE_MODEL(int, dup3, int oldfd, int newfd, int flags) {
   }
 
   if (STATIC_LIST_CHECK(__fdt, (unsigned)newfd)) {
-    close(newfd);
+    CALL_MODEL(close, newfd);
   }
 
   __fdt[newfd] = __fdt[oldfd];
 
   fd_entry_t *fde = &__fdt[newfd];
+  fde->io_object->refcount++;
 
-  if (fde->attr & FD_IS_CONCRETE) {
-    if (flags & FD_CLOSE_ON_EXEC) {
-      fde->concrete_fd = CALL_UNDERLYING(fcntl, __fdt[oldfd].concrete_fd,
-          F_DUPFD_CLOEXEC, 0);
-    } else {
-      fde->concrete_fd = CALL_UNDERLYING(fcntl, __fdt[oldfd].concrete_fd,
-          F_DUPFD, 0);
-    }
-
-    if (fde->concrete_fd < 0) {
-      STATIC_LIST_CLEAR(__fdt, newfd);
-      errno = klee_get_errno();
-      return -1;
-    }
-
+  if (flags & O_CLOEXEC) {
+    fde->attr |= FD_CLOSE_ON_EXEC;
   } else {
-    fde->io_object->refcount++;
+    fde->attr &= ~FD_CLOSE_ON_EXEC;
+  }
 
-    if (flags & O_CLOEXEC) {
-      fde->attr |= FD_CLOSE_ON_EXEC;
-    } else {
-      fde->attr &= ~FD_CLOSE_ON_EXEC;
-    }
-  }
   klee_debug("New duplicate of %d: %d\n", oldfd, newfd);
-  if (__fdt[newfd].attr & FD_IS_CONCRETE) {
-    klee_debug("New concrete duplicate of %d: %d\n", __fdt[oldfd].concrete_fd, __fdt[newfd].concrete_fd);
-  }
   return newfd;
 }
 
@@ -696,11 +577,6 @@ static int _validate_fd_set(int nfds, fd_set *fds) {
       return -1;
     }
 
-    if (__fdt[fd].attr & FD_IS_CONCRETE) {
-      klee_warning("unsupported concrete FD in fd_set (EBADF)");
-      return -1;
-    }
-    //fprintf(stderr, "Watching for fd %d\n", fd);
     res++;
   }
 
@@ -917,60 +793,50 @@ DEFINE_MODEL(int, fcntl, int fd, int cmd, ...) {
     va_end(ap);
   }
 
-  if (__fdt[fd].attr & FD_IS_CONCRETE) {
-    int res = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd, cmd, arg);
-    if (res == -1) {
-      errno = klee_get_errno();
-      return -1;
+  fd_entry_t *fde = &__fdt[fd];
+  int res;
+
+  switch (cmd) {
+  case F_DUPFD:
+  case F_DUPFD_CLOEXEC:
+    res = _dup(fd, arg);
+    if (res < -1) {
+      return res;
     }
 
-    return res;
-  } else {
-    fd_entry_t *fde = &__fdt[fd];
-    int res;
+    if (cmd == F_DUPFD_CLOEXEC) {
+      __fdt[res].attr |= FD_CLOEXEC;
+    }
+    break;
 
-    switch (cmd) {
-    case F_DUPFD:
-    case F_DUPFD_CLOEXEC:
-      res = _dup(fd, arg);
-      if (res < -1) {
-        return res;
-      }
+  case F_SETFD:
+    if (arg & FD_CLOEXEC) {
+      fde->attr |= FD_CLOSE_ON_EXEC;
+    }
+    // Go through the next case
+  case F_GETFD:
+    res = (fde->attr & FD_CLOSE_ON_EXEC) ? FD_CLOEXEC : 0;
+    break;
 
-      if (cmd == F_DUPFD_CLOEXEC) {
-        __fdt[res].attr |= FD_CLOEXEC;
-      }
-      break;
-
-    case F_SETFD:
-      if (arg & FD_CLOEXEC) {
-        fde->attr |= FD_CLOSE_ON_EXEC;
-      }
-      // Go through the next case
-    case F_GETFD:
-      res = (fde->attr & FD_CLOSE_ON_EXEC) ? FD_CLOEXEC : 0;
-      break;
-
-    case F_SETFL:
-      if (arg & (O_APPEND | O_ASYNC | O_DIRECT | O_NOATIME)) {
-        klee_warning("unsupported fcntl flags");
-        errno = EINVAL;
-        return -1;
-      }
-      fde->io_object->flags |= (arg & (O_APPEND | O_ASYNC | O_DIRECT | O_NOATIME | O_NONBLOCK));
-      // Go through the next case
-    case F_GETFL:
-      res = fde->io_object->flags;
-      break;
-
-    default:
-      klee_warning("symbolic file, ignoring (EINVAL)");
+  case F_SETFL:
+    if (arg & (O_APPEND | O_ASYNC | O_DIRECT | O_NOATIME)) {
+      klee_warning("unsupported fcntl flags");
       errno = EINVAL;
       return -1;
     }
+    fde->io_object->flags |= (arg & (O_APPEND | O_ASYNC | O_DIRECT | O_NOATIME | O_NONBLOCK));
+    // Go through the next case
+  case F_GETFL:
+    res = fde->io_object->flags;
+    break;
 
-    return res;
+  default:
+    klee_warning("unsupported fcntl operation (EINVAL)");
+    errno = EINVAL;
+    return -1;
   }
+
+  return res;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -992,19 +858,12 @@ DEFINE_MODEL(int, ioctl, int fd, unsigned long request, ...) {
 
   va_end(ap);
 
-  // For now, this works only on concrete FDs
-  if (fde->attr & FD_IS_CONCRETE) {
-    int res = CALL_UNDERLYING(ioctl, __fdt[fd].concrete_fd, request, argp);
-    if (res == -1) {
-      errno = klee_get_errno();
-    }
-    return res;
-  }
-
-  if (fde->attr & FD_IS_SOCKET) {
+  if (fde->attr & FD_IS_FILE) {
+    return _ioctl_file((file_t*)fde->io_object, request, argp);
+  } else if (fde->attr & FD_IS_SOCKET) {
     return _ioctl_socket((socket_t*)fde->io_object, request, argp);
   } else {
-    klee_warning("ioctl operation not supported on symbolic file descriptors");
+    klee_warning("ioctl operation not supported on file descriptor");
     errno = EINVAL;
     return -1;
   }

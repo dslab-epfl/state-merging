@@ -37,7 +37,7 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Internal Routines
+// Internal File System Routines
 ////////////////////////////////////////////////////////////////////////////////
 
 static int __isupper(const char c) {
@@ -114,8 +114,6 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
   // Initializing the buffer contents...
   _block_init(&dfile->contents, maxsize);
   dfile->contents.size = maxsize;
-  memset(dfile->contents.contents, 0, maxsize);
-
   strcpy(namebuf, symname); strcat(namebuf, "-data");
   klee_make_symbolic(dfile->contents.contents, maxsize, namebuf);
   klee_make_shared(dfile->contents.contents, maxsize);
@@ -131,10 +129,61 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Internal File Routines
+////////////////////////////////////////////////////////////////////////////////
+
+static int __is_concrete_blocking(int concretefd, int event) {
+  fd_set fds;
+  _FD_ZERO(&fds);
+  _FD_SET(concretefd, &fds);
+
+  struct timeval timeout;
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 0;
+
+  int res;
+
+  switch(event) {
+  case EVENT_READ:
+    res = CALL_UNDERLYING(select, concretefd+1, &fds, NULL, NULL, &timeout);
+    return (res == 0);
+  case EVENT_WRITE:
+    res = CALL_UNDERLYING(select, concretefd+1, NULL, &fds, NULL, &timeout);
+    return (res == 0);
+  default:
+      assert(0 && "invalid event");
+  }
+}
+
+int _is_blocking_file(file_t *file, int event) {
+  if (_file_is_concrete(file))
+    return __is_concrete_blocking(file->concrete_fd, event);
+
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // The POSIX API
 ////////////////////////////////////////////////////////////////////////////////
 
 ssize_t _read_file(file_t *file, void *buf, size_t count) {
+  if (_file_is_concrete(file)) {
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
+    /* XXX In terms of looking for bugs we really should do this check
+      before concretization, at least once the routine has been fixed
+      to properly work with symbolics. */
+    klee_check_memory_access(buf, count);
+
+    int res = pread(file->concrete_fd, buf, count, file->offset);
+    if (res == -1)
+     errno = klee_get_errno();
+    else
+      file->offset += res;
+
+    return res;
+  }
+
   ssize_t res = _block_read(&file->storage->contents, buf, count, file->offset);
   assert(res >= 0);
 
@@ -145,6 +194,23 @@ ssize_t _read_file(file_t *file, void *buf, size_t count) {
 }
 
 ssize_t _write_file(file_t *file, const void *buf, size_t count) {
+  if (_file_is_concrete(file)) {
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
+    /* XXX In terms of looking for bugs we really should do this check
+      before concretization, at least once the routine has been fixed
+      to properly work with symbolics. */
+    klee_check_memory_access(buf, count);
+
+    int res = pwrite(file->concrete_fd, buf, count, file->offset);
+    if (res == -1)
+      errno = klee_get_errno();
+    else
+      file->offset += res;
+
+    return res;
+  }
+
   ssize_t res = _block_write(&file->storage->contents, buf, count, file->offset);
   assert(res >= 0);
 
@@ -169,6 +235,14 @@ static int _stat_dfile(disk_file_t *dfile, struct stat *buf) {
 }
 
 int _stat_file(file_t *file, struct stat *buf) {
+  if (_file_is_concrete(file)) {
+    int res = CALL_UNDERLYING(fstat, file->concrete_fd, buf);
+
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
   return _stat_dfile(file->storage, buf);
 }
 
@@ -196,6 +270,23 @@ DEFINE_MODEL(int, lstat, const char *path, struct stat *buf) {
   }
 
   return _stat_dfile(dfile, buf);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int _ioctl_file(file_t *file, unsigned long request, char *argp) {
+  // For now, this works only on concrete FDs
+  if (_file_is_concrete(file)) {
+    int res = CALL_UNDERLYING(ioctl, file->concrete_fd, request, argp);
+    if (res == -1) {
+      errno = klee_get_errno();
+    }
+    return res;
+  }
+
+  klee_warning("operation not supported on symbolic files");
+  errno = EINVAL;
+  return -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -336,9 +427,19 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   return fd;
 }
 
+int _open_concrete(int concrete_fd, int flags) {
+
+}
+
+int _open_symbolic(disk_file_t *dfile, int flags) {
+
+}
+
 DEFINE_MODEL(int, creat, const char *pathname, mode_t mode) {
   return open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 int _close_file(file_t *file) {
   if (INJECT_FAULT(close, EIO))

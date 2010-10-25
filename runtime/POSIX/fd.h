@@ -12,8 +12,6 @@
 
 #include <sys/uio.h>
 
-#define FD_IS_CONCRETE      (1 << 0)    // The calls get forwarded to the underlying implementation
-#define FD_IS_DUMMY         (1 << 1)    // The data read is symbolic, and the data written is discarded
 #define FD_IS_FILE          (1 << 3)    // The fd points to a disk file
 #define FD_IS_SOCKET        (1 << 4)    // The fd points to a socket
 #define FD_IS_PIPE          (1 << 5)    // The fd points to a pipe
@@ -27,8 +25,6 @@ typedef struct {
 
 typedef struct {
   unsigned int attr;
-
-  int concrete_fd;
 
   file_base_t *io_object;
 
@@ -75,6 +71,11 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 
 void __adjust_fds_on_fork(void);
 void __close_fds(void);
+
+#define _FD_SET(n, p)    ((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
+#define _FD_CLR(n, p)    ((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
+#define _FD_ISSET(n, p)  ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
+#define _FD_ZERO(p)  memset((char *)(p), '\0', sizeof(*(p)))
 
 ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt);
 ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt);

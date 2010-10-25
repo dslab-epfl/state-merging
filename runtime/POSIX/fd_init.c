@@ -23,34 +23,33 @@
 
 #include <klee/klee.h>
 
-// File descriptor table static initialization,
-// for pre-klee_init_fds FD operations
-fd_entry_t __fdt[MAX_FDS] = {
-    { FD_IS_CONCRETE | FD_IS_PIPE, 0, NULL, 1},
-    { FD_IS_CONCRETE | FD_IS_PIPE, 1, NULL, 1},
-    { FD_IS_CONCRETE | FD_IS_PIPE, 1, NULL, 1}  // Print the program STDERR to our STDOUT
-};
+// File descriptor table
+fd_entry_t __fdt[MAX_FDS];
 
 // Symbolic file system
 filesystem_t    __fs;
+disk_file_t __stdin_file;
 
 // Symbolic network
 network_t       __net;
 unix_t          __unix_net;
 
 static void _init_fdt(void) {
-  // Duplicate the STD{IN,OUT,ERR} descriptors, since they belong to
-  // the symbolic execution engine and we don't want to manipulate them
-  // directly.
+  STATIC_LIST_INIT(__fdt);
+
   int fd;
-  for (fd = 0; fd < 3; fd++) {
-    __fdt[fd].concrete_fd = CALL_UNDERLYING(fcntl, __fdt[fd].concrete_fd,
-        F_DUPFD, 0L);
-    assert(__fdt[fd].concrete_fd != -1);
-  }
+
+  fd = _open_symbolic(&__stdin_file, O_RDONLY);
+  assert(fd == 0);
+
+  fd = _open_concrete(1, O_WRONLY);
+  assert(fd == 1);
+
+  fd = _open_concrete(1, O_WRONLY);
+  assert(fd == 2);
 }
 
-static void _init_filesystem(unsigned n_files, unsigned file_length) {
+static void _init_symfiles(unsigned n_files, unsigned file_length) {
   char fname[] = "FILE??";
   unsigned int fname_len = strlen(fname);
 
@@ -75,6 +74,10 @@ static void _init_filesystem(unsigned n_files, unsigned file_length) {
 
     __init_disk_file(dfile, file_length, fname, &s);
   }
+
+  // Create the stdin symbolic file
+  klee_make_shared(&__stdin_file, sizeof(disk_file_t));
+  __init_disk_file(&__stdin_file, MAX_STDINSIZE, "STDIN", &s);
 }
 
 static void _init_network(void) {
@@ -92,7 +95,8 @@ static void _init_network(void) {
 
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    int sym_stdout_flag) {
-  _init_fdt();
-  _init_filesystem(n_files, file_length);
+  _init_symfiles(n_files, file_length);
   _init_network();
+
+  _init_fdt();
 }
