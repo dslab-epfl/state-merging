@@ -113,6 +113,8 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 
   // Initializing the buffer contents...
   _block_init(&dfile->contents, maxsize);
+  dfile->contents.size = maxsize;
+  memset(dfile->contents.contents, 0, maxsize);
 
   strcpy(namebuf, symname); strcat(namebuf, "-data");
   klee_make_symbolic(dfile->contents.contents, maxsize, namebuf);
@@ -339,16 +341,8 @@ DEFINE_MODEL(int, creat, const char *pathname, mode_t mode) {
 }
 
 int _close_file(file_t *file) {
-
   if (INJECT_FAULT(close, EIO))
     return -1;
-
-  // XXX: Fds for symbolic files are shared -- don't free them
-  if ((file->__bdata.flags && FD_IS_CONCRETE)==0) {
-    klee_warning("Shared symbolic file fd not closed!"); 
-    return 0;
-  } else
-    assert(file->__bdata.refcount == 0);
 
   free(file);
 
