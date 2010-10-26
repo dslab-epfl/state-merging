@@ -55,7 +55,7 @@ static inline int _file_is_concrete(file_t *file) {
 }
 
 int _open_concrete(int concrete_fd, int flags);
-int _open_symbolic(disk_file_t *dfile, int flags);
+int _open_symbolic(disk_file_t *dfile, int flags, mode_t mode);
 
 
 #endif /* FILES_H_ */

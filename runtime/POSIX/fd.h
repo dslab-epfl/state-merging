@@ -33,39 +33,6 @@ typedef struct {
 
 extern fd_entry_t __fdt[MAX_FDS];
 
-#define _WRAP_FD_SYSCALL_ERROR(call, ...) \
-  do { \
-    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) { \
-      errno = EBADF; \
-      return -1; \
-    } \
-    if (!((__fdt[fd]).attr & FD_IS_CONCRETE)) { \
-      klee_warning("symbolic file, " #call " unsupported (EBADF)"); \
-      errno = EBADF; \
-      return -1; \
-    } \
-    int ret = CALL_UNDERLYING(call, __fdt[fd].concrete_fd, ##__VA_ARGS__); \
-    if (ret == -1) \
-      errno = klee_get_errno(); \
-    return ret; \
-  } while (0)
-
-#define _WRAP_FD_SYSCALL_IGNORE(call, ...) \
-  do { \
-    if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) { \
-      errno = EBADF; \
-      return -1; \
-    } \
-    if (!((__fdt[fd]).attr & FD_IS_CONCRETE)) { \
-      klee_warning("symbolic file, " #call " does nothing"); \
-      return 0; \
-    } \
-    int ret = CALL_UNDERLYING(call, __fdt[fd].concrete_fd, ##__VA_ARGS__); \
-    if (ret == -1) \
-      errno = klee_get_errno(); \
-    return ret; \
-  } while (0)
-
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    int sym_stdout_flag);
 

@@ -39,7 +39,7 @@ static void _init_fdt(void) {
 
   int fd;
 
-  fd = _open_symbolic(&__stdin_file, O_RDONLY);
+  fd = _open_symbolic(&__stdin_file, O_RDONLY, 0);
   assert(fd == 0);
 
   fd = _open_concrete(1, O_WRONLY);

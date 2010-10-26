@@ -342,7 +342,32 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
 
   klee_debug("Attempting to open: %s\n", __concretize_string(pathname));
 
-  // Obtain a new file descriptor
+  // Obtain a symbolic file
+  disk_file_t *dfile = __get_sym_file(pathname);
+
+  if (dfile) {
+    return _open_symbolic(dfile, flags, mode);
+  } else {
+    int concrete_fd = CALL_UNDERLYING(open, __concretize_string(pathname),
+        flags, mode);
+
+    if (concrete_fd == -1) {
+      errno = klee_get_errno();
+      return -1;
+    }
+
+    int fd = _open_concrete(concrete_fd, flags);
+
+    if (fd == -1) {
+      CALL_UNDERLYING(close, concrete_fd);
+      return -1;
+    }
+
+    return fd;
+  }
+}
+
+int _open_concrete(int concrete_fd, int flags) {
   int fd;
   STATIC_LIST_ALLOC(__fdt, fd);
 
@@ -354,69 +379,18 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   fd_entry_t *fde = &__fdt[fd];
   fde->attr |= FD_IS_FILE;
 
-  // Obtain a symbolic file
-  disk_file_t *dfile = __get_sym_file(pathname);
-
-  if (!dfile) {
-    // Try to open the file concretely
-    fde->concrete_fd = CALL_UNDERLYING(open, __concretize_string(pathname),
-        flags, mode);
-
-    if (fde->concrete_fd == -1) {
-      errno = klee_get_errno();
-      STATIC_LIST_CLEAR(__fdt, fd);
-      return -1;
-    }
-
-    fde->attr |= FD_IS_CONCRETE;
-    klee_debug("Concrete file open (concrete fd: %d) - %d\n", fde->concrete_fd, fd);
-    return fd;
-  }
-
-  // Checking the flags
-  if ((flags & O_CREAT) && (flags & O_EXCL)) {
-    STATIC_LIST_CLEAR(__fdt, fd);
-    errno = EEXIST;
-    return -1;
-  }
-
-  if ((flags & O_TRUNC) && (flags & O_ACCMODE) == O_RDONLY) {
-    STATIC_LIST_CLEAR(__fdt, fd);
-    /* The result of using O_TRUNC with O_RDONLY is undefined, so we
-   return error */
-    klee_warning("Undefined call to open(): O_TRUNC | O_RDONLY\n");
-    errno = EACCES;
-    return -1;
-  }
-
-  if ((flags & O_EXCL) && !(flags & O_CREAT)) {
-    STATIC_LIST_CLEAR(__fdt, fd);
-    /* The result of using O_EXCL without O_CREAT is undefined, so
-   we return error */
-    klee_warning("Undefined call to open(): O_EXCL w/o O_RDONLY\n");
-    errno = EACCES;
-    return -1;
-  }
-
-  if (!_can_open(flags, dfile->stat)) {
-    STATIC_LIST_CLEAR(__fdt, fd);
-    errno = EACCES;
-    return -1;
-  }
-
-  // Now we can set up the open file structure...
   file_t *file = (file_t*)malloc(sizeof(file_t));
   klee_make_shared(file, sizeof(file_t));
   memset(file, 0, sizeof(file_t));
 
   file->__bdata.flags = flags;
   file->__bdata.refcount = 1;
-  file->storage = dfile;
-  file->offset = 0;
+  file->storage = NULL;
 
-  if ((flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC)) {
-    file->storage->contents.size = 0;
-  }
+  file->offset = CALL_UNDERLYING(lseek, concrete_fd, 0, SEEK_CUR);
+  assert(file->offset >= 0);
+
+  file->concrete_fd = concrete_fd;
 
   if (flags & O_CLOEXEC) {
     fde->attr |= FD_CLOSE_ON_EXEC;
@@ -427,12 +401,72 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   return fd;
 }
 
-int _open_concrete(int concrete_fd, int flags) {
+int _open_symbolic(disk_file_t *dfile, int flags, mode_t mode) {
+  // Checking the flags
+  if ((flags & O_CREAT) && (flags & O_EXCL)) {
+    errno = EEXIST;
+    return -1;
+  }
 
-}
+  if ((flags & O_TRUNC) && (flags & O_ACCMODE) == O_RDONLY) {
+    /* The result of using O_TRUNC with O_RDONLY is undefined, so we
+   return error */
+    klee_warning("Undefined call to open(): O_TRUNC | O_RDONLY\n");
+    errno = EACCES;
+    return -1;
+  }
 
-int _open_symbolic(disk_file_t *dfile, int flags) {
+  if ((flags & O_EXCL) && !(flags & O_CREAT)) {
+    /* The result of using O_EXCL without O_CREAT is undefined, so
+   we return error */
+    klee_warning("Undefined call to open(): O_EXCL w/o O_RDONLY\n");
+    errno = EACCES;
+    return -1;
+  }
 
+  if (!_can_open(flags, dfile->stat)) {
+    errno = EACCES;
+    return -1;
+  }
+
+  // Now we can allocate a FD
+  int fd;
+  STATIC_LIST_ALLOC(__fdt, fd);
+
+  if (fd == MAX_FDS) {
+    errno = ENFILE;
+    return -1;
+  }
+
+  fd_entry_t *fde = &__fdt[fd];
+  fde->attr |= FD_IS_FILE;
+
+  // Now we can set up the open file structure...
+  file_t *file = (file_t*)malloc(sizeof(file_t));
+  klee_make_shared(file, sizeof(file_t));
+  memset(file, 0, sizeof(file_t));
+
+  file->__bdata.flags = flags;
+  file->__bdata.refcount = 1;
+  file->storage = dfile;
+  file->offset = 0;
+  file->concrete_fd = -1;
+
+  if ((flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC)) {
+    file->storage->contents.size = 0;
+  }
+
+  if (flags & O_APPEND) {
+    file->offset = file->storage->contents.size;
+  }
+
+  if (flags & O_CLOEXEC) {
+    fde->attr |= FD_CLOSE_ON_EXEC;
+  }
+
+  fde->io_object = (file_base_t*)file;
+
+  return fd;
 }
 
 DEFINE_MODEL(int, creat, const char *pathname, mode_t mode) {
@@ -508,15 +542,18 @@ static off_t _lseek(file_t *file, off_t offset, int whence) {
 DEFINE_MODEL(off_t, lseek, int fd, off_t offset, int whence) {
   CHECK_IS_FILE(fd);
 
-  if (__fdt[fd].attr & FD_IS_CONCRETE) {
-    int res = CALL_UNDERLYING(lseek, __fdt[fd].concrete_fd, offset, whence);
+  file_t *file = (file_t*)__fdt[fd].io_object;
+
+  if (_file_is_concrete(file)) {
+    int res = CALL_UNDERLYING(lseek, file->concrete_fd, offset, whence);
     if (res == -1) {
       errno = klee_get_errno();
+    } else {
+      file->offset = res;
     }
+
     return res;
   }
-
-  file_t *file = (file_t*)__fdt[fd].io_object;
 
   return _lseek(file, offset, whence);
 }
@@ -552,14 +589,16 @@ DEFINE_MODEL(int, chmod, const char *path, mode_t mode) {
 DEFINE_MODEL(int, fchmod, int fd, mode_t mode) {
   CHECK_IS_FILE(fd);
 
-  if (__fdt[fd].attr & FD_IS_CONCRETE) {
-    int res = CALL_UNDERLYING(fchmod, __fdt[fd].concrete_fd, mode);
+  file_t *file = (file_t*)__fdt[fd].io_object;
+
+  if (_file_is_concrete(file)) {
+    int res = CALL_UNDERLYING(fchmod, file->concrete_fd, mode);
+
     if (res == -1)
       errno = klee_get_errno();
-    return -1;
-  }
 
-  file_t *file = (file_t*)__fdt[fd].io_object;
+    return res;
+  }
 
   return _chmod(file->storage, mode);
 }
@@ -671,6 +710,37 @@ DEFINE_MODEL(int, lchown, const char *pathname, uid_t owner, gid_t group) {
 DEFINE_MODEL(int, chdir, const char *pathname) {
   _WRAP_FILE_SYSCALL_ERROR(chdir);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define _WRAP_FD_SYSCALL_ERROR(call, ...) \
+  do { \
+    CHECK_IS_FILE(fd); \
+    file_t *file = (file_t*)__fdt[fd].io_object; \
+    if (!_file_is_concrete(file)) { \
+      klee_warning("symbolic file, " #call " unsupported (EBADF)"); \
+      errno = EBADF; \
+      return -1; \
+    } \
+    int ret = CALL_UNDERLYING(call, file->concrete_fd, ##__VA_ARGS__); \
+    if (ret == -1) \
+      errno = klee_get_errno(); \
+    return ret; \
+  } while (0)
+
+#define _WRAP_FD_SYSCALL_IGNORE(call, ...) \
+  do { \
+    CHECK_IS_FILE(fd); \
+    file_t *file = (file_t*)__fdt[fd].io_object; \
+    if (!_file_is_concrete(file)) { \
+      klee_warning("symbolic file, " #call " does nothing"); \
+      return 0; \
+    } \
+    int ret = CALL_UNDERLYING(call, file->concrete_fd, ##__VA_ARGS__); \
+    if (ret == -1) \
+      errno = klee_get_errno(); \
+    return ret; \
+  } while (0)
 
 DEFINE_MODEL(int, fsync, int fd) {
   _WRAP_FD_SYSCALL_IGNORE(fsync);
