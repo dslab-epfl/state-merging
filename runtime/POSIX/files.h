@@ -22,7 +22,8 @@ typedef struct {
 } disk_file_t;  // The "disk" storage of the file
 
 typedef struct {
-  disk_file_t *files[MAX_FILES];
+  unsigned count;
+  disk_file_t **files;
 } filesystem_t;
 
 extern filesystem_t __fs;

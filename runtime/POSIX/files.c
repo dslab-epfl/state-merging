@@ -52,9 +52,7 @@ disk_file_t *__get_sym_file(const char *pathname) {
     return NULL;
 
   unsigned int i;
-  for (i = 0; i < MAX_FILES; i++) {
-    if (!ARRAY_CHECK(__fs.files, i))
-      continue;
+  for (i = 0; i < __fs.count; i++) {
     if (c == 'A' + (char)i) {
       disk_file_t *df = __fs.files[i];
       return df;
@@ -608,25 +606,96 @@ DEFINE_MODEL(int, fchmod, int fd, mode_t mode) {
 // Directory management
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_MODEL(DIR *, opendir, const char *name) {
-  assert(0 && "not implemented");
-  return NULL;
+int getdents(unsigned int fd, struct dirent64 *dirp, unsigned int count) {
+  CHECK_IS_FILE(fd);
+
+  file_t *file = (file_t*)__fdt[fd].io_object;
+
+  if (!_file_is_concrete(file)) {
+    klee_warning("symbolic file, ignoring (EINVAL)");
+    errno = EINVAL;
+    return -1;
+  }
+
+  if ((unsigned long) file->offset < 4096u) {
+    /* Return our dirents */
+    unsigned i, pad, bytes=0;
+
+    /* What happens for bad offsets? */
+    i = file->offset / sizeof(*dirp);
+    if (((off64_t) (i * sizeof(*dirp)) != file->offset) ||
+        i > __fs.count) {
+      errno = EINVAL;
+      return -1;
+    }
+
+    for (; i< __fs.count; ++i) {
+      disk_file_t *df = __fs.files[i];
+
+      dirp->d_ino = df->stat->st_ino;
+      dirp->d_reclen = sizeof(*dirp);
+      dirp->d_type = IFTODT(df->stat->st_mode);
+      dirp->d_name[0] = 'A' + i;
+      dirp->d_name[1] = '\0';
+      dirp->d_off = (i+1) * sizeof(*dirp);
+      bytes += dirp->d_reclen;
+      ++dirp;
+    }
+
+    /* Fake jump to OS records by a "deleted" file. */
+    pad = count>=4096 ? 4096 : count;
+    dirp->d_ino = 0;
+    dirp->d_reclen = pad - bytes;
+    dirp->d_type = DT_UNKNOWN;
+    dirp->d_name[0] = '\0';
+    dirp->d_off = 4096;
+    bytes += dirp->d_reclen;
+    file->offset = pad;
+    return bytes;
+  } else {
+    unsigned os_pos = file->offset - 4096;
+    int res, s;
+
+    /* For reasons which I really don't understand, if I don't
+       memset this then sometimes the kernel returns d_ino==0 for
+       some valid entries? Am I crazy? Can writeback possibly be
+       failing?
+
+       Even more bizarre, interchanging the memset and the seek also
+       case strange behavior. Really should be debugged properly. */
+    memset(dirp, 0, count);
+    s = syscall(__NR_lseek, file->concrete_fd, (int) os_pos, SEEK_SET);
+    assert(s != (off64_t) -1);
+    res = syscall(__NR_getdents64, file->concrete_fd, dirp, count);
+    if (res == -1) {
+      errno = klee_get_errno();
+    } else {
+      int pos = 0;
+
+      file->offset = syscall(__NR_lseek, file->concrete_fd, 0, SEEK_CUR) + 4096;
+
+      /* Patch offsets */
+
+      while (pos < res) {
+        struct dirent64 *dp = (struct dirent64*) ((char*) dirp + pos);
+        dp->d_off += 4096;
+        pos += dp->d_reclen;
+      }
+    }
+    return res;
+  }
 }
 
-DEFINE_MODEL(DIR *, fdopendir, int fd) {
-  assert(0 && "not implemented");
-  return NULL;
+
+int __getdents(unsigned int fd, struct dirent *dirp, unsigned int count)
+     __attribute__((alias("getdents")));
+
+int getdents64(unsigned int fd, struct dirent *dirp, unsigned int count) {
+  return getdents(fd, (struct dirent64*) dirp, count);
 }
 
-DEFINE_MODEL(int, closedir, DIR *dirp) {
-  assert(0 && "not implemented");
-  return -1;
-}
-
-DEFINE_MODEL(struct dirent *, readdir, DIR *dirp) {
-  assert(0 && "not implemented");
-  return NULL;
-}
+int __getdents64(unsigned int fd, struct dirent *dirp, unsigned int count)
+     __attribute__((alias("getdents64")));
 
 ////////////////////////////////////////////////////////////////////////////////
 // Forwarded / unsupported calls

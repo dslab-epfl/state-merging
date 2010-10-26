@@ -61,6 +61,8 @@ static void _init_symfiles(unsigned n_files, unsigned file_length) {
   klee_make_shared(&__fs, sizeof(filesystem_t));
   memset(&__fs, 0, sizeof(filesystem_t));
 
+  __fs.count = n_files;
+
   // Create n symbolic files
   unsigned int i;
   for (i = 0; i < n_files; i++) {
