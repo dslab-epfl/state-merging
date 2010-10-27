@@ -14,10 +14,24 @@
 
 #ifdef __USE_MISC
 #undef __USE_MISC
+#define __REDEF_MISC
+#endif
+
+#ifdef __USE_XOPEN2K8
+#undef __USE_XOPEN2K8
+#define __REDEF_XOPEN2K8
+#endif
+
 #include <sys/stat.h>
+
+#ifdef __REDEF_MISC
 #define __USE_MISC 1
-#else
-#include <sys/stat.h>
+#undef __REDEF_MISC
+#endif
+
+#ifdef __REDEF_XOPEN2K8
+#define __USE_XOPEN2K8
+#undef __REDEF_XOPEN2K8
 #endif
 
 #include <string.h>
