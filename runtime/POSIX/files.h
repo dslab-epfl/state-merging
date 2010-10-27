@@ -39,7 +39,7 @@ typedef struct {
 } file_t;       // The open file structure
 
 void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
-    const struct stat *defstats);
+    const struct stat *defstats, int symstats);
 
 disk_file_t *__get_sym_file(const char *pathname);
 

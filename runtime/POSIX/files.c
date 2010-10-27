@@ -94,7 +94,7 @@ static void _init_stats(disk_file_t *dfile, const struct stat *defstats) {
 }
 
 void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
-    const struct stat *defstats) {
+    const struct stat *defstats, int symstats) {
   char namebuf[64];
 
   // Initializing the file name...
@@ -119,11 +119,14 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
   // Initializing the statistics...
   dfile->stat = (struct stat*)malloc(sizeof(struct stat));
 
-  strcpy(namebuf, symname); strcat(namebuf, "-stat");
-  klee_make_symbolic(dfile->stat, sizeof(struct stat), namebuf);
-  klee_make_shared(dfile->stat, sizeof(struct stat));
-
-  _init_stats(dfile, defstats);
+  if (symstats) {
+    strcpy(namebuf, symname); strcat(namebuf, "-stat");
+    klee_make_symbolic(dfile->stat, sizeof(struct stat), namebuf);
+    klee_make_shared(dfile->stat, sizeof(struct stat));
+    _init_stats(dfile, defstats);
+  } else {
+    memcpy(dfile->stat, defstats, sizeof(struct stat));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,11 +176,19 @@ ssize_t _read_file(file_t *file, void *buf, size_t count) {
       to properly work with symbolics. */
     klee_check_memory_access(buf, count);
 
-    int res = pread(file->concrete_fd, buf, count, file->offset);
+    int res;
+
+    if (file->offset >= 0)
+      res = pread(file->concrete_fd, buf, count, file->offset);
+    else
+      res = CALL_UNDERLYING(read, file->concrete_fd, buf, count);
+
     if (res == -1)
      errno = klee_get_errno();
-    else
-      file->offset += res;
+    else {
+      if (file->offset >= 0)
+        file->offset += res;
+    }
 
     return res;
   }
@@ -200,11 +211,19 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count) {
       to properly work with symbolics. */
     klee_check_memory_access(buf, count);
 
-    int res = pwrite(file->concrete_fd, buf, count, file->offset);
+    int res;
+
+    if (file->offset >= 0)
+      res = pwrite(file->concrete_fd, buf, count, file->offset);
+    else
+      res = CALL_UNDERLYING(write, file->concrete_fd, buf, count);
+
     if (res == -1)
       errno = klee_get_errno();
-    else
-      file->offset += res;
+    else {
+      if (file->offset >= 0)
+        file->offset += res;
+    }
 
     return res;
   }
@@ -384,11 +403,19 @@ int _open_concrete(int concrete_fd, int flags) {
   file->__bdata.flags = flags;
   file->__bdata.refcount = 1;
   file->storage = NULL;
-
-  file->offset = CALL_UNDERLYING(lseek, concrete_fd, 0, SEEK_CUR);
-  assert(file->offset >= 0);
-
   file->concrete_fd = concrete_fd;
+
+  // Check to see if the concrete FD is a char/PIPE/socket
+  struct stat s;
+  int res = CALL_UNDERLYING(fstat, concrete_fd, &s);
+  assert(res == 0);
+
+  if (S_ISCHR(s.st_mode) || S_ISFIFO(s.st_mode) || S_ISSOCK(s.st_mode)) {
+    file->offset = -1;
+  } else {
+    file->offset = CALL_UNDERLYING(lseek, concrete_fd, 0, SEEK_CUR);
+    assert(file->offset >= 0);
+  }
 
   if (flags & O_CLOEXEC) {
     fde->attr |= FD_CLOSE_ON_EXEC;
@@ -547,6 +574,7 @@ DEFINE_MODEL(off_t, lseek, int fd, off_t offset, int whence) {
     if (res == -1) {
       errno = klee_get_errno();
     } else {
+      assert(file->offset >= 0);
       file->offset = res;
     }
 
