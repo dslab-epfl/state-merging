@@ -76,7 +76,7 @@ static void _init_symfiles(unsigned n_files, unsigned file_length) {
     fname[fname_len-1] = '0' + (i % 10);
     fname[fname_len-2] = '0' + (i / 10);
 
-    __init_disk_file(dfile, file_length, fname, &s, 0);
+    __init_disk_file(dfile, file_length, fname, &s, 1);
   }
 
   // Create the stdin symbolic file
