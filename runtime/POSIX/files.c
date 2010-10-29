@@ -365,6 +365,12 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   if (dfile) {
     return _open_symbolic(dfile, flags, mode);
   } else {
+    if ((flags & O_ACCMODE) != O_RDONLY) {
+      klee_warning("blocked non-r/o access to concrete file");
+      errno = EACCES;
+      return -1;
+    }
+
     int concrete_fd = CALL_UNDERLYING(open, __concretize_string(pathname),
         flags, mode);
 
