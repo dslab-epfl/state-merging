@@ -16,10 +16,13 @@
 #include "../simplifier/bvsolver.h"
 
 #include "cloud9/instrum/InstrumentationManager.h"
+#include "DIMACSSerializer.h"
 
 #include <math.h>
 
 using cloud9::instrum::Timer;
+using namespace cloud9;
+
 
 
 namespace BEEV {
@@ -57,6 +60,7 @@ namespace BEEV {
  bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll)
  {
     CountersAndStats("SAT Solver");
+    DIMACSSerializer dimacs;
 
     //iterate through the list (conjunction) of ASTclauses cll
     BeevMgr::ClauseList::const_iterator i = cll.begin(), iend = cll.end();
@@ -71,6 +75,7 @@ namespace BEEV {
     for(; i!=iend; i++) {    
       //Clause for the SATSolver
       MINISAT::vec<MINISAT::Lit> satSolverClause;
+      DIMACSSerializer::Clause dimacsClause;
       
       //now iterate through the internals of the ASTclause itself
       ASTVec::const_iterator j = (*i)->begin(), jend = (*i)->end();
@@ -85,8 +90,11 @@ namespace BEEV {
 	MINISAT::Var v = LookupOrCreateSATVar(newS,n);
 	MINISAT::Lit l(v, negate);
 	satSolverClause.push(l);
+	dimacsClause.push_back(std::make_pair(v+1, negate));
+
       }
       newS.addClause(satSolverClause);
+      dimacs.addClause(dimacsClause);
       // clause printing.
       // (printClause<MINISAT::vec<MINISAT::Lit> >)(satSolverClause);
       // cout << " 0 ";
@@ -115,12 +123,29 @@ namespace BEEV {
     //PrintActivityLevels_Of_SATVars("Before SAT:",newS);
     //ChangeActivityLevels_Of_SATVars(newS);
     //PrintActivityLevels_Of_SATVars("Before SAT and after initial bias:",newS);
+
+    static char fName[256];
+    static unsigned int counter = 0;
+    sprintf(fName, "sat%05d.cnf", counter);
+
+    dimacs.setVarCount(newS.nVars());
+    dimacs.serialize(fName);
+
     Timer t;
     t.start();
     newS.solve();
     t.stop();
 
     cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SATSolve, t);
+
+    ostringstream os;
+    os << t;
+    os.flush();
+
+    dimacs.setDescription(os.str());
+    dimacs.serialize(fName);
+
+    counter++;
     //PrintActivityLevels_Of_SATVars("After SAT",newS);
 
     PrintStats(newS.stats);
