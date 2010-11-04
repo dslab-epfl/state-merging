@@ -185,7 +185,7 @@ void JobManager::serializeInstructionTrace(std::ostream &s,
         }
         count++;
       } else if (BreakpointEntry *brkEntry = dynamic_cast<BreakpointEntry*>(*it)) {
-        if (!enabled && brkEntry->getID() == 42) { // XXX This is ugly
+        if (!enabled && brkEntry->getID() == KLEE_BRK_START_TRACING) { // XXX This is ugly
           CLOUD9_DEBUG("Starting to serialize. Skipped " << count << " instructions.");
           enabled = true;
         }
@@ -607,7 +607,8 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
 
 ExecutionJob* JobManager::selectNextJob() {
   ExecutionJob *job = selStrategy->onNextJobSelection();
-  assert(job != NULL || jobCount == 0);
+  if (JobSelection != OracleSel)
+    assert(job != NULL || jobCount == 0);
 
   return job;
 }
@@ -842,7 +843,7 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
 
   unsigned int count = 0;
 
-  while (currentTime - startTime < JobQuanta) {
+  do {
     executeJob(lock, (**nodePin).getJob(), spawnNew);
     count++;
 
@@ -856,7 +857,7 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
     }
 
     currentTime = klee::util::getUserTime();
-  }
+  } while (currentTime - startTime < JobQuanta && JobSelection != OracleSel);
 
   timer.stop();
 
@@ -1083,7 +1084,7 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 
   if (parent->getCloud9State()->collectProgress) {
     state->collectProgress = true;
-    state->_instrProgress = parent->getCloud9State()->_instrProgress;
+    state->_instrProgress = parent->getCloud9State()->_instrProgress; // XXX This is totally inefficient
     state->_instrPos = parent->getCloud9State()->_instrPos;
   }
 
@@ -1145,11 +1146,13 @@ void JobManager::onEvent(klee::ExecutionState *kState,
     if (collectTraces) {
       (**node).trace.appendEntry(new BreakpointEntry(value));
     }
-#if 0
-    if (value == KLEE_BRK_START_TRACING) {
-      kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
+
+    if (JobSelection == OracleSel) {
+      if (value == KLEE_BRK_START_TRACING) {
+        kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
+      }
     }
-#endif
+
     break;
   default:
     (**node).trace.appendEntry(new EventEntry(kState->getStackTrace(), type, value));

@@ -46,7 +46,8 @@ bool OracleStrategy::checkProgress(SymbolicState *state) {
     i++;
   }
 
-  state->_instrProgress.clear();
+  state->_instrProgress.erase(state->_instrProgress.begin(),
+      state->_instrProgress.begin() + i);
 
   return result;
 }

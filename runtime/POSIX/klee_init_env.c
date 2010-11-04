@@ -231,6 +231,6 @@ usage: (klee_init_env) [options] [program arguments]\n\
 
   klee_init_mmap();
 
-  klee_event(__KLEE_EVENT_BREAKPOINT, 42);
+  klee_event(__KLEE_EVENT_BREAKPOINT, __KLEE_BREAK_TRACE);
 }
 

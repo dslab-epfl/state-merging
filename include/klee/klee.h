@@ -14,11 +14,6 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#define __KLEE_FORK_DEFAULT       0
-#define __KLEE_FORK_FAULTINJ      1
-
-#define __KLEE_EVENT_BREAKPOINT   10
-
 #ifdef __cplusplus
 extern "C" {
 #endif
