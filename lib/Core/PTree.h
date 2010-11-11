@@ -33,7 +33,9 @@ namespace klee {
     std::pair<Node*,Node*> split(Node *n,
                                  const data_type &leftData,
                                  const data_type &rightData,
+				 const ref<Expr>& condition,
                                  ForkTag forkTag);
+
     void merge(Node *target, Node *other);
     void terminate(Node *n);
 

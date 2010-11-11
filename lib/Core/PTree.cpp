@@ -29,10 +29,13 @@ std::pair<PTreeNode*, PTreeNode*>
 PTree::split(Node *n, 
              const data_type &leftData, 
              const data_type &rightData,
+	     const ref<Expr>& condition,
              ForkTag forkTag) {
+
   assert(n && !n->left && !n->right);
   assert(n->state == PTreeNode::RUNNING);
   n->state = PTreeNode::SPLITTED;
+  n->condition = condition;
   n->left = new Node(n, leftData);
   n->right = new Node(n, rightData);
   n->forkTag = forkTag;
@@ -86,7 +89,7 @@ void PTree::dump(std::ostream &os) {
     PTree::Node *n = stack.back();
     stack.pop_back();
 
-    if (n->condition.isNull()) {
+    if (true || n->condition.isNull()) {
       os << "\tn" << n << " [label=\"\"";
     } else {
       os << "\tn" << n << " [label=\"";

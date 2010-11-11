@@ -51,7 +51,8 @@ public:
   unsigned pos;
 
 public:
-  PrintContext(std::ostream &_os) : os(_os), newline("\n"), pos(0) {}
+  PrintContext(std::ostream &_os, const char *_newline = "\n")
+          : os(_os), newline(_newline), pos(0) {}
 
   void setNewline(const std::string &_newline) {
     newline = _newline;
@@ -340,12 +341,17 @@ private:
   }
 
 public:
-  PPrinter(std::ostream &_os) : os(_os), newline("\n") {
+  PPrinter(std::ostream &_os, const char *_newline = "\n")
+          : os(_os), newline(_newline) {
     reset();
   }
 
   void setNewline(const std::string &_newline) {
     newline = _newline;
+  }
+
+  const std::string& getNewline() {
+    return newline;
   }
 
   void reset() {
@@ -366,7 +372,7 @@ public:
   }
 
   void print(const ref<Expr> &e, unsigned level=0) {
-    PrintContext PC(os);
+    PrintContext PC(os, newline.c_str());
     PC.pos = level;
     print(e, PC);
   }
@@ -467,31 +473,35 @@ ExprPPrinter *klee::ExprPPrinter::create(std::ostream &os) {
 
 void ExprPPrinter::printOne(std::ostream &os,
                             const char *message, 
-                            const ref<Expr> &e) {
-  PPrinter p(os);
+                            const ref<Expr> &e,
+                            const char *newline) {
+  PPrinter p(os, newline);
   p.scan(e);
 
   // FIXME: Need to figure out what to do here. Probably print as a
   // "forward declaration" with whatever syntax we pick for that.
-  PrintContext PC(os);
+  PrintContext PC(os, newline);
   PC << message << ": ";
   p.print(e, PC);
   PC.breakLine();
 }
 
-void ExprPPrinter::printSingleExpr(std::ostream &os, const ref<Expr> &e) {
-  PPrinter p(os);
+void ExprPPrinter::printSingleExpr(std::ostream &os, const ref<Expr> &e,
+                                   const char *newline) {
+  PPrinter p(os, newline);
   p.scan(e);
 
   // FIXME: Need to figure out what to do here. Probably print as a
   // "forward declaration" with whatever syntax we pick for that.
-  PrintContext PC(os);
+  PrintContext PC(os, newline);
   p.print(e, PC);
 }
 
 void ExprPPrinter::printConstraints(std::ostream &os,
-                                    const ConstraintManager &constraints) {
-  printQuery(os, constraints, ConstantExpr::alloc(false, Expr::Bool));
+                                    const ConstraintManager &constraints,
+                                    const char *newline) {
+  printQuery(os, constraints, ConstantExpr::alloc(false, Expr::Bool),
+             0, 0, 0, 0, true, newline);
 }
 
 
@@ -502,8 +512,9 @@ void ExprPPrinter::printQuery(std::ostream &os,
                               const ref<Expr> *evalExprsEnd,
                               const Array * const *evalArraysBegin,
                               const Array * const *evalArraysEnd,
-                              bool printArrayDecls) {
-  PPrinter p(os);
+                              bool printArrayDecls,
+                              const char *newline) {
+  PPrinter p(os, newline);
   
   for (ConstraintManager::const_iterator it = constraints.begin(),
          ie = constraints.end(); it != ie; ++it)
@@ -513,7 +524,7 @@ void ExprPPrinter::printQuery(std::ostream &os,
   for (const ref<Expr> *it = evalExprsBegin; it != evalExprsEnd; ++it)
     p.scan(*it);
 
-  PrintContext PC(os);
+  PrintContext PC(os, newline);
   
   // Print array declarations.
   if (printArrayDecls) {
