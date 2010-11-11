@@ -615,7 +615,7 @@ void Executor::branch(ExecutionState &state,
     result.push_back(ns);
     es->ptreeNode->data = 0;
     std::pair<PTree::Node*,PTree::Node*> res = 
-      processTree->split(es->ptreeNode, ns, es);
+      processTree->split(es->ptreeNode, ns, es, conditions[i]);
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
   }
@@ -870,7 +870,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     current.ptreeNode->data = 0;
     std::pair<PTree::Node*, PTree::Node*> res =
-      processTree->split(current.ptreeNode, falseState, trueState);
+      processTree->split(current.ptreeNode, falseState, trueState, condition);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
 
