@@ -3,6 +3,7 @@
 	<name>Cloud9</name>
 	<comment></comment>
 	<projects>
+		<project>LLVM-2.6</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
