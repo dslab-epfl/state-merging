@@ -299,7 +299,7 @@ entry:
       statesAtMerge.insert(std::make_pair(mp, &es));
     } else {
       ExecutionState *mergeWith = it->second;
-      if (mergeWith->merge(es)) {
+      if (executor.merge(*mergeWith, es)) {
         // hack, because we are terminating the state we need to let
         // the baseSearcher know about it again
         baseSearcher->addState(&es);
@@ -398,7 +398,7 @@ ExecutionState &MergingSearcher::selectState() {
              ie = toMerge.end(); it != ie; ++it) {
         ExecutionState *mergeWith = *it;
         
-        if (base->merge(*mergeWith)) {
+        if (executor.merge(*base, *mergeWith)) {
           toErase.insert(mergeWith);
         }
       }
@@ -527,6 +527,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
                     // We've merged !
                     // Do forget about removed state now
                     // to avoid trying to merge anything with it
+                    executor.terminateState(*state);
                     doRemoveState(state);
                     state = NULL;
                     break;

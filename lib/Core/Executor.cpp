@@ -912,8 +912,8 @@ bool Executor::merge(ExecutionState &current, ExecutionState &other) {
         processTree->merge(current.ptreeNode, other.ptreeNode);
         if(DumpPTreeOnChange)
           dumpProcessTree();
-        terminateState(other);
-        updateStates(0);
+        //terminateState(other);
+        //updateStates(0);
 
         stats::mergesSuccess += 1;
         stats::mergeSuccessTime += timer.check();
