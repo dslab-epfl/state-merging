@@ -473,7 +473,7 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
   // This loop could have at most two iterations
   for(StatesSet::const_iterator it1 = it->second.begin(),
                       ie1 = it->second.end(); it1 != ie1; ++it1) {
-    if (*it1 != state)
+    if (*it1 != state && unmergeableStates.count(std::make_pair(state, *it1)) == 0)
       return true;
   }
 
@@ -521,6 +521,9 @@ ExecutionState &LazyMergingSearcher::selectState() {
 
           state = NULL;
           break;
+        } else {
+          unmergeableStates.insert( std::make_pair(state, state1) );
+          unmergeableStates.insert( std::make_pair(state1, state) );
         }
       }
     }
@@ -556,8 +559,9 @@ void LazyMergingSearcher::update(ExecutionState *current,
                              const std::set<ExecutionState*> &removedStates) {
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
-  if (current && removedStates.count(current) == 0)
+  if (current && removedStates.count(current) == 0) {
     statesTrace[current->getExecIndex()].insert(current);
+  }
 
   // TODO: we could add every newly created state to fast-forward track,
   // that would be more aggressive. This can be done be removing the following

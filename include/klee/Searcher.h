@@ -15,6 +15,8 @@
 #include <map>
 #include <queue>
 
+#include <tr1/unordered_set>
+
 #include <inttypes.h>
 
 // FIXME: Move out of header, use llvm streams.
@@ -216,6 +218,10 @@ namespace klee {
 
     StatesTrace statesTrace;
     StatesSet statesToForward;
+
+    typedef std::set< std::pair<const ExecutionState*,
+                      const ExecutionState*> > StatePairsSet;
+    StatePairsSet unmergeableStates;
 
     bool canFastForwardState(const ExecutionState* state) const;
 
