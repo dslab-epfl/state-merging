@@ -169,6 +169,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     std::cerr << "-- attempting merge of A:" 
                << this << " with B:" << &b << "--\n";
+
   if (pc != b.pc) {
     if (DebugLogStateMerge)
       std::cerr << "---- merge failed: program counters are different\n";
@@ -182,6 +183,66 @@ bool ExecutionState::merge(const ExecutionState &b) {
       std::cerr << "---- merge failed: symbolics sets are different\n";
     return false;
   }
+
+  // We cannot merge if addresses would resolve differently in the
+  // states. This means:
+  //
+  // 1. Any objects created since the branch in either object must
+  // have been free'd.
+  //
+  // 2. We cannot have free'd any pre-existing object in one state
+  // and not the other
+
+  std::set<const MemoryObject*> mutated;
+
+  {
+    MemoryMap::iterator ai = addressSpace.objects.begin();
+    MemoryMap::iterator bi = b.addressSpace.objects.begin();
+    MemoryMap::iterator ae = addressSpace.objects.end();
+    MemoryMap::iterator be = b.addressSpace.objects.end();
+    for (; ai!=ae && bi!=be; ++ai, ++bi) {
+      if (ai->first != bi->first) {
+        if (DebugLogStateMerge) {
+          if (ai->first < bi->first) {
+            std::cerr << "\t\tB misses binding for: " << ai->first->id << "\n";
+          } else {
+            std::cerr << "\t\tA misses binding for: " << bi->first->id << "\n";
+          }
+        }
+        if (DebugLogStateMerge)
+          std::cerr << "---- merge failed: mappings are different\n";
+        return false;
+      }
+      if (ai->second != bi->second) {
+        //if (DebugLogStateMerge)
+        //  std::cerr << "\t\tmutated: " << ai->first->id << "\n";
+        mutated.insert(ai->first);
+  #if 0
+        // XXX: for now we refuse to merge states that has different concrete
+        // values in the memory. This is wrong, but otherwise we are ending up
+        // merging different iterations of the same loop
+        const MemoryObject* mi = ai->first;
+        const ObjectState* as = ai->second;
+        const ObjectState* bs = bi->second;
+        for(unsigned i=0; i<mi->size; ++i) {
+          ref<Expr> av = as->read8(i);
+          ref<Expr> bv = bs->read8(i);
+          if(!av.isNull() && !bv.isNull() && av != bv)
+            if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
+              return false;
+        }
+  #endif
+      }
+    }
+    if (ai!=ae || bi!=be) {
+      if (DebugLogStateMerge)
+        std::cerr << "\t\tmappings differ\n";
+      if (DebugLogStateMerge)
+        std::cerr << "---- merge failed: mappings are different\n";
+      return false;
+    }
+  }
+
 
   {
     std::vector<StackFrame>::const_iterator itA = stack.begin();
@@ -253,76 +314,6 @@ bool ExecutionState::merge(const ExecutionState &b) {
     std::cerr << "]\n";
   }
 
-  // We cannot merge if addresses would resolve differently in the
-  // states. This means:
-  // 
-  // 1. Any objects created since the branch in either object must
-  // have been free'd.
-  //
-  // 2. We cannot have free'd any pre-existing object in one state
-  // and not the other
-
-  if (DebugLogStateMerge) {
-    std::cerr << "\tchecking object states\n";
-    //std::cerr << "A: " << addressSpace.objects << "\n";
-    //std::cerr << "B: " << b.addressSpace.objects << "\n";
-  }
-    
-  size_t memoryObjects = 0;
-  std::set<const MemoryObject*> mutated;
-  MemoryMap::iterator ai = addressSpace.objects.begin();
-  MemoryMap::iterator bi = b.addressSpace.objects.begin();
-  MemoryMap::iterator ae = addressSpace.objects.end();
-  MemoryMap::iterator be = b.addressSpace.objects.end();
-  for (; ai!=ae && bi!=be; ++ai, ++bi) {
-    if (ai->first != bi->first) {
-      if (DebugLogStateMerge) {
-        if (ai->first < bi->first) {
-          std::cerr << "\t\tB misses binding for: " << ai->first->id << "\n";
-        } else {
-          std::cerr << "\t\tA misses binding for: " << bi->first->id << "\n";
-        }
-      }
-      if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: mappings are different\n";
-      return false;
-    }
-    memoryObjects += 1;
-    if (ai->second != bi->second) {
-      //if (DebugLogStateMerge)
-      //  std::cerr << "\t\tmutated: " << ai->first->id << "\n";
-      mutated.insert(ai->first);
-#if 0
-      // XXX: for now we refuse to merge states that has different concrete
-      // values in the memory. This is wrong, but otherwise we are ending up
-      // merging different iterations of the same loop
-      const MemoryObject* mi = ai->first;
-      const ObjectState* as = ai->second;
-      const ObjectState* bs = bi->second;
-      for(unsigned i=0; i<mi->size; ++i) {
-        ref<Expr> av = as->read8(i);
-        ref<Expr> bv = bs->read8(i);
-        if(!av.isNull() && !bv.isNull() && av != bv)
-          if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
-            return false;
-      }
-#endif
-    }
-  }
-  if (ai!=ae || bi!=be) {
-    if (DebugLogStateMerge)
-      std::cerr << "\t\tmappings differ\n";
-    if (DebugLogStateMerge)
-      std::cerr << "---- merge failed: mappings are different\n";
-    return false;
-  }
-
-  if(DebugLogStateMerge) {
-      std::cerr << "\t\tfound " << mutated.size()
-                << " (of " << memoryObjects
-                << ") different memory objects\n";
-  }
-
   // merge stack
 
   ref<Expr> inA = ConstantExpr::alloc(1, Expr::Bool);
@@ -360,12 +351,14 @@ bool ExecutionState::merge(const ExecutionState &b) {
       }
     }
   }
+
   if(DebugLogStateMerge) {
       std::cerr << "\t\tfound " << stackDifference
                 << " (of " << stackObjects
                 << ") different values on stack\n";
   }
 
+  int memDifference = 0, memObjects = 0;
   for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
          ie = mutated.end(); it != ie; ++it) {
     const MemoryObject *mo = *it;
@@ -375,14 +368,22 @@ bool ExecutionState::merge(const ExecutionState &b) {
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
+    memObjects += mo->size;
     ObjectState *wos = addressSpace.getWriteable(mo, os);
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
       ref<Expr> bv = otherOS->read8(i);
       if(av != bv) {
+          memDifference += 1;
           wos->write(i, SelectExpr::create(inA, av, bv));
       }
     }
+  }
+
+  if(DebugLogStateMerge) {
+      std::cerr << "\t\tfound " << memDifference
+                << " (of " << memObjects
+                << ") different values in memory\n";
   }
 
   constraints = ConstraintManager();
