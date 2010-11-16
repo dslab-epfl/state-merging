@@ -16,6 +16,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Analysis/LoopPass.h"
 #include "llvm/CodeGen/IntrinsicLowering.h"
 
 namespace llvm {
@@ -149,6 +150,24 @@ private:
                      llvm::Value *value,
                      llvm::BasicBlock *origBlock,
                      llvm::BasicBlock *defaultBlock);
+};
+
+/// AnnotateLoopPass - Annotate all loop headers and exits with a call
+/// to a special KLEE functions. This pass does not changes the CFG.
+///
+/// NOTE: LLVM loop analysis ignores loops that have multiple entry
+///       points. Such loops will remain uninstrumented.
+class AnnotateLoopPass : public llvm::LoopPass {
+  int lastLoopID;
+public:
+  static char ID;
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 8)
+  AnnotateLoopPass() : LoopPass((intptr_t) &ID), lastLoopID(0) {}
+#else
+  AnnotateLoopPass() : LoopPass(ID), lastLoopID(0) {}
+#endif
+
+  virtual bool runOnLoop(llvm::Loop *L, llvm::LPPassManager &LPM);
 };
 
 }

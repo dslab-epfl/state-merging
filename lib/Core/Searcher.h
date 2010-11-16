@@ -15,6 +15,8 @@
 #include <map>
 #include <queue>
 
+#include <inttypes.h>
+
 // FIXME: Move out of header, use llvm streams.
 #include <ostream>
 
@@ -208,8 +210,9 @@ namespace klee {
     Executor &executor;
     Searcher *baseSearcher;
 
+    // TODO: use unordered multimap instead
     typedef std::set<ExecutionState*> StatesSet;
-    typedef std::map<KInstIterator, StatesSet> StatesTrace;
+    typedef std::map<uint32_t, StatesSet> StatesTrace;
 
     StatesTrace statesTrace;
     StatesSet statesToForward;

@@ -99,6 +99,9 @@ namespace klee {
     HANDLER(handleUnderConstrained);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);
+
+    HANDLER(handleLoopIter);
+    HANDLER(handleLoopExit);
 #undef HANDLER
   };
 } // End klee namespace

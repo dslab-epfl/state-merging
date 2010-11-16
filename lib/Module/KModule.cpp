@@ -325,6 +325,19 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   f = module->getFunction("memset");
   if (f && f->use_empty()) f->eraseFromParent();
 
+  // TODO: do the following only when lazy merging is enabled
+  // Create loop annotation markers
+  // TODO: check for uniqueness of the names
+  FunctionType *fty = FunctionType::get(
+      Type::getVoidTy(getGlobalContext()),
+      std::vector<const Type*>(1, Type::getInt32Ty(getGlobalContext())), false);
+  Function::Create(fty, Function::ExternalLinkage, "_klee_loop_iter", module);
+  Function::Create(fty, Function::ExternalLinkage, "_klee_loop_exit", module);
+
+  // Run the pass that instruments loops for execution index computation
+  PassManager pm4;
+  pm4.add(new AnnotateLoopPass());
+  pm4.run(*module);
 
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so
