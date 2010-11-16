@@ -218,7 +218,6 @@ namespace klee {
     StatesSet statesToForward;
 
     bool canFastForwardState(const ExecutionState* state) const;
-    void doRemoveState(const ExecutionState* state);
 
   public:
     LazyMergingSearcher(Executor &executor, Searcher *baseSearcher);
