@@ -140,6 +140,10 @@ HandlerInfo handlerInfo[] = {
 
   add("syscall", handleSyscall, true)
 
+  // loop instrumentation
+  add("_klee_loop_iter", handleLoopIter, false),
+  add("_klee_loop_exit", handleLoopExit, false),
+
 #undef addDNR
 #undef add  
 };
@@ -1132,5 +1136,49 @@ void SpecialFunctionHandler::handleSyscall(ExecutionState &state,
     }
   } else {
     executor.terminateStateOnError(state, "syscall requires a concrete syscall number", "user.err");
+  }
+}
+
+void SpecialFunctionHandler::handleLoopIter(ExecutionState &state,
+                                              KInstruction *target,
+                                              std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to _klee_loop_iter");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         "argument to _klee_loop_iter is not a constant");
+
+  uint64_t loopID = cast<ConstantExpr>(arguments[0])->getZExtValue();
+  std::vector<LoopExecIndex> &indexStack = state.stack.back().execIndexStack;
+
+  // This function is called from the loop header. This means that either
+  // a new loop or another iteration is just started.
+  if (loopID != indexStack.back().loopID) {
+    // New loop started, push corresponding item to the loop index stack
+    LoopExecIndex execIndex = { loopID, indexStack.back().index };
+    indexStack.push_back(execIndex);
+  }
+  indexStack.back().updateIndex((void*) loopID);
+}
+
+void SpecialFunctionHandler::handleLoopExit(ExecutionState &state,
+                                              KInstruction *target,
+                                              std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to _klee_loop_exit");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         "argument to _klee_loop_exit is not a constant");
+
+  uint64_t loopID = cast<ConstantExpr>(arguments[0])->getZExtValue();
+  std::vector<LoopExecIndex> &indexStack = state.stack.back().execIndexStack;
+
+  // This function is called from the loop exit basic blocks. This does not
+  // mean that it is called after the loop: the block can have other
+  // incoming edges. To distinguish this we check current loop ID
+  if (loopID == indexStack.back().loopID) {
+    // Loop terminated, pop corresponding item form the loop index stack
+    assert(indexStack.size() > 1 && "Unexpected loop end");
+    indexStack.pop_back();
   }
 }

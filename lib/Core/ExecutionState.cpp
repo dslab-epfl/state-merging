@@ -46,6 +46,16 @@ namespace klee {
 
 /***/
 
+// Update the index with new value.
+uint32_t LoopExecIndex::newIndex(void* updateID) const {
+  uint32_t newIndex = index;
+  const char* buf = reinterpret_cast<const char*>(&updateID);
+  for (unsigned i = 0; i < sizeof(void*); ++i) {
+    newIndex ^= static_cast<size_t>(buf[i]);
+    newIndex *= static_cast<size_t>(16777619UL);
+  }
+  return newIndex;
+}
 
 
 /***/
@@ -309,7 +319,19 @@ ExecutionState *ExecutionState::branch() {
   return falseState;
 }
 
-///
+  /*
+void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
+  stack.push_back(StackFrame(caller, getExecIndex(), kf));
+}
+
+void ExecutionState::popFrame() {
+  StackFrame &sf = stack.back();
+  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
+         ie = sf.allocas.end(); it != ie; ++it)
+    addressSpace.unbindObject(*it);
+  stack.pop_back();
+  }*/
+
 
 std::string ExecutionState::getFnAlias(std::string fn) {
   std::map < std::string, std::string >::iterator it = fnAliases.find(fn);
@@ -395,13 +417,20 @@ bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     std::cerr << "-- attempting merge of A:" 
                << this << " with B:" << &b << "--\n";
-  if (pc() != b.pc())
+
+  if (pc() != b.pc()) {
+    if (DebugLogStateMerge)
+      std::cerr << "---- merge failed: program counters are different\n";
     return false;
+  }
 
   // XXX is it even possible for these to differ? does it matter? probably
   // implies difference in object states?
-  if (symbolics!=b.symbolics)
+  if (symbolics!=b.symbolics) {
+    if (DebugLogStateMerge)
+      std::cerr << "---- merge failed: symbolics sets are different\n";
     return false;
+  }
 
   {
 
@@ -411,9 +440,13 @@ bool ExecutionState::merge(const ExecutionState &b) {
     std::vector<StackFrame>::const_iterator itBE = b.stack().end();
     while (itA!=itAE && itB!=itBE) {
       // XXX vaargs?
-      if (itA->caller!=itB->caller || itA->kf!=itB->kf)
+      if (itA->caller!=itB->caller || itA->kf!=itB->kf) {
+        if (DebugLogStateMerge)
+          std::cerr << "---- merge failed: call stacks are different\n";
         return false;
+      }
 
+#if 0
       // XXX: for now we refuse to merge states that has different concrete
       // values on the stack. This is wrong, but otherwise we are ending up
       // merging different iterations of the same loop
@@ -427,13 +460,17 @@ bool ExecutionState::merge(const ExecutionState &b) {
           if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
             return false;
       }
+#endif
 
       ++itA;
       ++itB;
     }
 
-    if (itA!=itAE || itB!=itBE)
+    if (itA!=itAE || itB!=itBE) {
+      if (DebugLogStateMerge)
+        std::cerr << "---- merge failed: call stacks are different\n";
       return false;
+    }
   }
 
   std::set< ref<Expr> > aConstraints(constraints().begin(), constraints().end());
@@ -455,12 +492,12 @@ bool ExecutionState::merge(const ExecutionState &b) {
            ie = commonConstraints.end(); it != ie; ++it)
       std::cerr << *it << ", ";
     std::cerr << "]\n";
-    std::cerr << "\tA suffix: [";
+    std::cerr << "\tA constraint suffix: [";
     for (std::set< ref<Expr> >::iterator it = aSuffix.begin(), 
            ie = aSuffix.end(); it != ie; ++it)
       std::cerr << *it << ", ";
     std::cerr << "]\n";
-    std::cerr << "\tB suffix: [";
+    std::cerr << "\tB constraint suffix: [";
     for (std::set< ref<Expr> >::iterator it = bSuffix.begin(), 
            ie = bSuffix.end(); it != ie; ++it)
       std::cerr << *it << ", ";
@@ -478,10 +515,11 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
   if (DebugLogStateMerge) {
     std::cerr << "\tchecking object states\n";
-    std::cerr << "A: " << addressSpace().objects << "\n";
-    std::cerr << "B: " << b.addressSpace().objects << "\n";
+    //std::cerr << "A: " << addressSpace().objects << "\n";
+    //std::cerr << "B: " << b.addressSpace().objects << "\n";
   }
     
+  size_t memoryObjects = 0;
   std::set<const MemoryObject*> mutated;
   MemoryMap::iterator ai = addressSpace().objects.begin();
   MemoryMap::iterator bi = b.addressSpace().objects.begin();
@@ -496,12 +534,16 @@ bool ExecutionState::merge(const ExecutionState &b) {
           std::cerr << "\t\tA misses binding for: " << bi->first->id << "\n";
         }
       }
+      if (DebugLogStateMerge)
+        std::cerr << "---- merge failed: mappings are different\n";
       return false;
     }
+    memoryObjects += 1;
     if (ai->second != bi->second) {
-      if (DebugLogStateMerge)
-        std::cerr << "\t\tmutated: " << ai->first->id << "\n";
+      //if (DebugLogStateMerge)
+      //  std::cerr << "\t\tmutated: " << ai->first->id << "\n";
       mutated.insert(ai->first);
+#if 0
       // XXX: for now we refuse to merge states that has different concrete
       // values in the memory. This is wrong, but otherwise we are ending up
       // merging different iterations of the same loop
@@ -515,12 +557,21 @@ bool ExecutionState::merge(const ExecutionState &b) {
           if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
             return false;
       }
+#endif
     }
   }
   if (ai!=ae || bi!=be) {
     if (DebugLogStateMerge)
       std::cerr << "\t\tmappings differ\n";
+    if (DebugLogStateMerge)
+      std::cerr << "---- merge failed: mappings are different\n";
     return false;
+  }
+
+  if(DebugLogStateMerge) {
+      std::cerr << "\t\tfound " << mutated.size()
+                << " (of " << memoryObjects
+                << ") different memory objects\n";
   }
 
   // merge stack
@@ -602,10 +653,23 @@ bool ExecutionState::merge(const ExecutionState &b) {
       coveredLines[it->first].insert(it->second.begin(), it->second.end());
   }
 
+  if (DebugLogStateMerge)
+    std::cerr << "---- merged successfully\n";
+
   return true;
 }
 
 /***/
+
+uint32_t ExecutionState::getExecIndex() const {
+  //LoopExecIndex e = {0, 2166136261UL};
+  //return e.newIndex((void*) (KInstruction*) pc);
+  if(stack().empty())
+    return 2166136261UL;
+  else
+    return stack().back().execIndexStack.back().newIndex(
+							 (void*) (KInstruction*) pc());
+}
 
 StackTrace ExecutionState::getStackTrace() const {
   StackTrace result;

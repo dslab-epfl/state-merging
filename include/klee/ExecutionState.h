@@ -65,6 +65,47 @@ std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
 typedef uint64_t wlist_id_t;
 
+struct LoopExecIndex {
+  uint32_t loopID;
+  uint32_t index;
+
+  uint32_t newIndex(void* updateID) const;
+  void updateIndex(void* updateID) { index = newIndex(updateID); }
+};
+
+/*
+struct StackFrame {
+  KInstIterator caller;
+  KFunction *kf;
+  CallPathNode *callPathNode;
+
+  std::vector<const MemoryObject*> allocas;
+  Cell *locals;
+
+  /// Minimum distance to an uncovered instruction once the function
+  /// returns. This is not a good place for this but is used to
+  /// quickly compute the context sensitive minimum distance to an
+  /// uncovered instruction. This value is updated by the StatsTracker
+  /// periodically.
+  unsigned minDistToUncoveredOnReturn;
+
+  // For vararg functions: arguments not passed via parameter are
+  // stored (packed tightly) in a local (alloca) memory object. This
+  // is setup to match the way the front-end generates vaarg code (it
+  // does not pass vaarg through as expected). VACopy is lowered inside
+  // of intrinsic lowering.
+  MemoryObject *varargs;
+
+  /// A stack of execution indexes. An item at index 0 corresponds to the
+  /// non-loop function code, each next item corresponds to one loop level.
+  /// This is updated by special function handlers for loop instrumentation.
+  std::vector<LoopExecIndex> execIndexStack;
+
+  StackFrame(KInstIterator caller, uint32_t callerExecIndex, KFunction *kf);
+  StackFrame(const StackFrame &s);
+  ~StackFrame();
+};*/
+
 class ExecutionState {
 	friend class ObjectState;
 
@@ -247,6 +288,9 @@ public:
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
 
   StackTrace getStackTrace() const;
+
+  uint32_t getExecIndex() const;
+
 };
 
 }

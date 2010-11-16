@@ -2680,6 +2680,10 @@ void Executor::run(ExecutionState &initialState) {
 
   searcher->update(0, states, std::set<ExecutionState*>());
 
+  // Tell searcher about initial current state
+  searcher->update(&initialState, std::set<ExecutionState*>(),
+                   std::set<ExecutionState*>());
+
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
 
