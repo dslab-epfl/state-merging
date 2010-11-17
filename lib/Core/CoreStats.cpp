@@ -20,6 +20,8 @@ Statistic stats::mergeSuccessTime("MergeSuccessTime", "MStime");
 Statistic stats::mergeFailTime("MergeFailTime", "MFtime");
 Statistic stats::mergesSuccess("MergesSuccess", "MergesS");
 Statistic stats::mergesFail("MergesFail", "MergesF");
+Statistic stats::fastForwardsStart("FastForwardStart", "FFForwardT");
+Statistic stats::fastForwardsFail("FastForwardFail", "FForwardF");
 Statistic stats::instructionRealTime("InstructionRealTimes", "Ireal");
 Statistic stats::instructionTime("InstructionTimes", "Itime");
 Statistic stats::instructions("Instructions", "I");

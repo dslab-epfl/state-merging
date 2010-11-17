@@ -365,6 +365,8 @@ void StatsTracker::writeStatsHeader() {
              << "'MergeFailTime',"
              << "'MergesSuccess',"
              << "'MergesFail',"
+             << "'FastForwardStart',"
+             << "'FastForwardFail',"
              << ")\n";
   statsFile->flush();
 }
@@ -396,6 +398,8 @@ void StatsTracker::writeStatsLine() {
              << "," << stats::mergeFailTime / 1000000.
              << "," << stats::mergesSuccess
              << "," << stats::mergesFail
+             << "," << stats::fastForwardsStart
+             << "," << stats::fastForwardsFail
              << ")\n";
   statsFile->flush();
 }

@@ -495,6 +495,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
     if(ti == statesTrace.end() || ti->second.size() == ti->second.count(state)) {
       // State can no longer be fast-forwarded
       statesToForward.erase(state);
+      stats::fastForwardsFail += 1;
       continue;
     }
 
@@ -511,8 +512,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
           // Make traces that was pointing to state to point to state1
           for (StatesTrace::iterator it1 = statesTrace.begin(),
                                      ie1 = statesTrace.end(); it1 != ie1; ++it1) {
-            if (it1->second.count(state) != 0) {
-              it1->second.erase(state);
+            if (it1->second.erase(state) > 0) {
               it1->second.insert(state1);
             }
           }
@@ -546,6 +546,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
 
   if (canFastForwardState(state)) {
     statesToForward.insert(state);
+    stats::fastForwardsStart += 1;
     return selectState(); // recursive
   }
 
@@ -569,8 +570,10 @@ void LazyMergingSearcher::update(ExecutionState *current,
     // We would like to check it as soon as possible
     for (StatesSet::const_iterator it = addedStates.begin(),
                                    ie = addedStates.end(); it != ie; ++it) {
-      if (canFastForwardState(*it))
+      if (canFastForwardState(*it)) {
         statesToForward.insert(*it);
+        stats::fastForwardsStart += 1;
+      }
     }
   }
 
