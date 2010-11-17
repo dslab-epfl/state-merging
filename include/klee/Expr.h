@@ -33,6 +33,29 @@ class ObjectState;
 
 template<class T> class ref;
 
+// Generic hash init value
+static inline uint32_t hashInit() {
+  return 2166136261UL;
+}
+
+// Generic hash update function
+static inline uint32_t hashUpdate(uint32_t hash, uint32_t update) {
+  const char* buf = reinterpret_cast<const char*>(&update);
+  for (unsigned i = 0; i < sizeof(uint32_t); ++i) {
+    hash ^= static_cast<size_t>(buf[i]);
+    hash *= static_cast<size_t>(16777619UL);
+  }
+  return hash;
+}
+
+static inline uint32_t hashUpdate(uint32_t hash, uint64_t update) {
+  const char* buf = reinterpret_cast<const char*>(&update);
+  for (unsigned i = 0; i < sizeof(uint64_t); ++i) {
+    hash ^= static_cast<size_t>(buf[i]);
+    hash *= static_cast<size_t>(16777619UL);
+  }
+  return hash;
+}
 
 /// Class representing symbolic expressions.
 /**

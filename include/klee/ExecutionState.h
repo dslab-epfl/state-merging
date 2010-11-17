@@ -37,9 +37,6 @@ std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 struct LoopExecIndex {
   uint32_t loopID;
   uint32_t index;
-
-  uint32_t newIndex(void* updateID) const;
-  void updateIndex(void* updateID) { index = newIndex(updateID); }
 };
 
 struct StackFrame {
@@ -111,6 +108,7 @@ public:
   //
   // FIXME: Move to a shared list structure (not critical).
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
+  uint32_t symbolicsHash;
 
   // Used by the checkpoint/rollback methods for fake objects.
   // FIXME: not freeing things on branch deletion.
@@ -141,6 +139,7 @@ public:
 
   void addSymbolic(const MemoryObject *mo, const Array *array) { 
     symbolics.push_back(std::make_pair(mo, array));
+    symbolicsHash = hashUpdate(symbolicsHash, (uintptr_t) mo);
   }
   void addConstraint(ref<Expr> e) { 
     constraints.addConstraint(e); 
@@ -148,6 +147,7 @@ public:
 
   bool merge(const ExecutionState &b);
   uint32_t getExecIndex() const;
+  uint32_t getMergeIndex() const;
 
   void dumpStack(std::ostream &out) const;
 };

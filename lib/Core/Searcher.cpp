@@ -466,14 +466,15 @@ LazyMergingSearcher::~LazyMergingSearcher() {
 ///
 
 inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const {
-  StatesTrace::const_iterator it = statesTrace.find(state->getExecIndex());
+  StatesTrace::const_iterator it = statesTrace.find(state->getMergeIndex());
+
   if (it == statesTrace.end())
     return false;
 
   // This loop could have at most two iterations
   for(StatesSet::const_iterator it1 = it->second.begin(),
                       ie1 = it->second.end(); it1 != ie1; ++it1) {
-    if (*it1 != state && unmergeableStates.count(std::make_pair(state, *it1)) == 0)
+    if (*it1 != state)
       return true;
   }
 
@@ -487,9 +488,10 @@ ExecutionState &LazyMergingSearcher::selectState() {
     // states that could be merged with state first (i.e., select
     // smartly what state to fast-forward first).
     state = *statesToForward.begin();
+    uint32_t mergeIndex = state->getMergeIndex();
 
     // Check wether we can already merge
-    StatesTrace::const_iterator ti = statesTrace.find(state->getExecIndex());
+    StatesTrace::const_iterator ti = statesTrace.find(mergeIndex);
     if(ti == statesTrace.end() || ti->second.size() == ti->second.count(state)) {
       // State can no longer be fast-forwarded
       statesToForward.erase(state);
@@ -500,7 +502,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
                              ie = ti->second.end(); it != ie; ++it) {
       state1 = *it;
 
-      if (state1 != state && state1->getExecIndex() == state->getExecIndex()) {
+      if (state1 != state && state1->getMergeIndex() == mergeIndex) {
         // State is at the same execution index as state1, let's try merging
         if (executor.merge(*state1, *state)) {
           // We've merged !
@@ -521,9 +523,6 @@ ExecutionState &LazyMergingSearcher::selectState() {
 
           state = NULL;
           break;
-        } else {
-          unmergeableStates.insert( std::make_pair(state, state1) );
-          unmergeableStates.insert( std::make_pair(state1, state) );
         }
       }
     }
@@ -550,7 +549,6 @@ ExecutionState &LazyMergingSearcher::selectState() {
     return selectState(); // recursive
   }
 
-  //  statesTrace[state->getExecIndex()].insert(state);
   return *state;
 }
 
@@ -560,7 +558,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
   if (current && removedStates.count(current) == 0) {
-    statesTrace[current->getExecIndex()].insert(current);
+    statesTrace[current->getMergeIndex()].insert(current);
   }
 
   // TODO: we could add every newly created state to fast-forward track,

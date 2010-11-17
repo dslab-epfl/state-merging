@@ -36,17 +36,6 @@ namespace {
   DebugLogStateMerge("debug-log-state-merge");
 }
 
-// Update the index with new value.
-uint32_t LoopExecIndex::newIndex(void* updateID) const {
-  uint32_t newIndex = index;
-  const char* buf = reinterpret_cast<const char*>(&updateID);
-  for (unsigned i = 0; i < sizeof(void*); ++i) {
-    newIndex ^= static_cast<size_t>(buf[i]);
-    newIndex *= static_cast<size_t>(16777619UL);
-  }
-  return newIndex;
-}
-
 /***/
 
 StackFrame::StackFrame(KInstIterator _caller, uint32_t _callerExecIndex,
@@ -56,8 +45,7 @@ StackFrame::StackFrame(KInstIterator _caller, uint32_t _callerExecIndex,
     execIndexStack(1) {
 
   execIndexStack[0].loopID = uint32_t(-1);
-  execIndexStack[0].index = _callerExecIndex;
-  execIndexStack[0].updateIndex(_kf);
+  execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
 
   locals = new Cell[kf->numRegisters];
 }
@@ -92,7 +80,8 @@ ExecutionState::ExecutionState(KFunction *kf)
     instsSinceCovNew(0),
     coveredNew(false),
     forkDisabled(false),
-    ptreeNode(0) {
+    ptreeNode(0),
+    symbolicsHash(hashInit()) {
   pushFrame(0, kf);
 }
 
@@ -408,14 +397,19 @@ bool ExecutionState::merge(const ExecutionState &b) {
   return true;
 }
 
-uint32_t ExecutionState::getExecIndex() const {
-  //LoopExecIndex e = {0, 2166136261UL};
-  //return e.newIndex((void*) (KInstruction*) pc);
+inline uint32_t ExecutionState::getExecIndex() const {
   if(stack.empty())
-    return 2166136261UL;
+    return hashInit();
   else
-    return stack.back().execIndexStack.back().newIndex(
-                                  (void*) (KInstruction*) pc);
+    return hashUpdate(stack.back().execIndexStack.back().index,
+                      (uintptr_t) (KInstruction*) pc);
+}
+
+uint32_t ExecutionState::getMergeIndex() const {
+  uint32_t hash = getExecIndex();
+  hash = hashUpdate(hash, addressSpace.hash);
+  hash = hashUpdate(hash, symbolicsHash);
+  return hash;
 }
 
 void ExecutionState::dumpStack(std::ostream &out) const {
