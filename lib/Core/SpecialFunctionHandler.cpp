@@ -1158,7 +1158,7 @@ void SpecialFunctionHandler::handleLoopIter(ExecutionState &state,
     LoopExecIndex execIndex = { loopID, indexStack.back().index };
     indexStack.push_back(execIndex);
   }
-  indexStack.back().updateIndex((void*) loopID);
+  indexStack.back().index = hashUpdate(indexStack.back().index, loopID);
 }
 
 void SpecialFunctionHandler::handleLoopExit(ExecutionState &state,

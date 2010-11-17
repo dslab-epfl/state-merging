@@ -42,22 +42,6 @@ namespace {
   DebugLogStateMerge("debug-log-state-merge");
 }
 
-namespace klee {
-
-/***/
-
-// Update the index with new value.
-uint32_t LoopExecIndex::newIndex(void* updateID) const {
-  uint32_t newIndex = index;
-  const char* buf = reinterpret_cast<const char*>(&updateID);
-  for (unsigned i = 0; i < sizeof(void*); ++i) {
-    newIndex ^= static_cast<size_t>(buf[i]);
-    newIndex *= static_cast<size_t>(16777619UL);
-  }
-  return newIndex;
-}
-
-
 /***/
 
 ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
@@ -91,10 +75,13 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     ptreeNode(0),
     globalConstraints(assumptions),
     wlistCounter(1),
-    preemptions(0) {
+    preemptions(0),
+    symbolicHash(hashInit()) {
 
   setupMain(NULL);
 
+  execIndexStack[0].loopID = uint32_t(-1);
+  execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
 }
 
 void ExecutionState::setupTime() {
@@ -127,6 +114,7 @@ void ExecutionState::setupMain(KFunction *kf) {
   cowDomain.push_back(&crtProcessIt->second.addressSpace);
 
   crtProcessIt->second.addressSpace.cowDomain = &cowDomain;
+
 }
 
 Thread& ExecutionState::createThread(thread_id_t tid, KFunction *kf) {
@@ -663,14 +651,19 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
 /***/
 
-uint32_t ExecutionState::getExecIndex() const {
-  //LoopExecIndex e = {0, 2166136261UL};
-  //return e.newIndex((void*) (KInstruction*) pc);
+inline uint32_t ExecutionState::getExecIndex() const {
   if(stack().empty())
-    return 2166136261UL;
+    return hashInit();
   else
-    return stack().back().execIndexStack.back().newIndex(
-							 (void*) (KInstruction*) pc());
+    return hashUpdate(stack().back().execIndexStack.back().index,
+                      (uintptr_t) (KInstruction*) pc);
+}
+
+uint32_t ExecutionState::getMergeIndex() const {
+  uint32_t hash = getExecIndex();
+  hash = hashUpdate(hash, addressSpace.hash);
+  hash = hashUpdate(hash, symbolicsHash);
+  return hash;
 }
 
 StackTrace ExecutionState::getStackTrace() const {

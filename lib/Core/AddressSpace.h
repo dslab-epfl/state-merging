@@ -46,7 +46,7 @@ namespace klee {
     mutable cow_domain_t *cowDomain;
 
     /// Unsupported, use copy constructor
-    AddressSpace &operator=(const AddressSpace&); 
+    AddressSpace &operator=(const AddressSpace&);
     
   public:
     /// The MemoryObject -> ObjectState map that constitutes the
@@ -57,10 +57,15 @@ namespace klee {
     ///
     /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
     MemoryMap objects;
+
+    /// Hash value that uniquely identifies address space mappings
+    /// NOTE: the hash is very weak due to performance reasons
+    uint32_t hash;
     
   public:
-    AddressSpace() : cowKey(1), cowDomain(NULL) {}
-    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL), objects(b.objects)  { }
+    AddressSpace() : cowKey(1), cowDomain(NULL), hash(hashInit()) {}
+    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL), objects(b.objects), hash(b.hash)  { }
+
     ~AddressSpace() {}
 
     /// Resolve address to an ObjectPair in result.

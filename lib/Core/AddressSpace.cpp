@@ -26,7 +26,12 @@ void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner==0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
 
+  const MemoryMap::value_type *prev = objects.lookup(mo);
+  if (prev)
+    hash -= (uintptr_t) prev->first;
+
   objects = objects.replace(std::make_pair(mo, os));
+  hash += (uintptr_t) mo;
 }
 
 void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
@@ -37,6 +42,9 @@ void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
 }
 
 void AddressSpace::unbindObject(const MemoryObject *mo) {
+  const MemoryMap::value_type *prev = objects.lookup(mo);
+  if (prev)
+    hash -= (uintptr_t) prev->first;
   objects = objects.remove(mo);
 }
 

@@ -219,10 +219,6 @@ namespace klee {
     StatesTrace statesTrace;
     StatesSet statesToForward;
 
-    typedef std::set< std::pair<const ExecutionState*,
-                      const ExecutionState*> > StatePairsSet;
-    StatePairsSet unmergeableStates;
-
     bool canFastForwardState(const ExecutionState* state) const;
 
   public:
