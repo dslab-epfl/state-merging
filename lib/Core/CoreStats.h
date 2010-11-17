@@ -34,6 +34,12 @@ namespace stats {
   /// The number of process forks.
   extern Statistic forks;
 
+  /// The number of started fast forwards.
+  extern Statistic fastForwardsStart;
+
+  /// The number of failed fast forwards.
+  extern Statistic fastForwardsFail;
+
   /// The number of successful merges.
   extern Statistic mergesSuccess;
 
