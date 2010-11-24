@@ -65,11 +65,6 @@ std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
 typedef uint64_t wlist_id_t;
 
-struct LoopExecIndex {
-  uint32_t loopID;
-  uint32_t index;
-};
-
 /*
 struct StackFrame {
   KInstIterator caller;
@@ -256,7 +251,7 @@ public:
   ExecutionState *branch();
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
-    t.stack.push_back(StackFrame(caller,kf));
+    t.stack.push_back(StackFrame(caller, t.getExecIndex(), kf));
   }
   void pushFrame(KInstIterator caller, KFunction *kf) {
     pushFrame(crtThread(), caller, kf);
@@ -287,10 +282,7 @@ public:
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
 
   StackTrace getStackTrace() const;
-
-  uint32_t getExecIndex() const;
   uint32_t getMergeIndex() const;
-
 };
 
 }

@@ -639,7 +639,7 @@ void Executor::branch(ExecutionState &state,
     result.push_back(ns);
     es->ptreeNode->data = 0;
     std::pair<PTree::Node*,PTree::Node*> res = 
-      processTree->split(es->ptreeNode, ns, es, tag, conditions[i]);
+      processTree->split(es->ptreeNode, ns, es, conditions[i], tag);
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
 
@@ -906,7 +906,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
 
     current.ptreeNode->data = 0;
     std::pair<PTree::Node*, PTree::Node*> res =
-      processTree->split(current.ptreeNode, falseState, trueState, tag, condition);
+      processTree->split(current.ptreeNode, falseState, trueState, condition, tag);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
 
@@ -956,7 +956,7 @@ Executor::fork(ExecutionState &current, int reason) {
 
   lastState->ptreeNode->data = 0;
   std::pair<PTree::Node*,PTree::Node*> res =
-   processTree->split(lastState->ptreeNode, newState, lastState, tag);
+   processTree->split(lastState->ptreeNode, newState, lastState, 0, tag);
   newState->ptreeNode = res.first;
   lastState->ptreeNode = res.second;
 
@@ -2778,7 +2778,6 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
 		if (it3 != seedMap.end())
 			seedMap.erase(it3);
 		addedStates.erase(it);
-		processTree->remove(state.ptreeNode);
 
 		if(state.ptreeNode->state != PTreeNode::MERGED) {
 		  state.ptreeNode->data = NULL;

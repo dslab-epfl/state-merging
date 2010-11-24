@@ -138,7 +138,7 @@ HandlerInfo handlerInfo[] = {
   add("_Znwm", handleNew, true),
   add("_ZnwmRKSt9nothrow_t", handleNew, true),
 
-  add("syscall", handleSyscall, true)
+  add("syscall", handleSyscall, true),
 
   // loop instrumentation
   add("_klee_loop_iter", handleLoopIter, false),
@@ -1148,8 +1148,8 @@ void SpecialFunctionHandler::handleLoopIter(ExecutionState &state,
   assert(isa<ConstantExpr>(arguments[0]) &&
          "argument to _klee_loop_iter is not a constant");
 
-  uint64_t loopID = cast<ConstantExpr>(arguments[0])->getZExtValue();
-  std::vector<LoopExecIndex> &indexStack = state.stack.back().execIndexStack;
+  uint32_t loopID = (uint32_t)cast<ConstantExpr>(arguments[0])->getZExtValue();
+  std::vector<LoopExecIndex> &indexStack = state.stack().back().execIndexStack;
 
   // This function is called from the loop header. This means that either
   // a new loop or another iteration is just started.
@@ -1171,7 +1171,7 @@ void SpecialFunctionHandler::handleLoopExit(ExecutionState &state,
          "argument to _klee_loop_exit is not a constant");
 
   uint64_t loopID = cast<ConstantExpr>(arguments[0])->getZExtValue();
-  std::vector<LoopExecIndex> &indexStack = state.stack.back().execIndexStack;
+  std::vector<LoopExecIndex> &indexStack = state.stack().back().execIndexStack;
 
   // This function is called from the loop exit basic blocks. This does not
   // mean that it is called after the loop: the block can have other

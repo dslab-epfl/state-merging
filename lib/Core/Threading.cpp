@@ -9,14 +9,20 @@
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Module/Cell.h"
+#include "klee/Expr.h"
 
 namespace klee {
 
 /* StackFrame Methods */
 
-StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
+StackFrame::StackFrame(KInstIterator _caller, uint32_t _callerExecIndex, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0),
-    minDistToUncoveredOnReturn(0), varargs(0) {
+    minDistToUncoveredOnReturn(0), varargs(0),
+    execIndexStack(1) {
+
+  execIndexStack[0].loopID = uint32_t(-1);
+  execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
+
   locals = new Cell[kf->numRegisters];
 }
 
@@ -26,7 +32,9 @@ StackFrame::StackFrame(const StackFrame &s)
     callPathNode(s.callPathNode),
     allocas(s.allocas),
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
-    varargs(s.varargs) {
+    varargs(s.varargs),
+    execIndexStack(s.execIndexStack) {
+
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i=0; i<s.kf->numRegisters; i++)
     locals[i] = s.locals[i];
@@ -40,6 +48,7 @@ StackFrame& StackFrame::operator=(const StackFrame &s) {
     allocas = s.allocas;
     minDistToUncoveredOnReturn = s.minDistToUncoveredOnReturn;
     varargs = s.varargs;
+    execIndexStack = s.execIndexStack;
 
     if (locals)
       delete []locals;
@@ -64,12 +73,20 @@ Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
   tuid = std::make_pair(tid, pid);
 
   if (kf) {
-    stack.push_back(StackFrame(0, kf));
+    stack.push_back(StackFrame(0, getExecIndex(), kf));
 
     pc = kf->instructions;
     prevPC = pc;
   }
-
 }
+
+uint32_t Thread::getExecIndex() const {
+  if(stack.empty())
+    return hashInit();
+  else
+    return hashUpdate(stack.back().execIndexStack.back().index,
+                      (uintptr_t) (KInstruction*) pc);
+}
+
 
 }

@@ -44,6 +44,8 @@ namespace {
 
 /***/
 
+namespace klee {
+
 ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
   : c9State(NULL),
     executor(_executor),
@@ -58,6 +60,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     ptreeNode(0),
     crtForkReason(KLEE_FORK_DEFAULT),
     crtSpecialFork(NULL),
+    symbolicsHash(hashInit()),
     wlistCounter(1),
     preemptions(0) {
 
@@ -75,13 +78,9 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     ptreeNode(0),
     globalConstraints(assumptions),
     wlistCounter(1),
-    preemptions(0),
-    symbolicHash(hashInit()) {
+    preemptions(0) {
 
   setupMain(NULL);
-
-  execIndexStack[0].loopID = uint32_t(-1);
-  execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
 }
 
 void ExecutionState::setupTime() {
@@ -398,9 +397,6 @@ std::ostream &operator<<(std::ostream &os, const ExecutionState &state) {
 	return klee::c9::printStateStack(os, state);
 }
 
-
-
-
 bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     std::cerr << "-- attempting merge of A:" 
@@ -432,10 +428,10 @@ bool ExecutionState::merge(const ExecutionState &b) {
   std::set<const MemoryObject*> mutated;
 
   {
-    MemoryMap::iterator ai = addressSpace.objects.begin();
-    MemoryMap::iterator bi = b.addressSpace.objects.begin();
-    MemoryMap::iterator ae = addressSpace.objects.end();
-    MemoryMap::iterator be = b.addressSpace.objects.end();
+    MemoryMap::iterator ai = addressSpace().objects.begin();
+    MemoryMap::iterator bi = b.addressSpace().objects.begin();
+    MemoryMap::iterator ae = addressSpace().objects.end();
+    MemoryMap::iterator be = b.addressSpace().objects.end();
     for (; ai!=ae && bi!=be; ++ai, ++bi) {
       if (ai->first != bi->first) {
         if (DebugLogStateMerge) {
@@ -651,17 +647,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
 /***/
 
-inline uint32_t ExecutionState::getExecIndex() const {
-  if(stack().empty())
-    return hashInit();
-  else
-    return hashUpdate(stack().back().execIndexStack.back().index,
-                      (uintptr_t) (KInstruction*) pc);
-}
-
 uint32_t ExecutionState::getMergeIndex() const {
-  uint32_t hash = getExecIndex();
-  hash = hashUpdate(hash, addressSpace.hash);
+  uint32_t hash = crtThread().getExecIndex();
+  hash = hashUpdate(hash, addressSpace().hash);
   hash = hashUpdate(hash, symbolicsHash);
   return hash;
 }

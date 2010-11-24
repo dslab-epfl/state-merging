@@ -519,7 +519,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
 
           // Terminate merged state
           statesToForward.erase(state);
-          executor.terminateState(*state);
+          executor.terminateState(*state, true);
 
           state = NULL;
           break;

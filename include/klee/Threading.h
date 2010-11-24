@@ -30,6 +30,11 @@ typedef uint64_t wlist_id_t;
 
 typedef std::pair<thread_id_t, process_id_t> thread_uid_t;
 
+struct LoopExecIndex {
+  uint32_t loopID;
+  uint32_t index;
+};
+
 struct StackFrame {
   KInstIterator caller;
   KFunction *kf;
@@ -52,7 +57,12 @@ struct StackFrame {
   // of intrinsic lowering.
   MemoryObject *varargs;
 
-  StackFrame(KInstIterator caller, KFunction *kf);
+  /// A stack of execution indexes. An item at index 0 corresponds to the
+  /// non-loop function code, each next item corresponds to one loop level.
+  /// This is updated by special function handlers for loop instrumentation.
+  std::vector<LoopExecIndex> execIndexStack;
+
+  StackFrame(KInstIterator caller, uint32_t _callerExecIndex, KFunction *kf);
   StackFrame(const StackFrame &s);
 
   StackFrame& operator=(const StackFrame &sf);
@@ -80,6 +90,8 @@ public:
 
   thread_id_t getTid() const { return tuid.first; }
   process_id_t getPid() const { return tuid.second; }
+
+  uint32_t getExecIndex() const;
 };
 
 }
