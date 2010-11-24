@@ -145,6 +145,10 @@ namespace {
 		       cl::desc("Use constraint independence"));
 
   cl::opt<bool>
+  UseParallelSolver("use-parallel-solver",
+      cl::init(false), cl::desc("Use parallel solver"));
+
+  cl::opt<bool>
   EmitAllErrors("emit-all-errors",
                 cl::init(false),
                 cl::desc("Generate tests cases for all errors "
@@ -285,6 +289,9 @@ Solver *constructSolverChain(STPSolver *stpSolver,
                              std::string queryPCLogPath,
                              std::string stpQueryPCLogPath) {
   Solver *solver = stpSolver;
+
+  if (UseParallelSolver)
+    solver = createParallelSolver(solver);
 
   if (UseSTPQueryPCLog)
     solver = createPCLoggingSolver(solver, 

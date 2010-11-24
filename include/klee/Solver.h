@@ -215,6 +215,10 @@ namespace klee {
   /// after writing them to the given path in .pc format.
   Solver *createPCLoggingSolver(Solver *s, std::string path);
 
+  /// createParallelSolver - Create a solver which will solve high-level
+  /// disjunctions in parallel.
+  Solver *createParallelSolver(Solver *s);
+
   /// createDummySolver - Create a dummy solver implementation which always
   /// fails.
   Solver *createDummySolver();
