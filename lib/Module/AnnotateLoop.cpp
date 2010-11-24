@@ -21,7 +21,7 @@
 using namespace llvm;
 using namespace klee;
 
-char AnnotateLoopPass::ID = 0;
+char AnnotateLoopPass::ID = 1337;
 
 bool AnnotateLoopPass::runOnLoop(Loop *L, LPPassManager &LPM) {
   BasicBlock *H = L->getHeader();
