@@ -19,8 +19,8 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 ///XXX: ugly, remove this dependency
-#include "../../lib/Core/CallPathManager.h"
-#include "../../lib/Core/StatsTracker.h"
+#include "../../Core/CallPathManager.h"
+#include "../../Core/StatsTracker.h"
 #include "../../Core/CoreStats.h"
 
 
