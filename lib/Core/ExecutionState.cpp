@@ -114,6 +114,23 @@ void ExecutionState::setupMain(KFunction *kf) {
 
   crtProcessIt->second.addressSpace.cowDomain = &cowDomain;
 
+  if(kf)
+      setPC(kf->instructions);
+}
+
+void ExecutionState::setPC(const KInstIterator& newPC)
+{
+    crtThread().pc = newPC;
+    if(crtThread().stack.empty()) {
+        crtThread().execIndex = hashInit();
+    } else {
+        crtThread().execIndex = hashUpdate(
+                crtThread().stack.back().execIndexStack.back().index,
+                (uintptr_t) (KInstruction*) newPC);
+    }
+    crtThread().mergeIndex = hashUpdate(hashUpdate(crtThread().execIndex,
+                                                   symbolicsHash),
+                                        addressSpace().hash);
 }
 
 Thread& ExecutionState::createThread(thread_id_t tid, KFunction *kf) {
@@ -313,7 +330,7 @@ void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
 
 void ExecutionState::popFrame() {
   StackFrame &sf = stack.back();
-  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
+  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
          ie = sf.allocas.end(); it != ie; ++it)
     addressSpace.unbindObject(*it);
   stack.pop_back();
@@ -646,13 +663,6 @@ bool ExecutionState::merge(const ExecutionState &b) {
 }
 
 /***/
-
-uint32_t ExecutionState::getMergeIndex() const {
-  uint32_t hash = crtThread().getExecIndex();
-  hash = hashUpdate(hash, addressSpace().hash);
-  hash = hashUpdate(hash, symbolicsHash);
-  return hash;
-}
 
 StackTrace ExecutionState::getStackTrace() const {
   StackTrace result;

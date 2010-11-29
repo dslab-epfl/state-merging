@@ -226,11 +226,11 @@ public:
   AddressSpace &addressSpace() { return crtProcess().addressSpace; }
   const AddressSpace &addressSpace() const { return crtProcess().addressSpace; }
 
-  KInstIterator& pc() { return crtThread().pc; }
   const KInstIterator& pc() const { return crtThread().pc; }
+  void setPC(const KInstIterator& newPC);
 
-  KInstIterator& prevPC() { return crtThread().prevPC; }
   const KInstIterator& prevPC() const { return crtThread().prevPC; }
+  void setPrevPC(const KInstIterator& newPrevPC) { crtThread().prevPC = newPrevPC; }
 
   stack_ty& stack() { return crtThread().stack; }
   const stack_ty& stack() const { return crtThread().stack; }
@@ -251,7 +251,7 @@ public:
   ExecutionState *branch();
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
-    t.stack.push_back(StackFrame(caller, t.getExecIndex(), kf));
+    t.stack.push_back(StackFrame(caller, t.execIndex, kf));
   }
   void pushFrame(KInstIterator caller, KFunction *kf) {
     pushFrame(crtThread(), caller, kf);
@@ -282,7 +282,9 @@ public:
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
 
   StackTrace getStackTrace() const;
-  uint32_t getMergeIndex() const;
+
+  uint32_t getExecIndex() const { return crtThread().execIndex; }
+  uint32_t getMergeIndex() const { return crtThread().mergeIndex; }
 };
 
 }

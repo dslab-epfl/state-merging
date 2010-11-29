@@ -753,7 +753,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
   if (!success) {
-    current.pc() = current.prevPC();
+    current.setPC(current.prevPC());
     terminateStateEarly(current, "query timed out");
     return StatePair((klee::ExecutionState*)NULL, (klee::ExecutionState*)NULL);
   }
@@ -1218,8 +1218,8 @@ void Executor::stepInstruction(ExecutionState &state) {
     statsTracker->stepInstruction(state);
 
   ++stats::instructions;
-  state.prevPC() = state.pc();
-  ++state.pc();
+  state.setPrevPC(state.pc());
+  state.setPC(state.pc().next());
 
   if (stats::instructions==StopAfterNInstructions)
     haltExecution = true;
@@ -1309,7 +1309,7 @@ void Executor::executeCall(ExecutionState &state,
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC(), kf);
-    state.pc() = kf->instructions;
+    state.setPC(kf->instructions);
         
     if (statsTracker)
       statsTracker->framePushed(state, &state.stack()[state.stack().size()-2]); //XXX TODO fix this ugly stuff
@@ -1396,7 +1396,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // XXX this lookup has to go ?
   KFunction *kf = state.stack().back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
-  state.pc() = &kf->instructions[entry];
+  state.setPC(&kf->instructions[entry]);
   if (state.pc()->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(state.pc()->inst);
     state.crtThread().incomingBBIndex = first->getBasicBlockIndex(src);
@@ -1514,8 +1514,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
-        state.pc() = kcaller;
-        ++state.pc();
+        state.setPC(kcaller);
+        state.setPC(state.pc().next());
       }
 
       if (!isVoidReturn) {
@@ -2775,7 +2775,7 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
 
 	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
 	if (it == addedStates.end()) {
-	  state.pc() = state.prevPC();
+      state.setPC(state.prevPC());
 
 	  removedStates.insert(&state);
 	} else {
@@ -3466,7 +3466,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       inBounds);
     solver->setTimeout(0);
     if (!success) {
-      state.pc() = state.prevPC();
+      state.setPC(state.prevPC());
       terminateStateEarly(state, "query timed out");
       return;
     }

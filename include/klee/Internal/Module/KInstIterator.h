@@ -42,6 +42,11 @@ namespace klee {
       return *this;
     }
 
+    KInstIterator next() const {
+      KInstIterator r(*this);
+      return ++r;
+    }
+
     operator KInstruction*() const { return it ? *it : 0;}
     operator bool() const { return it != 0; }
 

@@ -68,25 +68,16 @@ StackFrame::~StackFrame() {
 /* Thread class methods */
 
 Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
-  enabled(true), waitingList(0) {
+  enabled(true), waitingList(0), execIndex(hashInit()), mergeIndex(0) {
 
   tuid = std::make_pair(tid, pid);
 
   if (kf) {
-    stack.push_back(StackFrame(0, getExecIndex(), kf));
+    stack.push_back(StackFrame(0, execIndex, kf));
 
     pc = kf->instructions;
     prevPC = pc;
   }
 }
-
-uint32_t Thread::getExecIndex() const {
-  if(stack.empty())
-    return hashInit();
-  else
-    return hashUpdate(stack.back().execIndexStack.back().index,
-                      (uintptr_t) (KInstruction*) pc);
-}
-
 
 }

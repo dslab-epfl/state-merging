@@ -85,13 +85,15 @@ private:
   wlist_id_t waitingList;
 
   thread_uid_t tuid;
+
+  uint32_t execIndex;
+  uint32_t mergeIndex;
+
 public:
   Thread(thread_id_t tid, process_id_t pid, KFunction *start_function);
 
   thread_id_t getTid() const { return tuid.first; }
   process_id_t getPid() const { return tuid.second; }
-
-  uint32_t getExecIndex() const;
 };
 
 }

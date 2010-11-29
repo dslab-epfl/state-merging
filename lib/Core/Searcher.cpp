@@ -282,7 +282,7 @@ entry:
       statesAtMerge.begin();
     ExecutionState *es = it->second;
     statesAtMerge.erase(it);
-    ++es->pc();
+    es->setPC(es->pc().next());
 
     baseSearcher->addState(es);
   }
@@ -306,7 +306,7 @@ entry:
         executor.terminateState(es, true);
       } else {
         it->second = &es; // the bump
-        ++mergeWith->pc();
+        mergeWith->setPC(mergeWith->pc().next());
 
         baseSearcher->addState(mergeWith);
       }
@@ -421,7 +421,7 @@ ExecutionState &MergingSearcher::selectState() {
 
       // step past merge and toss base back in pool
       statesAtMerge.erase(statesAtMerge.find(base));
-      ++base->pc();
+      base->setPC(base->pc().next());
       baseSearcher->addState(base);
     }  
   }
