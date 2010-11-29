@@ -9,7 +9,7 @@
 #define PROTOCOLS_H_
 
 // TODO Fix this hack in the Makefile
-#include "../../lib/Cloud9/Cloud9Data.pb.h"
+#include "cloud9/Cloud9Data.pb.h"
 
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionPath.h"
