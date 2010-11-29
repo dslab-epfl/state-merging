@@ -29,14 +29,12 @@ namespace instrum {
 
 class IOServices {
 public:
-  boost::asio::io_service service;
-  boost::asio::deadline_timer timer;
-
+  boost::timed_mutex terminateMutex;
   boost::mutex eventsMutex;
   boost::mutex coverageMutex;
   boost::thread instrumThread;
 public:
-  IOServices() : timer(service, boost::posix_time::seconds(InstrUpdateRate)) { }
+  IOServices() { }
 };
 
 InstrumentationManager &theInstrManager = InstrumentationManager::getManager();
@@ -47,17 +45,16 @@ void InstrumentationManager::instrumThreadControl() {
 
 	for (;;) {
 		boost::system::error_code code;
-		ioServices->timer.wait(code);
+        bool terminated = ioServices->terminateMutex.timed_lock(boost::posix_time::seconds(InstrUpdateRate));
 
-		if (terminated) {
+        if (terminated) {
 			CLOUD9_INFO("Instrumentation interrupted. Stopping.");
 			writeStatistics();
 			writeEvents();
-			writeCoverage();
+            writeCoverage();
+            ioServices->terminateMutex.unlock();
 			break;
 		}
-
-		ioServices->timer.expires_at(ioServices->timer.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
 
 		writeStatistics();
 		writeEvents();
@@ -67,7 +64,7 @@ void InstrumentationManager::instrumThreadControl() {
 
 
 InstrumentationManager::InstrumentationManager() :
-		referenceTime(now()), stats(MAX_STATISTICS), covUpdated(false), terminated(false) {
+        referenceTime(now()), stats(MAX_STATISTICS), covUpdated(false) {
 
   ioServices = new IOServices();
 }
@@ -85,13 +82,13 @@ InstrumentationManager::~InstrumentationManager() {
 }
 
 void InstrumentationManager::start() {
+    ioServices->terminateMutex.lock();
 	ioServices->instrumThread = boost::thread(&InstrumentationManager::instrumThreadControl, this);
 }
 
 void InstrumentationManager::stop() {
 	if (ioServices->instrumThread.joinable()) {
-		terminated = true;
-		ioServices->timer.cancel();
+        ioServices->terminateMutex.unlock();
 
 		ioServices->instrumThread.join();
 	}

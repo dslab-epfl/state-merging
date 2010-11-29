@@ -95,8 +95,6 @@ private:
 
 	IOServices *ioServices;
 
-	bool terminated;
-
 	void instrumThreadControl();
 
 	void writeStatistics();
