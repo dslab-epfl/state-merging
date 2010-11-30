@@ -87,6 +87,7 @@ void klee_init_env(int* argcPtr, char*** argvPtr) {
 
   int new_argc = 0, n_args;
   char* new_argv[1024];
+  char* tmp_argv[1024];
   unsigned max_len, min_argvs, max_argvs;
   unsigned sym_files = 0, sym_file_len = 0;
   unsigned sym_streams = 0, sym_stream_len = 0;
@@ -141,12 +142,16 @@ usage: (klee_init_env) [options] [program arguments]\n\
       max_argvs = __str_to_int(argv[k++], msg);
       max_len = __str_to_int(argv[k++], msg);
 
-      n_args = klee_range(min_argvs, max_argvs+1, "n_args");
-      for (i=0; i < n_args; i++) {
+      for (i=0; i < max_argvs; ++i) {
         sym_arg_name[3] = '0' + sym_arg_num++;
-        __add_arg(&new_argc, new_argv, 
-                  __get_sym_str(max_len, sym_arg_name),
-                  1024);
+        tmp_argv[i] = __get_sym_str(max_len, sym_arg_name);
+      }
+
+      //n_args = klee_range(min_argvs, max_argvs+1, "n_args");
+      klee_make_symbolic(&n_args, sizeof(n_args), "n_args");
+      klee_assume(n_args >= (int) min_argvs && n_args <= (int) max_argvs);
+      for (i=0; i < n_args; i++) {
+        __add_arg(&new_argc, new_argv, tmp_argv[i], 1024);
       }
     }
     else if (__streq(argv[k], "--sym-files") || __streq(argv[k], "-sym-files")) {
