@@ -453,9 +453,11 @@ bool ExecutionState::merge(const ExecutionState &b) {
       if (ai->first != bi->first) {
         if (DebugLogStateMerge) {
           if (ai->first < bi->first) {
-            std::cerr << "\t\tB misses binding for: " << ai->first->id << "\n";
+            std::cerr << "\t\tB misses binding for: " << ai->first->id
+                      << " (" << ai->first->name << ")\n";
           } else {
-            std::cerr << "\t\tA misses binding for: " << bi->first->id << "\n";
+            std::cerr << "\t\tA misses binding for: " << bi->first->id
+                      << " (" << bi->first->name << ")\n";
           }
         }
         if (DebugLogStateMerge)
