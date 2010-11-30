@@ -218,11 +218,12 @@ RandomPathSearcher::~RandomPathSearcher() {
 ExecutionState &RandomPathSearcher::selectState() {
   unsigned flips=0, bits=0;
   PTree::Node *n = executor.processTree->root;
+  assert(n->active);
   
   while (!n->data) {
-    if (!n->left) {
+    if (!n->left || !n->left->active) {
       n = n->right;
-    } else if (!n->right) {
+    } else if (!n->right || !n->right->active) {
       n = n->left;
     } else {
       if (bits==0) {
@@ -232,6 +233,7 @@ ExecutionState &RandomPathSearcher::selectState() {
       --bits;
       n = (flips&(1<<bits)) ? n->left : n->right;
     }
+    assert(n && n->active);
   }
 
   return *n->data;

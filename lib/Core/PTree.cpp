@@ -50,27 +50,32 @@ void PTree::merge(Node *target, Node *other) {
 
   other->left = target;
   other->state = PTreeNode::MERGED;
+  target->mergedParents.push_back(other);
+}
+
+void PTree::markInactive(Node *n) {
+  for (; n; n = n->parent) {
+    if (n->left && n->left->active)
+      return;
+    if (n->right && n->right->active)
+      return;
+
+    n->active = false;
+    for (llvm::SmallVectorImpl<PTreeNode*>::iterator it = n->mergedParents.begin(),
+                  ie = n->mergedParents.end(); it != ie; ++it) {
+      markInactive(*it);
+    }
+  }
 }
 
 void PTree::terminate(Node *n) {
-  if(n->state != PTreeNode::MERGED)
-    n->state = PTreeNode::TERMINATED;
-#if 0
-  assert(!n->left && !n->right);
-  do {
-    Node *p = n->parent;
-    delete n;
-    if (p) {
-      if (n == p->left) {
-        p->left = 0;
-      } else {
-        assert(n == p->right);
-        p->right = 0;
-      }
-    }
-    n = p;
-  } while (n && !n->left && !n->right);
-#endif
+  if(n->state == PTreeNode::MERGED)
+    return;
+
+  assert(!n->left && !n->right && n->active);
+
+  n->state = PTreeNode::TERMINATED;
+  markInactive(n);
 }
 
 void PTree::dump(std::ostream &os) {
@@ -124,6 +129,7 @@ PTreeNode::PTreeNode(PTreeNode *_parent,
     data(_data),
     condition(0),
     state(RUNNING),
+    active(true),
     forkTag(KLEE_FORK_DEFAULT) {
 }
 

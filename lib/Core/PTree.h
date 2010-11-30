@@ -13,6 +13,8 @@
 #include <klee/Expr.h>
 #include <klee/ForkTag.h>
 
+#include "llvm/ADT/SmallVector.h"
+
 #include <utility>
 #include <cassert>
 #include <iostream>
@@ -20,11 +22,17 @@
 namespace klee {
   class ExecutionState;
 
-  class PTree { 
-    typedef ExecutionState* data_type;
-
+  /* XXX: with merging enabled this is no longer a tree */
+  class PTree {
   public:
     typedef class PTreeNode Node;
+
+  private:
+    typedef ExecutionState* data_type;
+
+    void markInactive(Node *n);
+
+  public:
     Node *root;
 
     PTree(const data_type &_root);
@@ -46,9 +54,11 @@ namespace klee {
     friend class PTree;
   public:
     PTreeNode *parent, *left, *right;
+    llvm::SmallVector<PTreeNode*, 2> mergedParents;
     ExecutionState *data;
     ref<Expr> condition;
     enum { RUNNING, SPLITTED, MERGED, TERMINATED } state;
+    bool active; ///< at least one node in a subtree is running
 
     ForkTag forkTag;
   private:
