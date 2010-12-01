@@ -489,8 +489,28 @@ ExecutionState &LazyMergingSearcher::selectState() {
     // TODO: do not fast-forward state if there are other
     // states that could be merged with state first (i.e., select
     // smartly what state to fast-forward first).
+#if 0
     state = *statesToForward.begin();
     uint32_t mergeIndex = state->getMergeIndex();
+
+#else
+    state = NULL;
+    uint32_t mergeIndex = 0;
+    int maxCandidates = -1;
+    for (StatesSet::iterator it = statesToForward.begin(), ie = statesToForward.end();
+                            it != ie; ++it) {
+      mergeIndex = (*it)->getMergeIndex();
+      StatesTrace::const_iterator ti = statesTrace.find(mergeIndex);
+      int candidates = (ti == statesTrace.end() ? 0
+                        : ti->second.size() - ti->second.count(state));
+      if (candidates > maxCandidates) {
+        maxCandidates = candidates;
+        state = *it;
+      }
+    }
+#endif
+
+    assert(state != NULL);
 
     // Check wether we can already merge
     StatesTrace::const_iterator ti = statesTrace.find(mergeIndex);
