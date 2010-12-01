@@ -15,7 +15,9 @@
 #include <map>
 #include <queue>
 
-#include <tr1/unordered_set>
+#include <llvm/ADT/SmallPtrSet.h>
+#include <llvm/ADT/DenseSet.h>
+#include <llvm/ADT/DenseMap.h>
 
 #include <inttypes.h>
 
@@ -213,8 +215,8 @@ namespace klee {
     Searcher *baseSearcher;
 
     // TODO: use unordered multimap instead
-    typedef std::set<ExecutionState*> StatesSet;
-    typedef std::map<uint32_t, StatesSet> StatesTrace;
+    typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
+    typedef llvm::DenseMap<uint32_t, StatesSet*> StatesTrace;
 
     StatesTrace statesTrace;
     StatesSet statesToForward;

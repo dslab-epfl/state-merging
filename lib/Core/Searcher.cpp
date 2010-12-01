@@ -474,8 +474,8 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
     return false;
 
   // This loop could have at most two iterations
-  for(StatesSet::const_iterator it1 = it->second.begin(),
-                      ie1 = it->second.end(); it1 != ie1; ++it1) {
+  for (StatesSet::const_iterator it1 = it->second->begin(),
+                      ie1 = it->second->end(); it1 != ie1; ++it1) {
     if (*it1 != state)
       return true;
   }
@@ -492,37 +492,65 @@ ExecutionState &LazyMergingSearcher::selectState() {
 #if 0
     state = *statesToForward.begin();
     uint32_t mergeIndex = state->getMergeIndex();
+    StatesTrace::iterator traceIt = statesTrace.find(mergeIndex);
+    unsigned candidates = (traceIt == statesTrace.end() ? 0
+                  : traceIt->second->size() - traceIt->second->count(state));
 
-#else
-    state = NULL;
-    uint32_t mergeIndex = 0;
-    int maxCandidates = -1;
-    for (StatesSet::iterator it = statesToForward.begin(), ie = statesToForward.end();
-                            it != ie; ++it) {
-      mergeIndex = (*it)->getMergeIndex();
-      StatesTrace::const_iterator ti = statesTrace.find(mergeIndex);
-      int candidates = (ti == statesTrace.end() ? 0
-                        : ti->second.size() - ti->second.count(state));
-      if (candidates > maxCandidates) {
-        maxCandidates = candidates;
-        state = *it;
-      }
-    }
-#endif
-
-    assert(state != NULL);
-
-    // Check wether we can already merge
-    StatesTrace::const_iterator ti = statesTrace.find(mergeIndex);
-    if(ti == statesTrace.end() || ti->second.size() == ti->second.count(state)) {
+    if (candidates == 0) {
       // State can no longer be fast-forwarded
       statesToForward.erase(state);
       stats::fastForwardsFail += 1;
       continue;
     }
 
-    for (StatesSet::iterator it = ti->second.begin(),
-                             ie = ti->second.end(); it != ie; ++it) {
+#else
+    state = NULL;
+    uint32_t mergeIndex = 0;
+    unsigned candidates = 0;
+    StatesTrace::iterator traceIt;
+
+    /* Find the state that has maximum number of potential targets to merge */
+    for (StatesSet::iterator it = statesToForward.begin(),
+                        ie = statesToForward.end(); it != ie;) {
+      uint32_t _mergeIndex = (*it)->getMergeIndex();
+      StatesTrace::iterator _traceIt = statesTrace.find(_mergeIndex);
+      unsigned _candidates = (_traceIt == statesTrace.end() ? 0
+                     : _traceIt->second->size() - _traceIt->second->count(*it));
+
+      if (_candidates == 0) {
+          // State can no longer be fast-forwarded, perhaps it branched
+          // in a different direction that it's merge target
+
+          // XXX: StatesSet does not support erase by iterator!
+          // Moreover, erasing seems to invalidate iterators.
+          statesToForward.erase(*it);
+          stats::fastForwardsFail += 1;
+
+          // Restart iteration from the begining since our iterators
+          // are invalidated by calling erase
+          it = statesToForward.begin();
+
+      } else {
+          if (_candidates > candidates) {
+            state = *it;
+            mergeIndex = _mergeIndex;
+            candidates = _candidates;
+            traceIt = _traceIt;
+          }
+          ++it;
+      }
+    }
+
+    if (state == NULL) {
+        // All states were removed from statesToForward
+        break;
+    }
+
+#endif
+
+    // Check wether we can already merge
+    for (StatesSet::iterator it = traceIt->second->begin(),
+                             ie = traceIt->second->end(); it != ie; ++it) {
       state1 = *it;
 
       if (state1 != state && state1->getMergeIndex() == mergeIndex) {
@@ -534,8 +562,8 @@ ExecutionState &LazyMergingSearcher::selectState() {
           // Make traces that was pointing to state to point to state1
           for (StatesTrace::iterator it1 = statesTrace.begin(),
                                      ie1 = statesTrace.end(); it1 != ie1; ++it1) {
-            if (it1->second.erase(state) > 0) {
-              it1->second.insert(state1);
+            if (it1->second->erase(state) > 0) {
+              it1->second->insert(state1);
             }
           }
 
@@ -581,7 +609,22 @@ void LazyMergingSearcher::update(ExecutionState *current,
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
   if (current && removedStates.count(current) == 0) {
-    statesTrace[current->getMergeIndex()].insert(current);
+    uint32_t mergeIndex = current->getMergeIndex();
+    StatesTrace::iterator it = statesTrace.find(mergeIndex);
+    if (it == statesTrace.end()) {
+        it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
+    }
+    it->second->insert(current);
+
+    // XXX for some reason the following causes a slowdown
+    /*
+    if (statesToForward.empty() && it->second->size() > 1) {
+        // We are not currently fast-forwarding, but the current
+        // state can now be fast-forwarded
+        statesToForward.insert(current);
+        stats::fastForwardsStart += 1;
+    }
+    */
   }
 
   // TODO: we could add every newly created state to fast-forward track,
@@ -590,7 +633,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
   if (!statesToForward.empty()) {
     // States created during fast-forward are also candidates for fast-forward
     // We would like to check it as soon as possible
-    for (StatesSet::const_iterator it = addedStates.begin(),
+    for (std::set<ExecutionState*>::const_iterator it = addedStates.begin(),
                                    ie = addedStates.end(); it != ie; ++it) {
       if (canFastForwardState(*it)) {
         statesToForward.insert(*it);
@@ -599,7 +642,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
     }
   }
 
-  for (StatesSet::const_iterator it = removedStates.begin(),
+  for (std::set<ExecutionState*>::const_iterator it = removedStates.begin(),
                                  ie = removedStates.end(); it != ie; ++it) {
     ExecutionState *state = *it;
     statesToForward.erase(const_cast<ExecutionState*>(state));
@@ -607,11 +650,13 @@ void LazyMergingSearcher::update(ExecutionState *current,
     // Terminated states are useless for merge, remove them from traces
     for (StatesTrace::iterator it1 = statesTrace.begin(),
                                ie1 = statesTrace.end(); it1 != ie1;) {
-      it1->second.erase(const_cast<ExecutionState*>(state));
-      if (it1->second.empty())
+      it1->second->erase(const_cast<ExecutionState*>(state));
+      if (it1->second->empty()) {
+        delete it1->second;
         statesTrace.erase(it1++);
-      else
+      } else {
         ++it1;
+      }
     }
   }
 
