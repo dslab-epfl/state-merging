@@ -290,8 +290,10 @@ Solver *constructSolverChain(STPSolver *stpSolver,
                              std::string stpQueryPCLogPath) {
   Solver *solver = stpSolver;
 
-  if (UseParallelSolver)
+  if (UseParallelSolver) {
+    CLOUD9_DEBUG("Using the parallel solver...");
     solver = createParallelSolver(solver);
+  }
 
   if (UseSTPQueryPCLog)
     solver = createPCLoggingSolver(solver, 
