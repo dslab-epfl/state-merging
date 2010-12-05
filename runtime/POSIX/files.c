@@ -167,7 +167,7 @@ int _is_blocking_file(file_t *file, int event) {
 // The POSIX API
 ////////////////////////////////////////////////////////////////////////////////
 
-ssize_t _read_file(file_t *file, void *buf, size_t count) {
+ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
@@ -178,31 +178,38 @@ ssize_t _read_file(file_t *file, void *buf, size_t count) {
 
     int res;
 
-    if (file->offset >= 0)
-      res = pread(file->concrete_fd, buf, count, file->offset);
+    if (offset >= 0)
+      res = CALL_UNDERLYING(pread, file->concrete_fd, buf, count, offset);
+    else if (file->offset >= 0)
+      res = CALL_UNDERLYING(pread, file->concrete_fd, buf, count, file->offset);
     else
       res = CALL_UNDERLYING(read, file->concrete_fd, buf, count);
 
     if (res == -1)
      errno = klee_get_errno();
     else {
-      if (file->offset >= 0)
+      if (file->offset >= 0 && offset < 0)
         file->offset += res;
     }
 
     return res;
   }
 
-  ssize_t res = _block_read(&file->storage->contents, buf, count, file->offset);
-  assert(res >= 0);
+  ssize_t res = _block_read(&file->storage->contents, buf, count,
+      offset >= 0 ? offset : file->offset);
 
-  file->offset += res;
-  file->storage->stat->st_size = file->storage->contents.size;
+  if (res < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (offset < 0)
+    file->offset += res;
 
   return res;
 }
 
-ssize_t _write_file(file_t *file, const void *buf, size_t count) {
+ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
@@ -213,26 +220,35 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count) {
 
     int res;
 
+    if (offset >= 0)
+      res = CALL_UNDERLYING(pwrite, file->concrete_fd, buf, count, offset);
     if (file->offset >= 0)
-      res = pwrite(file->concrete_fd, buf, count, file->offset);
+      res = CALL_UNDERLYING(pwrite, file->concrete_fd, buf, count, file->offset);
     else
       res = CALL_UNDERLYING(write, file->concrete_fd, buf, count);
 
     if (res == -1)
       errno = klee_get_errno();
     else {
-      if (file->offset >= 0)
+      if (file->offset >= 0 && offset < 0)
         file->offset += res;
     }
 
     return res;
   }
 
-  ssize_t res = _block_write(&file->storage->contents, buf, count, file->offset);
-  assert(res >= 0);
+  ssize_t res = _block_write(&file->storage->contents, buf, count,
+      offset >= 0 ? offset : file->offset);
 
-  file->offset += res;
-  file->storage->stat->st_size = file->storage->contents.size;
+  if (res < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (offset < 0) {
+    file->offset += res;
+    file->storage->stat->st_size = file->storage->contents.size;
+  }
 
   if (res == 0)
     errno = EFBIG;

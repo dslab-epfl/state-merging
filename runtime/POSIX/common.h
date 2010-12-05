@@ -88,7 +88,7 @@
   __attribute__((used)) static const void* __usage_ ## name = (void*) &name;
 
 #define CALL_UNDERLYING(name, ...) \
-    __klee_original_ ## name(__VA_ARGS__);
+    __klee_original_ ## name(__VA_ARGS__)
 
 #define CALL_MODEL(name, ...) \
     __klee_model_ ## name(__VA_ARGS__);
