@@ -24,6 +24,8 @@ typedef struct {
 typedef struct {
   unsigned count;
   disk_file_t **files;
+
+  char unsafe;
 } filesystem_t;
 
 extern filesystem_t __fs;
@@ -44,8 +46,8 @@ void __init_disk_file(disk_file_t *dfile, size_t maxsize, const char *symname,
 disk_file_t *__get_sym_file(const char *pathname);
 
 int _close_file(file_t *file);
-ssize_t _read_file(file_t *file, void *buf, size_t count);
-ssize_t _write_file(file_t *file, const void *buf, size_t count);
+ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset);
+ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset);
 int _stat_file(file_t *file, struct stat *buf);
 int _ioctl_file(file_t *file, unsigned long request, char *argp);
 

@@ -90,11 +90,16 @@ static int _is_blocking(int fd, int event) {
   }
 }
 
-static ssize_t _clean_read(int fd, void *buf, size_t count) {
+static ssize_t _clean_read(int fd, void *buf, size_t count, off_t offset) {
   fd_entry_t *fde = &__fdt[fd];
 
+  if (offset >= 0 && !(fde->attr & FD_IS_FILE)) {
+    errno = EINVAL;
+    return -1;
+  }
+
   if (fde->attr & FD_IS_FILE) {
-    return _read_file((file_t*)fde->io_object, buf, count);
+    return _read_file((file_t*)fde->io_object, buf, count, offset);
   } else if (fde->attr & FD_IS_PIPE) {
     return _read_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
@@ -104,11 +109,16 @@ static ssize_t _clean_read(int fd, void *buf, size_t count) {
   }
 }
 
-static ssize_t _clean_write(int fd, const void *buf, size_t count) {
+static ssize_t _clean_write(int fd, const void *buf, size_t count, off_t offset) {
   fd_entry_t *fde = &__fdt[fd];
 
+  if (offset >= 0 && !(fde->attr & FD_IS_FILE)) {
+    errno = EINVAL;
+    return -1;
+  }
+
   if (fde->attr & FD_IS_FILE) {
-    return _write_file((file_t*)fde->io_object, buf, count);
+    return _write_file((file_t*)fde->io_object, buf, count, offset);
   } else if (fde->attr & FD_IS_PIPE) {
     return _write_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
@@ -131,7 +141,7 @@ ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt) {
     if (count > 0 && _is_blocking(fd, EVENT_READ))
       return count;
 
-    ssize_t res = _clean_read(fd, iov[i].iov_base, iov[i].iov_len);
+    ssize_t res = _clean_read(fd, iov[i].iov_base, iov[i].iov_len, -1);
 
     if (res == -1) {
       assert(count == 0);
@@ -160,7 +170,7 @@ ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt) {
     if (count > 0 && _is_blocking(fd, EVENT_WRITE))
       return count;
 
-    ssize_t res = _clean_write(fd, iov[i].iov_base, iov[i].iov_len);
+    ssize_t res = _clean_write(fd, iov[i].iov_base, iov[i].iov_len, -1);
 
     if (res == -1) {
       assert(count == 0);
@@ -215,7 +225,7 @@ static ssize_t _read(int fd, int type, ...) {
   }
 
   // Now perform the real thing
-  if (type & _IO_TYPE_SCATTER_GATHER) {
+  if (type == _IO_TYPE_SCATTER_GATHER) {
     va_list ap;
     va_start(ap, type);
     struct iovec *iov = va_arg(ap, struct iovec*);
@@ -228,9 +238,12 @@ static ssize_t _read(int fd, int type, ...) {
     va_start(ap, type);
     void *buf = va_arg(ap, void*);
     size_t count = va_arg(ap, size_t);
+    off_t offset = -1;
+    if (type == _IO_TYPE_POSITIONAL)
+      offset = va_arg(ap, off_t);
     va_end(ap);
 
-    return _clean_read(fd, buf, count);
+    return _clean_read(fd, buf, count, offset);
   }
 }
 
@@ -240,6 +253,10 @@ DEFINE_MODEL(ssize_t, read, int fd, void *buf, size_t count) {
 
 DEFINE_MODEL(ssize_t, readv, int fd, const struct iovec *iov, int iovcnt) {
   return _read(fd, _IO_TYPE_SCATTER_GATHER, iov, iovcnt);
+}
+
+DEFINE_MODEL(ssize_t, pread, int fd, void *buf, size_t count, off_t offset) {
+  return _read(fd, _IO_TYPE_POSITIONAL, buf, count, offset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -275,7 +292,7 @@ static ssize_t _write(int fd, int type, ...) {
     }
   }
 
-  if (type & _IO_TYPE_SCATTER_GATHER) {
+  if (type == _IO_TYPE_SCATTER_GATHER) {
     va_list ap;
     va_start(ap, type);
     struct iovec *iov = va_arg(ap, struct iovec*);
@@ -288,9 +305,12 @@ static ssize_t _write(int fd, int type, ...) {
     va_start(ap, type);
     void *buf = va_arg(ap, void*);
     size_t count = va_arg(ap, size_t);
+    off_t offset = -1;
+    if (type == _IO_TYPE_POSITIONAL)
+      offset = va_arg(ap, off_t);
     va_end(ap);
 
-    return _clean_write(fd, buf, count);
+    return _clean_write(fd, buf, count, offset);
   }
 }
 
@@ -300,6 +320,10 @@ DEFINE_MODEL(ssize_t, write, int fd, const void *buf, size_t count) {
 
 DEFINE_MODEL(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt) {
   return _write(fd, _IO_TYPE_SCATTER_GATHER, iov, iovcnt);
+}
+
+DEFINE_MODEL(ssize_t, pwrite, int fd, const void *buf, size_t count, off_t offset) {
+  return _write(fd, _IO_TYPE_POSITIONAL, buf, count, offset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -363,7 +387,7 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
       }
 
       res = _clean_read(in_fd, buffer,
-          (count > SENDFILE_BUFFER_SIZE) ? SENDFILE_BUFFER_SIZE : count);
+          (count > SENDFILE_BUFFER_SIZE) ? SENDFILE_BUFFER_SIZE : count, -1);
 
       if (res <= 0) {
         // We don't assert anything here, since reads can be undone
@@ -375,7 +399,7 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
       rtotal += res;
     }
 
-    res = _clean_write(out_fd, &buffer[wpos], rpos - wpos);
+    res = _clean_write(out_fd, &buffer[wpos], rpos - wpos, -1);
     if (res <= 0) {
       if (res == -1)
         assert(wtotal == 0);
