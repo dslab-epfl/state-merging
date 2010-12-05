@@ -1,5 +1,8 @@
 #!/bin/bash
 
+RUN_WORKER="./run-worker.sh"
+RUN_LB="$(dirname $0)/run-lb.sh"
+
 if [ -n "$1" ]
 then
 	NOWORKERS=$1
@@ -34,11 +37,11 @@ for X in $(seq 1 $NOWORKERS)
 do
 	echo "Launching worker $X..."
 	WORKER_PORT=$((WORKER_START+X))
-	./run-worker.sh $WORKER_PORT $LBPORT ${EXPNAME}-worker${X} 2>&1 | tee ${EXPNAME}-output-w${X}.txt &
+	$RUN_WORKER $WORKER_PORT $LBPORT ${EXPNAME}-worker${X} 2>&1 | tee ${EXPNAME}-output-w${X}.txt &
 done
 
 echo "Launching the load balancer..."
-./run-lb.sh $LBPORT 2>&1 | tee ${EXPNAME}-output-lb.txt &
+$RUN_LB $LBPORT 2>&1 | tee ${EXPNAME}-output-lb.txt &
 
 echo "Now waiting for them to finish..."
 for X in $(seq 1 $((NOWORKERS+1)) )
