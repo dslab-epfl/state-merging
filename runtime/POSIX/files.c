@@ -381,7 +381,7 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
   if (dfile) {
     return _open_symbolic(dfile, flags, mode);
   } else {
-    if ((flags & O_ACCMODE) != O_RDONLY) {
+    if ((flags & O_ACCMODE) != O_RDONLY && !__fs.unsafe) {
       klee_warning("blocked non-r/o access to concrete file");
       errno = EACCES;
       return -1;

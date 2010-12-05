@@ -24,6 +24,8 @@ typedef struct {
 typedef struct {
   unsigned count;
   disk_file_t **files;
+
+  char unsafe;
 } filesystem_t;
 
 extern filesystem_t __fs;

@@ -97,10 +97,12 @@ static void _init_network(void) {
   STATIC_LIST_INIT(__unix_net.end_points);
 }
 
-void klee_init_fds(unsigned n_files, unsigned file_length,
-                   int sym_stdout_flag) {
+void klee_init_fds(unsigned n_files, unsigned file_length, char unsafe) {
   _init_symfiles(n_files, file_length);
   _init_network();
 
   _init_fdt();
+
+  // Setting the unsafe (allow external writes) flag
+  __fs.unsafe = unsafe;
 }

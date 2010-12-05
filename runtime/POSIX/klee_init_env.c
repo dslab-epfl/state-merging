@@ -89,11 +89,7 @@ void klee_init_env(int* argcPtr, char*** argvPtr) {
   char* new_argv[1024];
   unsigned max_len, min_argvs, max_argvs;
   unsigned sym_files = 0, sym_file_len = 0;
-  unsigned sym_streams = 0, sym_stream_len = 0;
-  unsigned sym_dgrams = 0, sym_dgram_len = 0;
-  int sym_stdout_flag = 0;
-  int save_all_writes_flag = 0;
-  int fd_fail = 0;
+  char unsafe_flag = 0;
   char** final_argv;
   char sym_arg_name[5] = "arg";
   unsigned sym_arg_num = 0;
@@ -160,55 +156,9 @@ usage: (klee_init_env) [options] [program arguments]\n\
       sym_file_len = __str_to_int(argv[k++], msg);
 
     }
-    else if (__streq(argv[k], "--sym-stdout") || __streq(argv[k], "-sym-stdout")) {
-      sym_stdout_flag = 1;
+    else if (__streq(argv[k], "--unsafe") || __streq(argv[k], "-unsafe")) {
+      unsafe_flag = 1;
       k++;
-    }
-    else if (__streq(argv[k], "--save-all-writes") || __streq(argv[k], "-save-all-writes")) {
-      save_all_writes_flag = 1;
-      k++;
-    }
-    else if (__streq(argv[k], "--fd-fail") || __streq(argv[k], "-fd-fail")) {
-      fd_fail = 1;
-      k++;
-    }
-    else if (__streq(argv[k], "--max-fail") || __streq(argv[k], "-max-fail")) {
-      const char *msg = "--max-fail expects an integer argument <max-failures>";
-      if (++k == argc)
-	__emit_error(msg);
-		
-      fd_fail = __str_to_int(argv[k++], msg);
-    }
-    /* "sym-connections": for backward compatability */
-    else if (__streq(argv[k], "--sym-connections") || __streq(argv[k], "-sym-connections")) {
-      const char* msg = "--sym-connections expects two integer arguments <no-connections> <bytes-per-connection>";
-
-      if (k+2 >= argc)
-        __emit_error(msg);
-
-      k++;
-      sym_streams = __str_to_int(argv[k++], msg);
-      sym_stream_len = __str_to_int(argv[k++], msg);
-    }
-    else if (__streq(argv[k], "--sym-streams") || __streq(argv[k], "-sym-streams")) {
-      const char* msg = "--sym-streams expects two integer arguments <no-streams> <bytes-per-stream>";
-
-      if (k+2 >= argc)
-        __emit_error(msg);
-
-      k++;
-      sym_streams = __str_to_int(argv[k++], msg);
-      sym_stream_len = __str_to_int(argv[k++], msg);
-    }
-    else if (__streq(argv[k], "--sym-datagrams") || __streq(argv[k], "-sym-datagrams")) {
-      const char* msg = "--sym-datagrams expects two integer arguments <no-datagrams> <bytes-per-datagram>";
-
-      if (k+2 >= argc)
-        __emit_error(msg);
-
-      k++;
-      sym_dgrams = __str_to_int(argv[k++], msg);
-      sym_dgram_len = __str_to_int(argv[k++], msg);
     }
     else {
       /* simply copy arguments */
@@ -226,8 +176,7 @@ usage: (klee_init_env) [options] [program arguments]\n\
 
   klee_init_processes();
 
-  klee_init_fds(sym_files, sym_file_len, 
-		sym_stdout_flag);
+  klee_init_fds(sym_files, sym_file_len, unsafe_flag);
 
   klee_init_mmap();
 
