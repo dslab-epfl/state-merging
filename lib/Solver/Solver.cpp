@@ -438,6 +438,7 @@ public:
 
   char *getConstraintLog(const Query&);
   void setTimeout(double _timeout) { timeout = _timeout; }
+  double getTimeout() { return timeout; }
 
   bool computeTruth(const Query&, bool &isValid);
   bool computeValue(const Query&, ref<Expr> &result);

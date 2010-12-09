@@ -12,6 +12,8 @@
 #include <vector>
 #include <deque>
 
+#include <pthread.h>
+
 namespace klee {
 
 class ParallelSolver: public SolverImpl {
@@ -42,6 +44,19 @@ public:
                                       &values,
                                     bool &hasSolution);
 };
+
+struct SolverWork {
+  pthread_mutex_t mutex;
+  bool cancelFlag;
+};
+
+static void *subQuerySolver(void *work) {
+  SolverWork *solverWork = static_cast<SolverWork*>(work);
+}
+
+static void *mainQuerySolver(void *work) {
+  SolverWork *solverWork = static_cast<SolverWork*>(work);
+}
 
 ParallelSolver::ParallelSolver(Solver *_solver) :
   solver(_solver) {

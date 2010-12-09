@@ -25,6 +25,14 @@ using namespace llvm;
 
 using cloud9::instrum::Timer;
 
+static void recordTiming(const Timer &t, const ExecutionState &state) {
+  std::stringstream ss;
+  ss << t << " " << state.multiplicity;
+  ss.flush();
+
+  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve, ss.str());
+}
+
 /***/
 
 bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr,
@@ -47,7 +55,7 @@ bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr,
   bool success = solver->evaluate(Query(state.constraints(), expr), result);
 
   t.stop();
-  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve, t);
+  recordTiming(t, state);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -77,7 +85,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr,
   bool success = solver->mustBeTrue(Query(state.constraints(), expr), result);
 
   t.stop();
-  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve, t);
+  recordTiming(t, state);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -130,7 +138,7 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr,
   bool success = solver->getValue(Query(state.constraints(), expr), result);
 
   t.stop();
-  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve, t);
+  recordTiming(t, state);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -160,7 +168,7 @@ TimingSolver::getInitialValues(const ExecutionState& state,
                                           objects, result);
   
   t.stop();
-  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve, t);
+  recordTiming(t, state);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
