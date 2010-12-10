@@ -748,6 +748,7 @@ STPSolverImpl::computeInitialValues(const Query &query,
     t.start();
     runAndGetCex(vc, builder, stp_e, objects, values, hasSolution);
     t.stop();
+
     cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
 
     //CLOUD9_DEBUG("SMT solving complete: " << t);

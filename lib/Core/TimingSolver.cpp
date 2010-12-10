@@ -26,11 +26,15 @@ using namespace llvm;
 using cloud9::instrum::Timer;
 
 static void recordTiming(const Timer &t, const ExecutionState &state) {
-  std::stringstream ss;
-  ss << t << " " << state.multiplicity;
-  ss.flush();
+  cloud9::instrum::theInstrManager.recordEventAttribute(
+      cloud9::instrum::ConstraintSolve, cloud9::instrum::StateDepth, state.depth);
+  cloud9::instrum::theInstrManager.recordEventAttribute(
+      cloud9::instrum::ConstraintSolve, cloud9::instrum::StateMultiplicity, state.multiplicity);
 
-  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve, ss.str());
+  cloud9::instrum::theInstrManager.recordEventTiming(
+      cloud9::instrum::ConstraintSolve, t);
+
+  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve);
 }
 
 /***/

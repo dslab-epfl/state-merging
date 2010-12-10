@@ -41,8 +41,15 @@ void LocalFileWriter::writeStatistics(InstrumentationManager::TimeStamp &time,
 void LocalFileWriter::writeEvents(InstrumentationManager::events_t &events) {
 	for (InstrumentationManager::events_t::iterator it = events.begin();
 			it != events.end(); it++) {
-		eventsStream << (*it).first << ' ' << (*it).second.first << ' ' <<
-				(*it).second.second << endl;
+
+		eventsStream << it->first.first << ' ' << it->first.second << ' ';
+
+		for (InstrumentationManager::event_attributes_t::iterator ait = (*it).second.begin();
+		    ait != (*it).second.end(); ait++) {
+		  eventsStream << ait->first << '=' << ait->second << ' ';
+		}
+
+		eventsStream << endl;
 	}
 }
 

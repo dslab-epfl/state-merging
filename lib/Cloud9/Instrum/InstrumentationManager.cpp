@@ -137,9 +137,17 @@ void InstrumentationManager::writeCoverage() {
   }
 }
 
-void InstrumentationManager::recordEvent(Events id, string value) {
-    boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
-    events.push_back(make_pair(now() - referenceTime, make_pair(id, value)));
+void InstrumentationManager::recordEventAttribute(EventClass id, EventAttribute attr, string value) {
+  boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+  pendingEvents[id][attr] = value;
+}
+
+void InstrumentationManager::recordEvent(EventClass id, bool reset) {
+  boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+  events.push_back(make_pair(make_pair(now() - referenceTime, id), pendingEvents[id]));
+
+  if (reset)
+    pendingEvents.erase(id);
 }
 
 void InstrumentationManager::updateCoverage(string tag, std::pair<unsigned, unsigned> value) {

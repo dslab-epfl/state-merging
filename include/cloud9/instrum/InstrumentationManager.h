@@ -31,40 +31,46 @@ using namespace llvm;
 class InstrumentationWriter;
 
 enum Statistics {
-	TotalProcInstructions = 0,
+  TotalProcInstructions = 0,
 
-	TotalProcJobs = 1,
-	TotalReplayedJobs = 14,
-	TotalExportedJobs = 8,
-	TotalImportedJobs = 9,
-	TotalDroppedJobs = 10,
+  TotalProcJobs = 1,
+  TotalReplayedJobs = 14,
+  TotalExportedJobs = 8,
+  TotalImportedJobs = 9,
+  TotalDroppedJobs = 10,
 
-	TotalForkedStates = 15,
-	TotalFinishedStates = 16,
+  TotalForkedStates = 15,
+  TotalFinishedStates = 16,
 
-	TotalTreePaths = 17,
+  TotalTreePaths = 17,
 
-	TotalReplayInstructions = 20,
+  TotalReplayInstructions = 20,
 
-	CurrentJobCount = 11,
-	CurrentActiveStateCount = 18,
-	CurrentStateCount = 19,
+  CurrentJobCount = 11,
+  CurrentActiveStateCount = 18,
+  CurrentStateCount = 19,
 
-	MAX_STATISTICS = 21
+  MAX_STATISTICS = 21
 };
 
-enum Events {
-	TestCase = 0,
-	ErrorCase = 1,
-	JobExecutionState = 2,
-	TimeOut = 3,
-	InstructionBatch = 4,
-	ReplayBatch = 5,
-	SMTSolve = 6,
-	SATSolve = 7,
-	ConstraintSolve = 8,
+enum EventClass {
+  TestCase = 0,
+  ErrorCase = 1,
+  JobExecutionState = 2,
+  TimeOut = 3,
+  InstructionBatch = 4,
+  ReplayBatch = 5,
+  SMTSolve = 6,
+  SATSolve = 7,
+  ConstraintSolve = 8
+};
 
-	MAX_EVENTS = 9
+enum EventAttribute {
+  Default = 0,
+  WallTime = 1,
+  ThreadTime = 2,
+  StateDepth = 3,
+  StateMultiplicity = 4
 };
 
 class IOServices;
@@ -72,10 +78,16 @@ class IOServices;
 class InstrumentationManager {
 public:
 	typedef sys::TimeValue TimeStamp;
-	typedef vector<int> statistics_t;
-	typedef vector<pair<TimeStamp, pair<int, string> > > events_t;
 
-	typedef map<string, std::pair<unsigned, unsigned> > coverage_t;
+	typedef vector<int> statistics_t;
+
+	typedef map<int, string> event_attributes_t;
+	typedef pair<TimeStamp, int> event_id_t;
+
+	typedef map<int, event_attributes_t> pending_events_t;
+	typedef vector<pair<event_id_t, event_attributes_t> > events_t;
+
+	typedef map<string, pair<unsigned, unsigned> > coverage_t;
 private:
 	typedef set<InstrumentationWriter*> writer_set_t;
 
@@ -86,6 +98,8 @@ private:
 	}
 
 	statistics_t stats;
+
+	pending_events_t pendingEvents;
 	events_t events;
 
 	writer_set_t writers;
@@ -115,13 +129,32 @@ public:
 	void start();
 	void stop();
 
-	void recordEvent(Events id, string value);
-	void recordEvent(Events id, Timer &timer) {
-	  ostringstream os;
-	  os << timer;
-	  os.flush();
+	void recordEventAttribute(EventClass id, EventAttribute attr, string value);
 
-	  recordEvent(id, os.str());
+	template <class T>
+	void recordEventAttribute(EventClass id, EventAttribute attr, T value) {
+	  stringstream ss;
+	  ss << value;
+	  ss.flush();
+
+	  recordEventAttribute(id, attr, ss.str());
+	}
+
+	void recordEventTiming(EventClass id, const Timer &t) {
+	  recordEventAttribute(id, WallTime, t.getRealTime());
+	  recordEventAttribute(id, ThreadTime, t.getThreadTime());
+	}
+
+	void recordEvent(EventClass id, bool reset = true);
+
+	void recordEvent(EventClass id, Timer &t) {
+	  recordEventTiming(id, t);
+	  recordEvent(id);
+	}
+
+	void recordEvent(EventClass id, string value) {
+	  recordEventAttribute(id, Default, value);
+	  recordEvent(id);
 	}
 
 	void setStatistic(Statistics id, int value) {
