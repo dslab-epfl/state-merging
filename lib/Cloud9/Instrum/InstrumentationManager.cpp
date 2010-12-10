@@ -137,7 +137,7 @@ void InstrumentationManager::writeCoverage() {
   }
 }
 
-void InstrumentationManager::recordEventAttribute(EventClass id, EventAttribute attr, string value) {
+void InstrumentationManager::recordEventAttributeStr(EventClass id, EventAttribute attr, string value) {
   boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
   pendingEvents[id][attr] = value;
 }

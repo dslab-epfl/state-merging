@@ -129,7 +129,7 @@ public:
 	void start();
 	void stop();
 
-	void recordEventAttribute(EventClass id, EventAttribute attr, string value);
+	void recordEventAttributeStr(EventClass id, EventAttribute attr, string value);
 
 	template <class T>
 	void recordEventAttribute(EventClass id, EventAttribute attr, T value) {
@@ -137,7 +137,7 @@ public:
 	  ss << value;
 	  ss.flush();
 
-	  recordEventAttribute(id, attr, ss.str());
+	  recordEventAttributeStr(id, attr, ss.str());
 	}
 
 	void recordEventTiming(EventClass id, const Timer &t) {
@@ -153,7 +153,7 @@ public:
 	}
 
 	void recordEvent(EventClass id, string value) {
-	  recordEventAttribute(id, Default, value);
+	  recordEventAttributeStr(id, Default, value);
 	  recordEvent(id);
 	}
 
