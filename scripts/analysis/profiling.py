@@ -6,6 +6,7 @@ import c9instrum
 
 from c9instrum import Events
 from c9instrum import Statistics
+from c9instrum import EventAttributes
 
 import re
 import math
@@ -47,7 +48,7 @@ def gen_stp_distributions(outFile, experiment):
         assert event.timeStamp >= lastTimeStamp
         
         if event.id == Events.SMT_SOLVE or event.id == Events.SAT_SOLVE:
-            timing, _ = c9instrum.parse_timer(event.value)
+            timing, _ = c9instrum.parse_timer(event)
         
         bucket = int(math.floor(math.log10(timing[0])))
         
@@ -87,12 +88,12 @@ def gen_stp_distributions(outFile, experiment):
 def gen_multiplicity_distribution(outFile, eventEntries):
     relevantEvents = filter(lambda event: event.id == Events.CONSTRAINT_SOLVE, eventEntries)
 
-    for event in relevantEvents:
-        timing, appendix = c9instrum.parse_timer(event.value)
-        if not appendix: continue
-        depth, multiplicity = map(int, appendix.split(","))
-        
-        outFile.write("%d %d %.3f\n" % (depth, multiplicity, timing[1]))
+    for event in relevantEvents:        
+        outFile.write("%d %d %.3f\n" % (
+                int(event.values.get(EventAttributes.STATE_DEPTH)),
+                int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                float(event.values.get(EventAttributes.THREAD_TIME))
+                ))
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]

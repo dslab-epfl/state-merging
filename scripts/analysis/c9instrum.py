@@ -105,6 +105,13 @@ class Events:
   SAT_SOLVE = 7
   CONSTRAINT_SOLVE = 8
 
+class EventAttributes:
+  DEFAULT = 0
+  WALL_TIME = 1
+  THREAD_TIME = 2
+  STATE_DEPTH = 3
+  STATE_MULTIPLICITY = 4
+
 
 class StatisticEntry:
   def __init__(self):
@@ -116,18 +123,18 @@ class EventEntry:
   def __init__(self):
     self.timeStamp = None
     self.id = None
-    self.value = None
+    self.values = { }
     
 
 def _parse_stamp(stamp_str):
   paranthesis_expr = re.match("\[(?P<time>[0-9]*.[0-9]*)\]", stamp_str)
   
-  if paranthesis_expr is not None:
+  if paranthesis_expr:
     return float(paranthesis_expr.group("time"))
   else:
     return float(stamp_str)
   
-def parse_timer(timer_str):
+def parse_timer(event):
   timings = []
   
   tokens = timer_str.split()
@@ -137,7 +144,7 @@ def parse_timer(timer_str):
 
   appendix = tokens[-1] if len(tokens) % 2 == 1 else None
   
-  return timings, appendix
+  return (event.values.get(EventAttributes.WALL_TIME), event.values.get(EventAttributes.THREAD_TIME)), None
 
 
 def _parse_stats(f, file_name):
@@ -200,10 +207,9 @@ def _parse_events(f, file_name):
         line_words = line.split()
         try:
             entry = EventEntry()
-            entry.timeStamp = _parse_stamp(line_words[0])
-            entry.id = int(line_words[1])
+            entry.timeStamp, entry.id = _parse_stamp(line_words[0]), int(line_words[1])
     
-            entry.value = " ".join(line_words[2:])
+            entry.values = dict(map(lambda (x,y): (int(x), y), [attr.split("=") for attr in line_words[2:]]))
             
             result.append(entry)
         except:
