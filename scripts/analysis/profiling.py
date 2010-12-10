@@ -47,7 +47,7 @@ def gen_stp_distributions(outFile, experiment):
         assert event.timeStamp >= lastTimeStamp
         
         if event.id == Events.SMT_SOLVE or event.id == Events.SAT_SOLVE:
-            timing = c9instrum.parse_timer(event.value)
+            timing, _ = c9instrum.parse_timer(event.value)
         
         bucket = int(math.floor(math.log10(timing[0])))
         
@@ -90,8 +90,9 @@ def gen_multiplicity_distribution(outFile, eventEntries):
     for event in relevantEvents:
         timing, appendix = c9instrum.parse_timer(event.value)
         if not appendix: continue
+        depth, multiplicity = map(int, appendix.split(","))
         
-        outFile.write("%d %.3f\n" % (int(appendix), timing[1]))
+        outFile.write("%d %d %.3f\n" % (depth, multiplicity, timing[1]))
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]
