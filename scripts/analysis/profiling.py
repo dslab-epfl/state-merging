@@ -86,14 +86,30 @@ def gen_stp_distributions(outFile, experiment):
     outFile.write("\n\n")
 
 def gen_multiplicity_distribution(outFile, eventEntries):
-    relevantEvents = filter(lambda event: event.id == Events.CONSTRAINT_SOLVE, eventEntries)
+    csEvents = filter(lambda event: event.id == Events.CONSTRAINT_SOLVE, eventEntries)
+    stpEvents = filter(lambda event: event.id == Events.SMT_SOLVE, eventEntries)
 
-    for event in relevantEvents:        
+    for event in csEvents:        
         outFile.write("%d %d %.3f\n" % (
                 int(event.values.get(EventAttributes.STATE_DEPTH)),
                 int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
                 float(event.values.get(EventAttributes.THREAD_TIME))
                 ))
+
+    outFile.write("\n\n")
+
+    for event in stpEvents:
+        if not EventAttributes.STATE_DEPTH in event.values or \
+                not EventAttributes.STATE_MULTIPLICITY in event.values:
+            continue
+
+        outFile.write("%d %d %.3f\n" % (
+                int(event.values.get(EventAttributes.STATE_DEPTH)),
+                int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                float(event.values.get(EventAttributes.THREAD_TIME))
+                ))
+
+    
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]
