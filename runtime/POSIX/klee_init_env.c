@@ -138,7 +138,7 @@ usage: (klee_init_env) [options] [program arguments]\n\
       max_argvs = __str_to_int(argv[k++], msg);
       max_len = __str_to_int(argv[k++], msg);
 
-      for (i=0; i < max_argvs; ++i) {
+      for (i=0; (unsigned) i < max_argvs; ++i) {
         sym_arg_name[3] = '0' + sym_arg_num++;
         tmp_argv[i] = __get_sym_str(max_len, sym_arg_name);
       }
