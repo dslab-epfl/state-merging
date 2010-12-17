@@ -310,6 +310,54 @@ namespace klee {
     }
   };
 
+  class ForkCapSearcher : public Searcher {
+    Searcher *baseSearcher;
+
+#if 0
+    typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
+#else
+    typedef std::set<ExecutionState*> StatesSet;
+#endif
+
+    struct StatesAtFork {
+      unsigned long totalForks;
+      StatesSet active;
+      StatesSet paused;
+
+      StatesAtFork(): totalForks(0) {}
+    };
+
+#if 0
+    typedef llvm::DenseMap<KInstruction*, StatesAtFork*> ForkMap;
+    typedef llvm::DenseMap<ExecutionState*, StatesAtFork*> StatesMap;
+#else
+    typedef std::map<KInstruction*, StatesAtFork*> ForkMap;
+    typedef std::map<ExecutionState*, StatesAtFork*> StatesMap;
+#endif
+
+    ForkMap forkMap;
+    StatesMap statesMap;
+    StatesSet disabledStates;
+
+    unsigned long forkCap;
+    unsigned long hardForkCap;
+
+  public:
+    ForkCapSearcher(Searcher *baseSearcher,
+                    unsigned long forkCap,
+                    unsigned long hardForkCap);
+    ~ForkCapSearcher();
+
+    ExecutionState &selectState();
+    void update(ExecutionState *current,
+                const std::set<ExecutionState*> &addedStates,
+                const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty(); }
+    void printName(std::ostream &os) {
+      os << "FrokCapSearcher\n";
+    }
+  };
+
 }
 
 #endif

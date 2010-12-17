@@ -103,10 +103,10 @@ void RandomSearcher::update(ExecutionState *current,
     ExecutionState *es = *it;
     bool ok = false;
 
-    for (std::vector<ExecutionState*>::iterator it = states.begin(),
-           ie = states.end(); it != ie; ++it) {
-      if (es==*it) {
-        states.erase(it);
+    for (std::vector<ExecutionState*>::iterator it1 = states.begin(),
+           ie1 = states.end(); it1 != ie1; ++it1) {
+      if (es==*it1) {
+        states.erase(it1);
         ok = true;
         break;
       }
@@ -783,4 +783,149 @@ void InterleavedSearcher::update(ExecutionState *current,
   for (std::vector<Searcher*>::const_iterator it = searchers.begin(),
          ie = searchers.end(); it != ie; ++it)
     (*it)->update(current, addedStates, removedStates);
+}
+
+/***/
+
+ForkCapSearcher::ForkCapSearcher(Searcher *_baseSearcher,
+                                 unsigned long _forkCap,
+                                 unsigned long _hardForkCap)
+  : baseSearcher(_baseSearcher), forkCap(_forkCap), hardForkCap(_hardForkCap) {
+}
+
+ForkCapSearcher::~ForkCapSearcher() {
+  foreach (const ForkMap::value_type &forkMapItem, forkMap)
+    delete forkMapItem.second;
+
+  delete baseSearcher;
+}
+
+ExecutionState &ForkCapSearcher::selectState() {
+  assert(!baseSearcher->empty() && !statesMap.empty());
+  return baseSearcher->selectState();
+}
+
+void ForkCapSearcher::update(ExecutionState *current,
+                             const std::set<ExecutionState *> &addedStates,
+                             const std::set<ExecutionState *> &removedStates) {
+
+  std::set<ExecutionState*> newAddedStates;
+  std::set<ExecutionState*> newRemovedStates;
+
+  /* Remove the removedStates from forkMap and check for caps */
+  foreach (ExecutionState* state, removedStates) {
+    StatesMap::iterator statesMapIter = statesMap.find(state);
+    if (statesMapIter == statesMap.end()) {
+      assert(disabledStates.count(state));
+      continue;
+    }
+
+    StatesAtFork* statesAtFork = statesMapIter->second;
+    statesMap.erase(statesMapIter);
+
+    if (statesAtFork->active.erase(state)) {
+      /* The removed state was active. Check whether there are states to resume
+         in place of the removed state */
+      if (!statesAtFork->paused.empty()) {
+        /* For now we resume the state that happened to be first
+           in the set ordering. TODO: resume random state or define
+           a heuristic to determine which state to resume. */
+        ExecutionState *resumedState = *statesAtFork->paused.begin();
+        statesAtFork->paused.erase(resumedState);
+        statesAtFork->active.insert(resumedState);
+
+        /* Resumed state could be amoung states to be deleted, so check for it */
+        /* XXX: avoid digging into removedStates again */
+        if (removedStates.count(resumedState) == 0)
+          newAddedStates.insert(resumedState);
+      }
+
+      /* The state was active, which means the baseSearcher knows about it */
+      newRemovedStates.insert(state);
+
+    } else {
+      /* The states was paused. Just remove it and forget. */
+      bool ok = statesAtFork->paused.erase(state);
+      assert(ok);
+    }
+  }
+
+  if (!addedStates.empty()) {
+    /* Get StatesAtFork for the current fork point */
+    KInstruction *forkPoint = current ? current->prevPC() :
+                                    (*addedStates.begin())->prevPC();
+    ForkMap::iterator forkMapIter = forkMap.find(forkPoint);
+    if (forkMapIter == forkMap.end())
+      forkMapIter = forkMap.insert(
+                std::make_pair(forkPoint, new StatesAtFork)).first;
+
+    StatesAtFork* statesAtFork = forkMapIter->second;
+
+    if (current) {
+      /* XXX: does KLEE ever removes current like this ? */
+      assert(removedStates.count(current) == 0);
+
+      StatesMap::iterator statesMapIter = statesMap.find(current);
+      assert(statesMapIter != statesMap.end());
+
+      StatesAtFork* statesAtOldFork = statesMapIter->second;
+      assert(statesAtOldFork->active.count(current));
+
+      if (statesAtOldFork != statesAtFork) {
+        /* We assume that addedStates are non-empty because the current state
+           have forked. It means it should be removed from previous forkpoint and
+           readded to a new one. */
+        /* TODO: verify this */
+
+        /* Remove current state from the previous fork point */
+        statesAtOldFork->active.erase(current);
+
+        if (!statesAtOldFork->paused.empty()) {
+          /* For now we resume the state that happened to be first
+             in the set ordering. TODO: resume random state or define
+             a heuristic to determine which state to resume. */
+          ExecutionState *resumedState = *statesAtOldFork->paused.begin();
+          statesAtOldFork->paused.erase(resumedState);
+          statesAtOldFork->active.insert(resumedState);
+          newAddedStates.insert(resumedState);
+        }
+
+        /* Add current state to the new fork point */
+        statesAtFork->totalForks += 1;
+        if (!hardForkCap || statesAtFork->totalForks <= hardForkCap) {
+          statesMapIter->second = statesAtFork;
+          if (statesAtFork->active.size() < forkCap) {
+            statesAtFork->active.insert(current);
+          } else {
+            statesAtFork->paused.insert(current);
+            newRemovedStates.insert(current);
+          }
+        } else {
+          statesMap.erase(statesMapIter);
+          disabledStates.insert(current);
+          newRemovedStates.insert(current);
+        }
+      }
+    }
+
+    /* Add all other states */
+    foreach (ExecutionState *state, addedStates) {
+      assert(state->prevPC() == forkPoint);
+
+      statesAtFork->totalForks += 1;
+      if (!hardForkCap || statesAtFork->totalForks <= hardForkCap) {
+        statesMap.insert(std::make_pair(state, statesAtFork));
+        if (statesAtFork->active.size() < forkCap) {
+          statesAtFork->active.insert(state);
+          newAddedStates.insert(state);
+        } else {
+          statesAtFork->paused.insert(state);
+        }
+      } else {
+        disabledStates.insert(state);
+      }
+    }
+  }
+
+  baseSearcher->update(current, newAddedStates, newRemovedStates);
 }

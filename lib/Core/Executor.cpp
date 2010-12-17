@@ -2693,7 +2693,8 @@ void Executor::run(ExecutionState &initialState) {
   searcher->update(&initialState, std::set<ExecutionState*>(),
                    std::set<ExecutionState*>());
 
-  while (!states.empty() && !haltExecution) {
+  //while (!states.empty() && !haltExecution) {
+  while (!searcher->empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
 
     stepInState(&state);

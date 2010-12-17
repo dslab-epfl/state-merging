@@ -89,6 +89,16 @@ namespace {
   BatchTime("batch-time",
             cl::desc("Amount of time to batch when using --use-batching-search"),
             cl::init(5.0));
+
+  cl::opt<unsigned>
+  UseForkCap("use-fork-cap",
+            cl::desc("Limit the maximum number of states forked at the same point that are considered at a time"),
+            cl::init(0));
+
+  cl::opt<unsigned>
+  UseHardForkCap("use-hard-fork-cap",
+            cl::desc("Hard limit on the maximum number of states forked at the same point"),
+            cl::init(0));
 }
 
 bool klee::userSearcherRequiresMD2U() {
@@ -173,6 +183,11 @@ Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
   
   if (UseIterativeDeepeningTimeSearch) {
     searcher = new IterativeDeepeningTimeSearcher(searcher);
+  }
+
+  /* XXX: think about the ordering of ForkCap and LazyMerge */
+  if (UseForkCap != 0 || UseHardForkCap != 0) {
+    searcher = new ForkCapSearcher(searcher, UseForkCap, UseHardForkCap);
   }
 
   std::ostream &os = executor.getHandler().getInfoStream();
