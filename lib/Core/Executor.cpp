@@ -148,6 +148,10 @@ namespace {
   UseParallelSolver("use-parallel-solver",
       cl::init(false), cl::desc("Use parallel solver"));
 
+  cl::opt<unsigned>
+  ParallelSubqueriesDelay("parallel-subq-delay",
+      cl::init(100), cl::desc("The delay in millisecs before the subqueries start to be computed"));
+
   cl::opt<bool>
   EmitAllErrors("emit-all-errors",
                 cl::init(false),
@@ -292,7 +296,7 @@ Solver *constructSolverChain(STPSolver *stpSolver,
 
   if (UseParallelSolver) {
     CLOUD9_DEBUG("Using the parallel solver...");
-    solver = createParallelSolver(solver);
+    solver = createParallelSolver(4, ParallelSubqueriesDelay, STPOptimizeDivides, solver);
   }
 
   if (UseSTPQueryPCLog)

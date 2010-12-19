@@ -216,7 +216,7 @@ namespace klee {
 
   /// createParallelSolver - Create a solver which will solve high-level
   /// disjunctions in parallel.
-  Solver *createParallelSolver(Solver *s);
+  Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, Solver *solver);
 
   /// createDummySolver - Create a dummy solver implementation which always
   /// fails.
