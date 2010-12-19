@@ -25,14 +25,22 @@ private:
   bool optimizeDivides;
 
   pthread_mutex_t mutex;
+
   pthread_cond_t mainSolverStarted;
   pthread_cond_t mainSolverReady;
-  pthread_cond_t subQueryReady;
-  pthread_barrier_t doneBarrier;
+  pthread_cond_t subQueryManagerReady;
+
+  pthread_barrier_t queueReadyBarrier;
+  pthread_barrier_t queueDoneBarrier;
 
   // Shared state (protected by the mutex)
-  std::deque<Query*> queryQueue;
+  std::deque<Query*> subQueryQueue;
   const Query *mainQuery;
+
+  const std::vector<const Array*> *solObjects;
+  std::vector< std::vector<unsigned char> > *solValues;
+  bool *hasSolution;
+
   bool subQueryStarted;
 
   // Various solver fields (they don't change from query to query)
@@ -51,6 +59,9 @@ private:
       constraint_expr_t &crtQuery);
 
   void splitQuery(const Query &query, std::vector<constraint_expr_t> &newQueries);
+
+  void solveQueryInParallel(const Query *query);
+  void solveSubQuerySerially(STPSolver *solver, const Query *query);
 public:
   ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, Solver *solver);
   virtual ~ParallelSolver();
@@ -75,6 +86,36 @@ void *subQuerySolverThread(void *ps) {
   // Create our local solver
   STPSolver *stpSolver = new STPSolver(false, pSolver->optimizeDivides);
 
+  CLOUD9_DEBUG("Sub-query solver thread ready");
+
+  for (;;) {
+    pthread_barrier_wait(&pSolver->queueReadyBarrier);
+
+    for (;;) {
+      pthread_mutex_lock(&pSolver->mutex);
+      if (pSolver->subQueryQueue.empty()) {
+        pthread_mutex_unlock(&pSolver->mutex);
+        break;
+      }
+
+      Query *q = pSolver->subQueryQueue.front();
+      if (q == QUERY_FINALIZAE) {
+        pthread_mutex_unlock(&pSolver->mutex);
+        CLOUD9_DEBUG("Sub-query solver done");
+        break;
+      }
+
+      pSolver->subQueryQueue.pop_front();
+      pthread_mutex_unlock(&pSolver->mutex);
+
+      pSolver->solveSubQuerySerially(stpSolver, q);
+
+      delete q;
+    }
+
+    pthread_barrier_wait(&pSolver->queueDoneBarrier);
+  }
+
   // Finalizing...
   delete stpSolver;
 
@@ -94,6 +135,7 @@ void *subSolversManagerThread(void *ps) {
 
     if (pSolver->mainQuery == QUERY_FINALIZAE) {
       pthread_mutex_unlock(&pSolver->mutex);
+      pSolver->solveQueryInParallel(pSolver->mainQuery);
       CLOUD9_DEBUG("Sub-Solver manager thread done");
       break;
     }
@@ -116,19 +158,84 @@ void *subSolversManagerThread(void *ps) {
 
     if (pSolver->subQueryStarted) {
       CLOUD9_DEBUG("Sub-query Manager: Waiting timed out... proceeding to sub-queries");
+
+      assert(pSolver->mainQuery != NULL);
+      pSolver->solveQueryInParallel(pSolver->mainQuery);
     }
 
     pthread_mutex_lock(&pSolver->mutex);
     pSolver->subQueryStarted = false;
-    pthread_cond_signal(&pSolver->subQueryReady);
+    pthread_cond_signal(&pSolver->subQueryManagerReady);
     pthread_mutex_unlock(&pSolver->mutex);
   }
 
-  /*std::vector<ParallelSolver::constraint_expr_t> newQueries;
-  pSolver->splitQuery(query, newQueries);
+  // TODO: Join with the worker threads?
 
-  CLOUD9_DEBUG("Generated " << newQueries.size() << " orthogonal queries");*/
   return NULL;
+}
+
+void ParallelSolver::solveSubQuerySerially(STPSolver *solver, const Query *query) {
+  std::vector< std::vector<unsigned char> > values;
+  bool solution;
+
+  solver->impl->computeInitialValues(*query, *solObjects, values, solution);
+
+  CLOUD9_DEBUG("Sub-query solved!");
+}
+
+void ParallelSolver::solveQueryInParallel(const Query *query) {
+  if (query == QUERY_FINALIZAE) {
+    pthread_mutex_lock(&mutex);
+    subQueryQueue.push_back(QUERY_FINALIZAE);
+    pthread_mutex_unlock(&mutex);
+
+    pthread_barrier_wait(&queueReadyBarrier);
+
+    for (unsigned i = 0; i < solverCount; i++) {
+      pthread_join(subQuerySolvers[i], NULL);
+    }
+
+    return;
+  }
+
+  std::vector<constraint_expr_t> newQueries;
+  std::vector<ConstraintManager*> newManagers;
+  splitQuery(*query, newQueries);
+
+  CLOUD9_DEBUG("Generated " << newQueries.size() << " orthogonal queries");
+
+  if (newQueries.size() == 1) {
+    // Really don't have anything to do here. Pass...
+    return;
+  }
+
+  // Now populate the queries vector
+  pthread_mutex_lock(&mutex);
+
+  assert(subQueryQueue.empty() && "queries leaked from previous invocation");
+
+  for (unsigned i = 0; i < newQueries.size(); i++) {
+    ConstraintManager *m = new ConstraintManager(newQueries[i]);
+    newManagers.push_back(m);
+    subQueryQueue.push_back(new Query(*m, mainQuery->expr));
+  }
+  pthread_mutex_unlock(&mutex);
+
+  pthread_barrier_wait(&queueReadyBarrier); // Synchronize with the group
+
+  pthread_barrier_wait(&queueDoneBarrier); // Synchronize again with the group
+
+  pthread_mutex_lock(&mutex);
+  while (subQueryQueue.size() > 0) {
+    delete subQueryQueue.front();
+    subQueryQueue.pop_front();
+  }
+  pthread_mutex_unlock(&mutex);
+
+  for (unsigned i = 0; i < newManagers.size(); i++) {
+    delete newManagers[i];
+  }
+  newManagers.clear();
 }
 
 ParallelSolver::ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, Solver *solver) {
@@ -144,9 +251,13 @@ ParallelSolver::ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout,
 
   // Init the synchronization structures
   pthread_mutex_init(&mutex, NULL);
+
   pthread_cond_init(&mainSolverStarted, NULL);
   pthread_cond_init(&mainSolverReady, NULL);
-  pthread_cond_init(&subQueryReady, NULL);
+  pthread_cond_init(&subQueryManagerReady, NULL);
+
+  pthread_barrier_init(&queueReadyBarrier, NULL, solverCount + 1);
+  pthread_barrier_init(&queueDoneBarrier, NULL, solverCount + 1); // "+1" accounts for the sub-solvers manager
 
   // Now create the sub-threads
   int res;
@@ -155,9 +266,10 @@ ParallelSolver::ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout,
   assert(res == 0 && "cannot create solver thread");
 
   subQuerySolvers = new pthread_t[solverCount];
-  /*for (int i = 0; i < solverCount; i++) {
+  for (unsigned i = 0; i < solverCount; i++) {
     res = pthread_create(&subQuerySolvers[i], NULL, &subQuerySolverThread, (void*)this);
-  }*/
+    assert(res == 0 && "cannot create solver thread");
+  }
 }
 
 ParallelSolver::~ParallelSolver() {
@@ -169,8 +281,6 @@ ParallelSolver::~ParallelSolver() {
 
   pthread_join(subSolversManager, NULL);
   delete mainSolver;
-
-  // TODO: Join the rest of the threads...
 
   delete subQuerySolvers;
 }
@@ -232,6 +342,7 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   // Save the current query, before starting to solve
   pthread_mutex_lock(&mutex);
   mainQuery = &query;
+  solObjects = &objects;
   assert(!subQueryStarted && "another query is being solved in parallel");
   pthread_cond_signal(&mainSolverStarted);
   pthread_mutex_unlock(&mutex);
@@ -246,7 +357,7 @@ bool ParallelSolver::computeInitialValues(const Query& query,
 
     while(subQueryStarted) {
       // We must wait for the subquery to finish
-      pthread_cond_wait(&subQueryReady, &mutex);
+      pthread_cond_wait(&subQueryManagerReady, &mutex);
     }
   } else {
     pthread_cond_signal(&mainSolverReady);
