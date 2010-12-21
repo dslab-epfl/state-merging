@@ -15,7 +15,10 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <pthread.h>
+#include <errno.h>
 
+// A special pointer value that indicates to the working threads that
+// they should shut down
 #define QUERY_FINALIZAE ((Query*)(uintptr_t)(-1))
 
 #define _CHECKED(smt, expected) \
@@ -56,6 +59,7 @@ private:
   bool *hasSolution;
 
   bool subQueryStarted;
+  bool mainQueryFinished;
 
   // Various solver fields (they don't change from query to query)
   unsigned solverCount;
@@ -110,7 +114,7 @@ void *subQuerySolverThread(void *ps) {
 
     for (;;) {
       _CHECKED(pthread_mutex_lock(&pSolver->mutex), 0);
-      if (pSolver->subQueryQueue.empty()) {
+      if (pSolver->subQueryQueue.empty() || pSolver->mainQueryFinished) {
         _CHECKED(pthread_mutex_unlock(&pSolver->mutex), 0);
         break;
       }
@@ -169,7 +173,7 @@ void *subSolversManagerThread(void *ps) {
     wTime.tv_nsec %= 1000000000L;
 
 
-    pthread_cond_timedwait(&pSolver->mainSolverReady, &pSolver->mutex, &wTime);
+    _CHECKED2(pthread_cond_timedwait(&pSolver->mainSolverReady, &pSolver->mutex, &wTime), 0, ETIMEDOUT);
 
     if (pSolver->mainQuery != NULL) {
       pSolver->subQueryStarted = true;
@@ -178,8 +182,6 @@ void *subSolversManagerThread(void *ps) {
     _CHECKED(pthread_mutex_unlock(&pSolver->mutex), 0);
 
     if (pSolver->subQueryStarted) {
-      CLOUD9_DEBUG("Sub-query Manager: Waiting timed out... proceeding to sub-queries");
-
       assert(pSolver->mainQuery != NULL);
       pSolver->solveQueryInParallel(pSolver->mainQuery);
     }
@@ -199,7 +201,7 @@ void ParallelSolver::solveSubQuerySerially(char *solveBuffer, const Query *query
 
   mainSolver->getInitialValues(*query, *solObjects, values, solution, solveBuffer);
 
-  CLOUD9_DEBUG("Sub-query solved!");
+  CLOUD9_DEBUG("Sub-query solved! " << (solution ? "[sat]" : "[unsat]"));
 }
 
 void ParallelSolver::solveQueryInParallel(const Query *query) {
@@ -221,12 +223,12 @@ void ParallelSolver::solveQueryInParallel(const Query *query) {
   std::vector<ConstraintManager*> newManagers;
   splitQuery(*query, newQueries);
 
-  CLOUD9_DEBUG("Generated " << newQueries.size() << " orthogonal queries");
-
   if (newQueries.size() == 1) {
     // Really don't have anything to do here. Pass...
     return;
   }
+
+  CLOUD9_DEBUG("Generated " << newQueries.size() << " orthogonal queries");
 
   // Now populate the queries vector
   _CHECKED(pthread_mutex_lock(&mutex), 0);
@@ -264,6 +266,7 @@ ParallelSolver::ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout,
   this->optimizeDivides = optimizeDivides;
   this->mainSolverTimeout = mainSolverTimeout;
   subQueryStarted = false;
+  mainQueryFinished = false;
 
   // Save the main solver
   mainSolver = solver;
@@ -364,6 +367,7 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   // Save the current query, before starting to solve
   _CHECKED(pthread_mutex_lock(&mutex), 0);
   mainQuery = &query;
+  mainQueryFinished = false;
   solObjects = &objects;
   assert(!subQueryStarted && "another query is being solved in parallel");
   _CHECKED(pthread_cond_signal(&mainSolverStarted), 0);
@@ -376,7 +380,9 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   _CHECKED(pthread_mutex_lock(&mutex), 0);
 
   if (subQueryStarted) {
-    CLOUD9_DEBUG("Waiting for subqueries to finish...");
+    mainQueryFinished = true;
+
+    CLOUD9_DEBUG("Main query solved! " << (hasSolution ? "[SAT]" : "[UNSAT]"));
 
     while(subQueryStarted) {
       // We must wait for the subquery to finish
