@@ -34,12 +34,18 @@ static void recordStateInfo(cloud9::instrum::EventClass instrumEvent, const Exec
 
 static void recordTiming(const Timer &t, const ExecutionState &state) {
   recordStateInfo(cloud9::instrum::ConstraintSolve, state);
-  recordStateInfo(cloud9::instrum::SMTSolve, state);
 
   cloud9::instrum::theInstrManager.recordEventTiming(
       cloud9::instrum::ConstraintSolve, t);
 
   cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ConstraintSolve);
+}
+
+static void clearStateInfo(cloud9::instrum::EventClass instrumEvent) {
+  cloud9::instrum::theInstrManager.clearEventAttribute(instrumEvent,
+      cloud9::instrum::StateDepth);
+  cloud9::instrum::theInstrManager.clearEventAttribute(instrumEvent,
+      cloud9::instrum::StateMultiplicity);
 }
 
 /***/
@@ -56,6 +62,7 @@ bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr,
   sys::Process::GetTimeUsage(now,user,sys);
 
   Timer t;
+  recordStateInfo(cloud9::instrum::SMTSolve, state);
   t.start();
 
   if (simplifyExprs)
@@ -65,6 +72,7 @@ bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr,
 
   t.stop();
   recordTiming(t, state);
+  clearStateInfo(cloud9::instrum::SMTSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -86,6 +94,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr,
   sys::Process::GetTimeUsage(now,user,sys);
 
   Timer t;
+  recordStateInfo(cloud9::instrum::SMTSolve, state);
   t.start();
 
   if (simplifyExprs)
@@ -95,6 +104,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr,
 
   t.stop();
   recordTiming(t, state);
+  clearStateInfo(cloud9::instrum::SMTSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -139,6 +149,7 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr,
   sys::Process::GetTimeUsage(now,user,sys);
 
   Timer t;
+  recordStateInfo(cloud9::instrum::SMTSolve, state);
   t.start();
 
   if (simplifyExprs)
@@ -148,6 +159,7 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr,
 
   t.stop();
   recordTiming(t, state);
+  clearStateInfo(cloud9::instrum::SMTSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -170,6 +182,7 @@ TimingSolver::getInitialValues(const ExecutionState& state,
   sys::Process::GetTimeUsage(now,user,sys);
 
   Timer t;
+  recordStateInfo(cloud9::instrum::SMTSolve, state);
   t.start();
 
   bool success = solver->getInitialValues(Query(state.constraints(),
@@ -178,6 +191,7 @@ TimingSolver::getInitialValues(const ExecutionState& state,
   
   t.stop();
   recordTiming(t, state);
+  clearStateInfo(cloud9::instrum::SMTSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;

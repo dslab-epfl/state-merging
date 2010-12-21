@@ -70,7 +70,8 @@ enum EventAttribute {
   WallTime = 1,
   ThreadTime = 2,
   StateDepth = 3,
-  StateMultiplicity = 4
+  StateMultiplicity = 4,
+  SolvingResult = 5
 };
 
 class IOServices;
@@ -139,6 +140,8 @@ public:
 
 	  recordEventAttributeStr(id, attr, ss.str());
 	}
+
+	void clearEventAttribute(EventClass id, EventAttribute attr);
 
 	void recordEventTiming(EventClass id, const Timer &t) {
 	  recordEventAttribute(id, WallTime, t.getRealTime());

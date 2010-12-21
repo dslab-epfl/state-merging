@@ -142,6 +142,11 @@ void InstrumentationManager::recordEventAttributeStr(EventClass id, EventAttribu
   pendingEvents[id][attr] = value;
 }
 
+void InstrumentationManager::clearEventAttribute(EventClass id, EventAttribute attr) {
+  boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+  pendingEvents[id].erase(attr);
+}
+
 void InstrumentationManager::recordEvent(EventClass id, bool reset) {
   boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
   events.push_back(make_pair(make_pair(now() - referenceTime, id), pendingEvents[id]));

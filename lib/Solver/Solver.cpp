@@ -726,9 +726,12 @@ STPSolverImpl::computeInitialValues(const Query& query,
 	int exitcode;
 	bool success = false;
 
+	Timer t;
+	t.start();
 	do {
 	  res = waitpid(pid, &status, 0);
 	} while (res < 0 && errno == EINTR);
+	t.stop();
 
 	if (res < 0) {
 	  fprintf(stderr, "error: waitpid() for STP failed");
@@ -771,6 +774,11 @@ STPSolverImpl::computeInitialValues(const Query& query,
 		pos += array->size;
 	  }
 	}
+
+	cloud9::instrum::theInstrManager.recordEventAttribute(cloud9::instrum::SMTSolve,
+	    cloud9::instrum::SolvingResult, (int)hasSolution);
+	cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
+
 
 	success = true;
 
