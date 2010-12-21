@@ -49,6 +49,8 @@ using namespace llvm;
 
 using cloud9::instrum::Timer;
 
+#define SHARED_MEM_SIZE	(1<<20)
+
 /***/
 
 const char *Solver::validity_to_str(Validity v) {
@@ -432,6 +434,7 @@ private:
   double timeout;
   bool useForkedSTP;
 
+  char *defaultShMem;
 public:
   STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides = true);
   ~STPSolverImpl();
@@ -446,15 +449,29 @@ public:
                             const std::vector<const Array*> &objects,
                             std::vector< std::vector<unsigned char> > &values,
                             bool &hasSolution);
-};
 
-static unsigned char *shared_memory_ptr;
-static const unsigned shared_memory_size = 1<<20;
-static int shared_memory_id;
+  bool computeInitialValues(const Query&,
+                              const std::vector<const Array*> &objects,
+                              std::vector< std::vector<unsigned char> > &values,
+                              bool &hasSolution, char *shmSegment);
+
+  char *getSharedMemSegment();
+};
 
 static void stp_error_handler(const char* err_msg) {
   fprintf(stderr, "error: STP Error: %s\n", err_msg);
   abort();
+}
+
+char *STPSolverImpl::getSharedMemSegment() {
+	int shmID = shmget(IPC_PRIVATE, SHARED_MEM_SIZE, IPC_CREAT | 0700);
+	assert(shmID>=0 && "shmget failed");
+
+	char *shmPtr = (char*) shmat(shmID, NULL, 0);
+	assert(shmPtr!=(void*)-1 && "shmat failed");
+	shmctl(shmID, IPC_RMID, NULL);
+
+	return shmPtr;
 }
 
 STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides)
@@ -478,17 +495,13 @@ STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optim
 #endif
   vc_registerErrorHandler(::stp_error_handler);
 
-  if (useForkedSTP) {
-    shared_memory_id = shmget(IPC_PRIVATE, shared_memory_size, IPC_CREAT | 0700);
-    assert(shared_memory_id>=0 && "shmget failed");
-    shared_memory_ptr = (unsigned char*) shmat(shared_memory_id, NULL, 0);
-    assert(shared_memory_ptr!=(void*)-1 && "shmat failed");
-    shmctl(shared_memory_id, IPC_RMID, NULL);
-  }
+  defaultShMem = getSharedMemSegment();
 }
 
 STPSolverImpl::~STPSolverImpl() {
   delete builder;
+
+  shmdt(defaultShMem);
 
   vc_Destroy(vc);
 }
@@ -560,6 +573,7 @@ bool STPSolverImpl::computeValue(const Query& query,
   return true;
 }
 
+/*
 static void runAndGetCex(::VC vc, STPBuilder *builder, ::VCExpr q,
                    const std::vector<const Array*> &objects,
                    std::vector< std::vector<unsigned char> > &values,
@@ -585,184 +599,180 @@ static void runAndGetCex(::VC vc, STPBuilder *builder, ::VCExpr q,
       values.push_back(data);
     }
   }
-}
+}*/
 
 static void stpTimeoutHandler(int x) {
   _exit(52);
 }
 
-static bool runAndGetCexForked(::VC vc, 
-                               STPBuilder *builder,
-                               ::VCExpr q,
-                               const std::vector<const Array*> &objects,
-                               std::vector< std::vector<unsigned char> >
-                                 &values,
-                               bool &hasSolution,
-                               double timeout) {
-  unsigned char *pos = shared_memory_ptr;
+bool
+STPSolverImpl::computeInitialValues(const Query& query,
+                            const std::vector<const Array*> &objects,
+                            std::vector< std::vector<unsigned char> > &values,
+                            bool &hasSolution, char *shmSegment) {
+  TimerStatIncrementer t(stats::queryTime);
+
+  ++stats::queries;
+  ++stats::queryCounterexamples;
+
+  /*bool success = runAndGetCexForked(vc, builder, stp_e, objects, values,
+								 hasSolution, timeout);*/
+
+  unsigned char *pos = (unsigned char*)shmSegment;
+
+  // Do some checks before forking...
   unsigned sum = 0;
   for (std::vector<const Array*>::const_iterator
-         it = objects.begin(), ie = objects.end(); it != ie; ++it)
-    sum += (*it)->size;
-  assert(sum<shared_memory_size && "not enough shared memory for counterexample");
+		 it = objects.begin(), ie = objects.end(); it != ie; ++it)
+	sum += (*it)->size;
 
+  assert(sum<SHARED_MEM_SIZE && "not enough shared memory for counterexample");
+
+  // Now fork...
   fflush(stdout);
   fflush(stderr);
   int pid = fork();
+
+  // Handle error cases
   if (pid==-1) {
-    
+	if(errno == EAGAIN)
+	  fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)\n");
+	else
+	  if(errno == ENOMEM) {
+		  unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
+		  fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u\n", mbs);
+	  }
+	  else
+		  fprintf(stderr, "error: fork failed (for STP) - unknown errno = %d\n", errno);
 
-    if(errno == EAGAIN)
-      fprintf(stderr, "error: fork failed (for STP) - reached system limit (EAGAIN)\n");
-    else
-      if(errno == ENOMEM) {
-    	  unsigned mbs = sys::Process::GetTotalMemoryUsage() >> 20;
-    	  fprintf(stderr, "error: fork failed (for STP) - cannot allocate kernel structures (ENOMEM) - Klee mem = %u\n", mbs);
-      }
-      else
-    	  fprintf(stderr, "error: fork failed (for STP) - unknown errno = %d\n", errno);
+	std::string line;
+	std::ifstream *f;
+	f = new std::ifstream("/proc/meminfo");
+	if (!f) {
+	  fprintf(stderr, "out of memory");
+	} else if (!f->good()) {
+	  fprintf(stderr, "error opening /proc/meminfo");
+	  delete f;
+	  f = NULL;
+	}
 
-    std::string line;
-    std::ifstream *f;
-    f = new std::ifstream("/proc/meminfo");
-    if (!f) {
-      fprintf(stderr, "out of memory");
-    } else if (!f->good()) {
-      fprintf(stderr, "error opening /proc/meminfo");
-      delete f;
-      f = NULL;
-    }
-    
-    std::getline(*f, line);
-    fprintf(stderr,  "%s\n", line.c_str());
-    std::getline(*f, line);
-    fprintf(stderr, "%s\n", line.c_str());
-    
-    f->close();
+	std::getline(*f, line);
+	fprintf(stderr,  "%s\n", line.c_str());
+	std::getline(*f, line);
+	fprintf(stderr, "%s\n", line.c_str());
 
-    return false;
+	f->close();
+
+	return false;
   }
 
   if (pid == 0) {
-    if (timeout) {
-      ::alarm(0); /* Turn off alarm so we can safely set signal handler */
-      ::signal(SIGALRM, stpTimeoutHandler);
-      ::alarm(std::max(1, (int)timeout));
-    }    
-    unsigned res = vc_query(vc, q);
-    if (!res) {
-      for (std::vector<const Array*>::const_iterator
-             it = objects.begin(), ie = objects.end(); it != ie; ++it) {
-        const Array *array = *it;
-        for (unsigned offset = 0; offset < array->size; offset++) {
-          ExprHandle counter = 
-            vc_getCounterExample(vc, builder->getInitialRead(array, offset));
-          *pos++ = getBVUnsigned(counter);
-        }
-      }
-    }
-    _exit(res);
+	  // We are now in the child...
+	  vc_push(vc);
+
+	  // Construct the data structures for STP...
+		for (ConstraintManager::const_iterator it = query.constraints.begin(),
+			 ie = query.constraints.end(); it != ie; ++it)
+		vc_assertFormula(vc, builder->construct(*it));
+
+		ExprHandle stp_e = builder->construct(query.expr);
+
+
+	if (timeout) {
+	  ::alarm(0); /* Turn off alarm so we can safely set signal handler */
+	  ::signal(SIGALRM, stpTimeoutHandler);
+	  ::alarm(std::max(1, (int)timeout));
+	}
+	unsigned res = vc_query(vc, stp_e);
+	if (!res) {
+	  for (std::vector<const Array*>::const_iterator
+			 it = objects.begin(), ie = objects.end(); it != ie; ++it) {
+		const Array *array = *it;
+		for (unsigned offset = 0; offset < array->size; offset++) {
+		  ExprHandle counter =
+			vc_getCounterExample(vc, builder->getInitialRead(array, offset));
+		  *pos++ = getBVUnsigned(counter);
+		}
+	  }
+	}
+
+	vc_pop(vc);
+
+	_exit(res);
   } else {
-    int status;
-    pid_t res;
+	int status;
+	pid_t res;
+	int exitcode;
+	bool success = false;
 
-    do {
-      res = waitpid(pid, &status, 0);
-    } while (res < 0 && errno == EINTR);
-    
-    if (res < 0) {
-      fprintf(stderr, "error: waitpid() for STP failed");
-      return false;
-    }
-    
-    // From timed_run.py: It appears that linux at least will on
-    // "occasion" return a status when the process was terminated by a
-    // signal, so test signal first.
-    if (WIFSIGNALED(status) || !WIFEXITED(status)) {
-      fprintf(stderr, "error: STP did not return successfully");
-      return false;
-    }
+	do {
+	  res = waitpid(pid, &status, 0);
+	} while (res < 0 && errno == EINTR);
 
-    int exitcode = WEXITSTATUS(status);
-    if (exitcode==0) {
-      hasSolution = true;
-    } else if (exitcode==1) {
-      hasSolution = false;
-    } else if (exitcode==52) {
-      fprintf(stderr, "error: STP timed out");
-      return false;
-    } else {
-      fprintf(stderr, "error: STP did not return a recognized code");
-      return false;
-    }
-    
-    if (hasSolution) {
-      values = std::vector< std::vector<unsigned char> >(objects.size());
-      unsigned i=0;
-      for (std::vector<const Array*>::const_iterator
-             it = objects.begin(), ie = objects.end(); it != ie; ++it) {
-        const Array *array = *it;
-        std::vector<unsigned char> &data = values[i++];
-        data.insert(data.begin(), pos, pos + array->size);
-        pos += array->size;
-      }
-    }
+	if (res < 0) {
+	  fprintf(stderr, "error: waitpid() for STP failed");
+	  success = false;
+	  goto finalize;
+	}
 
-    return true;
+	// From timed_run.py: It appears that linux at least will on
+	// "occasion" return a status when the process was terminated by a
+	// signal, so test signal first.
+	if (WIFSIGNALED(status) || !WIFEXITED(status)) {
+	  fprintf(stderr, "error: STP did not return successfully");
+	  success = false;
+	  goto finalize;
+	}
+
+	exitcode = WEXITSTATUS(status);
+	if (exitcode==0) {
+	  hasSolution = true;
+	} else if (exitcode==1) {
+	  hasSolution = false;
+	} else if (exitcode==52) {
+	  fprintf(stderr, "error: STP timed out");
+	  success = false;
+	  goto finalize;
+	} else {
+	  fprintf(stderr, "error: STP did not return a recognized code");
+	  success = false;
+	  goto finalize;
+	}
+
+	if (hasSolution) {
+	  values = std::vector< std::vector<unsigned char> >(objects.size());
+	  unsigned i=0;
+	  for (std::vector<const Array*>::const_iterator
+			 it = objects.begin(), ie = objects.end(); it != ie; ++it) {
+		const Array *array = *it;
+		std::vector<unsigned char> &data = values[i++];
+		data.insert(data.begin(), pos, pos + array->size);
+		pos += array->size;
+	  }
+	}
+
+	success = true;
+
+finalize:
+
+	if (success) {
+		if (hasSolution)
+		  ++stats::queriesInvalid;
+		else
+		  ++stats::queriesValid;
+	  }
+
+	  return success;
   }
 }
 
 bool
 STPSolverImpl::computeInitialValues(const Query &query,
-                                    const std::vector<const Array*> 
+                                    const std::vector<const Array*>
                                       &objects,
-                                    std::vector< std::vector<unsigned char> > 
+                                    std::vector< std::vector<unsigned char> >
                                       &values,
                                     bool &hasSolution) {
-  TimerStatIncrementer t(stats::queryTime);
-
-  vc_push(vc);
-
-  for (ConstraintManager::const_iterator it = query.constraints.begin(), 
-         ie = query.constraints.end(); it != ie; ++it)
-    vc_assertFormula(vc, builder->construct(*it));
-  
-  ++stats::queries;
-  ++stats::queryCounterexamples;
-
-  ExprHandle stp_e = builder->construct(query.expr);
-     
-  if (0) {
-    char *buf;
-    unsigned long len;
-    vc_printQueryStateToBuffer(vc, stp_e, &buf, &len, false);
-    fprintf(stderr, "note: STP query: %.*s\n", (unsigned) len, buf);
-  }
-
-  bool success;
-  if (useForkedSTP) {
-    success = runAndGetCexForked(vc, builder, stp_e, objects, values, 
-                                 hasSolution, timeout);
-  } else {
-    Timer t;
-    t.start();
-    runAndGetCex(vc, builder, stp_e, objects, values, hasSolution);
-    t.stop();
-
-    cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
-
-    //CLOUD9_DEBUG("SMT solving complete: " << t);
-    success = true;
-  }
-  
-  if (success) {
-    if (hasSolution)
-      ++stats::queriesInvalid;
-    else
-      ++stats::queriesValid;
-  }
-  
-  vc_pop(vc);
-  
-  return success;
+	return computeInitialValues(query, objects, values, hasSolution,
+			defaultShMem);
 }
