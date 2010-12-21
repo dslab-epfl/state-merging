@@ -169,6 +169,22 @@ namespace klee {
     /// setTimeout - Set constraint solver timeout delay to the given value; 0
     /// is off.
     void setTimeout(double timeout);
+
+    char *getSharedMemSegment();
+
+    void releaseSharedMemSegment(char *shMem);
+
+    bool getInitialValues(const Query& query,
+                          const std::vector<const Array*> &objects,
+                          std::vector< std::vector<unsigned char> > &result,
+                          bool &hasSolution);
+
+    bool getInitialValues(const Query& query,
+                          const std::vector<const Array*> &objects,
+                          std::vector< std::vector<unsigned char> > &result,
+                          bool &hasSolution,
+                          char *shMemBuffer);
+
   };
 
   /* *** */
@@ -216,7 +232,7 @@ namespace klee {
 
   /// createParallelSolver - Create a solver which will solve high-level
   /// disjunctions in parallel.
-  Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, Solver *solver);
+  Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver);
 
   /// createDummySolver - Create a dummy solver implementation which always
   /// fails.

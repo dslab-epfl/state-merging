@@ -454,24 +454,11 @@ public:
                               const std::vector<const Array*> &objects,
                               std::vector< std::vector<unsigned char> > &values,
                               bool &hasSolution, char *shmSegment);
-
-  char *getSharedMemSegment();
 };
 
 static void stp_error_handler(const char* err_msg) {
   fprintf(stderr, "error: STP Error: %s\n", err_msg);
   abort();
-}
-
-char *STPSolverImpl::getSharedMemSegment() {
-	int shmID = shmget(IPC_PRIVATE, SHARED_MEM_SIZE, IPC_CREAT | 0700);
-	assert(shmID>=0 && "shmget failed");
-
-	char *shmPtr = (char*) shmat(shmID, NULL, 0);
-	assert(shmPtr!=(void*)-1 && "shmat failed");
-	shmctl(shmID, IPC_RMID, NULL);
-
-	return shmPtr;
 }
 
 STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides)
@@ -495,7 +482,7 @@ STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optim
 #endif
   vc_registerErrorHandler(::stp_error_handler);
 
-  defaultShMem = getSharedMemSegment();
+  defaultShMem = solver->getSharedMemSegment();
 }
 
 STPSolverImpl::~STPSolverImpl() {
@@ -519,6 +506,40 @@ char *STPSolver::getConstraintLog(const Query &query) {
 
 void STPSolver::setTimeout(double timeout) {
   static_cast<STPSolverImpl*>(impl)->setTimeout(timeout);
+}
+
+char *STPSolver::getSharedMemSegment() {
+	int shmID = shmget(IPC_PRIVATE, SHARED_MEM_SIZE, IPC_CREAT | 0700);
+	assert(shmID>=0 && "shmget failed");
+
+	char *shmPtr = (char*) shmat(shmID, NULL, 0);
+	assert(shmPtr!=(void*)-1 && "shmat failed");
+	shmctl(shmID, IPC_RMID, NULL);
+
+	return shmPtr;
+}
+
+void STPSolver::releaseSharedMemSegment(char *shMem) {
+	int res = shmdt(shMem);
+
+	assert(res == 0);
+}
+
+bool STPSolver::getInitialValues(const Query& query,
+                      const std::vector<const Array*> &objects,
+                      std::vector< std::vector<unsigned char> > &result,
+                      bool &hasSolution) {
+	return dynamic_cast<STPSolverImpl*>(impl)->computeInitialValues(query,
+			objects, result, hasSolution);
+}
+
+bool STPSolver::getInitialValues(const Query& query,
+                      const std::vector<const Array*> &objects,
+                      std::vector< std::vector<unsigned char> > &result,
+                      bool &hasSolution,
+                      char *shMemBuffer) {
+	return dynamic_cast<STPSolverImpl*>(impl)->computeInitialValues(query,
+				objects, result, hasSolution, shMemBuffer);
 }
 
 /***/

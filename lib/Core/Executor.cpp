@@ -296,7 +296,7 @@ Solver *constructSolverChain(STPSolver *stpSolver,
 
   if (UseParallelSolver) {
     CLOUD9_DEBUG("Using the parallel solver...");
-    solver = createParallelSolver(4, ParallelSubqueriesDelay, STPOptimizeDivides, solver);
+    solver = createParallelSolver(4, ParallelSubqueriesDelay, STPOptimizeDivides, stpSolver);
   }
 
   if (UseSTPQueryPCLog)
