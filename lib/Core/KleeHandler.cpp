@@ -42,7 +42,12 @@ namespace {
 cl::opt<std::string>
 		OutputDir("output-dir", cl::desc(
 				"Directory to write results in (defaults to klee-out-N)"),
-				cl::init(""));
+        cl::init(""));
+
+cl::opt<bool>
+        CreateOutputDir("create-output-dir", cl::desc(
+                "Create the directory specified as the output-dir option"),
+                cl::init(true));
 
 cl::opt<bool> WritePaths("write-paths", cl::desc(
 		"Write .path files for each test case"));
@@ -127,11 +132,21 @@ KleeHandler::KleeHandler(int argc, char **argv) :
 	}
 	strcpy(m_outputDirectory, p.c_str());
 
-	if (mkdir(m_outputDirectory, 0775) < 0) {
-		std::cerr << "KLEE: ERROR: Unable to make output directory: \""
-				<< m_outputDirectory << "\", refusing to overwrite.\n";
-		exit(1);
-	}
+    if (OutputDir == "" || CreateOutputDir) {
+      if (mkdir(m_outputDirectory, 0775) < 0) {
+          std::cerr << "KLEE: ERROR: Unable to make output directory: \""
+                  << m_outputDirectory << "\", refusing to overwrite.\n";
+          exit(1);
+      }
+    } else {
+      DIR* dir = opendir(m_outputDirectory);
+      if (!dir) {
+          std::cerr << "KLEE: ERROR: Unable to open output directory: \""
+                  << m_outputDirectory << "\n";
+          exit(1);
+      }
+      closedir(dir);
+    }
 
 	char fname[1024];
 	snprintf(fname, sizeof(fname), "%s/warnings.txt", m_outputDirectory);
