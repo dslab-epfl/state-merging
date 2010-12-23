@@ -187,7 +187,8 @@ Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
 
   /* XXX: think about the ordering of ForkCap and LazyMerge */
   if (UseForkCap != 0 || UseHardForkCap != 0) {
-    searcher = new ForkCapSearcher(searcher, UseForkCap, UseHardForkCap);
+    searcher = new ForkCapSearcher(executor, searcher,
+                                   UseForkCap, UseHardForkCap);
   }
 
   std::ostream &os = executor.getHandler().getInfoStream();

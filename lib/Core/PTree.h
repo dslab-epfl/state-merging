@@ -30,8 +30,6 @@ namespace klee {
   private:
     typedef ExecutionState* data_type;
 
-    void markInactive(Node *n);
-
   public:
     Node *root;
 
@@ -46,6 +44,9 @@ namespace klee {
 
     void merge(Node *target, Node *other);
     void terminate(Node *n);
+
+    void markInactive(Node *n);
+    void markActive(Node *n);
 
     void dump(std::ostream &os);
   };

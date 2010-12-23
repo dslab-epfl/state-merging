@@ -55,6 +55,9 @@ void PTree::merge(Node *target, Node *other) {
 
 void PTree::markInactive(Node *n) {
   for (; n; n = n->parent) {
+    if (!n->active)
+      return;
+
     if (n->left && n->left->active)
       return;
     if (n->right && n->right->active)
@@ -68,11 +71,24 @@ void PTree::markInactive(Node *n) {
   }
 }
 
+void PTree::markActive(Node *n) {
+  for (; n; n = n->parent) {
+    if (n->active)
+      return;
+
+    n->active = true;
+    for (llvm::SmallVectorImpl<PTreeNode*>::iterator it = n->mergedParents.begin(),
+                  ie = n->mergedParents.end(); it != ie; ++it) {
+      markInactive(*it);
+    }
+  }
+}
+
 void PTree::terminate(Node *n) {
   if(n->state == PTreeNode::MERGED)
     return;
 
-  assert(!n->left && !n->right && n->active);
+  assert(!n->left && !n->right);
 
   n->state = PTreeNode::TERMINATED;
   markInactive(n);

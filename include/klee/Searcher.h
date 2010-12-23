@@ -311,6 +311,7 @@ namespace klee {
   };
 
   class ForkCapSearcher : public Searcher {
+    Executor &executor;
     Searcher *baseSearcher;
 
 #if 0
@@ -343,7 +344,8 @@ namespace klee {
     unsigned long hardForkCap;
 
   public:
-    ForkCapSearcher(Searcher *baseSearcher,
+    ForkCapSearcher(Executor &executor,
+                    Searcher *baseSearcher,
                     unsigned long forkCap,
                     unsigned long hardForkCap);
     ~ForkCapSearcher();

@@ -787,10 +787,12 @@ void InterleavedSearcher::update(ExecutionState *current,
 
 /***/
 
-ForkCapSearcher::ForkCapSearcher(Searcher *_baseSearcher,
+ForkCapSearcher::ForkCapSearcher(Executor &_executor,
+                                 Searcher *_baseSearcher,
                                  unsigned long _forkCap,
                                  unsigned long _hardForkCap)
-  : baseSearcher(_baseSearcher), forkCap(_forkCap), hardForkCap(_hardForkCap) {
+  : executor(_executor), baseSearcher(_baseSearcher),
+    forkCap(_forkCap), hardForkCap(_hardForkCap) {
 }
 
 ForkCapSearcher::~ForkCapSearcher() {
@@ -836,8 +838,10 @@ void ForkCapSearcher::update(ExecutionState *current,
 
         /* Resumed state could be amoung states to be deleted, so check for it */
         /* XXX: avoid digging into removedStates again */
-        if (removedStates.count(resumedState) == 0)
+        if (removedStates.count(resumedState) == 0) {
           newAddedStates.insert(resumedState);
+          executor.processTree->markActive(resumedState->ptreeNode);
+        }
       }
 
       /* The state was active, which means the baseSearcher knows about it */
@@ -888,6 +892,7 @@ void ForkCapSearcher::update(ExecutionState *current,
           statesAtOldFork->paused.erase(resumedState);
           statesAtOldFork->active.insert(resumedState);
           newAddedStates.insert(resumedState);
+          executor.processTree->markActive(resumedState->ptreeNode);
         }
 
         /* Add current state to the new fork point */
@@ -899,11 +904,13 @@ void ForkCapSearcher::update(ExecutionState *current,
           } else {
             statesAtFork->paused.insert(current);
             newRemovedStates.insert(current);
+            executor.processTree->markInactive(current->ptreeNode);
           }
         } else {
           statesMap.erase(statesMapIter);
           disabledStates.insert(current);
           newRemovedStates.insert(current);
+          executor.processTree->markInactive(current->ptreeNode);
         }
       }
     }
@@ -920,9 +927,11 @@ void ForkCapSearcher::update(ExecutionState *current,
           newAddedStates.insert(state);
         } else {
           statesAtFork->paused.insert(state);
+          executor.processTree->markInactive(state->ptreeNode);
         }
       } else {
         disabledStates.insert(state);
+        executor.processTree->markInactive(state->ptreeNode);
       }
     }
   }

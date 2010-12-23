@@ -81,6 +81,7 @@ class Executor : public Interpreter, public ::cloud9::worker::SymbolicEngine {
   friend class RandomPathSearcher;
   friend class OwningSearcher;
   friend class WeightedRandomSearcher;
+  friend class ForkCapSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
 
