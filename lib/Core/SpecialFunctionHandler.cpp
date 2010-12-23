@@ -292,6 +292,8 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
     if (!isa<ConstantExpr>(cur)) //XXX: Should actually concretize the value...
            return std::string("hit symbolic char while reading concrete string");
     buf[i] = cast<ConstantExpr>(cur)->getZExtValue(8);
+    if(buf[i] == 0)
+      break;
   }
   buf[i] = 0;
   
@@ -539,12 +541,13 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
 
   if (arguments.size() == 2 && arguments[1]->getWidth() == sizeof(long)*8) {
     // Special case for displaying strings
-    if (!isa<ConstantExpr>(arguments[1])) {
+    ref<Expr> address = executor.toUnique(state, arguments[1]);
+    if (!isa<ConstantExpr>(address)) {
       executor.terminateStateOnError(state, "klee_debug needs a constant list of arguments", "user.err");
       return;
     }
 
-    std::string paramStr = readStringAtAddress(state, arguments[1]);
+    std::string paramStr = readStringAtAddress(state, address);
 
     fprintf(stderr, formatStr.c_str(), paramStr.c_str());
     return;
@@ -553,12 +556,13 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
   std::vector<int> args;
 
   for (unsigned int i = 1; i < arguments.size(); i++) {
-    if (!isa<ConstantExpr>(arguments[i])) {
+    ref<Expr> argS = executor.toUnique(state, arguments[i]);
+    if (!isa<ConstantExpr>(argS)) {
       executor.terminateStateOnError(state, "klee_debug needs a constant list of arguments", "user.err");
       return;
     }
 
-    ref<ConstantExpr> arg = cast<ConstantExpr>(arguments[i]);
+    ref<ConstantExpr> arg = cast<ConstantExpr>(argS);
 
     if (arg->getWidth() != sizeof(int)*8) {
       executor.terminateStateOnError(state, "klee_debug works only with 32-bit arguments", "user.err");
