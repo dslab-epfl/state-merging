@@ -57,6 +57,8 @@ private:
   const std::vector<const Array*> *solObjects;
   std::vector< std::vector<unsigned char> > *solValues;
   bool *hasSolution;
+  bool success;
+  bool solutionFound;
 
   bool subQueryStarted;
   bool mainQueryFinished;
@@ -80,7 +82,8 @@ private:
   void splitQuery(const Query &query, std::vector<constraint_expr_t> &newQueries);
 
   void solveQueryInParallel(const Query *query);
-  void solveSubQuerySerially(char *solveBuffer, const Query *query);
+  bool solveSubQuerySerially(char *solveBuffer, const Query *query,
+      std::vector< std::vector<unsigned char> > &values, bool &hasSolution);
 public:
   ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver);
   virtual ~ParallelSolver();
@@ -119,8 +122,8 @@ void *subQuerySolverThread(void *ps) {
         break;
       }
 
-      Query *q = pSolver->subQueryQueue.front();
-      if (q == QUERY_FINALIZAE) {
+      Query *subQuery = pSolver->subQueryQueue.front();
+      if (subQuery == QUERY_FINALIZAE) {
         _CHECKED(pthread_mutex_unlock(&pSolver->mutex), 0);
         CLOUD9_DEBUG("Sub-query solver done");
         done = true;
@@ -130,9 +133,25 @@ void *subQuerySolverThread(void *ps) {
       pSolver->subQueryQueue.pop_front();
       _CHECKED(pthread_mutex_unlock(&pSolver->mutex), 0);
 
-      pSolver->solveSubQuerySerially(solverBuffer, q);
+      std::vector< std::vector<unsigned char> > values;
+      bool hasSolution;
 
-      delete q;
+      bool result = pSolver->solveSubQuerySerially(solverBuffer, subQuery, values, hasSolution);
+
+      _CHECKED(pthread_mutex_lock(&pSolver->mutex), 0);
+      if (!pSolver->solutionFound && hasSolution) {
+        assert(result);
+
+        pSolver->solutionFound = true;
+        pSolver->mainSolver->cancelPendingJobs();
+
+        *pSolver->solValues = values;
+        *pSolver->hasSolution = hasSolution;
+        pSolver->success = result;
+      }
+      _CHECKED(pthread_mutex_unlock(&pSolver->mutex), 0);
+
+      delete subQuery;
     }
 
     if (done)
@@ -195,13 +214,15 @@ void *subSolversManagerThread(void *ps) {
   return NULL;
 }
 
-void ParallelSolver::solveSubQuerySerially(char *solveBuffer, const Query *query) {
-  std::vector< std::vector<unsigned char> > values;
-  bool solution;
+bool ParallelSolver::solveSubQuerySerially(char *solveBuffer, const Query *query,
+    std::vector< std::vector<unsigned char> > &values, bool &hasSolution) {
 
-  mainSolver->getInitialValues(*query, *solObjects, values, solution, solveBuffer);
+  bool result = mainSolver->getInitialValues(*query, *solObjects, values, hasSolution, solveBuffer);
 
-  CLOUD9_DEBUG("Sub-query solved! " << (solution ? "[sat]" : "[unsat]"));
+  if (result)
+    CLOUD9_DEBUG("Sub-query solved! " << (hasSolution ? "[sat]" : "[unsat]"));
+
+  return result;
 }
 
 void ParallelSolver::solveQueryInParallel(const Query *query) {
@@ -368,21 +389,41 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   _CHECKED(pthread_mutex_lock(&mutex), 0);
   mainQuery = &query;
   mainQueryFinished = false;
-  solObjects = &objects;
+
+  this->solObjects = &objects;
+  this->solValues = &values;
+  this->hasSolution = &hasSolution;
+  this->success = false;
+  solutionFound = false;
+
   assert(!subQueryStarted && "another query is being solved in parallel");
   _CHECKED(pthread_cond_signal(&mainSolverStarted), 0);
   _CHECKED(pthread_mutex_unlock(&mutex), 0);
 
-  bool result = mainSolver->getInitialValues(query, objects, values,
-		  hasSolution, mainBuffer);
+  std::vector< std::vector<unsigned char> > localValues;
+  bool localHasSolution;
+
+  bool result = mainSolver->getInitialValues(query, objects, localValues,
+		  localHasSolution, mainBuffer);
 
   // Now check to see whether the sub-query mechanism started
   _CHECKED(pthread_mutex_lock(&mutex), 0);
 
+  if (!solutionFound) {
+    solutionFound = true;
+    // Terminate all the other sub-queries
+    mainSolver->cancelPendingJobs();
+
+    values = localValues;
+    hasSolution = localHasSolution;
+    success = result;
+  }
+
   if (subQueryStarted) {
     mainQueryFinished = true;
 
-    CLOUD9_DEBUG("Main query solved! " << (hasSolution ? "[SAT]" : "[UNSAT]"));
+    if (result)
+      CLOUD9_DEBUG("Main query solved! " << (hasSolution ? "[SAT]" : "[UNSAT]"));
 
     while(subQueryStarted) {
       // We must wait for the subquery to finish
@@ -396,7 +437,7 @@ bool ParallelSolver::computeInitialValues(const Query& query,
 
   _CHECKED(pthread_mutex_unlock(&mutex), 0);
 
-  return result;
+  return success;
 }
 
 Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver) {

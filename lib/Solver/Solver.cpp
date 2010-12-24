@@ -823,7 +823,9 @@ void STPSolverImpl::cancelPendingJobs() {
   for (std::set<pid_t>::iterator it = solverInstances.begin();
       it != solverInstances.end(); it++) {
     int res = kill(*it, SIGKILL);
-    assert(res == 0);
+    if (res == -1) {
+      assert(errno == ESRCH);
+    }
   }
 
   pthread_mutex_unlock(&mutex);
