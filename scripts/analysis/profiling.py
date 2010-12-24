@@ -98,16 +98,22 @@ def gen_multiplicity_distribution(outFile, eventEntries):
 
     outFile.write("\n\n")
 
-    for event in stpEvents:
-        if not EventAttributes.STATE_DEPTH in event.values or \
-                not EventAttributes.STATE_MULTIPLICITY in event.values:
-            continue
+    stpSATEvents = filter(lambda event: event.values.get(EventAttributes.SOLVING_RESULT) == "1", stpEvents)
+    stpUNSATEvents = filter(lambda event: event.values.get(EventAttributes.SOLVING_RESULT) == "0", stpEvents)
 
-        outFile.write("%d %d %.3f\n" % (
-                int(event.values.get(EventAttributes.STATE_DEPTH)),
-                int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
-                float(event.values.get(EventAttributes.THREAD_TIME))
-                ))
+    for eventList in (stpSATEvents, stpUNSATEvents):
+        for event in eventList:
+            if not EventAttributes.STATE_DEPTH in event.values or \
+                    not EventAttributes.STATE_MULTIPLICITY in event.values:
+                continue
+
+            outFile.write("%d %d %.3f\n" % (
+                    int(event.values.get(EventAttributes.STATE_DEPTH)),
+                    int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                    float(event.values.get(EventAttributes.THREAD_TIME))
+                    ))
+
+        outFile.write("\n\n")
 
     
 

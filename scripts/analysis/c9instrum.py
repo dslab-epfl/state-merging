@@ -111,6 +111,7 @@ class EventAttributes:
   THREAD_TIME = 2
   STATE_DEPTH = 3
   STATE_MULTIPLICITY = 4
+  SOLVING_RESULT = 5
 
 
 class StatisticEntry:

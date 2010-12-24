@@ -17,4 +17,7 @@ GNUPLOT_FILE="${GNUPLOT_FILE#gen-}"
 gnuplot -e "datafile = \"$DATA_FILE\"; ext = \".png\"; set terminal png notransparent enhanced size 800, 400" $SCRIPT_DIR/gnuplot/$GNUPLOT_FILE
 gnuplot -e "datafile = \"$DATA_FILE\"; ext = \".eps\"; set terminal postscript eps enhanced size 4.0 in, 3.0 in" $SCRIPT_DIR/gnuplot/$GNUPLOT_FILE
 
-rm $DATA_FILE
+if [ "$1" != "-d" ]
+then
+    rm $DATA_FILE
+fi
