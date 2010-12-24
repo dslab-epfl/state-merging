@@ -40,6 +40,9 @@
 #include <sys/wait.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <pthread.h>
 
 #include <iostream>
 #include <fstream>
@@ -435,6 +438,9 @@ private:
   bool useForkedSTP;
 
   char *defaultShMem;
+
+  pthread_mutex_t mutex;
+  std::set<pid_t> solverInstances;
 public:
   STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides = true);
   ~STPSolverImpl();
@@ -454,6 +460,8 @@ public:
                               const std::vector<const Array*> &objects,
                               std::vector< std::vector<unsigned char> > &values,
                               bool &hasSolution, char *shmSegment);
+
+  void cancelPendingJobs();
 };
 
 static void stp_error_handler(const char* err_msg) {
@@ -483,6 +491,8 @@ STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optim
   vc_registerErrorHandler(::stp_error_handler);
 
   defaultShMem = solver->getSharedMemSegment();
+
+  pthread_mutex_init(&mutex, NULL);
 }
 
 STPSolverImpl::~STPSolverImpl() {
@@ -540,6 +550,10 @@ bool STPSolver::getInitialValues(const Query& query,
                       char *shMemBuffer) {
 	return dynamic_cast<STPSolverImpl*>(impl)->computeInitialValues(query,
 				objects, result, hasSolution, shMemBuffer);
+}
+
+void STPSolver::cancelPendingJobs() {
+  dynamic_cast<STPSolverImpl*>(impl)->cancelPendingJobs();
 }
 
 /***/
@@ -726,12 +740,20 @@ STPSolverImpl::computeInitialValues(const Query& query,
 	int exitcode;
 	bool success = false;
 
+	pthread_mutex_lock(&mutex);
+	solverInstances.insert(pid);
+	pthread_mutex_unlock(&mutex);
+
 	Timer t;
 	t.start();
 	do {
 	  res = waitpid(pid, &status, 0);
 	} while (res < 0 && errno == EINTR);
 	t.stop();
+
+	pthread_mutex_lock(&mutex);
+	solverInstances.erase(pid);
+	pthread_mutex_unlock(&mutex);
 
 	if (res < 0) {
 	  fprintf(stderr, "error: waitpid() for STP failed");
@@ -793,6 +815,18 @@ finalize:
 
 	  return success;
   }
+}
+
+void STPSolverImpl::cancelPendingJobs() {
+  pthread_mutex_lock(&mutex);
+
+  for (std::set<pid_t>::iterator it = solverInstances.begin();
+      it != solverInstances.end(); it++) {
+    int res = kill(*it, SIGKILL);
+    assert(res == 0);
+  }
+
+  pthread_mutex_unlock(&mutex);
 }
 
 bool

@@ -185,6 +185,8 @@ namespace klee {
                           bool &hasSolution,
                           char *shMemBuffer);
 
+    void cancelPendingJobs();
+
   };
 
   /* *** */
