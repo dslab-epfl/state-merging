@@ -31,8 +31,11 @@ set title "Distribution of state multiplicity over forking depth"
 
 set output "mplicity-vs-depth". ext
 set xrange [0:*]
-plot datafile using 1:2 index 1 with points ls 2 title "SAT", \
+set logscale y
+plot datafile using 1:2 index 5 with boxes title "Average over SAT+UNSAT", \
+     datafile using 1:2 index 1 with points ls 2 title "SAT", \
      datafile using 1:2 index 2 with points ls 1 title "UNSAT"
+unset logscale y
 
 ###################################################################
 
