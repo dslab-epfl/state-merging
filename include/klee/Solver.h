@@ -159,7 +159,7 @@ namespace klee {
     /// (required for using timeouts).
     /// \param optimizeDivides - Whether constant division operations should
     /// be optimized into add/shift/multiply operations.
-    STPSolver(bool useForkedSTP, bool optimizeDivides = true);
+    STPSolver(bool useForkedSTP, bool optimizeDivides, bool enabledLogging);
     
     
     /// getConstraintLog - Return the constraint log for the given state in CVC

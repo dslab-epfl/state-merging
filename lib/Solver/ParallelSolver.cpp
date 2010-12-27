@@ -17,6 +17,12 @@
 #include <pthread.h>
 #include <errno.h>
 
+#include "cloud9/instrum/Timing.h"
+#include "cloud9/instrum/InstrumentationManager.h"
+#include "cloud9/Logger.h"
+
+using cloud9::instrum::Timer;
+
 // A special pointer value that indicates to the working threads that
 // they should shut down
 #define QUERY_FINALIZAE ((Query*)(uintptr_t)(-1))
@@ -385,6 +391,9 @@ bool ParallelSolver::computeInitialValues(const Query& query,
                                     &values,
                                   bool &hasSolution) {
 
+  Timer t;
+  t.start();
+
   // Save the current query, before starting to solve
   _CHECKED(pthread_mutex_lock(&mutex), 0);
   mainQuery = &query;
@@ -436,6 +445,12 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   mainQuery = NULL;
 
   _CHECKED(pthread_mutex_unlock(&mutex), 0);
+
+  t.stop();
+
+  cloud9::instrum::theInstrManager.recordEventAttribute(cloud9::instrum::SMTSolve,
+      cloud9::instrum::SolvingResult, (int)hasSolution);
+  cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
 
   return success;
 }

@@ -436,13 +436,15 @@ private:
   STPBuilder *builder;
   double timeout;
   bool useForkedSTP;
+  bool enabledLogging;
 
   char *defaultShMem;
 
   pthread_mutex_t mutex;
   std::set<pid_t> solverInstances;
 public:
-  STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides = true);
+  STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides,
+      bool _enabledLogging);
   ~STPSolverImpl();
 
   char *getConstraintLog(const Query&);
@@ -469,12 +471,14 @@ static void stp_error_handler(const char* err_msg) {
   abort();
 }
 
-STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides)
+STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP,
+    bool _optimizeDivides, bool _enabledLogging)
   : solver(_solver),
     vc(vc_createValidityChecker()),
     builder(new STPBuilder(vc, _optimizeDivides)),
     timeout(0.0),
-    useForkedSTP(_useForkedSTP)
+    useForkedSTP(_useForkedSTP),
+    enabledLogging(_enabledLogging)
 {
   assert(vc && "unable to create validity checker");
   assert(builder && "unable to create STPBuilder");
@@ -505,8 +509,8 @@ STPSolverImpl::~STPSolverImpl() {
 
 /***/
 
-STPSolver::STPSolver(bool useForkedSTP, bool optimizeDivides)
-  : Solver(new STPSolverImpl(this, useForkedSTP, optimizeDivides))
+STPSolver::STPSolver(bool useForkedSTP, bool optimizeDivides, bool enabledLogging)
+  : Solver(new STPSolverImpl(this, useForkedSTP, optimizeDivides, enabledLogging))
 {
 }
 
@@ -745,11 +749,13 @@ STPSolverImpl::computeInitialValues(const Query& query,
 	pthread_mutex_unlock(&mutex);
 
 	Timer t;
-	t.start();
+	if (enabledLogging) t.start();
+
 	do {
 	  res = waitpid(pid, &status, 0);
 	} while (res < 0 && errno == EINTR);
-	t.stop();
+
+	if (enabledLogging) t.stop();
 
 	pthread_mutex_lock(&mutex);
 	solverInstances.erase(pid);
@@ -797,9 +803,11 @@ STPSolverImpl::computeInitialValues(const Query& query,
 	  }
 	}
 
-	cloud9::instrum::theInstrManager.recordEventAttribute(cloud9::instrum::SMTSolve,
-	    cloud9::instrum::SolvingResult, (int)hasSolution);
-	cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
+	if (enabledLogging) {
+          cloud9::instrum::theInstrManager.recordEventAttribute(cloud9::instrum::SMTSolve,
+              cloud9::instrum::SolvingResult, (int)hasSolution);
+          cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::SMTSolve, t);
+	}
 
 
 	success = true;
