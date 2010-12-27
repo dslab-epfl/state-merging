@@ -167,11 +167,11 @@ def gen_multiplicity_distribution(outFile, eventEntries):
     outFile.write("# [Index 4] STP solving time vs. multiplicity histogram\n")
 
     mplicityHistogram = _compute_histogram(stpEvents,
-                                           lambda event: int(event.values.get(EventAttributes.STATE_MULTIPLICITY)) // 1000,
+                                           lambda event: int(math.log(int(event.values.get(EventAttributes.STATE_MULTIPLICITY)), 2)),
                                            lambda event: float(event.values.get(EventAttributes.WALL_TIME))
                                            )
 
-    _write_histogram(outFile, mplicityHistogram, lambda key: key * 1000)
+    _write_histogram(outFile, mplicityHistogram, lambda key: math.pow(2, key))
 
     outFile.write("\n\n")
     outFile.write("#"*80 + "\n")
@@ -182,6 +182,17 @@ def gen_multiplicity_distribution(outFile, eventEntries):
                                            lambda event: int(event.values.get(EventAttributes.STATE_MULTIPLICITY))
                                            )
     _write_histogram(outFile, mplicityDepthHist, lambda key: key)
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 6] Constraint solving time vs. multiplicity histogram\n")
+
+    csHistogram = _compute_histogram(csEvents,
+                                     lambda event: int(math.log(int(event.values.get(EventAttributes.STATE_MULTIPLICITY)), 2)),
+                                     lambda event: float(event.values.get(EventAttributes.WALL_TIME))
+                                     )
+    
+    _write_histogram(outFile, csHistogram, lambda key: math.pow(2, key))
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]
