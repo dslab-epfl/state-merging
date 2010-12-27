@@ -171,7 +171,7 @@ def gen_multiplicity_distribution(outFile, eventEntries):
                                            lambda event: float(event.values.get(EventAttributes.WALL_TIME))
                                            )
 
-    _write_histogram(outFile, mplicityHistogram, lambda key: math.pow(2, key))
+    _write_histogram(outFile, mplicityHistogram, lambda key: 3*math.pow(2, key)/2.0)
 
     outFile.write("\n\n")
     outFile.write("#"*80 + "\n")
@@ -192,7 +192,7 @@ def gen_multiplicity_distribution(outFile, eventEntries):
                                      lambda event: float(event.values.get(EventAttributes.WALL_TIME))
                                      )
     
-    _write_histogram(outFile, csHistogram, lambda key: math.pow(2, key))
+    _write_histogram(outFile, csHistogram, lambda key: 3*math.pow(2, key)/2.0)
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]

@@ -14,6 +14,7 @@ set logscale x
 
 set output "cs-time-vs-mplicity". ext
 set xrange [1:*]
+set yrange [:1000]
 plot datafile using 2:3 index 0 with points ls 1 notitle, \
      datafile using 1:4 index 6 with histeps ls 3 title "Average"
 
@@ -23,6 +24,7 @@ unset logscale x
 
 set title "Distribution of STP Time Over State Multiplicity"
 set xrange [1:*]
+set yrange [:1000]
 set logscale x
 
 set output "stp-time-vs-mplicity". ext
@@ -40,6 +42,7 @@ set title "Distribution of State Multiplicity Over Forking Depth"
 
 set output "stp-mplicity-vs-depth". ext
 set xrange [0:*]
+set yrange [:*]
 plot datafile using 1:2 index 1 with points ls 2 title "SAT", \
      datafile using 1:2 index 2 with points ls 1 title "UNSAT", \
      datafile using 1:4 index 5 with histeps ls 3 title "Average over SAT+UNSAT"
@@ -52,6 +55,7 @@ set title "Distribution of Solving Time Over State Depth"
 
 set output "stp-time-vs-depth". ext
 set xrange [0:*]
+set yrange [:1000]
 plot datafile using 1:3 index 1 with points ls 2 title "SAT", \
      datafile using 1:3 index 2 with points ls 1 title "UNSAT", \
      datafile using 1:4 index 3 with histeps ls 3 title "Average over SAT+UNSAT"
