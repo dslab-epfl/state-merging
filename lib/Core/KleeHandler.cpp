@@ -391,19 +391,8 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 			}
 		}
 
-		if (state.coveredNew) {
-			cloud9::instrum::InstrumentationManager &manager =
-					cloud9::instrum::theInstrManager;
-
-			manager.recordEvent(cloud9::instrum::TestCase,
-					"[" +
-					manager.stampToString(manager.getRelativeTime(state.lastCoveredTime))
-					+ "] " +
-					getTestFilename("ktest", id));
-		} else {
-			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TestCase,
-					getTestFilename("ktest", id));
-		}
+		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TestCase,
+                    getTestFilename("ktest", id));
 	}
 }
 

@@ -26,7 +26,7 @@ LocalFileWriter::~LocalFileWriter() {
 
 void LocalFileWriter::writeStatistics(InstrumentationManager::TimeStamp &time,
 		InstrumentationManager::statistics_t &stats) {
-	statsStream << time;
+	InstrumentationManager::writeStamp(statsStream, time);
 
 	for (unsigned i = 0; i < stats.size(); i++) {
 	  if (stats[i] == 0)
@@ -42,20 +42,21 @@ void LocalFileWriter::writeEvents(InstrumentationManager::events_t &events) {
 	for (InstrumentationManager::events_t::iterator it = events.begin();
 			it != events.end(); it++) {
 
-		eventsStream << it->first.first << ' ' << it->first.second << ' ';
+	    InstrumentationManager::writeStamp(eventsStream, it->first.first);
+            eventsStream << ' ' << it->first.second << ' ';
 
-		for (InstrumentationManager::event_attributes_t::iterator ait = (*it).second.begin();
-		    ait != (*it).second.end(); ait++) {
-		  eventsStream << ait->first << '=' << ait->second << ' ';
-		}
+            for (InstrumentationManager::event_attributes_t::iterator ait = (*it).second.begin();
+                ait != (*it).second.end(); ait++) {
+              eventsStream << ait->first << '=' << ait->second << ' ';
+            }
 
-		eventsStream << endl;
+            eventsStream << endl;
 	}
 }
 
 void LocalFileWriter::writeCoverage(InstrumentationManager::TimeStamp &time,
         InstrumentationManager::coverage_t &coverage) {
-  coverageStream << time;
+  InstrumentationManager::writeStamp(coverageStream, time);
 
   boost::io::ios_all_saver saver(coverageStream);
   coverageStream.precision(2);

@@ -8,8 +8,6 @@
 #ifndef INSTRUMENTATIONMANAGER_H_
 #define INSTRUMENTATIONMANAGER_H_
 
-#include "llvm/System/Process.h"
-
 #include "cloud9/instrum/Timing.h"
 
 #include <set>
@@ -26,7 +24,6 @@ namespace instrum {
 
 
 using namespace std;
-using namespace llvm;
 
 class InstrumentationWriter;
 
@@ -78,7 +75,7 @@ class IOServices;
 
 class InstrumentationManager {
 public:
-	typedef sys::TimeValue TimeStamp;
+	typedef double TimeStamp;
 
 	typedef vector<int> statistics_t;
 
@@ -92,11 +89,7 @@ public:
 private:
 	typedef set<InstrumentationWriter*> writer_set_t;
 
-	TimeStamp referenceTime;
-
-	TimeStamp now() {
-		return TimeStamp::now();
-	}
+	Timer absoluteCounter;
 
 	statistics_t stats;
 
@@ -185,14 +178,11 @@ public:
 		return manager;
 	}
 
-	std::string stampToString(TimeStamp stamp);
-	TimeStamp getRelativeTime(TimeStamp absoluteStamp);
+	static std::string stampToString(TimeStamp stamp);
+	static std::ostream &writeStamp(std::ostream &s, const TimeStamp &stamp);
 };
 
 extern InstrumentationManager &theInstrManager;
-
-std::ostream &operator<<(std::ostream &s,
-			const InstrumentationManager::TimeStamp &stamp);
 
 }
 
