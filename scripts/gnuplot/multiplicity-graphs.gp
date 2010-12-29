@@ -36,6 +36,17 @@ unset logscale x
 
 ###################################################################
 
+set title "Distribution of SAT Time Over State Multiplicity"
+set logscale x
+
+set output "sat-time-vs-mplicity". ext
+plot datafile using 2:3 index 7 with points ls 1 notitle, \
+     datafile using 1:4 index 8 with histeps ls 3 title "Average"
+
+unset logscale x
+
+###################################################################
+
 set xlabel "State Depth"
 set ylabel "State Multiplicity"
 set title "Distribution of State Multiplicity Over Forking Depth"

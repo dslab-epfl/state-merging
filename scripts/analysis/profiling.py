@@ -126,6 +126,9 @@ def gen_multiplicity_distribution(outFile, eventEntries):
     stpEvents = filter(lambda event: event.id == Events.SMT_SOLVE and
                        event.values.get(EventAttributes.STATE_DEPTH) and
                        event.values.get(EventAttributes.STATE_MULTIPLICITY), eventEntries)
+    satEvents = filter(lambda event: event.id == Events.SAT_SOLVE and
+                       event.values.get(EventAttributes.STATE_DEPTH) and
+                       event.values.get(EventAttributes.STATE_MULTIPLICITY), eventEntries)
 
     outFile.write("#"*80 + "\n")
     outFile.write("# [Index 0] Constraint solving events (Depth, Multiplicity, Wall Time)\n")
@@ -193,6 +196,28 @@ def gen_multiplicity_distribution(outFile, eventEntries):
                                      )
     
     _write_histogram(outFile, csHistogram, lambda key: 3*math.pow(2, key)/2.0)
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 7] SAT solving events (Depth, Multiplicity, Wall Time)\n");
+
+    for event in satEvents:
+        outFile.write("%d %d %.3f\n" % (
+                int(event.values.get(EventAttributes.STATE_DEPTH)),
+                int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                float(event.values.get(EventAttributes.WALL_TIME))
+                ))
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 8] SAT solving time vs. multiplicity histogram\n")
+
+    satHistogram = _compute_histogram(satEvents,
+                                      lambda event: int(math.log(int(event.values.get(EventAttributes.STATE_MULTIPLICITY)), 2)),
+                                      lambda event: float(event.values.get(EventAttributes.WALL_TIME))
+                                      )
+
+    _write_histogram(outFile, satHistogram, lambda key: 3*math.pow(2, key)/2.0)
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]
