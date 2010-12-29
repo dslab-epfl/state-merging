@@ -43,6 +43,11 @@ using namespace llvm;
 namespace {
   cl::opt<bool>
   DebugLogMerge("debug-log-merge");
+
+  cl::opt<unsigned>
+  MaxStateMultiplicity("max-state-multiplicity",
+            cl::desc("Maximum number of states merged into one"),
+            cl::init(0));
 }
 
 namespace klee {
@@ -468,6 +473,9 @@ LazyMergingSearcher::~LazyMergingSearcher() {
 ///
 
 inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const {
+  if (MaxStateMultiplicity && state->multiplicity >= MaxStateMultiplicity)
+    return false;
+
   StatesTrace::const_iterator it = statesTrace.find(state->getMergeIndex());
 
   if (it == statesTrace.end())
@@ -552,6 +560,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
     for (StatesSet::iterator it = traceIt->second->begin(),
                              ie = traceIt->second->end(); it != ie; ++it) {
       state1 = *it;
+      assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
 
       if (state1 != state && state1->getMergeIndex() == mergeIndex) {
         // State is at the same execution index as state1, let's try merging
@@ -562,7 +571,10 @@ ExecutionState &LazyMergingSearcher::selectState() {
           // Make traces that was pointing to state to point to state1
           for (StatesTrace::iterator it1 = statesTrace.begin(),
                                      ie1 = statesTrace.end(); it1 != ie1; ++it1) {
-            if (it1->second->erase(state) > 0) {
+            if (MaxStateMultiplicity && state1->multiplicity >= MaxStateMultiplicity) {
+              it1->second->erase(state1);
+              it1->second->erase(state);
+            } else if (it1->second->erase(state) > 0) {
               it1->second->insert(state1);
             }
           }
@@ -608,7 +620,8 @@ void LazyMergingSearcher::update(ExecutionState *current,
                              const std::set<ExecutionState*> &removedStates) {
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
-  if (current && removedStates.count(current) == 0) {
+  if (current && removedStates.count(current) == 0 &&
+        (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
     uint32_t mergeIndex = current->getMergeIndex();
     StatesTrace::iterator it = statesTrace.find(mergeIndex);
     if (it == statesTrace.end()) {
