@@ -350,7 +350,7 @@ Executor::Executor(const InterpreterOptions &opts,
 	       ? std::min(MaxSTPTime,MaxInstructionTime)
 	       : std::max(MaxSTPTime,MaxInstructionTime)) {
 
-  STPSolver *stpSolver = new STPSolver(UseForkedSTP, STPOptimizeDivides,
+  STPSolver *stpSolver = new STPSolver(UseForkedSTP || UseParallelSolver, STPOptimizeDivides,
       !UseParallelSolver);
 
   Solver *solver = 

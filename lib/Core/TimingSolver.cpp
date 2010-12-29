@@ -63,6 +63,7 @@ bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr,
 
   Timer t;
   recordStateInfo(cloud9::instrum::SMTSolve, state);
+  recordStateInfo(cloud9::instrum::SATSolve, state);
   t.start();
 
   if (simplifyExprs)
@@ -73,6 +74,7 @@ bool TimingSolver::evaluate(const ExecutionState& state, ref<Expr> expr,
   t.stop();
   recordTiming(t, state);
   clearStateInfo(cloud9::instrum::SMTSolve);
+  clearStateInfo(cloud9::instrum::SATSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -95,6 +97,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr,
 
   Timer t;
   recordStateInfo(cloud9::instrum::SMTSolve, state);
+  recordStateInfo(cloud9::instrum::SATSolve, state);
   t.start();
 
   if (simplifyExprs)
@@ -105,6 +108,7 @@ bool TimingSolver::mustBeTrue(const ExecutionState& state, ref<Expr> expr,
   t.stop();
   recordTiming(t, state);
   clearStateInfo(cloud9::instrum::SMTSolve);
+  clearStateInfo(cloud9::instrum::SATSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -150,6 +154,7 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr,
 
   Timer t;
   recordStateInfo(cloud9::instrum::SMTSolve, state);
+  recordStateInfo(cloud9::instrum::SATSolve, state);
   t.start();
 
   if (simplifyExprs)
@@ -160,6 +165,7 @@ bool TimingSolver::getValue(const ExecutionState& state, ref<Expr> expr,
   t.stop();
   recordTiming(t, state);
   clearStateInfo(cloud9::instrum::SMTSolve);
+  clearStateInfo(cloud9::instrum::SATSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
@@ -183,6 +189,7 @@ TimingSolver::getInitialValues(const ExecutionState& state,
 
   Timer t;
   recordStateInfo(cloud9::instrum::SMTSolve, state);
+  recordStateInfo(cloud9::instrum::SATSolve, state);
   t.start();
 
   bool success = solver->getInitialValues(Query(state.constraints(),
@@ -192,6 +199,7 @@ TimingSolver::getInitialValues(const ExecutionState& state,
   t.stop();
   recordTiming(t, state);
   clearStateInfo(cloud9::instrum::SMTSolve);
+  clearStateInfo(cloud9::instrum::SATSolve);
 
   sys::Process::GetTimeUsage(delta,user,sys);
   delta -= now;
