@@ -11,11 +11,19 @@
 #include "cloud9/lb/LBCommon.h"
 #include "cloud9/Logger.h"
 
+#include "llvm/Support/CommandLine.h"
+
 #include <boost/bind.hpp>
 #include <string>
 #include <vector>
+#include <sstream>
 
+using namespace llvm;
 using namespace cloud9::data;
+
+namespace {
+  cl::opt<bool> DebugWorkerCommunication("debug-worker-communication", cl::init(false));
+}
 
 namespace cloud9 {
 
@@ -157,6 +165,10 @@ void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
   lb->getAndResetCoverageUpdates(id, data);
 
   if (data.size() > 0) {
+    if (DebugWorkerCommunication) {
+      CLOUD9_WRK_DEBUG(worker, "Sent coverage updates: " << covUpdatesToString(data));
+    }
+
     StatisticUpdate *update = response.add_globalupdates();
     serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data, *update);
   }
@@ -186,6 +198,10 @@ bool WorkerConnection::processStatisticsUpdates(
     if (update.name() == CLOUD9_STAT_NAME_LOCAL_COVERAGE) {
       cov_update_t data;
       parseStatisticUpdate(update, data);
+
+      if (DebugWorkerCommunication) {
+        CLOUD9_WRK_DEBUG(worker, "Received coverage updates: " << covUpdatesToString(data));
+      }
 
       if (data.size() > 0)
         lb->updateCoverageData(id, data);

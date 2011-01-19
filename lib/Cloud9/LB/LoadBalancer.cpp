@@ -75,6 +75,9 @@ void LoadBalancer::checkProgramParams(const std::string &programName,
   }
 
   assert(this->programName == programName);
+  if (this->statIDCount != statIDCount) {
+    CLOUD9_DEBUG("StatIDCount Mismatch! Required: " << this->statIDCount << " Reported: " << statIDCount);
+  }
   assert(this->statIDCount == statIDCount);
 }
 

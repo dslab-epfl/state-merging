@@ -37,24 +37,6 @@ class ExecutionPathSet;
 
 typedef std::vector<std::pair<uint32_t, uint64_t> > cov_update_t;
 
-#if 0
-// XXX Debugging
-static inline std::string getASCIIMessage(std::string &message) {
-	std::string result;
-	bool first = true;
-
-	for (std::string::iterator it = message.begin(); it != message.end(); it++) {
-		if (!first)
-			result.push_back(':');
-		else
-			first = false;
-
-		result.append(boost::lexical_cast<std::string>((int)(*it)));
-	}
-	return result;
-}
-#endif
-
 void embedMessageLength(std::string &message);
 
 void sendMessage(tcp::socket &socket, std::string &message);
@@ -171,7 +153,24 @@ void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port, boost::system::error_code &error);
 
+/* Functions useful for debugging */
 
+std::string covUpdatesToString(cov_update_t &covUpdate);
+
+static inline std::string getASCIIMessage(std::string &message) {
+    std::string result;
+    bool first = true;
+
+    for (std::string::iterator it = message.begin(); it != message.end(); it++) {
+        if (!first)
+            result.push_back(':');
+        else
+            first = false;
+
+        result.append(boost::lexical_cast<std::string>((int)(*it)));
+    }
+    return result;
+}
 
 }
 

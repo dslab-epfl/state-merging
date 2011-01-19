@@ -153,4 +153,17 @@ void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
 	}
 }
 
+std::string covUpdatesToString(cov_update_t &covUpdate) {
+  std::stringstream ss;
+
+  for (cov_update_t::iterator it = covUpdate.begin(); it != covUpdate.end(); it++) {
+    if (it != covUpdate.begin())
+      ss << " ";
+
+    ss << it->first << ":" << it->second;
+  }
+
+  return ss.str();
+}
+
 }

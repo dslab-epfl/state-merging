@@ -20,6 +20,11 @@
 using namespace llvm;
 using namespace cloud9::data;
 
+namespace {
+  cl::opt<bool>
+  DebugLBCommuncation("debug-lb-communication", cl::init(false));
+}
+
 namespace cloud9 {
 
 namespace worker {
@@ -128,6 +133,9 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 
   if (data.size() > 0) {
     CLOUD9_DEBUG("Sending " << data.size() << " local coverage updates.");
+    if (DebugLBCommuncation) {
+      CLOUD9_DEBUG("Coverage updates sent: " << covUpdatesToString(data));
+    }
 
     StatisticUpdate *update = message.add_localupdates();
     serializeStatisticUpdate(CLOUD9_STAT_NAME_LOCAL_COVERAGE, data, *update);
@@ -207,7 +215,11 @@ void LBConnection::processResponse(LBResponseMessage &response) {
         parseStatisticUpdate(update, data);
 
         if (data.size() > 0) {
-          CLOUD9_INFO("Receiving " << data.size() << " global coverage updates.");
+          CLOUD9_DEBUG("Receiving " << data.size() << " global coverage updates.");
+          if (DebugLBCommuncation) {
+            CLOUD9_DEBUG("Coverage updates received: " << covUpdatesToString(data));
+          }
+
           jobManager->setUpdatedGlobalCoverage(data);
         }
       }
