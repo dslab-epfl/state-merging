@@ -97,6 +97,9 @@ namespace {
                cl::desc("Enable calltree tracking for instruction level statistics"),
                cl::init(true));
   
+  cl::opt<bool>
+  DebugCoverableInstr("debug-coverable-instr", cl::init(false));
+
 }
 
 ///
@@ -223,6 +226,24 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
             numBranches++;
       }
     }
+  }
+
+  if (DebugCoverableInstr) {
+    std::stringstream ss;
+
+    for (std::vector<KFunction*>::iterator it = km->functions.begin(),
+        ie = km->functions.end(); it != ie; ++it) {
+      KFunction *kf = *it;
+      for (unsigned i = 0; i < kf->numInstructions; ++i) {
+        KInstruction *ki = kf->instructions[i];
+        unsigned id = ki->info->id;
+        if (kf->trackCoverage && instructionIsCoverable(ki->inst)) {
+          ss << id << " ";
+        }
+      }
+    }
+
+    CLOUD9_DEBUG("Coverable instruction IDs: " << ss.str());
   }
 
   if (OutputStats) {
