@@ -57,7 +57,28 @@ void __close_fds(void) {
   }
 }
 
+int __get_concrete_fd(int symfd) {
+  if (!STATIC_LIST_CHECK(__fdt, (unsigned)symfd)) {
+    errno = EBADFD;
+    return -1;
+  }
 
+  fd_entry_t *fde = &__fdt[symfd];
+
+  if (!(fde->attr & FD_IS_FILE)) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  file_t *file = (file_t*)fde->io_object;
+
+  if (file->concrete_fd < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  return file->concrete_fd;
+}
 
 static int _is_blocking(int fd, int event) {
   if (!STATIC_LIST_CHECK(__fdt, (unsigned)fd)) {

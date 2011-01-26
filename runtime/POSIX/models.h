@@ -21,6 +21,8 @@
 DECLARE_MODEL(int, stat, const char *path, struct stat *buf);
 DECLARE_MODEL(int, fstat, int fd, struct stat *buf);
 DECLARE_MODEL(int, lstat, const char *path, struct stat *buf);
+DECLARE_MODEL(int, fstatat, int dirfd, const char *pathname, struct stat *buf,
+                   int flags);
 
 DECLARE_MODEL(int, close, int fd);
 

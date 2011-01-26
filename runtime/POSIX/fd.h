@@ -46,5 +46,7 @@ void __close_fds(void);
 ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt);
 ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt);
 
+int __get_concrete_fd(int symfd);
+
 
 #endif /* FD_H_ */
