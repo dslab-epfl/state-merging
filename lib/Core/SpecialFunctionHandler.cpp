@@ -262,9 +262,12 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
                                             ref<Expr> addressExpr) {
   ObjectPair op;
   addressExpr = executor.toUnique(state, addressExpr);
+  if (!isa<ConstantExpr>(addressExpr))
+    return std::string("<KLEE<symaddr>>");
+
   ref<ConstantExpr> address = cast<ConstantExpr>(addressExpr);
   if (!state.addressSpace().resolveOne(address, op))
-    assert(0 && "XXX out of bounds / multiple resolution unhandled");
+    return std::string("<KLEE<multires>>");
 
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
@@ -277,7 +280,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
 	  ref<ConstantExpr> value = cast<ConstantExpr>(offset_expr.get());
   	  ioffset = value.get()->getZExtValue();
   } else
-	  assert(0 && "Error: invalid interior pointer");
+	  return std::string("<KLEE<invalstring>>");
 
   assert(ioffset < mo->size);
 
@@ -286,7 +289,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
     ref<Expr> cur = os->read8(i + ioffset);
     cur = executor.toUnique(state, cur);
     if (!isa<ConstantExpr>(cur)) //XXX: Should actually concretize the value...
-           return std::string("hit symbolic char while reading concrete string");
+           return std::string("<KLEE<symchar>>");
     buf[i] = cast<ConstantExpr>(cur)->getZExtValue(8);
   }
   buf[i] = 0;
@@ -535,10 +538,6 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
 
   if (arguments.size() == 2 && arguments[1]->getWidth() == sizeof(long)*8) {
     // Special case for displaying strings
-    if (!isa<ConstantExpr>(arguments[1])) {
-      executor.terminateStateOnError(state, "klee_debug needs a constant list of arguments", "user.err");
-      return;
-    }
 
     std::string paramStr = readStringAtAddress(state, arguments[1]);
 
@@ -550,14 +549,14 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
 
   for (unsigned int i = 1; i < arguments.size(); i++) {
     if (!isa<ConstantExpr>(arguments[i])) {
-      executor.terminateStateOnError(state, "klee_debug needs a constant list of arguments", "user.err");
+      fprintf(stderr, "%s: %s\n", formatStr.c_str(), "<nonconst args>");
       return;
     }
 
     ref<ConstantExpr> arg = cast<ConstantExpr>(arguments[i]);
 
     if (arg->getWidth() != sizeof(int)*8) {
-      executor.terminateStateOnError(state, "klee_debug works only with 32-bit arguments", "user.err");
+      fprintf(stderr, "%s: %s\n", formatStr.c_str(), "<non-32-bit args>");
       return;
     }
 
@@ -581,8 +580,6 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
     executor.terminateStateOnError(state, "klee_debug allows up to 3 arguments", "user.err");
     return;
   }
-
-  //vprintf(formatStr.c_str(), *((va_list*)cast<ConstantExpr>(arguments[1])->getZExtValue()));
 }
 
 void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
