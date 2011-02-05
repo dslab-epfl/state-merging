@@ -379,9 +379,9 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
     Value *modelF = mainModule->getNamedValue(newName);
 
     if (modelF != NULL) {
-      //CLOUD9_DEBUG("Patching " << fName.str());
-      //modelF->getType()->dump();
-      //f->getType()->dump();
+      CLOUD9_DEBUG("Patching " << fName.str());
+      modelF->getType()->dump();
+      f->getType()->dump();
       modelF->replaceAllUsesWith(f);
     }
   }
@@ -397,7 +397,7 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
 
     StringRef newName = fName.substr(strlen("__klee_original_"));
 
-    //CLOUD9_DEBUG("Patching " << fName.str());
+    CLOUD9_DEBUG("Patching " << fName.str());
 
     Value *originalF = mainModule->getNamedValue(newName);
 

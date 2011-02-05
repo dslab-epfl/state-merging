@@ -165,8 +165,9 @@ static bool instructionIsCoverable(Instruction *i) {
       Instruction *prev = --it;
       if (isa<CallInst>(prev) || isa<InvokeInst>(prev)) {
         Function *target = getDirectCallTarget(prev);
-        if (target && target->doesNotReturn())
+        if (target && target->doesNotReturn()) {
           return false;
+        }
       }
     }
   }
@@ -278,6 +279,7 @@ StatsTracker::~StatsTracker() {
 }
 
 void StatsTracker::done() {
+  computeCodeCoverage();
   if (statsFile)
     writeStatsLine();
   if (OutputIStats)
@@ -899,17 +901,23 @@ void StatsTracker::computeCodeCoverage() {
 std::pair<std::pair<unsigned, unsigned>, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf) {
   unsigned localCount = 0;
   unsigned globalCount = 0;
+  unsigned grandTotal = 0;
 
   for (unsigned i = 0; i < kf->numInstructions; i++) {
     unsigned id = kf->instructions[i]->info->id;
 
+    if (!instructionIsCoverable(kf->instructions[i]->inst))
+      continue;
+
     localCount += theStatisticManager->getIndexedValue(stats::locallyCoveredInstructions, id);
+
     globalCount += theStatisticManager->getIndexedValue(stats::globallyCoveredInstructions, id);
+    grandTotal++;
   }
 
   cloud9::instrum::theInstrManager.updateCoverage(kf->function->getNameStr(),
-      std::make_pair(UseGlobalCoverage ? globalCount : localCount, kf->numInstructions));
+      std::make_pair(UseGlobalCoverage ? globalCount : localCount, grandTotal));
 
-  return std::make_pair(std::make_pair(localCount, globalCount), kf->numInstructions);
+  return std::make_pair(std::make_pair(localCount, globalCount), grandTotal);
 }
 
