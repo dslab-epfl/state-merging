@@ -415,7 +415,7 @@ std::ostream &operator<<(std::ostream &os, const ExecutionState &state) {
 	return klee::c9::printStateStack(os, state);
 }
 
-bool ExecutionState::merge(const ExecutionState &b) {
+ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
   if (DebugLogStateMerge)
     std::cerr << "-- attempting merge of A:" 
                << this << " with B:" << &b << "--\n";
@@ -423,7 +423,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
   if (pc() != b.pc()) {
     if (DebugLogStateMerge)
       std::cerr << "---- merge failed: program counters are different\n";
-    return false;
+    return NULL;
   }
 
   // XXX is it even possible for these to differ? does it matter? probably
@@ -431,7 +431,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
   if (symbolics!=b.symbolics) {
     if (DebugLogStateMerge)
       std::cerr << "---- merge failed: symbolics sets are different\n";
-    return false;
+    return NULL;
   }
 
   // We cannot merge if addresses would resolve differently in the
@@ -463,7 +463,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
         }
         if (DebugLogStateMerge)
           std::cerr << "---- merge failed: mappings are different\n";
-        return false;
+        return NULL;
       }
       if (ai->second != bi->second) {
         //if (DebugLogStateMerge)
@@ -481,7 +481,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
           ref<Expr> bv = bs->read8(i);
           if(!av.isNull() && !bv.isNull() && av != bv)
             if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
-              return false;
+              return NULL;
         }
   #endif
       }
@@ -491,7 +491,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
         std::cerr << "\t\tmappings differ\n";
       if (DebugLogStateMerge)
         std::cerr << "---- merge failed: mappings are different\n";
-      return false;
+      return NULL;
     }
   }
 
@@ -507,7 +507,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
       if (itA->caller!=itB->caller || itA->kf!=itB->kf) {
         if (DebugLogStateMerge)
           std::cerr << "---- merge failed: call stacks are different\n";
-        return false;
+        return NULL;
       }
 
 #if 0
@@ -522,7 +522,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
         const ref<Expr> &bv = itB->locals[i].value;
         if(!av.isNull() && !bv.isNull() && av != bv)
           if(av->getKind() == Expr::Constant && bv->getKind() == Expr::Constant)
-            return false;
+            return NULL;
       }
 #endif
 
@@ -533,9 +533,13 @@ bool ExecutionState::merge(const ExecutionState &b) {
     if (itA!=itAE || itB!=itBE) {
       if (DebugLogStateMerge)
         std::cerr << "---- merge failed: call stacks are different\n";
-      return false;
+      return NULL;
     }
   }
+
+  // Everything seems OK, we are going to merge the states
+
+  ExecutionState *a = copy ? this->branch() : this;
 
   std::set< ref<Expr> > aConstraints(constraints().begin(), constraints().end());
   std::set< ref<Expr> > bConstraints(b.constraints().begin(),
@@ -568,8 +572,6 @@ bool ExecutionState::merge(const ExecutionState &b) {
     std::cerr << "]\n";
   }
 
-  // merge stack
-
   ref<Expr> inA = ConstantExpr::alloc(1, Expr::Bool);
   ref<Expr> inB = ConstantExpr::alloc(1, Expr::Bool);
   for (std::set< ref<Expr> >::iterator it = aSuffix.begin(), 
@@ -583,8 +585,10 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
 
-  std::vector<StackFrame>::iterator itA = stack().begin();
-  std::vector<StackFrame>::iterator itAE = stack().end();
+  // merge stack
+
+  std::vector<StackFrame>::iterator itA = a->stack().begin();
+  std::vector<StackFrame>::iterator itAE = a->stack().end();
   std::vector<StackFrame>::const_iterator itB = b.stack().begin();
   int stackDifference = 0, stackObjects = 0;
 
@@ -617,14 +621,14 @@ bool ExecutionState::merge(const ExecutionState &b) {
   for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
          ie = mutated.end(); it != ie; ++it) {
     const MemoryObject *mo = *it;
-    const ObjectState *os = addressSpace().findObject(mo);
+    const ObjectState *os = a->addressSpace().findObject(mo);
     const ObjectState *otherOS = b.addressSpace().findObject(mo);
     assert(os && !os->readOnly && 
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
     memObjects += mo->size;
-    ObjectState *wos = addressSpace().getWriteable(mo, os);
+    ObjectState *wos = a->addressSpace().getWriteable(mo, os);
 
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
@@ -649,21 +653,21 @@ bool ExecutionState::merge(const ExecutionState &b) {
     constraints().addConstraint(*it);
   constraints().addConstraint(OrExpr::create(inA, inB));
 
-  queryCost += b.queryCost;
-  weight += b.weight;
-  coveredNew |= b.coveredNew;
-  multiplicity += b.multiplicity;
-  if(instsSinceCovNew > b.instsSinceCovNew)
-      instsSinceCovNew = b.instsSinceCovNew;
+  a->queryCost += b.queryCost;
+  a->weight += b.weight;
+  a->coveredNew |= b.coveredNew;
+  a->multiplicity += b.multiplicity;
+  if(a->instsSinceCovNew > b.instsSinceCovNew)
+      a->instsSinceCovNew = b.instsSinceCovNew;
   for(std::map<const std::string*, std::set<unsigned> >::const_iterator
           it = b.coveredLines.begin(), ie = b.coveredLines.end(); it != ie; ++it) {
-      coveredLines[it->first].insert(it->second.begin(), it->second.end());
+      a->coveredLines[it->first].insert(it->second.begin(), it->second.end());
   }
 
   if (DebugLogStateMerge)
     std::cerr << "---- merged successfully\n";
 
-  return true;
+  return a;
 }
 
 /***/

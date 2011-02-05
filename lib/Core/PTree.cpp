@@ -53,6 +53,25 @@ void PTree::merge(Node *target, Node *other) {
   target->mergedParents.push_back(other);
 }
 
+PTreeNode* PTree::mergeCopy(Node *target, Node *other,
+                            const data_type &mergedData) {
+  assert(target && !target->left && !target->right);
+  assert(other && !other->left && !other->right);
+
+  assert(target->state == PTreeNode::RUNNING);
+  assert(other->state == PTreeNode::RUNNING);
+
+  PTreeNode *merged = new Node(0, mergedData);
+  target->state = PTreeNode::MERGED;
+  target->right = merged;
+  other->state = PTreeNode::MERGED;
+  other->left = merged;
+
+  merged->mergedParents.push_back(target);
+  merged->mergedParents.push_back(other);
+  return merged;
+}
+
 void PTree::markInactive(Node *n) {
   for (; n; n = n->parent) {
     if (!n->active)
@@ -124,7 +143,7 @@ void PTree::dump(std::ostream &os) {
     os << "];\n";
     if (n->left) {
       os << "\tn" << n << " -> n" << n->left << ";\n";
-      if(n->state != PTreeNode::MERGED)
+      //if(n->state != PTreeNode::MERGED)
         stack.push_back(n->left);
     }
     if (n->right) {

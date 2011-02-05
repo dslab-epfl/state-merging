@@ -43,6 +43,9 @@ namespace klee {
                                  ForkTag forkTag);
 
     void merge(Node *target, Node *other);
+    Node* mergeCopy(Node *target, Node *other,
+                    const data_type &mergedData);
+
     void terminate(Node *n);
 
     void markInactive(Node *n);

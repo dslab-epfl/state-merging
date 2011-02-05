@@ -1009,12 +1009,24 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
   return tag;
 }
 
-bool Executor::merge(ExecutionState &current, ExecutionState &other) {
+ExecutionState* Executor::merge(ExecutionState &current, ExecutionState &other,
+                                bool copy) {
     WallTimer timer;
 
-    if(current.merge(other)) {
-        other.ptreeNode->data = NULL;
-        processTree->merge(current.ptreeNode, other.ptreeNode);
+    ExecutionState *merged = current.merge(other, copy);
+    if (merged) {
+        if (copy) {
+            addedStates.insert(merged);
+
+            current.ptreeNode->data = NULL;
+            other.ptreeNode->data = NULL;
+            PTree::Node *n = processTree->mergeCopy(
+                    current.ptreeNode, other.ptreeNode, merged);
+            merged->ptreeNode = n;
+        } else {
+            other.ptreeNode->data = NULL;
+            processTree->merge(current.ptreeNode, other.ptreeNode);
+        }
         if(DumpPTreeOnChange)
           dumpProcessTree();
         //terminateState(other);
@@ -1022,12 +1034,12 @@ bool Executor::merge(ExecutionState &current, ExecutionState &other) {
 
         stats::mergesSuccess += 1;
         stats::mergeSuccessTime += timer.check();
-        return true;
+        return merged;
     }
 
     stats::mergesFail += 1;
     stats::mergeFailTime += timer.check();
-    return false;
+    return NULL;
 }
 
 void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {

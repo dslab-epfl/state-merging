@@ -277,7 +277,7 @@ public:
     constraints().addConstraint(e);
   }
 
-  bool merge(const ExecutionState &b);
+  ExecutionState* merge(const ExecutionState &b, bool copy = false);
 
   cloud9::worker::SymbolicState *getCloud9State() const { return c9State; }
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }

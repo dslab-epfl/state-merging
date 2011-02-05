@@ -564,7 +564,9 @@ ExecutionState &LazyMergingSearcher::selectState() {
 
       if (state1 != state && state1->getMergeIndex() == mergeIndex) {
         // State is at the same execution index as state1, let's try merging
-        if (executor.merge(*state1, *state)) {
+        const bool copy = true;
+        ExecutionState *merged = executor.merge(*state1, *state, copy);
+        if (merged) {
           // We've merged !
 
           // Any of the merged states could be followed for fast forwards.
@@ -574,8 +576,12 @@ ExecutionState &LazyMergingSearcher::selectState() {
             if (MaxStateMultiplicity && state1->multiplicity >= MaxStateMultiplicity) {
               it1->second->erase(state1);
               it1->second->erase(state);
-            } else if (it1->second->erase(state) > 0) {
-              it1->second->insert(state1);
+            } else {
+              bool erased = it1->second->erase(state);
+              if (copy)
+                erased |= it1->second->erase(state1);
+              if (erased)
+                it1->second->insert(merged);
             }
           }
 
@@ -583,18 +589,25 @@ ExecutionState &LazyMergingSearcher::selectState() {
           statesToForward.erase(state);
           executor.terminateState(*state, true);
 
+          if (copy) {
+            if (statesToForward.erase(state1))
+              statesToForward.insert(merged);
+            executor.terminateState(*state1, true);
+          }
+
           state = NULL;
           break;
         }
       }
     }
 
-    if (!state)
-      continue; // We merged
-
-    // We can't merge this state right now. May be later.
-    return *state;
+    if (state) {
+      // The state was not merged right now. Let us fast-forward it.
+      return *state;
+    }
   }
+
+  assert(state == NULL);
 
   // At this point we might have terminated states, but the base searcher is
   // unaware about it. We can not call it since it may crash. Instead, we
