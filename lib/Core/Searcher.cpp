@@ -492,7 +492,7 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
 }
 
 ExecutionState &LazyMergingSearcher::selectState() {
-  ExecutionState *state, *state1 = NULL;
+  ExecutionState *state = NULL, *merged = NULL;
   while (!statesToForward.empty()) {
     // TODO: do not fast-forward state if there are other
     // states that could be merged with state first (i.e., select
@@ -512,7 +512,6 @@ ExecutionState &LazyMergingSearcher::selectState() {
     }
 
 #else
-    state = NULL;
     uint32_t mergeIndex = 0;
     unsigned candidates = 0;
     StatesTrace::iterator traceIt;
@@ -559,13 +558,12 @@ ExecutionState &LazyMergingSearcher::selectState() {
     // Check wether we can already merge
     for (StatesSet::iterator it = traceIt->second->begin(),
                              ie = traceIt->second->end(); it != ie; ++it) {
-      state1 = *it;
+      ExecutionState *state1 = *it;
       assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
 
       if (state1 != state && state1->getMergeIndex() == mergeIndex) {
         // State is at the same execution index as state1, let's try merging
-        const bool copy = true;
-        ExecutionState *merged = executor.merge(*state1, *state, copy);
+        merged = executor.merge(*state1, *state);
         if (merged) {
           // We've merged !
 
@@ -578,7 +576,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
               it1->second->erase(state);
             } else {
               bool erased = it1->second->erase(state);
-              if (copy)
+              if (merged != state1)
                 erased |= it1->second->erase(state1);
               if (erased)
                 it1->second->insert(merged);
@@ -589,7 +587,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
           statesToForward.erase(state);
           executor.terminateState(*state, true);
 
-          if (copy) {
+          if (merged != state1) {
             if (statesToForward.erase(state1))
               statesToForward.insert(merged);
             executor.terminateState(*state1, true);
@@ -612,8 +610,8 @@ ExecutionState &LazyMergingSearcher::selectState() {
   // At this point we might have terminated states, but the base searcher is
   // unaware about it. We can not call it since it may crash. Instead, we
   // simply return the last merged state.
-  if (state1)
-    return *state1;
+  if (merged)
+    return *merged;
 
   // Nothing to fast-forward
   // Get state from base searcher

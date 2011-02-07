@@ -249,7 +249,7 @@ public:
 
   ~ExecutionState();
   
-  ExecutionState *branch();
+  ExecutionState *branch(bool copy = false);
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
     t.stack.push_back(StackFrame(caller, t.execIndex, kf));

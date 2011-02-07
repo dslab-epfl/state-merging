@@ -288,17 +288,21 @@ ExecutionState::~ExecutionState() {
   }
 }
 
-ExecutionState *ExecutionState::branch() {
-  depth++;
+ExecutionState *ExecutionState::branch(bool copy) {
+  if (!copy)
+    depth++;
 
   for (processes_ty::iterator it = processes.begin(); it != processes.end(); it++) {
     it->second.addressSpace.cowKey++;
   }
 
   ExecutionState *falseState = new ExecutionState(*this);
-  
-  falseState->coveredNew = false;
-  falseState->coveredLines.clear();
+
+  if (!copy) {
+    falseState->coveredNew = false;
+    falseState->coveredLines.clear();
+  }
+
   falseState->c9State = NULL;
 
   falseState->crtThreadIt = falseState->threads.find(crtThreadIt->second.tuid);
@@ -318,8 +322,10 @@ ExecutionState *ExecutionState::branch() {
     it->second.addressSpace.cowDomain = &falseState->cowDomain;
   }
 
-  weight *= .5;
-  falseState->weight -= weight;
+  if (!copy) {
+    weight *= .5;
+    falseState->weight -= weight;
+  }
 
   return falseState;
 }
