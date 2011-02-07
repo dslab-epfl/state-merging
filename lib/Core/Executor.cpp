@@ -277,6 +277,10 @@ namespace {
   cl::opt<bool>
   DumpPTreeOnChange("dump-ptree-on-change",
           cl::desc("Dump PTree each time it changes"));
+
+  cl::opt<bool>
+  KeepMergedDuplicates("keep-merged-duplicates",
+          cl::desc("Keep execuring merged states as duplicates"));
 }
 
 
@@ -1009,20 +1013,35 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
   return tag;
 }
 
-ExecutionState* Executor::merge(ExecutionState &current, ExecutionState &other,
-                                bool copy) {
+void Executor::addDuplicates(ExecutionState *main, ExecutionState *other) {
+  assert(!other->isDuplicate);
+  if (other->duplicates.empty()) {
+    ExecutionState *dup = other->branch(true);
+    dup->isDuplicate = true;
+    dup->ptreeNode = processTree->duplicate(other->ptreeNode, dup);
+    dup->ptreeNode->active = false;
+    main->duplicates.insert(dup);
+  } else {
+    main->duplicates.insert(other->duplicates.begin(), other->duplicates.end());
+  }
+}
+
+ExecutionState* Executor::merge(ExecutionState &current, ExecutionState &other) {
     WallTimer timer;
 
-    ExecutionState *merged = current.merge(other, copy);
+    ExecutionState *merged = current.merge(other, KeepMergedDuplicates);
     if (merged) {
-        if (copy) {
+        if (KeepMergedDuplicates) {
             addedStates.insert(merged);
 
             current.ptreeNode->data = NULL;
             other.ptreeNode->data = NULL;
-            PTree::Node *n = processTree->mergeCopy(
+            merged->ptreeNode = processTree->mergeCopy(
                     current.ptreeNode, other.ptreeNode, merged);
-            merged->ptreeNode = n;
+
+            addDuplicates(merged, &current);
+            addDuplicates(merged, &other);
+
         } else {
             other.ptreeNode->data = NULL;
             processTree->merge(current.ptreeNode, other.ptreeNode);
@@ -2580,7 +2599,10 @@ void Executor::bindModuleConstants() {
 }
 
 void Executor::stepInState(ExecutionState *state) {
-	fireControlFlowEvent(state, ::cloud9::worker::STEP);
+  fireControlFlowEvent(state, ::cloud9::worker::STEP);
+
+  std::set<ExecutionState*> duplicates;
+  duplicates.swap(state->duplicates);
 
 	KInstruction *ki = state->pc();
 	stepInstruction(*state);
@@ -2592,7 +2614,70 @@ void Executor::stepInState(ExecutionState *state) {
 	executeInstruction(*state, ki);
 	state->stateTime++; // Each instruction takes one unit of time
 
-	processTimers(state, MaxInstructionTime);
+  processTimers(state, MaxInstructionTime);
+
+  if (KeepMergedDuplicates && !duplicates.empty()) {
+    //klee_warning(">>> Running duplicated states.\n");
+    bool stateIsNew = addedStates.count(state);
+    bool stateIsTerminated = (removedStates.count(state) != 0) ||
+                             (!stateIsNew && states.count(state) == 0);
+
+    std::set<ExecutionState*> savedAddedStates;
+    savedAddedStates.swap(addedStates);
+
+    std::set<ExecutionState*> savedRemovedStates;
+    savedRemovedStates.swap(removedStates);
+
+    std::set<ExecutionState*> nextStates(savedAddedStates);
+    if (!stateIsTerminated)
+      nextStates.insert(state);
+
+    foreach (ExecutionState* duplicate, duplicates) {
+      // Execute the same instruction in a duplicate state
+      assert(duplicate->isDuplicate);
+      assert(stateIsTerminated || duplicate->pc() == state->prevPC());
+      ki = duplicate->pc();
+      duplicate->setPrevPC(duplicate->pc());
+      duplicate->setPC(duplicate->pc().next());
+      executeInstruction(*duplicate, ki);
+      duplicate->stateTime++;
+
+      // Sort all next states into duplicates of the main state
+      if (removedStates.count(duplicate) == 0)
+        addedStates.insert(duplicate);
+
+      foreach (ExecutionState* addedState, addedStates) {
+        assert(removedStates.count(addedState) == 0);
+        bool found = false;
+        foreach (ExecutionState* nextMain, nextStates) {
+          if (addedState->pc() == nextMain->pc()) {
+            assert(!found);
+            found = true;
+            nextMain->duplicates.insert(addedState);
+          }
+        }
+        assert(found);
+      }
+
+      addedStates.clear();
+
+      foreach (ExecutionState* removedState, removedStates) {
+        assert(removedState == duplicate || duplicates.count(removedState) == 0);
+      }
+      //  delete removedState;
+      //}
+      removedStates.clear();
+    }
+
+    foreach (ExecutionState* nextMain, nextStates) {
+      assert(!nextMain->duplicates.empty());
+    }
+
+    addedStates.swap(savedAddedStates);
+    removedStates.swap(savedRemovedStates);
+
+    //klee_warning("<<< Finished running duplicated states.\n");
+  }
 
 	if (MaxMemory) {
 		if ((stats::instructions & 0xFFFF) == 0) {
@@ -2713,7 +2798,11 @@ void Executor::run(ExecutionState &initialState) {
 
   //while (!states.empty() && !haltExecution) {
   while (!searcher->empty() && !haltExecution) {
+    assert(addedStates.empty() && removedStates.empty());
     ExecutionState &state = searcher->selectState();
+
+    if (!addedStates.empty())
+      updateStates(0);
 
     stepInState(&state);
   }
@@ -2814,7 +2903,7 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
 		    dumpProcessTree();
 		}
 
-		delete &state;
+    delete &state;
 	}
 
 	return true;

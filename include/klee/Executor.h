@@ -296,10 +296,11 @@ private:
   StatePair fork(ExecutionState &current, int reason);
   ForkTag getForkTag(ExecutionState &current, int reason);
 
+  void addDuplicates(ExecutionState *main, ExecutionState *other);
+
   // Merge current state with the other state. In case of success,
   // function returns true and terminates the other state
-  ExecutionState* merge(ExecutionState &current, ExecutionState &other,
-                        bool copy = false);
+  ExecutionState* merge(ExecutionState &current, ExecutionState &other);
 
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function

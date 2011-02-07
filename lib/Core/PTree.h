@@ -45,6 +45,7 @@ namespace klee {
     void merge(Node *target, Node *other);
     Node* mergeCopy(Node *target, Node *other,
                     const data_type &mergedData);
+    Node* duplicate(Node *main, const data_type &duplicateData);
 
     void terminate(Node *n);
 

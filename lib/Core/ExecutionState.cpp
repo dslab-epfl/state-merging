@@ -63,7 +63,8 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     crtSpecialFork(NULL),
     symbolicsHash(hashInit()),
     wlistCounter(1),
-    preemptions(0) {
+    preemptions(0),
+    isDuplicate(false) {
 
   setupMain(kf);
   setupTime();
@@ -79,7 +80,8 @@ ExecutionState::ExecutionState(Executor *_executor, const std::vector<ref<Expr> 
     ptreeNode(0),
     globalConstraints(assumptions),
     wlistCounter(1),
-    preemptions(0) {
+    preemptions(0),
+    isDuplicate(false) {
 
   setupMain(NULL);
 }
@@ -297,6 +299,8 @@ ExecutionState *ExecutionState::branch(bool copy) {
   }
 
   ExecutionState *falseState = new ExecutionState(*this);
+
+  falseState->duplicates.clear();
 
   if (!copy) {
     falseState->coveredNew = false;

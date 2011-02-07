@@ -240,6 +240,11 @@ public:
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
 
+
+  /* Duplicate states management */
+  std::set<ExecutionState*> duplicates;
+  bool isDuplicate;
+
 public:
   ExecutionState(Executor *_executor, KFunction *kf);
 
