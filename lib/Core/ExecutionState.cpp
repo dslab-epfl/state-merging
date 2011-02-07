@@ -539,9 +539,13 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
 
   // Everything seems OK, we are going to merge the states
 
-  ExecutionState *a = copy ? this->branch() : this;
+  ExecutionState *aPtr = this;
+  if (copy)
+    aPtr = this->branch(true);
+  ExecutionState &a = *aPtr;
 
-  std::set< ref<Expr> > aConstraints(constraints().begin(), constraints().end());
+  std::set< ref<Expr> > aConstraints(a.constraints().begin(),
+                                     a.constraints().end());
   std::set< ref<Expr> > bConstraints(b.constraints().begin(),
                                      b.constraints().end());
   std::set< ref<Expr> > commonConstraints, aSuffix, bSuffix;
@@ -587,8 +591,8 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
 
   // merge stack
 
-  std::vector<StackFrame>::iterator itA = a->stack().begin();
-  std::vector<StackFrame>::iterator itAE = a->stack().end();
+  std::vector<StackFrame>::iterator itA = a.stack().begin();
+  std::vector<StackFrame>::iterator itAE = a.stack().end();
   std::vector<StackFrame>::const_iterator itB = b.stack().begin();
   int stackDifference = 0, stackObjects = 0;
 
@@ -621,14 +625,14 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
   for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
          ie = mutated.end(); it != ie; ++it) {
     const MemoryObject *mo = *it;
-    const ObjectState *os = a->addressSpace().findObject(mo);
+    const ObjectState *os = a.addressSpace().findObject(mo);
     const ObjectState *otherOS = b.addressSpace().findObject(mo);
     assert(os && !os->readOnly && 
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
     memObjects += mo->size;
-    ObjectState *wos = a->addressSpace().getWriteable(mo, os);
+    ObjectState *wos = a.addressSpace().getWriteable(mo, os);
 
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
@@ -646,28 +650,28 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
                 << ") different values in memory\n";
   }
 
-  constraints() = ConstraintManager();
+  a.constraints() = ConstraintManager();
 
   for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
          ie = commonConstraints.end(); it != ie; ++it)
-    constraints().addConstraint(*it);
-  constraints().addConstraint(OrExpr::create(inA, inB));
+    a.constraints().addConstraint(*it);
+  a.constraints().addConstraint(OrExpr::create(inA, inB));
 
-  a->queryCost += b.queryCost;
-  a->weight += b.weight;
-  a->coveredNew |= b.coveredNew;
-  a->multiplicity += b.multiplicity;
-  if(a->instsSinceCovNew > b.instsSinceCovNew)
-      a->instsSinceCovNew = b.instsSinceCovNew;
+  a.queryCost += b.queryCost;
+  a.weight += b.weight;
+  a.coveredNew |= b.coveredNew;
+  a.multiplicity += b.multiplicity;
+  if(a.instsSinceCovNew > b.instsSinceCovNew)
+      a.instsSinceCovNew = b.instsSinceCovNew;
   for(std::map<const std::string*, std::set<unsigned> >::const_iterator
           it = b.coveredLines.begin(), ie = b.coveredLines.end(); it != ie; ++it) {
-      a->coveredLines[it->first].insert(it->second.begin(), it->second.end());
+      a.coveredLines[it->first].insert(it->second.begin(), it->second.end());
   }
 
   if (DebugLogStateMerge)
     std::cerr << "---- merged successfully\n";
 
-  return a;
+  return &a;
 }
 
 /***/
