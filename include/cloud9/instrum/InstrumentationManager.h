@@ -45,12 +45,13 @@ enum Statistics {
 	TotalTreePaths = 17,
 
 	TotalReplayInstructions = 20,
+	TotalWastedInstructions = 21,
 
 	CurrentJobCount = 11,
 	CurrentActiveStateCount = 18,
 	CurrentStateCount = 19,
 
-	MAX_STATISTICS = 21
+	MAX_STATISTICS = 22
 };
 
 enum Events {
@@ -72,7 +73,8 @@ class IOServices;
 class InstrumentationManager {
 public:
 	typedef sys::TimeValue TimeStamp;
-	typedef vector<int> statistics_t;
+	typedef long int stat_value_t;
+	typedef vector<stat_value_t> statistics_t;
 	typedef vector<pair<TimeStamp, pair<int, string> > > events_t;
 
 	typedef map<string, std::pair<unsigned, unsigned> > coverage_t;
@@ -126,20 +128,20 @@ public:
 	  recordEvent(id, os.str());
 	}
 
-	void setStatistic(Statistics id, int value) {
+	void setStatistic(Statistics id, stat_value_t value) {
 		stats[id] = value;
 	}
 
-	void topStatistic(Statistics id, int value) {
+	void topStatistic(Statistics id, stat_value_t value) {
 		if (value > stats[id])
 			stats[id] = value;
 	}
 
-	void incStatistic(Statistics id, int value = 1) {
+	void incStatistic(Statistics id, stat_value_t value = 1) {
 		stats[id] += value;
 	}
 
-	void decStatistic(Statistics id, int value = 1) {
+	void decStatistic(Statistics id, stat_value_t value = 1) {
 		stats[id] -= value;
 	}
 

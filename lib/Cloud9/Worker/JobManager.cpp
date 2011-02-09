@@ -651,6 +651,9 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool inva
 
       if (state) {
         fireDeactivateState(state);
+        cloud9::instrum::theInstrManager.incStatistic(
+            cloud9::instrum::TotalWastedInstructions,
+            state->_instrSinceFork);
         break;
       }
 
@@ -965,8 +968,10 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     lock.unlock();
 
     symbEngine->stepInState(state->getKleeState());
+
     lock.lock();
 
+    state->_instrSinceFork++;
     cloud9::instrum::theInstrManager.incStatistic(
         cloud9::instrum::TotalProcInstructions);
     if (replaying)
@@ -1094,7 +1099,6 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 
   //CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
 
-
   SymbolicState *pState = parent->getCloud9State();
 
   if (pState->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
@@ -1102,6 +1106,10 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   } else {
     fireDeactivateState(pState);
   }
+
+  // Reset the number of instructions since forking
+  state->_instrSinceFork = 0;
+  pState->_instrSinceFork = 0;
 
 }
 

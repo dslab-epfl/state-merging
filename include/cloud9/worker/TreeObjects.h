@@ -36,6 +36,7 @@ private:
 
 	std::vector<klee::KInstruction*> _instrProgress;
 	unsigned int _instrPos;
+	unsigned long _instrSinceFork;
 
 	bool collectProgress;
 
@@ -58,6 +59,7 @@ public:
 		nodePin(WORKER_LAYER_STATES),
 		_active(false),
 		_instrPos(0),
+		_instrSinceFork(0),
 		collectProgress(false) {
       kleeState->setCloud9State(this);
 	}
