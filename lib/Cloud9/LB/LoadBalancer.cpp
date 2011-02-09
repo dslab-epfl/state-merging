@@ -341,12 +341,12 @@ void LoadBalancer::analyzeBalance() {
     loadAvg += (*it)->totalJobs;
   }
 
-  loadAvg /= wList.size();
-
   if (loadAvg == 0) {
     done = true;
     return;
   }
+
+  loadAvg /= wList.size();
 
   for (std::vector<Worker*>::iterator it = wList.begin(); it != wList.end(); it++) {
     sqDeviation += (loadAvg - (*it)->totalJobs) * (loadAvg - (*it)->totalJobs);

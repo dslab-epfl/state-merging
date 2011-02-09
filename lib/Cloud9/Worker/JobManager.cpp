@@ -553,7 +553,7 @@ void JobManager::processLoop(bool allowGrowth, bool blocking,
       job = selectNextJob();
     }
 
-    if (blocking && timeOut == 0) {
+    if (blocking && timeOut == 0 && !terminationRequest) {
       assert(job != NULL);
     } else {
       if (job == NULL)
@@ -577,7 +577,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
   ExecutionJob *job = selectNextJob();
   assert(job != NULL || jobCount == 0);
 
-  while (job == NULL) {
+  while (job == NULL && !terminationRequest) {
     CLOUD9_INFO("No jobs in the queue, waiting for...");
     cloud9::instrum::theInstrManager.recordEvent(
         cloud9::instrum::JobExecutionState, "idle");
