@@ -2611,7 +2611,15 @@ void Executor::stepInState(ExecutionState *state) {
 
 	resetTimers();
 
-	executeInstruction(*state, ki);
+  {
+    WallTimer timer;
+    executeInstruction(*state, ki);
+    uint64_t timerResult = timer.check();
+
+    stats::executionTime += timerResult;
+    if (KeepMergedDuplicates && duplicates.empty())
+      stats::duplicatesExecutionTime += timerResult;
+  }
 	state->stateTime++; // Each instruction takes one unit of time
 
   processTimers(state, MaxInstructionTime);
@@ -2639,7 +2647,11 @@ void Executor::stepInState(ExecutionState *state) {
       ki = duplicate->pc();
       duplicate->setPrevPC(duplicate->pc());
       duplicate->setPC(duplicate->pc().next());
-      executeInstruction(*duplicate, ki);
+      {
+        WallTimer timer;
+        executeInstruction(*duplicate, ki);
+        stats::duplicatesExecutionTime += timer.check();
+      }
       duplicate->stateTime++;
 
       // Sort all next states into duplicates of the main state

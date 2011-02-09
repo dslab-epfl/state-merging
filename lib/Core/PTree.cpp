@@ -76,9 +76,9 @@ PTreeNode* PTree::duplicate(Node *main, const data_type &duplicateData)
 {
   PTreeNode *dup = new Node(main, duplicateData);
   if (!main->left) {
-    main->left = dup;
+    //main->left = dup;
   } else if (!main->right) {
-    main->right = dup;
+    //main->right = dup;
   } else {
     assert(0);
   }

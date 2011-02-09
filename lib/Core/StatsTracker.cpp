@@ -413,7 +413,7 @@ void StatsTracker::writeStatsHeader() {
                 << "'NumStates',"
                 << "'NumBranches',"
                 << "'FullBranches',"
-                << "'PartialBranches',";
+                << "'PartialBranches'";
 
   foreach (Statistic *stat, theStatisticManager->stats)
     *allStatsFile <<  ",'" << stat->getName() << "'";
@@ -460,10 +460,13 @@ void StatsTracker::writeStatsLine() {
                 << "," << executor.states.size()
                 << "," << numBranches
                 << "," << fullBranches
-                << "," << partialBranches
-                << ",";
-  foreach (Statistic *stat, theStatisticManager->stats)
-    *allStatsFile << "," << *stat;
+                << "," << partialBranches;
+  foreach (Statistic *stat, theStatisticManager->stats) {
+    if (stat->isTime())
+      *allStatsFile << "," << *stat / 1000000.;
+    else
+      *allStatsFile << "," << *stat;
+  }
 
   *allStatsFile << ")\n";
   allStatsFile->flush();

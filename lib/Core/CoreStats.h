@@ -63,6 +63,9 @@ namespace stats {
   /// distance to a function return.
   extern Statistic minDistToReturn;
 
+  /// Execution time (excluding initialization, statistics, the searcher, etc.)
+  extern Statistic executionTime;
+  extern Statistic duplicatesExecutionTime;
 }
 }
 

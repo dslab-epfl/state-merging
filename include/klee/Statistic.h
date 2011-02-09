@@ -37,10 +37,12 @@ namespace klee {
     unsigned id;
     const std::string name;
     const std::string shortName;
+    bool m_isTime;
 
   public:
     Statistic(const std::string &_name, 
-              const std::string &_shortName);
+              const std::string &_shortName,
+              bool _isTime = false);
     ~Statistic();
 
     /// getID - Get the unique statistic ID.
@@ -55,6 +57,9 @@ namespace klee {
 
     /// getValue - Get the current primary statistic value.
     uint64_t getValue() const;
+
+    /// isTime - return true is this statistic describes time
+    bool isTime() const { return m_isTime; }
 
     /// operator uint64_t - Get the current primary statistic value.
     operator uint64_t () const { return getValue(); }
