@@ -45,7 +45,8 @@ namespace cloud9 {
 namespace lb {
 
 LoadBalancer::LoadBalancer(boost::asio::io_service &service) :
-  timer(service), worryTimer(0), balanceTimer(0), nextWorkerID(1), rounds(0) {
+  timer(service), worryTimer(0), balanceTimer(0), nextWorkerID(1), rounds(0),
+  done(false) {
   tree = new LBTree();
 
   timer.expires_from_now(boost::posix_time::seconds(TimerRate));
@@ -342,14 +343,16 @@ void LoadBalancer::analyzeBalance() {
 
   loadAvg /= wList.size();
 
+  if (loadAvg == 0) {
+    done = true;
+    return;
+  }
+
   for (std::vector<Worker*>::iterator it = wList.begin(); it != wList.end(); it++) {
     sqDeviation += (loadAvg - (*it)->totalJobs) * (loadAvg - (*it)->totalJobs);
   }
 
   sqDeviation /= workers.size() - 1;
-
-  // XXX Uuuugly
-
 
   std::vector<Worker*>::iterator lowLoadIt = wList.begin();
   std::vector<Worker*>::iterator highLoadIt = wList.end() - 1;

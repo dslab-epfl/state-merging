@@ -90,6 +90,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
     response.set_id(id);
     response.set_more_details(false);
+    response.set_terminate(false);
 
     if (lb->getWorkerCount() == 1) {
       // Send the seed information
@@ -118,6 +119,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
     response.set_id(id);
     response.set_more_details(lb->requestAndResetDetails(id));
+    response.set_terminate(lb->isDone());
 
     sendJobTransfers(response);
 

@@ -205,6 +205,10 @@ void LBConnection::processResponse(LBResponseMessage &response) {
     jobManager->importJobs(paths);
   }
 
+  if (response.terminate()) {
+    jobManager->requestTermination();
+  }
+
   if (UseGlobalCoverage) {
     for (int i = 0; i < response.globalupdates_size(); i++) {
       const StatisticUpdate &update = response.globalupdates(i);

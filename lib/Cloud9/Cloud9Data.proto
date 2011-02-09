@@ -98,6 +98,7 @@ message LBResponseMessage {
 	optional JobTransfer jobTransfer = 2;
 	optional JobSeed jobSeed = 3;
 	required bool more_details = 4;
+	required bool terminate = 7;
 	
 	repeated StatisticUpdate globalUpdates = 5;
 	
