@@ -2599,6 +2599,7 @@ void Executor::bindModuleConstants() {
 }
 
 void Executor::stepInState(ExecutionState *state) {
+  assert(addedStates.count(state) == 0);
   fireControlFlowEvent(state, ::cloud9::worker::STEP);
 
   std::set<ExecutionState*> duplicates;
@@ -2609,16 +2610,20 @@ void Executor::stepInState(ExecutionState *state) {
 
 	//CLOUD9_DEBUG("Executing instruction: " << ki->info->assemblyLine);
 
-	resetTimers();
+  uint64_t executionTime = 0, duplicatesExecutionTime = 0;
+  resetTimers();
 
   {
     WallTimer timer;
+    state->lastResolveResult = 0;
     executeInstruction(*state, ki);
-    uint64_t timerResult = timer.check();
+    executionTime = timer.check();
 
-    stats::executionTime += timerResult;
-    if (KeepMergedDuplicates && duplicates.empty())
-      stats::duplicatesExecutionTime += timerResult;
+    stats::executionTime += executionTime;
+    if (KeepMergedDuplicates && duplicates.empty()) {
+      duplicatesExecutionTime += executionTime;
+      stats::duplicatesExecutionTime += executionTime;
+    }
   }
 	state->stateTime++; // Each instruction takes one unit of time
 
@@ -2626,9 +2631,7 @@ void Executor::stepInState(ExecutionState *state) {
 
   if (KeepMergedDuplicates && !duplicates.empty()) {
     //klee_warning(">>> Running duplicated states.\n");
-    bool stateIsNew = addedStates.count(state);
-    bool stateIsTerminated = (removedStates.count(state) != 0) ||
-                             (!stateIsNew && states.count(state) == 0);
+    bool stateIsTerminated = removedStates.count(state) != 0;
 
     std::set<ExecutionState*> savedAddedStates;
     savedAddedStates.swap(addedStates);
@@ -2643,14 +2646,17 @@ void Executor::stepInState(ExecutionState *state) {
     foreach (ExecutionState* duplicate, duplicates) {
       // Execute the same instruction in a duplicate state
       assert(duplicate->isDuplicate);
-      assert(stateIsTerminated || duplicate->pc() == state->prevPC());
+      assert(/*stateIsTerminated || */duplicate->pc() == state->prevPC());
       ki = duplicate->pc();
       duplicate->setPrevPC(duplicate->pc());
       duplicate->setPC(duplicate->pc().next());
       {
         WallTimer timer;
+        duplicate->lastResolveResult = 0;
         executeInstruction(*duplicate, ki);
-        stats::duplicatesExecutionTime += timer.check();
+        uint64_t time = timer.check();
+        duplicatesExecutionTime += time;
+        stats::duplicatesExecutionTime += time;
       }
       duplicate->stateTime++;
 
@@ -2661,14 +2667,28 @@ void Executor::stepInState(ExecutionState *state) {
       foreach (ExecutionState* addedState, addedStates) {
         assert(removedStates.count(addedState) == 0);
         bool found = false;
-        foreach (ExecutionState* nextMain, nextStates) {
-          if (addedState->pc() == nextMain->pc()) {
-            assert(!found);
-            found = true;
-            nextMain->duplicates.insert(addedState);
+
+        if (!nextStates.empty()) {
+          foreach (ExecutionState* nextMain, nextStates) {
+            bool match = false;
+            if (nextStates.size() > 1 &&
+                nextMain->ptreeNode->parent->forkTag.forkClass == KLEE_FORK_RESOLVE) {
+              match = nextMain->lastResolveResult == addedState->lastResolveResult;
+            } else {
+              match = nextMain->pc() == addedState->pc();
+            }
+
+            if (match) {
+              assert(!found);
+              found = true;
+              nextMain->duplicates.insert(addedState);
+            }
           }
+          assert(found);
+        } else {
+          // delete addedState;
         }
-        assert(found);
+          // It might happen that the main state were terminated (e.g., in case of timeout)
       }
 
       addedStates.clear();
@@ -2689,6 +2709,11 @@ void Executor::stepInState(ExecutionState *state) {
     removedStates.swap(savedRemovedStates);
 
     //klee_warning("<<< Finished running duplicated states.\n");
+  }
+
+  if (executionTime > 2*duplicatesExecutionTime) {
+    klee_warning("Merged state is slow: %g instead of %g for individual states\n",
+                 executionTime / 1000000., duplicatesExecutionTime / 1000000.);
   }
 
 	if (MaxMemory) {
@@ -3574,6 +3599,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
 
   if (success) {
     const MemoryObject *mo = op.first;
+    state.lastResolveResult = mo;
 
     if (MaxSymArraySize && mo->size>=MaxSymArraySize) {
       address = toConstant(state, address, "max-sym-array-size");
@@ -3635,11 +3661,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     
-    StatePair branches = fork(*unbound, inBounds, true, KLEE_FORK_INTERNAL);
+    StatePair branches = fork(*unbound, inBounds, true, KLEE_FORK_RESOLVE);
     ExecutionState *bound = branches.first;
 
     // bound can be 0 on failure or overlapped 
     if (bound) {
+      bound->lastResolveResult = mo;
       if (isWrite) {
         if (os->readOnly) {
           terminateStateOnError(*bound,

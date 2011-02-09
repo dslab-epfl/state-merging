@@ -245,6 +245,8 @@ public:
   std::set<ExecutionState*> duplicates;
   bool isDuplicate;
 
+  const MemoryObject* lastResolveResult;
+
 public:
   ExecutionState(Executor *_executor, KFunction *kf);
 
