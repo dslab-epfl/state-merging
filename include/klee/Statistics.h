@@ -58,6 +58,8 @@ namespace klee {
     	}
     }
 
+    friend class StatsTracker;
+
   public:
     StatisticManager();
     ~StatisticManager();

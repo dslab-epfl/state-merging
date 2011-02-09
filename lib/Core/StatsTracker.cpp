@@ -176,6 +176,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   : executor(_executor),
     objectFilename(_objectFilename),
     statsFile(0),
+    allStatsFile(0),
     istatsFile(0),
     startWallTime(util::getWallTime()),
     numBranches(0),
@@ -228,6 +229,9 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   if (OutputStats) {
     statsFile = executor.interpreterHandler->openOutputFile("run.stats");
     assert(statsFile && "unable to open statistics trace file");
+
+    allStatsFile = executor.interpreterHandler->openOutputFile("all.stats");
+    assert(allStatsFile && "unable to open statistics trace file");
     writeStatsHeader();
     writeStatsLine();
 
@@ -250,6 +254,8 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
 StatsTracker::~StatsTracker() {  
   if (statsFile)
     delete statsFile;
+  if (allStatsFile)
+    delete allStatsFile;
   if (istatsFile)
     delete istatsFile;
 }
@@ -399,6 +405,21 @@ void StatsTracker::writeStatsHeader() {
              << "'FastForwardFail',"
              << ")\n";
   statsFile->flush();
+
+  *allStatsFile << "("
+                << "'WallTime',"
+                << "'UserTime',"
+                << "'MallocUsage',"
+                << "'NumStates',"
+                << "'NumBranches',"
+                << "'FullBranches',"
+                << "'PartialBranches',";
+
+  foreach (Statistic *stat, theStatisticManager->stats)
+    *allStatsFile <<  ",'" << stat->getName() << "'";
+
+  *allStatsFile << ")\n";
+  allStatsFile->flush();
 }
 
 double StatsTracker::elapsed() {
@@ -432,6 +453,20 @@ void StatsTracker::writeStatsLine() {
              << "," << stats::fastForwardsFail
              << ")\n";
   statsFile->flush();
+
+  *allStatsFile << "(" << elapsed()
+                << "," << util::getUserTime()
+                << "," << sys::Process::GetTotalMemoryUsage()
+                << "," << executor.states.size()
+                << "," << numBranches
+                << "," << fullBranches
+                << "," << partialBranches
+                << ",";
+  foreach (Statistic *stat, theStatisticManager->stats)
+    *allStatsFile << "," << *stat;
+
+  *allStatsFile << ")\n";
+  allStatsFile->flush();
 }
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {
