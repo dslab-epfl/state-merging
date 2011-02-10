@@ -154,8 +154,8 @@ private:
   void executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
       ExecutionJob *origJob, bool spawnNew);
 
-  void stepInNode(boost::unique_lock<boost::mutex> &lock,
-      WorkerTree::Node *node, bool exhaust);
+  long stepInNode(boost::unique_lock<boost::mutex> &lock,
+      WorkerTree::Node *node, long count);
   void replayPath(boost::unique_lock<boost::mutex> &lock,
       WorkerTree::Node *pathEnd, WorkerTree::Node *&brokenEnd);
   void cleanInvalidJobs(WorkerTree::Node *rootNode);
@@ -256,9 +256,9 @@ public:
   /*
    * Job import/export methods
    */
-  void importJobs(ExecutionPathSetPin paths);
+  void importJobs(ExecutionPathSetPin paths, std::vector<long> &replayInstrs);
   ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
-      std::vector<int> &counts);
+      std::vector<int> &counts, std::vector<long> &replayInstrs);
 };
 
 }

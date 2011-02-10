@@ -44,9 +44,13 @@ void PeerConnection::handleMessageReceived(std::string &msgString,
 		const cloud9::data::ExecutionPathSet &pathSet = message.path_set();
 
 		ExecutionPathSetPin paths = parseExecutionPathSet(pathSet);
+		std::vector<long> replayInstrs;
 
+		for (int i = 0; i < message.instr_since_fork_size(); i++) {
+		  replayInstrs.push_back(message.instr_since_fork(i));
+		}
 
-		jobManager->importJobs(paths);
+		jobManager->importJobs(paths, replayInstrs);
 	} else {
 		CLOUD9_ERROR("Error receiving message from peer");
 	}

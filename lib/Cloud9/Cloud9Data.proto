@@ -111,4 +111,5 @@ message LBResponseMessage {
 
 message PeerTransferMessage {
 	required ExecutionPathSet path_set = 1;
+	repeated uint64 instr_since_fork = 2;
 }

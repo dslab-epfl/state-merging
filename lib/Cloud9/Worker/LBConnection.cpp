@@ -202,7 +202,8 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
     CLOUD9_DEBUG("Job seed request: " << paths->count() << " paths");
 
-    jobManager->importJobs(paths);
+    std::vector<long> replayInstrs;
+    jobManager->importJobs(paths, replayInstrs);
   }
 
   if (response.terminate()) {
@@ -234,7 +235,9 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
     ExecutionPathSetPin paths, std::vector<int> counts) {
 
-  ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts);
+  std::vector<long> replayInstrs;
+  ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts,
+      replayInstrs);
 
   tcp::socket peerSocket(service);
   boost::system::error_code error;
@@ -250,6 +253,10 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
   cloud9::data::ExecutionPathSet *pSet = message.mutable_path_set();
 
   serializeExecutionPathSet(jobPaths, *pSet);
+
+  for (std::vector<long>::iterator it = replayInstrs.begin(); it != replayInstrs.end(); it++) {
+    message.add_instr_since_fork(*it);
+  }
 
   std::string msgString;
   message.SerializeToString(&msgString);
