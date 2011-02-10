@@ -936,6 +936,8 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
         } else {
           CLOUD9_DEBUG("Replayed " << count << " instructions");
         }
+
+        cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayInstructions, count);
       } else {
         stepInNode(lock, nodePin.get(), 1);
       }
