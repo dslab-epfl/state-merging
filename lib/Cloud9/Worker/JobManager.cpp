@@ -625,6 +625,11 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
       SymbolicState *state = (**node).getSymbolicState();
 
       if (state) {
+        if (!state->_active) {
+          cloud9::instrum::theInstrManager.decStatistic(
+              cloud9::instrum::TotalWastedInstructions,
+              state->_instrSinceFork);
+        }
         fireActivateState(state);
         break;
       }
