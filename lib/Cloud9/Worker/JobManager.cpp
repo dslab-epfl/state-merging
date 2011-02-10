@@ -927,11 +927,17 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
     CLOUD9_INFO("Job canceled before start");
   } else {
     if (job->replayInstr > 0) {
-      long count = stepInNode(lock, nodePin.get(), job->replayInstr);
-      if (count < job->replayInstr) {
-        CLOUD9_DEBUG("BUG: Replayed " << count << " instructions instead of " << job->replayInstr);
+      long done = (**nodePin).symState->_instrSinceFork;
+
+      if (job->replayInstr - done > 0) {
+        long count = stepInNode(lock, nodePin.get(), job->replayInstr - done);
+        if (count < job->replayInstr - done) {
+          CLOUD9_DEBUG("BUG: Replayed " << count << " instructions instead of " << (job->replayInstr - done));
+        } else {
+          CLOUD9_DEBUG("Replayed " << count << " instructions");
+        }
       } else {
-        CLOUD9_DEBUG("Replayed " << count << " instructions");
+        stepInNode(lock, nodePin.get(), 1);
       }
 
       job->replayInstr = 0;
