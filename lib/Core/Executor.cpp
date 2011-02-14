@@ -2719,7 +2719,7 @@ void Executor::stepInState(ExecutionState *state) {
     //klee_warning("<<< Finished running duplicated states.\n");
   }
 
-  if (executionTime > 2*duplicatesExecutionTime) {
+  if (executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
     klee_warning("Merged state is slow: %g instead of %g for individual states\n",
                  executionTime / 1000000., duplicatesExecutionTime / 1000000.);
   }
@@ -3640,7 +3640,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
 
 	}          
       } else {
-	ref<Expr> result = os->read(offset, type);
+        ref<Expr> result = os->read(offset, type);
 
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
