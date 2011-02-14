@@ -232,6 +232,9 @@ namespace klee {
   /// after writing them to the given path in .pc format.
   Solver *createPCLoggingSolver(Solver *s, std::string path);
 
+  /// setPCLoggingSolverState - Set current state for PCLoggingSolver
+  void setPCLoggingSolverStateID(Solver *s, uint64_t stateID);
+
   /// createParallelSolver - Create a solver which will solve high-level
   /// disjunctions in parallel.
   Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver);

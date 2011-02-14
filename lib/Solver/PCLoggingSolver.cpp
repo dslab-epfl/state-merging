@@ -32,6 +32,7 @@ class PCLoggingSolver : public SolverImpl {
   ExprPPrinter *printer;
   unsigned queryCount;
   double startTime;
+  uint64_t stateID;
 
   void startQuery(const Query& query, const char *typeName,
                   const ref<Expr> *evalExprsBegin = 0,
@@ -42,6 +43,7 @@ class PCLoggingSolver : public SolverImpl {
     uint64_t instructions = S ? S->getValue() : 0;
     os << "# Query " << queryCount++ << " -- "
        << "Type: " << typeName << ", "
+       << "StateID: 0x" << std::hex << stateID << std::dec << ", "
        << "Instructions: " << instructions << "\n";
     printer->printQuery(os, query.constraints, query.expr,
                         evalExprsBegin, evalExprsEnd,
@@ -62,7 +64,8 @@ public:
   : solver(_solver),
     os(path.c_str(), std::ios::trunc),
     printer(ExprPPrinter::create(os)),
-    queryCount(0) {
+    queryCount(0),
+    stateID(0) {
   }                                                      
   ~PCLoggingSolver() {
     delete printer;
@@ -137,10 +140,20 @@ public:
     os << "\n";
     return success;
   }
+
+  void setCurrentStateID(uint64_t _stateID) {
+    stateID = _stateID;
+  }
 };
 
 ///
 
 Solver *klee::createPCLoggingSolver(Solver *_solver, std::string path) {
   return new Solver(new PCLoggingSolver(_solver, path));
+}
+
+void klee::setPCLoggingSolverStateID(Solver *s, uint64_t stateID) {
+  if (PCLoggingSolver *p = dynamic_cast<PCLoggingSolver*>(s->impl)) {
+    p->setCurrentStateID(stateID);
+  }
 }

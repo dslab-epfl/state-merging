@@ -2613,6 +2613,8 @@ void Executor::stepInState(ExecutionState *state) {
   uint64_t executionTime = 0, duplicatesExecutionTime = 0;
   resetTimers();
 
+  if (UseQueryPCLog)
+    setPCLoggingSolverStateID(solver->solver, uint64_t(state));
   {
     WallTimer timer;
     state->lastResolveResult = 0;
@@ -2625,7 +2627,9 @@ void Executor::stepInState(ExecutionState *state) {
       stats::duplicatesExecutionTime += executionTime;
     }
   }
-	state->stateTime++; // Each instruction takes one unit of time
+  if (UseQueryPCLog)
+    setPCLoggingSolverStateID(solver->solver, uint64_t(0));
+  state->stateTime++; // Each instruction takes one unit of time
 
   processTimers(state, MaxInstructionTime);
 
@@ -2650,6 +2654,8 @@ void Executor::stepInState(ExecutionState *state) {
       ki = duplicate->pc();
       duplicate->setPrevPC(duplicate->pc());
       duplicate->setPC(duplicate->pc().next());
+      if (UseQueryPCLog)
+        setPCLoggingSolverStateID(solver->solver, uint64_t(duplicate));
       {
         WallTimer timer;
         duplicate->lastResolveResult = 0;
@@ -2658,6 +2664,8 @@ void Executor::stepInState(ExecutionState *state) {
         duplicatesExecutionTime += time;
         stats::duplicatesExecutionTime += time;
       }
+      if (UseQueryPCLog)
+        setPCLoggingSolverStateID(solver->solver, 0);
       duplicate->stateTime++;
 
       // Sort all next states into duplicates of the main state
