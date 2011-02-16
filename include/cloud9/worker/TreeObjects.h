@@ -36,6 +36,7 @@ private:
 
 	std::vector<klee::KInstruction*> _instrProgress;
 	unsigned int _instrPos;
+	unsigned long _instrSinceFork;
 
 	bool collectProgress;
 
@@ -58,6 +59,7 @@ public:
 		nodePin(WORKER_LAYER_STATES),
 		_active(false),
 		_instrPos(0),
+		_instrSinceFork(0),
 		collectProgress(false) {
       kleeState->setCloud9State(this);
 	}
@@ -83,6 +85,8 @@ private:
 	bool exported;
 	bool removing;
 
+	long replayInstr;
+
 	klee::ForkTag forkTag;
 
     void rebindToNode(WorkerTree::Node *node) {
@@ -99,11 +103,12 @@ private:
     }
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
-		exported(false), removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {}
+		exported(false), removing(false), replayInstr(0),
+		forkTag(klee::KLEE_FORK_DEFAULT) {}
 
 	ExecutionJob(WorkerTree::Node *node, bool _imported) :
 		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
-		removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {
+		removing(false), replayInstr(0), forkTag(klee::KLEE_FORK_DEFAULT) {
 
 		rebindToNode(node);
 

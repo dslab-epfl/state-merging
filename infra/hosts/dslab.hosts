@@ -1,0 +1,5 @@
+# <Hostname>		<# of cores> <Cloud9 root>		<Username>	<Exp. dir>	 <Targets root>
+dslab-picard.epfl.ch	24	     /home/stefan/cloud9/cloud9	stefan		/var/cloud9/data /var/cloud9/experiments/trunk/coreutils-6.10
+dslab-worf.epfl.ch	48	     /home/stefan/cloud9/cloud9	stefan		/var/cloud9/data /var/cloud9/targets/coreutils-6.10
+# This is a special 0-core entry, describing the local host
+dslab-stefan.epfl.ch	0	     /home/stefan/cloud9/cloud9 -		/var/cloud9/data -

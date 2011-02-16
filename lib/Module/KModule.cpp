@@ -179,6 +179,7 @@ void KModule::readCoverableFiles(std::istream &is) {
 
 bool KModule::isFunctionCoverable(KFunction *kf) {
   Path fileName;
+  std::string fileNameStr;
 
   for (unsigned int i = 0; i < kf->numInstructions; i++) {
     if (kf->instructions[i]->info->file.empty())
@@ -190,13 +191,20 @@ bool KModule::isFunctionCoverable(KFunction *kf) {
   if (fileName.isEmpty())
     return false;
 
-  if (coverableFiles.count(fileName.getLast()) == 0)
-    return false;
-
   if (exceptedFunctions.count(kf->function->getNameStr()) > 0)
     return false;
 
-  return true;
+  fileNameStr = std::string(fileName.c_str());
+
+  for (cov_list_t::iterator it = coverableFiles.begin(); it != coverableFiles.end();
+      it++) {
+    if (fileNameStr.rfind(*it) != std::string::npos) {
+      // Found it!
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void KModule::readInitialCoverage(std::istream &is) {

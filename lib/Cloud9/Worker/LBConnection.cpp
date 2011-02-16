@@ -20,6 +20,11 @@
 using namespace llvm;
 using namespace cloud9::data;
 
+namespace {
+  cl::opt<bool>
+  DebugLBCommuncation("debug-lb-communication", cl::init(false));
+}
+
 namespace cloud9 {
 
 namespace worker {
@@ -128,6 +133,9 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 
   if (data.size() > 0) {
     CLOUD9_DEBUG("Sending " << data.size() << " local coverage updates.");
+    if (DebugLBCommuncation) {
+      CLOUD9_DEBUG("Coverage updates sent: " << covUpdatesToString(data));
+    }
 
     StatisticUpdate *update = message.add_localupdates();
     serializeStatisticUpdate(CLOUD9_STAT_NAME_LOCAL_COVERAGE, data, *update);
@@ -194,7 +202,12 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 
     CLOUD9_DEBUG("Job seed request: " << paths->count() << " paths");
 
-    jobManager->importJobs(paths);
+    std::vector<long> replayInstrs;
+    jobManager->importJobs(paths, replayInstrs);
+  }
+
+  if (response.terminate()) {
+    jobManager->requestTermination();
   }
 
   if (UseGlobalCoverage) {
@@ -207,7 +220,11 @@ void LBConnection::processResponse(LBResponseMessage &response) {
         parseStatisticUpdate(update, data);
 
         if (data.size() > 0) {
-          CLOUD9_INFO("Receiving " << data.size() << " global coverage updates.");
+          CLOUD9_DEBUG("Receiving " << data.size() << " global coverage updates.");
+          if (DebugLBCommuncation) {
+            CLOUD9_DEBUG("Coverage updates received: " << covUpdatesToString(data));
+          }
+
           jobManager->setUpdatedGlobalCoverage(data);
         }
       }
@@ -218,7 +235,9 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
     ExecutionPathSetPin paths, std::vector<int> counts) {
 
-  ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts);
+  std::vector<long> replayInstrs;
+  ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts,
+      replayInstrs);
 
   tcp::socket peerSocket(service);
   boost::system::error_code error;
@@ -234,6 +253,10 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
   cloud9::data::ExecutionPathSet *pSet = message.mutable_path_set();
 
   serializeExecutionPathSet(jobPaths, *pSet);
+
+  for (std::vector<long>::iterator it = replayInstrs.begin(); it != replayInstrs.end(); it++) {
+    message.add_instr_since_fork(*it);
+  }
 
   std::string msgString;
   message.SerializeToString(&msgString);

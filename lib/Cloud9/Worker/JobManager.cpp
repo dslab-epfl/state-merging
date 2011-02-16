@@ -510,7 +510,8 @@ void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
 
   if (standAlone) {
     // We need to import the root job
-    importJobs(ExecutionPathSet::getRootSet());
+    std::vector<long> replayInstrs;
+    importJobs(ExecutionPathSet::getRootSet(), replayInstrs);
   }
 
   processLoop(true, !standAlone, timeOut);
@@ -518,7 +519,8 @@ void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
 
 void JobManager::replayJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
   // First, we need to import the jobs in the manager
-  importJobs(paths);
+  std::vector<long> replayInstrs;
+  importJobs(paths, replayInstrs);
 
   // Then we execute them, but only them (non blocking, don't allow growth),
   // until the queue is exhausted
@@ -553,7 +555,7 @@ void JobManager::processLoop(bool allowGrowth, bool blocking,
       job = selectNextJob();
     }
 
-    if (blocking && timeOut == 0) {
+    if (blocking && timeOut == 0 && !terminationRequest) {
       assert(job != NULL);
     } else {
       if (job == NULL)
@@ -577,7 +579,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
   ExecutionJob *job = selectNextJob();
   assert(job != NULL || jobCount == 0);
 
-  while (job == NULL) {
+  while (job == NULL && !terminationRequest) {
     CLOUD9_INFO("No jobs in the queue, waiting for...");
     cloud9::instrum::theInstrManager.recordEvent(
         cloud9::instrum::JobExecutionState, "idle");
@@ -625,6 +627,11 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
       SymbolicState *state = (**node).getSymbolicState();
 
       if (state) {
+        if (!state->_active) {
+          cloud9::instrum::theInstrManager.decStatistic(
+              cloud9::instrum::TotalWastedInstructions,
+              state->_instrSinceFork);
+        }
         fireActivateState(state);
         break;
       }
@@ -651,6 +658,9 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool inva
 
       if (state) {
         fireDeactivateState(state);
+        cloud9::instrum::theInstrManager.incStatistic(
+            cloud9::instrum::TotalWastedInstructions,
+            state->_instrSinceFork);
         break;
       }
 
@@ -689,7 +699,8 @@ unsigned int JobManager::countJobs(WorkerTree::Node *root) {
   return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
-void JobManager::importJobs(ExecutionPathSetPin paths) {
+void JobManager::importJobs(ExecutionPathSetPin paths,
+    std::vector<long> &replayInstrs) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   std::vector<WorkerTree::Node*> nodes;
@@ -716,6 +727,9 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
       // longer needed
       ExecutionJob *job = new ExecutionJob(crtNode, true);
 
+      if (replayInstrs.size() > 0)
+        job->replayInstr = replayInstrs[i];
+
       if (!isValidJob(crtNode)) {
         droppedCount++;
 
@@ -739,7 +753,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
-    std::vector<int> &counts) {
+    std::vector<int> &counts, std::vector<long> &replayInstrs) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   std::vector<WorkerTree::Node*> roots;
@@ -754,9 +768,19 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
     selectJobs(roots[i], jobs, counts[i]);
   }
 
+  replayInstrs.clear();
+
   for (std::vector<ExecutionJob*>::iterator it = jobs.begin(); it != jobs.end(); it++) {
     ExecutionJob *job = *it;
-    jobRoots.push_back(job->getNode().get());
+    WorkerTree::Node *node = job->getNode().get();
+
+    jobRoots.push_back(node);
+
+    if ((**node).symState != NULL) {
+      replayInstrs.push_back((**node).symState->_instrSinceFork);
+    } else {
+      replayInstrs.push_back(job->replayInstr);
+    }
   }
 
   // Do this before de-registering the jobs, in order to keep the nodes pinned
@@ -902,7 +926,26 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
 
     CLOUD9_INFO("Job canceled before start");
   } else {
-    stepInNode(lock, nodePin.get(), false);
+    if (job->replayInstr > 0) {
+      long done = (**nodePin).symState->_instrSinceFork;
+
+      if (job->replayInstr - done > 0) {
+        long count = stepInNode(lock, nodePin.get(), job->replayInstr - done);
+        if (count < job->replayInstr - done) {
+          CLOUD9_DEBUG("BUG: Replayed " << count << " instructions instead of " << (job->replayInstr - done));
+        } else {
+          CLOUD9_DEBUG("Replayed " << count << " instructions");
+        }
+
+        cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayInstructions, count);
+      } else {
+        stepInNode(lock, nodePin.get(), 1);
+      }
+
+      job->replayInstr = 0;
+    } else {
+      stepInNode(lock, nodePin.get(), 1);
+    }
   }
 
   currentJob = NULL;
@@ -935,12 +978,14 @@ void JobManager::cleanInvalidJobs(WorkerTree::Node *rootNode) {
 
 }
 
-void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
-    WorkerTree::Node *node, bool exhaust) {
+long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
+    WorkerTree::Node *node, long count) {
   assert((**node).symState != NULL);
 
   // Keep the node alive until we finish with it
   WorkerTree::NodePin nodePin = node->pin(WORKER_LAYER_STATES);
+
+  long totalExec = 0;
 
   while ((**node).symState != NULL) {
 
@@ -965,17 +1010,25 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     lock.unlock();
 
     symbEngine->stepInState(state->getKleeState());
+
     lock.lock();
 
+    state->_instrSinceFork++;
+    totalExec++;
     cloud9::instrum::theInstrManager.incStatistic(
         cloud9::instrum::TotalProcInstructions);
     if (replaying)
       cloud9::instrum::theInstrManager.incStatistic(
           cloud9::instrum::TotalReplayInstructions);
 
-    if (!exhaust)
+    if (count == 1) {
       break;
+    } else if (count > 1) {
+      count--;
+    }
   }
+
+  return totalExec;
 }
 
 void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
@@ -1023,7 +1076,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
 
     if ((**crtNode).symState != NULL) {
-      stepInNode(lock, crtNode, true);
+      stepInNode(lock, crtNode, -1);
     }
 
     if (crtNode->getChild(WORKER_LAYER_JOBS, 1-path[i]) &&
@@ -1094,7 +1147,6 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
 
   //CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
 
-
   SymbolicState *pState = parent->getCloud9State();
 
   if (pState->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
@@ -1102,6 +1154,10 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   } else {
     fireDeactivateState(pState);
   }
+
+  // Reset the number of instructions since forking
+  state->_instrSinceFork = 0;
+  pState->_instrSinceFork = 0;
 
 }
 

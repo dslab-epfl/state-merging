@@ -52,6 +52,7 @@ private:
   worker_id_t nextWorkerID;
 
   unsigned rounds;
+  bool done;
 
   std::map<worker_id_t, Worker*> workers;
   std::set<worker_id_t> reports;
@@ -108,6 +109,10 @@ public:
 
   int getWorkerCount() {
     return workers.size();
+  }
+
+  bool isDone() {
+    return done;
   }
 
   bool requestAndResetDetails(worker_id_t id) {

@@ -97,6 +97,9 @@ namespace {
                cl::desc("Enable calltree tracking for instruction level statistics"),
                cl::init(true));
   
+  cl::opt<bool>
+  DebugCoverableInstr("debug-coverable-instr", cl::init(false));
+
 }
 
 ///
@@ -162,8 +165,9 @@ static bool instructionIsCoverable(Instruction *i) {
       Instruction *prev = --it;
       if (isa<CallInst>(prev) || isa<InvokeInst>(prev)) {
         Function *target = getDirectCallTarget(prev);
-        if (target && target->doesNotReturn())
+        if (target && target->doesNotReturn()) {
           return false;
+        }
       }
     }
   }
@@ -226,6 +230,24 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
     }
   }
 
+  if (DebugCoverableInstr) {
+    std::stringstream ss;
+
+    for (std::vector<KFunction*>::iterator it = km->functions.begin(),
+        ie = km->functions.end(); it != ie; ++it) {
+      KFunction *kf = *it;
+      for (unsigned i = 0; i < kf->numInstructions; ++i) {
+        KInstruction *ki = kf->instructions[i];
+        unsigned id = ki->info->id;
+        if (kf->trackCoverage && instructionIsCoverable(ki->inst)) {
+          ss << id << " ";
+        }
+      }
+    }
+
+    CLOUD9_DEBUG("Coverable instruction IDs: " << ss.str());
+  }
+
   if (OutputStats) {
     statsFile = executor.interpreterHandler->openOutputFile("run.stats");
     assert(statsFile && "unable to open statistics trace file");
@@ -237,8 +259,10 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
 
     executor.addTimer(new WriteStatsTimer(this), StatsWriteInterval);
 
-    if (updateMinDistToUncovered)
+    if (updateMinDistToUncovered) {
+      computeReachableUncovered();
       executor.addTimer(new UpdateReachableTimer(this), UncoveredUpdateInterval);
+    }
   }
 
   if (OutputIStats) {
@@ -261,6 +285,7 @@ StatsTracker::~StatsTracker() {
 }
 
 void StatsTracker::done() {
+  computeCodeCoverage();
   if (statsFile)
     writeStatsLine();
   if (OutputIStats)
@@ -687,7 +712,7 @@ void StatsTracker::computeReachableUncovered() {
       for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
            bbIt != bb_ie; ++bbIt) {
         for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); 
-             it != it; ++it) {
+             it != ie; ++it) {
           if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
             if (isa<InlineAsm>(it->getOperand(0))) {
               // We can never call through here so assume no targets
@@ -732,7 +757,7 @@ void StatsTracker::computeReachableUncovered() {
       for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
            bbIt != bb_ie; ++bbIt) {
         for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); 
-             it != it; ++it) {
+             it != ie; ++it) {
           instructions.push_back(it);
           unsigned id = infos.getInfo(it).id;
           sm.setIndexedValue(stats::minDistToReturn, 
@@ -804,7 +829,7 @@ void StatsTracker::computeReachableUncovered() {
     for (Function::iterator bbIt = fnIt->begin(), bb_ie = fnIt->end(); 
          bbIt != bb_ie; ++bbIt) {
       for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); 
-           it != it; ++it) {
+           it != ie; ++it) {
         unsigned id = infos.getInfo(it).id;
         instructions.push_back(&*it);
         sm.setIndexedValue(stats::minDistToGloballyUncovered, 
@@ -926,17 +951,23 @@ void StatsTracker::computeCodeCoverage() {
 std::pair<std::pair<unsigned, unsigned>, unsigned> StatsTracker::computeCodeCoverage(KFunction *kf) {
   unsigned localCount = 0;
   unsigned globalCount = 0;
+  unsigned grandTotal = 0;
 
   for (unsigned i = 0; i < kf->numInstructions; i++) {
     unsigned id = kf->instructions[i]->info->id;
 
+    if (!instructionIsCoverable(kf->instructions[i]->inst))
+      continue;
+
     localCount += theStatisticManager->getIndexedValue(stats::locallyCoveredInstructions, id);
+
     globalCount += theStatisticManager->getIndexedValue(stats::globallyCoveredInstructions, id);
+    grandTotal++;
   }
 
   cloud9::instrum::theInstrManager.updateCoverage(kf->function->getNameStr(),
-      std::make_pair(UseGlobalCoverage ? globalCount : localCount, kf->numInstructions));
+      std::make_pair(UseGlobalCoverage ? globalCount : localCount, grandTotal));
 
-  return std::make_pair(std::make_pair(localCount, globalCount), kf->numInstructions);
+  return std::make_pair(std::make_pair(localCount, globalCount), grandTotal);
 }
 
