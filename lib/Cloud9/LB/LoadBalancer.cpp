@@ -209,9 +209,7 @@ void LoadBalancer::analyze(worker_id_t id) {
 
   if (rounds == BalanceRate) {
     rounds = 0;
-
-    if (BalanceTimeOut == 0 || balanceTimer <= BalanceTimeOut)
-      analyzeBalance();
+    analyzeBalance();
   }
 }
 
@@ -320,8 +318,6 @@ void LoadBalancer::analyzeBalance() {
     return;
   }
 
-  CLOUD9_INFO("Performing load balancing");
-
   std::vector<Worker*> wList;
   Worker::LoadCompare comp;
 
@@ -345,6 +341,11 @@ void LoadBalancer::analyzeBalance() {
     done = true;
     return;
   }
+
+  if (BalanceTimeOut != 0 && balanceTimer > BalanceTimeOut)
+    return;
+
+  CLOUD9_INFO("Performing load balancing");
 
   loadAvg /= wList.size();
 
