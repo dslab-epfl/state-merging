@@ -545,7 +545,7 @@ void SpecialFunctionHandler::handleDebug(ExecutionState &state,
   if (arguments.size() == 2 && arguments[1]->getWidth() == sizeof(long)*8) {
     // Special case for displaying strings
 
-    std::string paramStr = readStringAtAddress(state, address);
+    std::string paramStr = readStringAtAddress(state, arguments[1]);
 
     fprintf(stderr, formatStr.c_str(), paramStr.c_str());
     return;

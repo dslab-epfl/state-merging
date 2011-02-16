@@ -41,8 +41,6 @@ enum Statistics {
 
   TotalTreePaths = 17,
 
-  TotalReplayInstructions = 20,
-
   CurrentJobCount = 11,
   CurrentActiveStateCount = 18,
   CurrentStateCount = 19,
@@ -82,7 +80,6 @@ public:
 	typedef double TimeStamp;
 	typedef long int stat_value_t;
 	typedef vector<stat_value_t> statistics_t;
-	typedef vector<pair<TimeStamp, pair<int, string> > > events_t;
 
 	typedef map<int, string> event_attributes_t;
 	typedef pair<TimeStamp, int> event_id_t;
