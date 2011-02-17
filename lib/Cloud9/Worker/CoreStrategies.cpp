@@ -95,6 +95,40 @@ ExecutionJob* RandomPathStrategy::onNextJobSelection() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Clustered Random Path Strategy
+////////////////////////////////////////////////////////////////////////////////
+
+ExecutionJob* ClusteredRandomPathStrategy::onNextJobSelection() {
+  if (states.empty())
+    return NULL;
+
+  std::vector<WorkerTree::Node*> nodes(states.size());
+
+  // TODO: Make this more efficient by implementing a custom iterator
+  for (state_set_t::iterator it = states.begin(); it != states.end(); it++) {
+    SymbolicState *state = *it;
+    nodes.push_back(state->getNode().get());
+  }
+
+  WorkerTree::Node *selNode = tree->selectRandomLeaf(WORKER_LAYER_STATES,
+      tree->getRoot(), theRNG, nodes.begin(), nodes.end());
+
+  SymbolicState *state = (**selNode).getSymbolicState();
+
+  assert(state != NULL);
+
+  return selectJob(tree, state);
+}
+
+void ClusteredRandomPathStrategy::onStateActivated(SymbolicState *state) {
+  states.insert(state);
+}
+
+void ClusteredRandomPathStrategy::onStateDeactivated(SymbolicState *state) {
+  states.erase(state);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Klee Imported Strategy
 ////////////////////////////////////////////////////////////////////////////////
 

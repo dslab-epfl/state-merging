@@ -87,6 +87,22 @@ public:
   virtual ExecutionJob* onNextJobSelection();
 };
 
+class ClusteredRandomPathStrategy: public BasicStrategy {
+private:
+  typedef std::set<SymbolicState*> state_set_t;
+  WorkerTree *tree;
+  state_set_t states;
+public:
+  ClusteredRandomPathStrategy(WorkerTree *t) :
+    tree(t) { };
+
+  virtual ~ClusteredRandomPathStrategy() { };
+
+  virtual ExecutionJob* onNextJobSelection();
+  virtual void onStateActivated(SymbolicState *state);
+  virtual void onStateDeactivated(SymbolicState *state);
+};
+
 class KleeStrategy: public BasicStrategy {
 protected:
 	WorkerTree *tree;
