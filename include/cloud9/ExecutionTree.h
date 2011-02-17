@@ -409,6 +409,23 @@ private:
 		}
 	}
 
+	template<typename NodeIterator>
+	void cleanupLabels(NodeIterator begin, NodeIterator end) {
+
+      for (NodeIterator it = begin; it != end; it++) {
+          Node *crtNode = *it;
+
+          while (crtNode != root) {
+              if (crtNode->_label == 0)
+                  break;
+              else {
+                  crtNode->_label = 0;
+                  crtNode = crtNode->parent;
+              }
+          }
+      }
+	}
+
 public:
 	ExecutionTree() {
 		root = new Node(NULL, 0);
@@ -585,6 +602,56 @@ public:
 
 	}
 
+	template<class Generator, typename NodeIterator>
+	Node *selectRandomLeaf(int layer, Node *root, Generator &gen,
+	    NodeIterator begin, NodeIterator end) {
+
+	  assert(root->exists[layer]);
+
+	  for (NodeIterator it = begin; it != end; it++) {
+	    Node *crtNode = *it;
+	    assert(crtNode->exists[layer]);
+
+	    while (crtNode != root) {
+	      if (crtNode->_label == 1)
+	        break;
+
+	      crtNode->_label = 1;
+	      crtNode = crtNode->parent;
+	    }
+	  }
+
+	  Node *crtNode = root;
+
+	  while(1) {
+	    int crtCount = 0;
+	    for (int i = 0; i < Degree; i++) {
+	      Node *child = crtNode->getChild(layer, i);
+	      if (child && child->_label == 1)
+	        crtCount++;
+	    }
+	    if (!crtCount)
+	      break;
+
+	    int index = gen.getInt32() % crtCount;
+	    for (int i = 0; i < Degree; i++) {
+	      Node *child = crtNode->getChild(layer, i);
+	      if (child && child->_label == 1) {
+	        if (!index) {
+	          crtNode = child;
+	          break;
+	        } else {
+	          index--;
+	        }
+	      }
+	    }
+	  }
+
+	  cleanupLabels(begin, end);
+
+	  return crtNode;
+	}
+
 	template<typename NodeIterator>
 	ExecutionPathSetPin buildPathSet(NodeIterator begin, NodeIterator end) {
 		ExecutionPathSet *set = new ExecutionPathSet();
@@ -624,19 +691,7 @@ public:
 			i++;
 		}
 
-		// Clean up the labels
-		for (NodeIterator it = begin; it != end; it++) {
-			Node *crtNode = *it;
-
-			while (crtNode != root) {
-				if (crtNode->_label == 0)
-					break;
-				else {
-					crtNode->_label = 0;
-					crtNode = crtNode->parent;
-				}
-			}
-		}
+		cleanupLabels(begin, end);
 
 		return ExecutionPathSetPin(set);
 	}
