@@ -782,6 +782,23 @@ public:
     return false;
   }
 
+  bool getConstantCases(std::vector<uint64_t> *cases) const {
+    bool res = true;
+    if (ConstantExpr* ce = dyn_cast<ConstantExpr>(trueExpr))
+      cases->push_back(ce->getZExtValue());
+    else if (SelectExpr *se = dyn_cast<SelectExpr>(trueExpr))
+      res &= se->getConstantCases(cases);
+    else
+      res = false;
+    if (ConstantExpr* ce = dyn_cast<ConstantExpr>(falseExpr))
+      cases->push_back(ce->getZExtValue());
+    else if (SelectExpr *se = dyn_cast<SelectExpr>(falseExpr))
+      res &= se->getConstantCases(cases);
+    else
+      res = false;
+    return res;
+  }
+
 private:
   SelectExpr(const ref<Expr> &c, const ref<Expr> &t, const ref<Expr> &f) 
     : cond(c), trueExpr(t), falseExpr(f) {}
