@@ -477,19 +477,25 @@ Array::~Array() {
 
 #define __LIFT_CONST_SELECT_1(e1, ...)                                        \
   if (const SelectExpr* se = dyn_cast<SelectExpr>(e1))                        \
-    if (se->isConstantCases())                                                \
+    if (se->hasConstantCases())                                               \
       return SelectExpr::create(se->cond,                                     \
                                 create(se->trueExpr, ## __VA_ARGS__),         \
                                 create(se->falseExpr, ## __VA_ARGS__));
 
 #define __LIFT_CONST_SELECT_2(e1, e2, ...)                                    \
-  if (const SelectExpr* se = dyn_cast<SelectExpr>(e1))                        \
-    if (se->isConstantCases())                                                \
+  if (const SelectExpr* se = dyn_cast<SelectExpr>(e1)) {                      \
+    if (const SelectExpr* se2 = dyn_cast<SelectExpr>(e2))                     \
+      if (se->cond == se2->cond)                                              \
+        return SelectExpr::create(se->cond,                                   \
+                      create(se->trueExpr, se2->trueExpr, ## __VA_ARGS__),    \
+                      create(se->falseExpr, se2->falseExpr, ## __VA_ARGS__)); \
+    if (se->hasConstantCases())                                               \
       return SelectExpr::create(se->cond,                                     \
                                 create(se->trueExpr, e2, ## __VA_ARGS__),     \
                                 create(se->falseExpr, e2, ## __VA_ARGS__));   \
+  }                                                                           \
   if (const SelectExpr* se = dyn_cast<SelectExpr>(e2))                        \
-    if (se->isConstantCases())                                                \
+    if (se->hasConstantCases())                                               \
       return SelectExpr::create(se->cond,                                     \
                                 create(e1, se->trueExpr, ## __VA_ARGS__),     \
                                 create(e1, se->falseExpr, ## __VA_ARGS__));
@@ -498,7 +504,7 @@ Array::~Array() {
 
 ref<Expr> ReadExpr::create(const UpdateList &ul, ref<Expr> index) {
   if (const SelectExpr* se = dyn_cast<SelectExpr>(index))
-    if (se->isConstantCases())
+    if (se->hasConstantCases())
       return SelectExpr::create(se->cond, ReadExpr::create(ul, se->trueExpr),
                                           ReadExpr::create(ul, se->falseExpr));
 

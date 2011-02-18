@@ -770,6 +770,18 @@ public:
     return res;
   }
 
+  bool hasConstantCases() const {
+    if (isa<ConstantExpr>(trueExpr) || isa<ConstantExpr>(falseExpr))
+      return true;
+    if (SelectExpr* te = dyn_cast<SelectExpr>(trueExpr))
+      if (te->hasConstantCases())
+        return true;
+    if (SelectExpr* fe = dyn_cast<SelectExpr>(falseExpr))
+      if (fe->hasConstantCases())
+        return true;
+    return false;
+  }
+
 private:
   SelectExpr(const ref<Expr> &c, const ref<Expr> &t, const ref<Expr> &f) 
     : cond(c), trueExpr(t), falseExpr(f) {}
