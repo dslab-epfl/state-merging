@@ -2107,12 +2107,28 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
   case Instruction::Load: {
     ref<Expr> base = eval(ki, 0, state).value;
+    if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
+      base = state.constraints().simplifyExpr(base);
+      if (!isa<ConstantExpr>(base))
+        base = toUnique(state, base);
+      int vnumber = ki->operands[0];
+      if (vnumber >= 0)
+        state.stack().back().locals[vnumber].value = base;
+    }
     executeMemoryOperation(state, false, base, 0, ki);
     break;
   }
   case Instruction::Store: {
     ref<Expr> base = eval(ki, 1, state).value;
     ref<Expr> value = eval(ki, 0, state).value;
+    if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
+      base = state.constraints().simplifyExpr(base);
+      if (!isa<ConstantExpr>(base))
+        base = toUnique(state, base);
+      int vnumber = ki->operands[1];
+      if (vnumber >= 0)
+        state.stack().back().locals[vnumber].value = base;
+    }
     executeMemoryOperation(state, true, base, value, 0);
     break;
   }
