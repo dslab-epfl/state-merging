@@ -43,14 +43,6 @@ public:
 	virtual ExecutionJob* onNextJobSelection();
 };
 
-#if 0
-
-class SpaceMultiplexedStrategy: public BasicStrategy {
-
-};
-
-#endif
-
 }
 
 }

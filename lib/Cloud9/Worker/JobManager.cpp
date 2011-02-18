@@ -399,7 +399,7 @@ void JobManager::initStrategy() {
 
   switch (JobSelection) {
   case RandomSel:
-    selStrategy = new RandomStrategy();
+    selStrategy = new RandomJobFromStateStrategy(tree, new RandomStrategy());
     CLOUD9_INFO("Using random job selection strategy");
     break;
   case RandomPathSel:
@@ -407,8 +407,11 @@ void JobManager::initStrategy() {
     CLOUD9_INFO("Using random path job selection strategy");
     break;
   case CoverageOptimizedSel:
-    strategies.push_back(new WeightedRandomStrategy(
-        WeightedRandomStrategy::CoveringNew, tree, symbEngine));
+    strategies.push_back(new RandomJobFromStateStrategy(tree,
+        new WeightedRandomStrategy(
+            WeightedRandomStrategy::CoveringNew,
+            tree,
+            symbEngine)));
     strategies.push_back(new RandomPathStrategy(tree));
     selStrategy = new TimeMultiplexedStrategy(strategies);
     CLOUD9_INFO("Using weighted random job selection strategy");
