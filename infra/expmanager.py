@@ -24,7 +24,7 @@ KLEE_PATH = "Release/bin/klee"
 class ExperimentManager:
     def __init__(self, hostsName, cmdlinesName, expName, kleeCmdName, coverableName,
                  uid=None, uidprefix="test", debugcomm=False, duration=DEFAULT_EXP_DURATION,
-                 balancetout=None):
+                 balancetout=None, strategy=None):
         self.hosts = readHosts(hostsName)
         self.cmdlines = readCmdlines(cmdlinesName)
         self.exp = readExp(expName)
@@ -36,6 +36,7 @@ class ExperimentManager:
         self.starttime = None
         self.duration = duration
         self.balancetout = balancetout
+        self.strategy = strategy
 
         self._logMsg("Using experiment name: %s" % self.uid)
         self._logMsg("Using as localhost: %s" % self.localhost)
@@ -309,7 +310,7 @@ class ExperimentManager:
             mkdir -p %(expdir)s
             cd %(expdir)s
             setarch $(arch) %(root)s/%(worker)s -c9-lb-host %(lbhost)s -c9-lb-port %(lbport)d \
-              -c9-local-host %(lhost)s -c9-local-port %(lport)d \
+              -c9-local-host %(lhost)s -c9-local-port %(lport)d %(jobsel)s \
               -output-dir %(outdir)s \
               %(kcmd)s %(debugcomm)s %(debugcov)s \
               --max-time %(maxtime)d --coverable-modules %(coverable)s \
@@ -329,6 +330,7 @@ class ExperimentManager:
                 "lbport": lbPort,
                 "lhost": host,
                 "lport": port,
+                "jobsel": ("-c9-jobsel %s" % self.strategy) if self.strategy else "",
                 "outdir": "worker-%d" % workerID,
                 "kcmd": " ".join(self.kleeCmd),
                 "debugcomm": "--debug-lb-communication" if self.debugcomm else "",

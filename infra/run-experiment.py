@@ -21,6 +21,7 @@ def main():
                         help="The duration of each experiment")
     parser.add_argument("--lb-stop", type=int,
                         help="The duraction of load balancing")
+    parser.add_argument("--strategy", help="Worker search strategy.")
     
     args = parser.parse_args()
 
@@ -28,7 +29,8 @@ def main():
                                 args.kleecmd, args.coverable,
                                 debugcomm=args.debugcomm, uidprefix=args.prefix,
                                 duration=args.duration,
-                                balancetout=args.lb_stop)
+                                balancetout=args.lb_stop,
+                                strategy=args.strategy)
     manager.initHosts()
     manager.runExperiment()
 

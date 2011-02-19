@@ -17,14 +17,21 @@ namespace cloud9 {
 
 namespace worker {
 
+class PartitioningStrategy;
+
 class StatePartition {
+  friend class PartitioningStrategy;
 private:
-  JobSelectionStrategy *strategy;
+  StateSelectionStrategy *strategy;
+  std::set<SymbolicState*> states;
 public:
   StatePartition() { }
 };
 
-class PartitioningStrategy: public BasicStrategy {
+class PartitioningStrategy: public StateSelectionStrategy {
+private:
+  typedef unsigned int part_id_t;
+  std::set<SymbolicState*> states;
 public:
   PartitioningStrategy();
   virtual ~PartitioningStrategy();

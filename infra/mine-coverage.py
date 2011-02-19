@@ -115,7 +115,7 @@ class FinalCoverageMiner:
                 dataset.append((timestamp, newcov))
             except:
                 self._logMsg("NOTE: Cannot process covdata '%s' on host '%s', target '%s'(%d), id %d" % \
-                    (covdata, host, target, workercount, workerID))
+                    (line, host, target, workercount, workerID))
 
     def _extractKeys(self, coveragedb):
         workerSet = set()
