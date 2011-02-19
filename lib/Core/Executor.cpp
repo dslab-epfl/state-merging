@@ -2735,7 +2735,7 @@ void Executor::stepInState(ExecutionState *state) {
     //klee_warning("<<< Finished running duplicated states.\n");
   }
 
-  if (executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
+  if (KeepMergedDuplicates && executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
     klee_warning("Merged state is slow: %g instead of %g for individual states\n",
                  executionTime / 1000000., duplicatesExecutionTime / 1000000.);
   }
