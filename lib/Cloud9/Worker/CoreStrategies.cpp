@@ -135,7 +135,8 @@ SymbolicState* ClusteredRandomPathStrategy::onNextStateSelection() {
   if (states.empty())
       return NULL;
 
-  std::vector<WorkerTree::Node*> nodes(states.size());
+  std::vector<WorkerTree::Node*> nodes;
+  nodes.reserve(states.size());
 
   // TODO: Make this more efficient by implementing a custom iterator
   for (state_set_t::iterator it = states.begin(); it != states.end(); it++) {
