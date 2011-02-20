@@ -577,30 +577,52 @@ public:
 	}
 
 	template<class Generator>
-	Node* selectRandomLeaf(int layer, Node *root, Generator &gen) {
-		assert(root->exists[layer]);
-		Node *crtNode = root;
-		int crtCount;
+    Node* selectRandomLeaf(int layer, Node *root, Generator &gen,
+        int layerMask = 0) {
 
-		while ((crtCount = crtNode->getCount(layer)) > 0) {
-			int index = gen.getInt32() % crtCount;
+      assert(root->exists[layer]);
+      Node *crtNode = root;
+      int crtCount;
 
-			for (int i = 0; i < Degree; i++) {
-				Node *child = crtNode->getChild(layer, i);
-				if (child) {
-					if (index == 0) {
-						crtNode = child;
-						break;
-					} else {
-						index--;
-					}
-				}
-			}
-		}
+      while (1) {
+        Node *candidate = NULL;
+        if (!layerMask)
+          crtCount = crtNode->getCount(layer);
+        else {
+          crtCount = 0;
+          for (int i = 0; i < Degree; i++) {
+            Node *child = crtNode->getChild(layer, i);
+            if (child && child->exists[layerMask]) {
+              candidate = child;
+              crtCount++;
+            }
+          }
+        }
 
-		return crtNode;
+        if (!crtCount)
+          break;
+        if (crtCount == 1) {
+          crtNode = candidate;
+          continue;
+        }
 
-	}
+        int index = gen.getInt32() % crtCount;
+        for (int i = 0; i < Degree; i++) {
+          Node *child = crtNode->getChild(layer, i);
+          if (child && (!layerMask || child->exists[layerMask])) {
+            if (index == 0) {
+              crtNode = child;
+              break;
+            } else {
+              index--;
+            }
+          }
+        }
+      }
+
+      return crtNode;
+
+    }
 
 	template<class Generator, typename NodeIterator>
 	Node *selectRandomLeaf(int layer, Node *root, Generator &gen,
@@ -625,13 +647,21 @@ public:
 
 	  while(1) {
 	    int crtCount = 0;
+	    Node *candidate = NULL;
 	    for (int i = 0; i < Degree; i++) {
 	      Node *child = crtNode->getChild(layer, i);
-	      if (child && child->_label == 1)
+	      if (child && child->_label == 1) {
+	        candidate = child;
 	        crtCount++;
+	      }
 	    }
+
 	    if (!crtCount)
 	      break;
+	    if (crtCount == 1) {
+	      crtNode = candidate;
+	      continue;
+	    }
 
 	    int index = gen.getInt32() % crtCount;
 	    for (int i = 0; i < Degree; i++) {

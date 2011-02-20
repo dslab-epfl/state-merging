@@ -40,6 +40,14 @@ static ExecutionJob *selectRandomPathJob(WorkerTree *tree) {
   return job;
 }
 
+static SymbolicState *selectRandomPathState(WorkerTree *tree) {
+  WorkerTree::Node *node = tree->selectRandomLeaf(WORKER_LAYER_STATES,
+      tree->getRoot(), theRNG, WORKER_LAYER_JOBS);
+  SymbolicState *state = (**node).getSymbolicState();
+
+  return state;
+}
+
 ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
   WorkerTree::Node *node = state->getNode().get();
   assert(node->layerExists(WORKER_LAYER_JOBS));
@@ -113,10 +121,10 @@ void RandomStrategy::onStateDeactivated(SymbolicState *state) {
 // Random Path Strategy
 ////////////////////////////////////////////////////////////////////////////////
 
-ExecutionJob* RandomPathStrategy::onNextJobSelection() {
-  ExecutionJob *job = selectRandomPathJob(tree);
+SymbolicState* RandomPathStrategy::onNextStateSelection() {
+  SymbolicState *state = selectRandomPathState(tree);
 
-  return job;
+  return state;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

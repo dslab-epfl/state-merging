@@ -52,6 +52,7 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(CoverageOptimizedSel, "coverage-optimized", "Coverage optimized job selection"),
 				clEnumValN(OracleSel, "oracle", "Almighty oracle"),
 				clEnumValN(FaultInjSel, "fault-inj", "Fault injection"),
+				clEnumValN(LimitedFlowSel, "lim-flow", "Limited flow"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 

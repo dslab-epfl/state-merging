@@ -52,6 +52,7 @@ private:
   void initStatistics();
   void initStrategy();
 
+  StateSelectionStrategy *createCoverageOptimizedStrat();
   OracleStrategy *createOracleStrategy();
 
   void initRootState(llvm::Function *f, int argc, char **argv, char **envp);

@@ -17,16 +17,13 @@ namespace cloud9 {
 
 namespace worker {
 
-class ComposedStrategy: public JobSelectionStrategy {
+class ComposedStrategy: public StateSelectionStrategy {
 protected:
-	typedef std::vector<JobSelectionStrategy*> strat_vector;
+	typedef std::vector<StateSelectionStrategy*> strat_vector;
 	strat_vector underlying;
 public:
-	ComposedStrategy(std::vector<JobSelectionStrategy*> &_underlying);
+	ComposedStrategy(std::vector<StateSelectionStrategy*> &_underlying);
 	virtual ~ComposedStrategy();
-
-	virtual void onJobAdded(ExecutionJob *job);
-	virtual void onRemovingJob(ExecutionJob *job);
 
 	virtual void onStateActivated(SymbolicState *state);
 	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
@@ -37,10 +34,10 @@ class TimeMultiplexedStrategy: public ComposedStrategy {
 private:
 	unsigned int position;
 public:
-	TimeMultiplexedStrategy(std::vector<JobSelectionStrategy*> strategies);
+	TimeMultiplexedStrategy(std::vector<StateSelectionStrategy*> strategies);
 	virtual ~TimeMultiplexedStrategy();
 
-	virtual ExecutionJob* onNextJobSelection();
+	virtual SymbolicState* onNextStateSelection();
 };
 
 }

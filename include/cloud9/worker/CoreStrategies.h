@@ -94,11 +94,7 @@ public:
   virtual ExecutionJob* onNextJobSelection();
 };
 
-////////////////////////////////////////////////////////////////////////////////
-// Job Search Strategies
-////////////////////////////////////////////////////////////////////////////////
-
-class RandomPathStrategy: public BasicStrategy {
+class RandomPathStrategy: public StateSelectionStrategy {
 private:
   WorkerTree *tree;
 public:
@@ -107,7 +103,7 @@ public:
 
   virtual ~RandomPathStrategy() { };
 
-  virtual ExecutionJob* onNextJobSelection();
+  virtual SymbolicState* onNextStateSelection();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

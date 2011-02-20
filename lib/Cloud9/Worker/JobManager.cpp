@@ -118,6 +118,8 @@ cl::opt<bool>
   InjectFaults("c9-fault-inj", cl::desc("Fork at fault injection points"),
       cl::init(false));
 
+cl::opt<unsigned> FlowSizeLimit("flow-size-limit", cl::init(10));
+
 }
 
 using namespace klee;
@@ -129,6 +131,17 @@ namespace worker {
 /*******************************************************************************
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
+
+StateSelectionStrategy *JobManager::createCoverageOptimizedStrat() {
+  std::vector<StateSelectionStrategy*> strategies;
+
+  strategies.push_back(new WeightedRandomStrategy(
+         WeightedRandomStrategy::CoveringNew,
+         tree,
+         symbEngine));
+  strategies.push_back(new RandomPathStrategy(tree));
+  return new TimeMultiplexedStrategy(strategies);
+}
 
 bool JobManager::isJob(WorkerTree::Node *node) {
   return (**node).getJob() != NULL;
@@ -395,25 +408,17 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
 }
 
 void JobManager::initStrategy() {
-  std::vector<JobSelectionStrategy*> strategies;
-
   switch (JobSelection) {
   case RandomSel:
     selStrategy = new RandomJobFromStateStrategy(tree, new RandomStrategy());
     CLOUD9_INFO("Using random job selection strategy");
     break;
   case RandomPathSel:
-    selStrategy = new RandomPathStrategy(tree);
+    selStrategy = new RandomJobFromStateStrategy(tree, new RandomPathStrategy(tree));
     CLOUD9_INFO("Using random path job selection strategy");
     break;
   case CoverageOptimizedSel:
-    strategies.push_back(new RandomJobFromStateStrategy(tree,
-        new WeightedRandomStrategy(
-            WeightedRandomStrategy::CoveringNew,
-            tree,
-            symbEngine)));
-    strategies.push_back(new RandomPathStrategy(tree));
-    selStrategy = new TimeMultiplexedStrategy(strategies);
+    selStrategy = new RandomJobFromStateStrategy(tree, createCoverageOptimizedStrat());
     CLOUD9_INFO("Using weighted random job selection strategy");
     break;
   case OracleSel:
@@ -423,6 +428,12 @@ void JobManager::initStrategy() {
   case FaultInjSel:
     selStrategy = new FIStrategy(tree);
     CLOUD9_INFO("Using the fault injection strategy");
+    break;
+  case LimitedFlowSel:
+    selStrategy = new RandomJobFromStateStrategy(tree, new LimitedFlowStrategy(
+        createCoverageOptimizedStrat(),
+        new ClusteredRandomPathStrategy(tree), FlowSizeLimit));
+    CLOUD9_INFO("Using the limited flow strategy");
     break;
   default:
     assert(0 && "undefined job selection strategy");

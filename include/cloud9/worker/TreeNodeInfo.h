@@ -49,10 +49,10 @@ public:
 
 #define WORKER_LAYER_COUNT			4
 
-#define WORKER_LAYER_JOBS			0
-#define WORKER_LAYER_STATES			1
-#define WORKER_LAYER_STATISTICS		2
-#define WORKER_LAYER_BREAKPOINTS	3
+#define WORKER_LAYER_JOBS			1
+#define WORKER_LAYER_STATES			2
+#define WORKER_LAYER_STATISTICS		3
+#define WORKER_LAYER_BREAKPOINTS	4
 
 typedef ExecutionTree<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Four layered, binary tree
 
