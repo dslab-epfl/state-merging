@@ -181,7 +181,11 @@ void LimitedFlowStrategy::onStateDeactivated(SymbolicState *state) {
 SymbolicState* LimitedFlowStrategy::onNextStateSelection() {
   // First, ask the underlying strategy...
   SymbolicState *candidate = underStrat->onNextStateSelection();
-  assert(candidate != NULL && activeStates.size() > 0);
+
+  if (!candidate) {
+    assert(activeStates.size() == 0);
+    return NULL;
+  }
 
   if (activeStates.count(candidate) > 0)
     return candidate;
