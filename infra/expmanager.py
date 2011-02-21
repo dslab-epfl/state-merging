@@ -309,7 +309,7 @@ class ExperimentManager:
             # The code below is run remotely
             mkdir -p %(expdir)s
             cd %(expdir)s
-            setarch $(arch) %(root)s/%(worker)s -c9-lb-host %(lbhost)s -c9-lb-port %(lbport)d \
+            setarch $(arch) -R %(root)s/%(worker)s -c9-lb-host %(lbhost)s -c9-lb-port %(lbport)d \
               -c9-local-host %(lhost)s -c9-local-port %(lport)d %(jobsel)s \
               -output-dir %(outdir)s \
               %(kcmd)s %(debugcomm)s %(debugcov)s \
