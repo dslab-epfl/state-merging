@@ -278,9 +278,9 @@ else
   ])
   CPPFLAGS="$old_CPPFLAGS"
 
-  AC_CHECK_LIB(stp, vc_setInterfaceFlags,, [
-         AC_MSG_ERROR([Unable to link with libstp])
-  ], -L$stp_root/lib)
+  dnl AC_CHECK_LIB(stp, vc_setInterfaceFlags,, [
+  dnl        AC_MSG_ERROR([Unable to link with libstp])
+  dnl ], -L$stp_root/lib)
 
   AC_DEFINE(HAVE_EXT_STP, 1, [Using external STP])
   AC_SUBST(ENABLE_EXT_STP,[[1]])
