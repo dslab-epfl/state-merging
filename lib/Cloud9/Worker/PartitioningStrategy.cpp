@@ -43,10 +43,7 @@ StatePartition PartitioningStrategy::createPartition() {
          engine));
   strategies.push_back(new ClusteredRandomPathStrategy(tree));
 
-  return StatePartition(new LimitedFlowStrategy(
-      new TimeMultiplexedStrategy(strategies),
-      new RandomStrategy(),
-      10));
+  return StatePartition(new TimeMultiplexedStrategy(strategies));
 }
 
 void PartitioningStrategy::activateStateInPartition(SymbolicState *state,
