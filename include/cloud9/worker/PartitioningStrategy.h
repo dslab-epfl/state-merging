@@ -25,25 +25,24 @@ private:
   StateSelectionStrategy *strategy;
   std::set<SymbolicState*> states;
   std::set<SymbolicState*> active;
-  unsigned forkCount;
 public:
   StatePartition(StateSelectionStrategy *_strategy)
-    : strategy(_strategy), forkCount(0) { }
+    : strategy(_strategy) { }
 
-  virtual ~StatePartition() {
-    delete strategy;
-  }
-
-  unsigned getForkCount() const { return forkCount; }
+  virtual ~StatePartition() { }
 };
 
 class PartitioningStrategy: public StateSelectionStrategy {
 private:
   typedef unsigned int part_id_t;
+  typedef std::set<part_id_t> part_id_set_t;
+
   std::map<SymbolicState*, part_id_t> states;
   std::map<part_id_t, StatePartition> partitions;
   std::set<SymbolicState*> active;
-  std::set<part_id_t> nonEmpty;
+  part_id_set_t nonEmpty;
+
+  part_id_set_t::iterator nextPartition;
 
   WorkerTree *tree;
   SymbolicEngine *engine;
@@ -59,7 +58,9 @@ protected:
   virtual part_id_t hashState(SymbolicState* state);
 public:
   PartitioningStrategy(WorkerTree *_tree, SymbolicEngine *_engine)
-    : tree(_tree), engine(_engine) { }
+    : tree(_tree), engine(_engine) {
+    nextPartition = nonEmpty.begin();
+  }
   virtual ~PartitioningStrategy() { }
 
   virtual void onStateActivated(SymbolicState *state);

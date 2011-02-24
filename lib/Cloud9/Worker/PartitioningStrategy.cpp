@@ -21,6 +21,10 @@ namespace worker {
 PartitioningStrategy::part_id_t
 PartitioningStrategy::hashState(SymbolicState* state) {
   WorkerTree::Node *node = state->getNode().get();
+  node = node->getParent();
+  if (!node)
+    return 0;
+
   ForkTag tag = (**node).getForkTag();
 
   return (part_id_t)tag.instrID;
@@ -57,6 +61,9 @@ void PartitioningStrategy::deactivateStateInPartition(SymbolicState *state,
   part.active.erase(state);
   active.erase(state);
   if (part.active.empty()) {
+    if (partID == *nextPartition) {
+      nextPartition++;
+    }
     nonEmpty.erase(partID);
   }
 }
@@ -75,8 +82,7 @@ void PartitioningStrategy::onStateActivated(SymbolicState *state) {
 
   // Now decide whether to activate the state or not
   if (isActive(key)) {
-    part.active.insert(state);
-    active.insert(state);
+    activateStateInPartition(state, key, part);
   } else {
     if (part.active.count(state->getParent()) > 0) {
       if (theRNG.getBool()) {
@@ -137,7 +143,27 @@ void PartitioningStrategy::onStateDeactivated(SymbolicState *state) {
 }
 
 SymbolicState* PartitioningStrategy::onNextStateSelection() {
+  if (nextPartition == nonEmpty.end()) {
+    nextPartition = nonEmpty.begin();
+  }
 
+  if (nextPartition != nonEmpty.end()) {
+    // Debug info
+    std::stringstream ss;
+    for (part_id_set_t::iterator it = nonEmpty.begin(); it != nonEmpty.end(); it++) {
+      ss << '[' << *it << ':' << partitions.find(*it)->second.active.size() << "] ";
+    }
+    CLOUD9_DEBUG("Selecting: " << *nextPartition << " Partitioning: " << ss.str());
+
+    StatePartition &part = partitions.find(*nextPartition)->second;
+    SymbolicState *state = part.strategy->onNextStateSelection();
+    assert(state != NULL);
+    nextPartition++;
+
+    return state;
+  }
+
+  return NULL;
 }
 
 }

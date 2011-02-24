@@ -33,8 +33,8 @@ int RetryConnectTime;
 int UpdateTime;
 
 namespace {
-static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"), cl::Positional,
-		cl::location(InputFile), cl::init("-"));
+static cl::opt<std::string, true> InputFileOpt(cl::desc("<input bytecode>"),
+    cl::Positional, cl::location(InputFile), cl::init("-"));
 
 static cl::opt<LibcType, true> LibcOpt("libc", cl::desc(
 		"Choose libc version (none by default)."), cl::values(
@@ -53,6 +53,7 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(OracleSel, "oracle", "Almighty oracle"),
 				clEnumValN(FaultInjSel, "fault-inj", "Fault injection"),
 				clEnumValN(LimitedFlowSel, "lim-flow", "Limited flow"),
+				clEnumValN(PartitioningSel, "partitioning", "State partitioning"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 

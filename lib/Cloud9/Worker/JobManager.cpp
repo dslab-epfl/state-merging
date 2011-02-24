@@ -29,6 +29,7 @@
 #include "cloud9/worker/OracleStrategy.h"
 #include "cloud9/worker/FIStrategy.h"
 #include "cloud9/worker/TargetedStrategy.h"
+#include "cloud9/worker/PartitioningStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
@@ -434,6 +435,11 @@ void JobManager::initStrategy() {
         createCoverageOptimizedStrat(),
         new ClusteredRandomPathStrategy(tree), FlowSizeLimit));
     CLOUD9_INFO("Using the limited flow strategy");
+    break;
+  case PartitioningSel:
+    selStrategy = new RandomJobFromStateStrategy(tree,
+        new PartitioningStrategy(tree, symbEngine));
+    CLOUD9_INFO("Using the state partitioning strategy");
     break;
   default:
     assert(0 && "undefined job selection strategy");
