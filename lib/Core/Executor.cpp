@@ -990,6 +990,7 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
     return tag;
 
   tag.functionName = current.stack().back().kf->function->getNameStr();
+  tag.instrID = current.prevPC()->info->id;
 
   if (tag.forkClass == KLEE_FORK_FAULTINJ) {
     tag.fiVulnerable = false;

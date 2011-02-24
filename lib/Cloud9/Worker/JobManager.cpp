@@ -400,7 +400,7 @@ void JobManager::initialize(llvm::Module *module, llvm::Function *_mainFn,
 void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
     char **envp) {
   klee::ExecutionState *kState = symbEngine->createRootState(f);
-  SymbolicState *state = new SymbolicState(kState);
+  SymbolicState *state = new SymbolicState(kState, NULL);
 
   state->rebindToNode(tree->getRoot());
 
@@ -1155,10 +1155,6 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
     state->_instrPos = parent->getCloud9State()->_instrPos;
   }
 
-  if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
-    fireActivateState(state);
-  }
-
   //CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
 
   SymbolicState *pState = parent->getCloud9State();
@@ -1167,6 +1163,10 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
     fireUpdateState(pState, pNode.get());
   } else {
     fireDeactivateState(pState);
+  }
+
+  if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
+    fireActivateState(state);
   }
 
   // Reset the number of instructions since forking
@@ -1293,7 +1293,7 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
   parent->getCloud9State()->rebindToNode(oldNode);
 
   newNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), index);
-  SymbolicState *state = new SymbolicState(kState);
+  SymbolicState *state = new SymbolicState(kState, parent->getCloud9State());
   state->rebindToNode(newNode);
 
   if (!replaying) {

@@ -31,6 +31,7 @@ class SymbolicState {
 private:
 	klee::ExecutionState *kleeState;
 	WorkerTree::NodePin nodePin;
+	SymbolicState *parent;
 
 	bool _active;
 
@@ -54,9 +55,10 @@ private:
 	}
 
 public:
-	SymbolicState(klee::ExecutionState *state) :
+	SymbolicState(klee::ExecutionState *state, SymbolicState *_parent) :
 		kleeState(state),
 		nodePin(WORKER_LAYER_STATES),
+		parent(_parent),
 		_active(false),
 		_instrPos(0),
 		_instrSinceFork(0),
@@ -71,6 +73,8 @@ public:
 	klee::ExecutionState *getKleeState() const { return kleeState; }
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
+
+	SymbolicState *getParent() const { return parent; }
 };
 
 /*
