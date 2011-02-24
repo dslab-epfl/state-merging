@@ -601,7 +601,7 @@ public:
 
         if (!crtCount)
           break;
-        if (crtCount == 1) {
+        if (layerMask && crtCount == 1) {
           crtNode = candidate;
           continue;
         }
