@@ -54,6 +54,7 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(FaultInjSel, "fault-inj", "Fault injection"),
 				clEnumValN(LimitedFlowSel, "lim-flow", "Limited flow"),
 				clEnumValN(PartitioningSel, "partitioning", "State partitioning"),
+				clEnumValN(KleeForkCapSel, "klee-fork-cap", "Klee Fork-cap"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 

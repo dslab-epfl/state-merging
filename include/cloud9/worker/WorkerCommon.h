@@ -29,7 +29,8 @@ enum JobSelectionType {
 	OracleSel,
 	FaultInjSel,
 	LimitedFlowSel,
-	PartitioningSel
+	PartitioningSel,
+	KleeForkCapSel
 };
 
 extern std::string InputFile;

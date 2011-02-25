@@ -70,6 +70,13 @@ public:
   virtual SymbolicState* onNextStateSelection();
 };
 
+class KleeForkCapStrategy: public KleeStrategy {
+public:
+  KleeForkCapStrategy(unsigned long _forkCap, unsigned long _hardForkCap,
+      WorkerTree *_tree, SymbolicEngine *_engine);
+  virtual ~KleeForkCapStrategy();
+};
+
 }
 
 }

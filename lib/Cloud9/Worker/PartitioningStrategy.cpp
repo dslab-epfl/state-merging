@@ -11,6 +11,8 @@
 #include "cloud9/worker/WorkerCommon.h"
 
 #include "klee/Internal/ADT/RNG.h"
+#include "klee/Searcher.h"
+#include "klee/Executor.h"
 
 using namespace klee;
 
@@ -161,6 +163,23 @@ SymbolicState* PartitioningStrategy::onNextStateSelection() {
   }
 
   return NULL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// FORK CAP STRATEGY
+////////////////////////////////////////////////////////////////////////////////
+
+KleeForkCapStrategy::KleeForkCapStrategy(unsigned long _forkCap, unsigned long _hardForkCap,
+    WorkerTree *_tree, SymbolicEngine *_engine)
+      : KleeStrategy(_tree) {
+  klee::Searcher *baseSearcher = new RandomSearcher();
+
+  klee::Executor *executor = dynamic_cast<klee::Executor*>(_engine); // XXX I should be ashamed of this
+  searcher = new ForkCapSearcher(*executor, baseSearcher, _forkCap, _hardForkCap);
+}
+
+KleeForkCapStrategy::~KleeForkCapStrategy() {
+  delete searcher;
 }
 
 }

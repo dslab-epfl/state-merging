@@ -441,6 +441,11 @@ void JobManager::initStrategy() {
         new PartitioningStrategy(tree, symbEngine));
     CLOUD9_INFO("Using the state partitioning strategy");
     break;
+  case KleeForkCapSel:
+    selStrategy = new RandomJobFromStateStrategy(tree,
+        new KleeForkCapStrategy(5, 0, tree, symbEngine));
+    CLOUD9_INFO("Using the Klee fork-cap strategy");
+    break;
   default:
     assert(0 && "undefined job selection strategy");
   }
