@@ -671,6 +671,9 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
     a.constraints().addConstraint(*it);
   a.constraints().addConstraint(OrExpr::create(inA, inB));
 
+  a.mergeConditions.push_back(useInA ? std::make_pair(inA, inB) :
+                                       std::make_pair(inB, inA));
+
   a.queryCost += b.queryCost;
   a.weight += b.weight;
   a.coveredNew |= b.coveredNew;

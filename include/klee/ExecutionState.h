@@ -240,6 +240,8 @@ public:
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
 
+  /* Merge info */
+  std::vector<std::pair<ref<Expr>, ref<Expr> > > mergeConditions;
 
   /* Duplicate states management */
   std::set<ExecutionState*> duplicates;
