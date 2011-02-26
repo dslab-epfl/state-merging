@@ -595,6 +595,8 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
          ie = bSuffix.end(); it != ie; ++it)
     inB = AndExpr::create(inB, *it);
 
+  bool useInA = (aSuffix.size() < bSuffix.size());
+
   // XXX should we have a preference as to which predicate to use?
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
@@ -618,7 +620,8 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
         // we cannot reuse this local, so just ignore
       } else {
         if(av != bv) {
-            av = SelectExpr::create(inA, av, bv);
+            av = useInA ? SelectExpr::create(inA, av, bv)
+                        : SelectExpr::create(inB, bv, av);
             ++stackDifference;
         }
       }
@@ -649,7 +652,8 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
       ref<Expr> bv = otherOS->read8(i);
       if(av != bv) {
           memDifference += 1;
-          wos->write(i, SelectExpr::create(inA, av, bv));
+          wos->write(i, useInA ? SelectExpr::create(inA, av, bv)
+                               : SelectExpr::create(inB, bv, av));
       }
     }
   }
