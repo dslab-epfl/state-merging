@@ -11,6 +11,7 @@
 #define KLEE_CONSTRAINTS_H
 
 #include "klee/Expr.h"
+#include <map>
 
 // FIXME: Currently we use ConstraintManager for two things: to pass
 // sets of constraints around, and to optimize constraints. We should
@@ -31,9 +32,10 @@ public:
   // create from constraints with no optimization
   explicit
   ConstraintManager(const std::vector< ref<Expr> > &_constraints) :
-    constraints(_constraints) {}
+    constraints(_constraints) { recomputeAllRanges(); }
 
-  ConstraintManager(const ConstraintManager &cs) : constraints(cs.constraints) {}
+  ConstraintManager(const ConstraintManager &cs)
+      : constraints(cs.constraints), ranges(cs.ranges) {}
 
   typedef std::vector< ref<Expr> >::const_iterator constraint_iterator;
 
@@ -68,10 +70,83 @@ public:
 private:
   std::vector< ref<Expr> > constraints;
 
+public:
+
+  // Signed range represented as a union of two ranges (positive and negative)
+  struct SRange {
+  private:
+    uint64_t minL, maxL;
+    uint64_t minU, maxU;
+    unsigned width;
+
+    void init(unsigned width, uint64_t min, uint64_t max) {
+      this->width = width; assert(width != 0);
+      uint64_t maxV = bits64::maxValueOfNBits(width);
+      uint64_t midV = maxV > 1 ? maxV >> 1 : maxV;
+      if (min > midV && max <= midV) {
+        minL = 0; maxU = maxV;
+      } else {
+        minL = min; maxU = std::min(max, maxV);
+      }
+      maxL = std::min(max, midV);
+      minU = std::max(min, midV+1);
+    }
+
+    int64_t sext(uint64_t v) { return int64_t(v<<(64-width)) >> (64-width); }
+
+  public:
+    SRange(): width(0) {}
+
+    SRange(unsigned width) { init(width, 0ull, ULLONG_MAX); }
+
+    SRange(unsigned width, uint64_t value) { init(width, value, value); }
+    SRange(unsigned width, uint64_t min, uint64_t max) { init(width, min, max); }
+
+    bool empty() { return minL > maxL && minU > maxU; }
+
+    SRange intersection(const SRange &o) {
+      SRange r = *this; assert(r.width == o.width);
+      if (r.minL < o.minL) r.minL = o.minL; if (r.maxL > o.maxL) r.maxL = o.maxL;
+      if (r.minU < o.minU) r.minU = o.minU; if (r.maxU > o.maxU) r.maxU = o.maxU;
+      return r;
+    }
+
+    bool isSingle() {
+      return (minL == maxL && minU > maxU) || (minU == maxU && minL > maxL);
+    }
+
+    uint64_t getSingle() {
+      if (minL == maxL) { assert(minU > maxU); return minL; }
+      assert(minL > maxL && minU == maxU); return minU;
+    }
+
+    uint64_t umin() { assert(!empty()); return minL <= maxL ? minL : minU; }
+    uint64_t umax() { assert(!empty()); return minU <= maxU ? maxU : maxL; }
+
+    int64_t smin() { assert(!empty()); return sext(minU <= maxU ? minU : minL); }
+    int64_t smax() { assert(!empty()); return sext(minL <= maxL ? maxL : maxU); }
+  };
+
+  typedef std::map<ref<Expr>, SRange> ranges_ty;
+
+private:
+  ranges_ty ranges;
+
   // returns true iff the constraints were modified
   bool rewriteConstraints(ExprVisitor &visitor);
 
+  // simplify constraints assuming e is true
+  void simplifyConstraints(const ref<Expr>& e);
+
   void addConstraintInternal(ref<Expr> e);
+
+  // return true of the range info already existed
+  bool intersectRange(const ref<Expr>& e, const SRange& r);
+
+  // update ranges assuming e is true,
+  // return true if already existing ranges might be changed
+  bool computeRanges(const ref<Expr>& e);
+  void recomputeAllRanges();
 };
 
 }
