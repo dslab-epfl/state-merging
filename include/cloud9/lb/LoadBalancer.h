@@ -47,8 +47,6 @@ private:
   unsigned statIDCount;
   unsigned programCRC;
 
-  std::set<std::string> targets;
-
   worker_id_t nextWorkerID;
 
   unsigned rounds;
@@ -98,6 +96,8 @@ public:
   void updateWorkerStats(worker_id_t id, std::vector<int> &stats);
 
   void updateCoverageData(worker_id_t id, const cov_update_t &data);
+
+  void updatePartitioningData(worker_id_t id, const part_stat_t &stats);
 
   Worker* getWorker(worker_id_t id) {
     std::map<worker_id_t, Worker*>::iterator it = workers.find(id);

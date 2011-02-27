@@ -787,10 +787,8 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
   tree->getNodes(WORKER_LAYER_JOBS, seeds, roots);
 
-  assert(roots.size() == counts.size());
-
   for (unsigned int i = 0; i < seeds->count(); i++) {
-    selectJobs(roots[i], jobs, counts[i]);
+    selectJobs(roots[i], jobs, (counts.size() > 0) ? counts[i] : 0);
   }
 
   replayInstrs.clear();
@@ -975,10 +973,7 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
 
   currentJob = NULL;
 
-  if ((**nodePin).symState != NULL) {
-    // Just mark the state as updated, no node progress
-    fireUpdateState((**nodePin).symState, nodePin.get());
-  } else if (brokenNode != NULL) {
+  if ((**nodePin).symState == NULL && brokenNode != NULL) {
     cleanInvalidJobs(brokenNode);
   }
 }

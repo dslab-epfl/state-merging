@@ -301,6 +301,13 @@ void LoadBalancer::updateCoverageData(worker_id_t id, const cov_update_t &data) 
   }
 }
 
+void LoadBalancer::updatePartitioningData(worker_id_t id, const part_stat_t &stats) {
+  Worker *worker = workers[id];
+  assert(worker);
+
+  worker->statePartitions = stats;
+}
+
 void LoadBalancer::getAndResetCoverageUpdates(worker_id_t id,
     cov_update_t &data) {
   Worker *w = workers[id];

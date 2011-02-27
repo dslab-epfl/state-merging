@@ -20,8 +20,7 @@ namespace cloud9 {
 
 namespace worker {
 
-PartitioningStrategy::part_id_t
-PartitioningStrategy::hashState(SymbolicState* state) {
+part_id_t PartitioningStrategy::hashState(SymbolicState* state) {
   WorkerTree::Node *node = state->getNode().get();
   node = node->getParent();
   if (!node)
@@ -30,10 +29,6 @@ PartitioningStrategy::hashState(SymbolicState* state) {
   ForkTag tag = (**node).getForkTag();
 
   return (part_id_t)tag.instrID;
-}
-
-bool PartitioningStrategy::isActive(part_id_t partition) {
-  return true;
 }
 
 StatePartition PartitioningStrategy::createPartition() {
@@ -50,16 +45,26 @@ StatePartition PartitioningStrategy::createPartition() {
 
 void PartitioningStrategy::activateStateInPartition(SymbolicState *state,
     part_id_t partID, StatePartition &part) {
-  part.active.insert(state);
-  active.insert(state);
-  nonEmpty.insert(partID);
+
+  if (part.activeStates.insert(state).second) {
+    part.strategy->onStateActivated(state);
+  }
+
+  activeStates.insert(state);
+  if (nonEmpty.insert(partID).second) {
+    part.active = true; // Activate by default new partitions
+  }
 }
 
 void PartitioningStrategy::deactivateStateInPartition(SymbolicState *state,
     part_id_t partID, StatePartition &part) {
-  part.active.erase(state);
-  active.erase(state);
-  if (part.active.empty()) {
+  if (part.activeStates.erase(state)) {
+    part.strategy->onStateDeactivated(state);
+  }
+
+  activeStates.erase(state);
+
+  if (part.activeStates.empty()) {
     if (partID == *nextPartition) {
       nextPartition++;
     }
@@ -77,13 +82,12 @@ void PartitioningStrategy::onStateActivated(SymbolicState *state) {
   StatePartition &part = partitions.find(key)->second;
 
   part.states.insert(state);
-  part.strategy->onStateActivated(state);
 
   // Now decide whether to activate the state or not
-  if (isActive(key)) {
+  if (part.active) {
     activateStateInPartition(state, key, part);
   } else {
-    if (part.active.count(state->getParent()) > 0) {
+    if (part.activeStates.count(state->getParent()) > 0) {
       if (theRNG.getBool()) {
         // Remove the parent from the active states, and replace it with the child
         deactivateStateInPartition(state->getParent(), key, part);
@@ -96,27 +100,18 @@ void PartitioningStrategy::onStateActivated(SymbolicState *state) {
 }
 
 void PartitioningStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
-  WorkerTree::Node *newNode = state->getNode().get();
-
-  if (newNode == oldNode) {
-    part_id_t key = hashState(state);
-    assert(partitions.count(key) > 0);
-    partitions.find(key)->second.strategy->onStateUpdated(state, oldNode);
-    return;
-  }
-
   part_id_t newKey = hashState(state);
   part_id_t oldKey = states[state];
+  StatePartition &oldPart = partitions.find(oldKey)->second;
   if (newKey == oldKey) {
-    partitions.find(newKey)->second.strategy->onStateUpdated(state, oldNode);
+    if (oldPart.activeStates.count(state) > 0)
+      oldPart.strategy->onStateUpdated(state, oldNode);
     return;
   }
 
-  StatePartition &oldPart = partitions.find(oldKey)->second;
   states[state] = newKey;
   deactivateStateInPartition(state, oldKey, oldPart);
   oldPart.states.erase(state);
-  oldPart.strategy->onStateDeactivated(state);
 
   if (partitions.count(newKey) == 0) {
     partitions.insert(std::make_pair(newKey, createPartition()));
@@ -124,7 +119,6 @@ void PartitioningStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node
 
   StatePartition &newPart = partitions.find(newKey)->second;
   newPart.states.insert(state);
-  newPart.strategy->onStateActivated(state);
   // By default, the state is active - it may be deactivated when the
   // child state is added
   activateStateInPartition(state, newKey, newPart);
@@ -138,7 +132,6 @@ void PartitioningStrategy::onStateDeactivated(SymbolicState *state) {
 
   deactivateStateInPartition(state, key, part);
   part.states.erase(state);
-  part.strategy->onStateDeactivated(state);
 }
 
 SymbolicState* PartitioningStrategy::onNextStateSelection() {
@@ -150,7 +143,7 @@ SymbolicState* PartitioningStrategy::onNextStateSelection() {
     // Debug info
     std::stringstream ss;
     for (part_id_set_t::iterator it = nonEmpty.begin(); it != nonEmpty.end(); it++) {
-      ss << '[' << *it << ':' << partitions.find(*it)->second.active.size() << "] ";
+      ss << '[' << *it << ':' << partitions.find(*it)->second.activeStates.size() << "] ";
     }
     CLOUD9_DEBUG("Selecting: " << *nextPartition << " Partitioning: " << ss.str());
 
@@ -165,8 +158,83 @@ SymbolicState* PartitioningStrategy::onNextStateSelection() {
   return NULL;
 }
 
+void PartitioningStrategy::getStatistics(part_stats_t &stats) {
+  for (part_id_set_t::iterator it = nonEmpty.begin(); it != nonEmpty.end(); it++) {
+    StatePartition &part = partitions.find(*it)->second;
+
+    stats.insert(std::make_pair(*it, std::make_pair(part.states.size(),
+        part.activeStates.size())));
+  }
+}
+
+void PartitioningStrategy::setActivation(std::set<part_id_t> &activation) {
+  for (std::set<part_id_t>::iterator it = activation.begin();
+      it != activation.end(); it++) {
+    StatePartition &part = partitions.find(*it)->second;
+
+    part.active = true;
+  }
+}
+
+ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
+  std::vector<WorkerTree::Node*> stateRoots;
+
+  for (part_select_t::iterator it = counts.begin();
+      it != counts.end(); it++) {
+    if (!it->second)
+      continue;
+
+    StatePartition &part = partitions.find(it->first)->second;
+    std::set<SymbolicState*> inactiveStates;
+    getInactiveSet(it->first, inactiveStates);
+
+    unsigned int inactiveCount = it->second;
+    if (inactiveStates.size() < it->second) {
+      inactiveCount = inactiveStates.size();
+    }
+
+    // Grab the inactive states...
+    if (inactiveCount > 0) {
+      unsigned int counter = inactiveCount;
+      for (std::set<SymbolicState*>::iterator it = inactiveStates.begin();
+          it != inactiveStates.end(); it++) {
+        stateRoots.push_back((*it)->getNode().get());
+        counter--;
+        if (!counter) break;
+      }
+    }
+
+    // Now grab the active ones...
+    if (it->second - inactiveCount > 0) {
+      unsigned int counter = it->second - inactiveCount;
+      for (std::set<SymbolicState*>::iterator it = part.activeStates.begin();
+          it != part.activeStates.end(); it++) {
+        stateRoots.push_back((*it)->getNode().get());
+        counter--;
+        if (!counter) break;
+      }
+    }
+  }
+
+  ExecutionPathSetPin paths = tree->buildPathSet(stateRoots.begin(),
+        stateRoots.end());
+
+  return paths;
+}
+
+void PartitioningStrategy::getInactiveSet(part_id_t partID,
+    std::set<SymbolicState*> &inactiveStates) {
+  StatePartition &part = partitions.find(partID)->second;
+
+  for (std::set<SymbolicState*>::iterator it = part.states.begin();
+      it != part.states.end(); it++) {
+    if (!part.activeStates.count(*it))
+      inactiveStates.insert(*it);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-// FORK CAP STRATEGY
+// KLEE FORK CAP STRATEGY
 ////////////////////////////////////////////////////////////////////////////////
 
 KleeForkCapStrategy::KleeForkCapStrategy(unsigned long _forkCap, unsigned long _hardForkCap,

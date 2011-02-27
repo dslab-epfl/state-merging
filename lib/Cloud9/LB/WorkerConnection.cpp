@@ -114,6 +114,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
     //processNodeSetUpdate(message); // XXX We disable this for now, it's useless
     processNodeDataUpdate(message);
     processStatisticsUpdates(message);
+    processPartitionUpdates(message);
 
     lb->analyze(id);
 
@@ -187,8 +188,7 @@ void WorkerConnection::handleMessageSent(const boost::system::error_code &error)
   }
 }
 
-bool WorkerConnection::processStatisticsUpdates(
-    const WorkerReportMessage &message) {
+bool WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
   if (message.localupdates_size() == 0)
     return false;
 
@@ -209,6 +209,26 @@ bool WorkerConnection::processStatisticsUpdates(
         lb->updateCoverageData(id, data);
     }
   }
+
+  return true;
+}
+
+bool WorkerConnection::processPartitionUpdates(const WorkerReportMessage &message) {
+  if (message.partitionupdates_size() == 0)
+    return false;
+
+  worker_id_t id = message.id();
+
+  part_stat_t partStat;
+
+  for (int i = 0; i < message.partitionupdates_size(); i++) {
+    const PartitionData &pData = message.partitionupdates(i);
+
+    partStat.insert(std::make_pair(pData.partition(),
+        std::make_pair(pData.total(), pData.active())));
+  }
+
+  lb->updatePartitioningData(id, partStat);
 
   return true;
 }

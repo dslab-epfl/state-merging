@@ -92,6 +92,8 @@ public:
   virtual void onStateDeactivated(SymbolicState *state);
 
   virtual ExecutionJob* onNextJobSelection();
+
+  StateSelectionStrategy *getStateStrategy() const { return stateStrat; }
 };
 
 class RandomPathStrategy: public StateSelectionStrategy {

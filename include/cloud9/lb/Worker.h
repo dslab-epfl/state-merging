@@ -18,6 +18,9 @@ namespace cloud9 {
 namespace lb {
 
 typedef unsigned int worker_id_t;
+typedef unsigned int part_id_t;
+
+typedef std::map<part_id_t, std::pair<unsigned, unsigned> > part_stat_t;
 
 class Worker {
   friend class LoadBalancer;
@@ -47,15 +50,12 @@ private:
 
   unsigned int totalJobs;
 
-  std::set<std::string> interests;
-  bool updatedInterests;
-
-  std::map<std::string, unsigned int> jobsBreakdown;
-
+  part_stat_t statePartitions;
+  std::set<part_id_t> activePartitions;
 
   unsigned int lastReportTime;
 
-  Worker() : nodesRevision(1), totalJobs(0), updatedInterests(false), lastReportTime(0) {
+  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0) {
 
   }
 public:

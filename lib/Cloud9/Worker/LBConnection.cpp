@@ -9,6 +9,7 @@
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManager.h"
 #include "cloud9/worker/TargetedStrategy.h"
+#include "cloud9/worker/PartitioningStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Protocols.h"
 
@@ -127,6 +128,8 @@ void LBConnection::sendJobStatistics(WorkerReportMessage &message) {
   }
 }
 
+
+
 void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
   cov_update_t data;
   jobManager->getUpdatedLocalCoverage(data);
@@ -142,6 +145,28 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
   }
 }
 
+void LBConnection::sendPartitionStatistics(WorkerReportMessage &message) {
+  RandomJobFromStateStrategy *jStrategy =
+      dynamic_cast<RandomJobFromStateStrategy*>(jobManager->getStrategy());
+  if (!jStrategy)
+    return;
+
+  PartitioningStrategy *pStrategy =
+      dynamic_cast<PartitioningStrategy*>(jStrategy->getStateStrategy());
+  if (!pStrategy)
+    return;
+
+  part_stats_t stats;
+  pStrategy->getStatistics(stats);
+
+  for (part_stats_t::iterator it = stats.begin(); it != stats.end(); it++) {
+    PartitionData *pData = message.add_partitionupdates();
+    pData->set_partition(it->first);
+    pData->set_total(it->second.first);
+    pData->set_active(it->second.second);
+  }
+}
+
 void LBConnection::sendUpdates() {
   // Prepare the updates message
   WorkerReportMessage message;
@@ -150,6 +175,8 @@ void LBConnection::sendUpdates() {
   sendJobStatistics(message);
 
   sendCoverageUpdates(message);
+
+  sendPartitionStatistics(message);
 
   std::string msgString;
   bool result = message.SerializeToString(&msgString);
@@ -189,7 +216,16 @@ void LBConnection::processResponse(LBResponseMessage &response) {
     counts.insert(counts.begin(), transDetails.count().begin(),
         transDetails.count().end());
 
-    transferJobs(destAddress, destPort, paths, counts);
+    part_select_t partSelect;
+    if (transDetails.partitions_size() > 0) {
+      for (int i = 0; i < transDetails.partitions_size(); i++) {
+        part_id_t partID = transDetails.partitions(i).partition();
+        unsigned count = transDetails.partitions(i).total();
+        partSelect.insert(std::make_pair(partID, count));
+      }
+    }
+
+    transferJobs(destAddress, destPort, paths, counts, partSelect);
   }
 
   if (response.has_jobseed()) {
@@ -233,11 +269,27 @@ void LBConnection::processResponse(LBResponseMessage &response) {
 }
 
 void LBConnection::transferJobs(std::string &destAddr, int destPort,
-    ExecutionPathSetPin paths, std::vector<int> counts) {
+    ExecutionPathSetPin paths, std::vector<int> counts,
+    part_select_t &partHints) {
 
+  ExecutionPathSetPin jobPaths;
   std::vector<long> replayInstrs;
-  ExecutionPathSetPin jobPaths = jobManager->exportJobs(paths, counts,
-      replayInstrs);
+
+  if (partHints.size() > 0) {
+    RandomJobFromStateStrategy *jStrategy =
+        dynamic_cast<RandomJobFromStateStrategy*>(jobManager->getStrategy());
+    assert(jStrategy);
+
+    PartitioningStrategy *pStrategy =
+        dynamic_cast<PartitioningStrategy*>(jStrategy->getStateStrategy());
+    assert(pStrategy);
+
+    ExecutionPathSetPin stateRoots = pStrategy->selectStates(partHints);
+    std::vector<int> emptyCounts;
+    jobPaths = jobManager->exportJobs(stateRoots, emptyCounts, replayInstrs);
+  } else {
+    jobPaths = jobManager->exportJobs(paths, counts, replayInstrs);
+  }
 
   tcp::socket peerSocket(service);
   boost::system::error_code error;
