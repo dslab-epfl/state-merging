@@ -38,7 +38,11 @@ typedef std::set<part_id_t> part_id_set_t;
 typedef std::map<part_id_t, std::pair<unsigned, unsigned> > part_stats_t;
 typedef std::map<part_id_t, unsigned> part_select_t;
 
+class PartitioningDecorator;
+class JobManager;
+
 class PartitioningStrategy: public StateSelectionStrategy {
+  friend class PartitioningDecorator;
 private:
   std::map<SymbolicState*, part_id_t> states;
   std::map<part_id_t, StatePartition> partitions;
@@ -59,6 +63,8 @@ private:
       StatePartition &part);
   part_id_t hashState(SymbolicState* state);
   void getInactiveSet(part_id_t partID, std::set<SymbolicState*> &inactiveStates);
+protected:
+  virtual void dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight);
 public:
   PartitioningStrategy(WorkerTree *_tree, SymbolicEngine *_engine, unsigned _forkQuota = 0)
     : tree(_tree), engine(_engine), forkQuota(_forkQuota) {
@@ -82,6 +88,29 @@ public:
   KleeForkCapStrategy(unsigned long _forkCap, unsigned long _hardForkCap,
       WorkerTree *_tree, SymbolicEngine *_engine);
   virtual ~KleeForkCapStrategy();
+};
+
+class PartitioningDecorator: public DotNodeDefaultDecorator<WorkerTree::Node> {
+private:
+  PartitioningStrategy *strategy;
+public:
+  PartitioningDecorator(PartitioningStrategy *_strategy, WorkerTree::Node *highlight) :
+    DotNodeDefaultDecorator<WorkerTree::Node>(WORKER_LAYER_STATES, WORKER_LAYER_JOBS, highlight),
+    strategy(_strategy) {
+
+  }
+
+  void operator() (WorkerTree::Node *node, std::map<std::string, std::string> &deco) {
+    DotNodeDefaultDecorator<WorkerTree::Node>::operator() (node, deco);
+
+    SymbolicState *state = (**node).getSymbolicState();
+
+    if (state && strategy->states.count(state) > 0) {
+      char label[10];
+      snprintf(label, 10, "%d", strategy->states[state]);
+      deco["label"] = std::string(label);
+    }
+  }
 };
 
 }

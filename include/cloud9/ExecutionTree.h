@@ -325,38 +325,6 @@ public:
 	typedef TreeNode<NodeInfo, Layers, Degree> Node;
 	typedef typename TreeNode<NodeInfo, Layers, Degree>::Pin NodePin;
 
-	struct NodeBreadthCompare {
-		bool operator()(const Node *a, const Node *b) {
-			if (a->level > b->level)
-				while (a->level > b->level)
-					a = a->getParent();
-			else
-				while (a->level < b->level)
-					b = b->getParent();
-
-			if (a == b) // One of them is the ancestor of the other
-				return false;
-
-			while (a->level > 0) {
-				Node *pa = a->parent;
-				Node *pb = b->parent;
-
-				if (pa == pb)
-					return a->index < b->index;
-
-				a = pa;
-				b = pb;
-			}
-
-			return false;
-		}
-	};
-
-	struct NodeDepthCompare {
-		bool operator()(const Node *a, const Node *b) {
-			return a->level < b->level;
-		}
-	};
 private:
 	Node* root;
 
@@ -749,6 +717,53 @@ public:
 		}
 	}
 
+	template<typename Decorator>
+	void dumpDotGraph(Node *root, std::ostream &os, Decorator decorator) {
+	  if (!root)
+	    root = this->root;
+
+	  // Write the Dot header
+	  os << "digraph symbex {" << std::endl;
+
+      std::stack<std::pair<Node*, std::string> > nodes;
+      nodes.push((std::make_pair(root, "r")));
+
+      while (!nodes.empty()) {
+        std::pair<Node*, std::string> node = nodes.top();
+        nodes.pop();
+
+        std::map<std::string, std::string> deco;
+        decorator(node.first, deco);
+
+        os << "  " << node.second << " [";
+
+        for (std::map<std::string, std::string>::iterator it = deco.begin();
+            it != deco.end(); it++) {
+          if (it != deco.begin())
+            os << ",";
+          os << it->first << "=" << it->second;
+        }
+
+        os << "];" << std::endl;
+
+
+        for (int i = 0; i < Degree; i++) {
+          Node *child = node.first->childrenNodes[i];
+          if (child) {
+            std::string name(node.second);
+            name.push_back('0' + i);
+
+            os << "  " << node.second << " -> " << name << ";" << std::endl;
+
+            nodes.push(std::make_pair(child, name));
+          }
+        }
+      }
+
+	  // Write the Dot footer
+	  os << "}" << std::endl;
+	}
+
 #undef BEGIN_LAYERED_DFS_SCAN
 #undef END_LAYERED_DFS_SCAN
 
@@ -756,6 +771,34 @@ public:
 #undef END_DFS_SCAN
 
 }; // End of ExecutionTree class
+
+
+template<class Node>
+class DotNodeDefaultDecorator {
+private:
+  int fillLayer;
+  int peripheryLayer;
+  Node *highlight;
+public:
+  DotNodeDefaultDecorator(int _fillLayer, int _peripheryLayer, Node *_highlight)
+    : fillLayer(_fillLayer), peripheryLayer(_peripheryLayer), highlight(_highlight) { }
+  virtual ~DotNodeDefaultDecorator() { }
+
+  void operator() (Node *node, std::map<std::string, std::string> &deco) {
+    deco["label"] = "\"\"";
+    deco["shape"] = "circle";
+    if (node->layerExists(fillLayer)) {
+      deco["style"] = "filled";
+      deco["fillcolor"] = "gray";
+    }
+    if (node->layerExists(peripheryLayer)) {
+      deco["penwidth"] = "3";
+    }
+    if (node == highlight) {
+      deco["peripheries"] = "2";
+    }
+  }
+};
 
 
 template<class NI, int L, int D>

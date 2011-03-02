@@ -392,6 +392,11 @@ void LoadBalancer::analyzeBalance() {
 
 }
 
+void LoadBalancer::analyzePartitionBalance() {
+  // Compute the aggregate situation
+
+}
+
 TransferRequest *LoadBalancer::computeTransfer(worker_id_t fromID,
     worker_id_t toID, unsigned count) {
   // XXX Be more intelligent

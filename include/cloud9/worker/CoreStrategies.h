@@ -26,6 +26,7 @@ namespace worker {
 class ExecutionJob;
 class SymbolicEngine;
 class SymbolicState;
+class JobManager;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Basic Building Blocks
@@ -50,10 +51,12 @@ public:
 };
 
 class StateSelectionStrategy {
+  friend class RandomJobFromStateStrategy;
 public:
   StateSelectionStrategy() { }
   virtual ~StateSelectionStrategy() { }
-
+protected:
+  virtual void dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight) { }
 public:
   virtual void onStateActivated(SymbolicState *state) { };
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { };
@@ -64,10 +67,13 @@ public:
 
 class BasicStrategy : public JobSelectionStrategy {
 protected:
+  JobManager *jobManager;
+
   ExecutionJob *selectJob(WorkerTree *tree, SymbolicState* state);
+  virtual void dumpSymbolicTree(WorkerTree::Node *highlight);
 public:
-	BasicStrategy() {};
-	virtual ~BasicStrategy() {};
+	BasicStrategy(JobManager *_jobManager) : jobManager(_jobManager) { }
+	virtual ~BasicStrategy() { }
 
 public:
 	virtual void onJobAdded(ExecutionJob *job) { };
@@ -83,9 +89,13 @@ class RandomJobFromStateStrategy: public BasicStrategy {
 private:
   WorkerTree *tree;
   StateSelectionStrategy *stateStrat;
+
+protected:
+  virtual void dumpSymbolicTree(WorkerTree::Node *highlight);
 public:
-  RandomJobFromStateStrategy(WorkerTree *_tree, StateSelectionStrategy *_stateStrat) :
-    tree(_tree), stateStrat(_stateStrat) { }
+  RandomJobFromStateStrategy(WorkerTree *_tree, StateSelectionStrategy *_stateStrat,
+      JobManager *_jobManager) :
+    BasicStrategy(_jobManager), tree(_tree), stateStrat(_stateStrat) { }
 
   virtual void onStateActivated(SymbolicState *state);
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);

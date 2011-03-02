@@ -13,6 +13,8 @@
 #include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/worker/CoreStrategies.h"
 
+#include "klee/KleeHandler.h"
+
 #include <boost/thread.hpp>
 #include <list>
 #include <set>
@@ -28,7 +30,6 @@ class Interpreter;
 class ExecutionState;
 class Searcher;
 class KModule;
-class KleeHandler;
 }
 
 namespace cloud9 {
@@ -108,9 +109,6 @@ private:
   int traceCounter;
 
   bool collectTraces;
-
-  void dumpStateTrace(WorkerTree::Node *node);
-  void dumpInstructionTrace(WorkerTree::Node *node);
 
   void serializeInstructionTrace(std::ostream &s, WorkerTree::Node *node);
   void parseInstructionTrace(std::istream &s, std::vector<unsigned int> &dest);
@@ -260,6 +258,25 @@ public:
   void importJobs(ExecutionPathSetPin paths, std::vector<long> &replayInstrs);
   ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
       std::vector<int> &counts, std::vector<long> &replayInstrs);
+
+  void dumpStateTrace(WorkerTree::Node *node);
+  void dumpInstructionTrace(WorkerTree::Node *node);
+
+  template<class Decorator>
+  void dumpSymbolicTree(WorkerTree::Node *node, Decorator decorator) {
+    char fileName[256];
+    snprintf(fileName, 256, "treeDump%05d.txt", traceCounter);
+    traceCounter++;
+
+    CLOUD9_INFO("Dumping symbolic tree in file " << fileName);
+
+    std::ostream *os = kleeHandler->openOutputFile(fileName);
+    assert(os != NULL);
+
+    tree->dumpDotGraph(node, *os, decorator);
+
+    delete os;
+  }
 };
 
 }

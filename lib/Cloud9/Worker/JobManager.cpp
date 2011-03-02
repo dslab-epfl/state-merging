@@ -411,15 +411,15 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
 void JobManager::initStrategy() {
   switch (JobSelection) {
   case RandomSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, new RandomStrategy());
+    selStrategy = new RandomJobFromStateStrategy(tree, new RandomStrategy(), this);
     CLOUD9_INFO("Using random job selection strategy");
     break;
   case RandomPathSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, new RandomPathStrategy(tree));
+    selStrategy = new RandomJobFromStateStrategy(tree, new RandomPathStrategy(tree), this);
     CLOUD9_INFO("Using random path job selection strategy");
     break;
   case CoverageOptimizedSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, createCoverageOptimizedStrat());
+    selStrategy = new RandomJobFromStateStrategy(tree, createCoverageOptimizedStrat(), this);
     CLOUD9_INFO("Using weighted random job selection strategy");
     break;
   case OracleSel:
@@ -427,23 +427,23 @@ void JobManager::initStrategy() {
     CLOUD9_INFO("Using the oracle");
     break;
   case FaultInjSel:
-    selStrategy = new FIStrategy(tree);
+    selStrategy = new FIStrategy(tree, this);
     CLOUD9_INFO("Using the fault injection strategy");
     break;
   case LimitedFlowSel:
     selStrategy = new RandomJobFromStateStrategy(tree, new LimitedFlowStrategy(
         createCoverageOptimizedStrat(),
-        new ClusteredRandomPathStrategy(tree), FlowSizeLimit));
+        new ClusteredRandomPathStrategy(tree), FlowSizeLimit), this);
     CLOUD9_INFO("Using the limited flow strategy");
     break;
   case PartitioningSel:
     selStrategy = new RandomJobFromStateStrategy(tree,
-        new PartitioningStrategy(tree, symbEngine));
+        new PartitioningStrategy(tree, symbEngine), this);
     CLOUD9_INFO("Using the state partitioning strategy");
     break;
   case KleeForkCapSel:
     selStrategy = new RandomJobFromStateStrategy(tree,
-        new KleeForkCapStrategy(5, 0, tree, symbEngine));
+        new KleeForkCapStrategy(5, 0, tree, symbEngine), this);
     CLOUD9_INFO("Using the Klee fork-cap strategy");
     break;
   default:
@@ -465,7 +465,7 @@ OracleStrategy *JobManager::createOracleStrategy() {
 
   parseInstructionTrace(ifs, goalPath);
 
-  OracleStrategy *result = new OracleStrategy(tree, goalPath);
+  OracleStrategy *result = new OracleStrategy(tree, goalPath, this);
 
   return result;
 }
@@ -1168,12 +1168,19 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
   if (pState->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
     fireUpdateState(pState, pNode.get());
   } else {
+    fireUpdateState(pState, pNode.get());
     fireDeactivateState(pState);
   }
 
   if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
     fireActivateState(state);
   }
+
+  dumpSymbolicTree(NULL,
+      DotNodeDefaultDecorator<WorkerTree::Node>(
+          WORKER_LAYER_STATES,
+          WORKER_LAYER_JOBS,
+          state->getNode().get()));
 
   // Reset the number of instructions since forking
   state->_instrSinceFork = 0;

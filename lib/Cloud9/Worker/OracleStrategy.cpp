@@ -17,8 +17,9 @@ namespace cloud9 {
 
 namespace worker {
 
-OracleStrategy::OracleStrategy(WorkerTree *_tree, std::vector<unsigned int> &_goalPath) :
-  goalPath(_goalPath), tree(_tree) {
+OracleStrategy::OracleStrategy(WorkerTree *_tree, std::vector<unsigned int> &_goalPath,
+    JobManager *_jobManager) :
+  BasicStrategy(_jobManager), goalPath(_goalPath), tree(_tree) {
 
 }
 

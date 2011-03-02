@@ -9,6 +9,7 @@
 #include "cloud9/worker/TreeObjects.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/SymbolicEngine.h"
+#include "cloud9/worker/JobManager.h"
 #include "cloud9/Logger.h"
 
 #include "klee/Internal/ADT/RNG.h"
@@ -50,6 +51,9 @@ static SymbolicState *selectRandomPathState(WorkerTree *tree) {
 
 ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
   WorkerTree::Node *node = state->getNode().get();
+  if (!node->layerExists(WORKER_LAYER_JOBS)) {
+    dumpSymbolicTree(node);
+  }
   assert(node->layerExists(WORKER_LAYER_JOBS));
 
   // Take the easy way first
@@ -62,6 +66,14 @@ ExecutionJob *BasicStrategy::selectJob(WorkerTree *tree, SymbolicState* state) {
   ExecutionJob *job = (**jobNode).getJob();
 
   return job;
+}
+
+void BasicStrategy::dumpSymbolicTree(WorkerTree::Node *highlight) {
+  jobManager->dumpSymbolicTree(NULL,
+      DotNodeDefaultDecorator<WorkerTree::Node>(
+          WORKER_LAYER_STATES,
+          WORKER_LAYER_JOBS,
+          highlight));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,6 +100,10 @@ ExecutionJob* RandomJobFromStateStrategy::onNextJobSelection() {
     return NULL;
 
   return selectJob(tree, state);
+}
+
+void RandomJobFromStateStrategy::dumpSymbolicTree(WorkerTree::Node *highlight) {
+  stateStrat->dumpSymbolicTree(jobManager, highlight);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,6 +166,8 @@ SymbolicState* ClusteredRandomPathStrategy::onNextStateSelection() {
   SymbolicState *state = (**selNode).getSymbolicState();
 
   assert(state != NULL);
+
+  CLOUD9_DEBUG("Selected state using clustered random path.");
 
   return state;
 }
@@ -245,6 +263,8 @@ SymbolicState* KleeStrategy::onNextStateSelection() {
 
   klee::ExecutionState &kState = searcher->selectState();
   SymbolicState *state = kState.getCloud9State();
+
+  CLOUD9_DEBUG("Selected state using Klee strategy.");
 
   return state;
 }

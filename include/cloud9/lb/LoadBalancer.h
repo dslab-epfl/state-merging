@@ -67,6 +67,7 @@ private:
       unsigned count);
 
   void analyzeBalance();
+  void analyzePartitionBalance();
 
   void displayStatistics();
 

@@ -9,6 +9,7 @@
 #include "cloud9/worker/ComplexStrategies.h"
 #include "cloud9/worker/TreeObjects.h"
 #include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/worker/JobManager.h"
 
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Searcher.h"
@@ -140,16 +141,12 @@ SymbolicState* PartitioningStrategy::onNextStateSelection() {
   }
 
   if (nextPartition != nonEmpty.end()) {
-    // Debug info
-    std::stringstream ss;
-    for (part_id_set_t::iterator it = nonEmpty.begin(); it != nonEmpty.end(); it++) {
-      ss << '[' << *it << ':' << partitions.find(*it)->second.activeStates.size() << "] ";
-    }
-    CLOUD9_DEBUG("Selecting: " << *nextPartition << " Partitioning: " << ss.str());
-
     StatePartition &part = partitions.find(*nextPartition)->second;
     SymbolicState *state = part.strategy->onNextStateSelection();
     assert(state != NULL);
+    if (!part.activeStates.count(state)) {
+      CLOUD9_DEBUG("Orphan state selected for partition " << *nextPartition);
+    }
     nextPartition++;
 
     return state;
@@ -159,12 +156,18 @@ SymbolicState* PartitioningStrategy::onNextStateSelection() {
 }
 
 void PartitioningStrategy::getStatistics(part_stats_t &stats) {
+  std::stringstream ss;
+
   for (part_id_set_t::iterator it = nonEmpty.begin(); it != nonEmpty.end(); it++) {
     StatePartition &part = partitions.find(*it)->second;
 
     stats.insert(std::make_pair(*it, std::make_pair(part.states.size(),
         part.activeStates.size())));
+
+    ss << '[' << *it << ": " << part.activeStates.size() << '/' << part.states.size() << "] ";
   }
+
+  CLOUD9_DEBUG("State Partition: " << ss.str());
 }
 
 void PartitioningStrategy::setActivation(std::set<part_id_t> &activation) {
@@ -231,6 +234,10 @@ void PartitioningStrategy::getInactiveSet(part_id_t partID,
     if (!part.activeStates.count(*it))
       inactiveStates.insert(*it);
   }
+}
+
+void PartitioningStrategy::dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight) {
+  jobManager->dumpSymbolicTree(NULL, PartitioningDecorator(this, highlight));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
