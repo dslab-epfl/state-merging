@@ -151,7 +151,14 @@ public:
   }
 };
 
-bool ConstraintManager::rewriteConstraints(ExprVisitor &visitor) {
+ConstraintManager::ConstraintManager(const std::vector<ref<Expr> > &_constraints)
+    : constraints(_constraints) {
+  if (SimplifyConstraints)
+    recomputeAllRanges();
+}
+
+bool ConstraintManager::rewriteConstraints(ExprVisitor &visitor,
+                                           bool canBeFalse, bool *ok) {
   ConstraintManager::constraints_ty old;
   bool changed = false;
 
@@ -162,17 +169,22 @@ bool ConstraintManager::rewriteConstraints(ExprVisitor &visitor) {
     ref<Expr> e = visitor.visit(ce);
 
     if (e!=ce) {
-      addConstraintInternal(e); // enable further reductions
+      if (!addConstraintInternal(e, canBeFalse)) { // enable further reductions
+        if (ok) *ok = false;
+        return true;
+      }
       changed = true;
     } else {
       constraints.push_back(ce);
     }
   }
 
+  if (ok) *ok = true;
   return changed;
 }
 
-void ConstraintManager::simplifyConstraints(const ref<Expr> &expr) {
+void ConstraintManager::simplifyConstraints(const ref<Expr> &expr,
+                                            bool canBeFalse, bool *ok) {
   constraints_ty old;
   constraints.swap(old);
 
@@ -188,7 +200,10 @@ void ConstraintManager::simplifyConstraints(const ref<Expr> &expr) {
     ref<Expr> e = visitor.visit(ce);
 
     if (e != ce) {
-      addConstraintInternal(e);
+      if (!addConstraintInternal(e, canBeFalse)) {
+        if (ok) *ok = false;
+        return;
+      }
       // this might clean out ranges, we have to update them
       computeRanges(expr);
     } else {
@@ -196,6 +211,8 @@ void ConstraintManager::simplifyConstraints(const ref<Expr> &expr) {
       computeRanges(ce);
     }
   }
+
+  if (ok) *ok = true;
 }
 
 void ConstraintManager::simplifyForValidConstraint(ref<Expr> e) {
@@ -231,7 +248,7 @@ ref<Expr> ConstraintManager::simplifyExpr(ref<Expr> e) const {
   }
 }
 
-void ConstraintManager::addConstraintInternal(ref<Expr> e) {
+bool ConstraintManager::addConstraintInternal(ref<Expr> e, bool canBeFalse) {
   // rewrite any known equalities 
 
   // XXX should profile the effects of this and the overhead.
@@ -240,17 +257,24 @@ void ConstraintManager::addConstraintInternal(ref<Expr> e) {
   // ConstraintSet ADT which efficiently remembers obvious patterns
   // (byte-constant comparison).
 
+  bool ok = true;
+
   switch (e->getKind()) {
   case Expr::Constant:
-    assert(cast<ConstantExpr>(e)->isTrue() && 
-           "attempt to add invalid (false) constraint");
+    if (canBeFalse) {
+      constraints.push_back(e);
+      ok = false;
+    } else {
+      assert(cast<ConstantExpr>(e)->isTrue() &&
+             "attempt to add invalid (false) constraint");
+    }
     break;
     
     // split to enable finer grained independence and other optimizations
   case Expr::And: {
     BinaryExpr *be = cast<BinaryExpr>(e);
-    addConstraintInternal(be->left);
-    addConstraintInternal(be->right);
+    ok &= addConstraintInternal(be->left, canBeFalse);
+    ok &= addConstraintInternal(be->right, canBeFalse);
     break;
   }
 
@@ -259,7 +283,7 @@ void ConstraintManager::addConstraintInternal(ref<Expr> e) {
       BinaryExpr *be = cast<BinaryExpr>(e);
       if (isa<ConstantExpr>(be->left)) {
         ExprReplaceVisitor visitor(be->right, be->left);
-        rewriteConstraints(visitor);
+        rewriteConstraints(visitor, canBeFalse, &ok);
       }
       constraints.push_back(e);
       //computeRanges(e);
@@ -269,18 +293,24 @@ void ConstraintManager::addConstraintInternal(ref<Expr> e) {
   default:
     if (/*0 && */SimplifyConstraints) {
       if (computeRanges(e))
-        simplifyConstraints(e);
+        simplifyConstraints(e, canBeFalse, &ok);
     } else {
       //computeRanges(e);
     }
     constraints.push_back(e);
     break;
   }
+  return ok;
 }
 
 void ConstraintManager::addConstraint(ref<Expr> e) {
   e = simplifyExpr(e);
-  addConstraintInternal(e);
+  addConstraintInternal(e, false);
+}
+
+bool ConstraintManager::checkAddConstraint(ref<Expr> e) {
+  e = simplifyExpr(e);
+  return addConstraintInternal(e, true);
 }
 
 bool ConstraintManager::intersectRange(const ref<Expr> &e, const SRange &r) {

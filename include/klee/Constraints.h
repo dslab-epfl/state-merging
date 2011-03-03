@@ -31,11 +31,11 @@ public:
 
   // create from constraints with no optimization
   explicit
-  ConstraintManager(const std::vector< ref<Expr> > &_constraints) :
-    constraints(_constraints) { recomputeAllRanges(); }
+  ConstraintManager(const std::vector< ref<Expr> > &_constraints);
 
   ConstraintManager(const ConstraintManager &cs)
-      : constraints(cs.constraints), ranges(cs.ranges) {}
+      : constraints(cs.constraints), mergeConditions(cs.mergeConditions),
+        ranges(cs.ranges) {}
 
   typedef std::vector< ref<Expr> >::const_iterator constraint_iterator;
 
@@ -46,6 +46,12 @@ public:
   ref<Expr> simplifyExpr(ref<Expr> e) const;
 
   void addConstraint(ref<Expr> e);
+
+  // Add constraint that might be unsatisfiable. Return false if
+  // unsatisfiability is detected. In this case, the ConstraintManager
+  // is in an undefined state. NOTE: true return value does not guarantees
+  // that the constraint is satisfiable.
+  bool checkAddConstraint(ref<Expr> e);
   
   bool empty() const {
     return constraints.empty();
@@ -69,6 +75,10 @@ public:
   
 private:
   std::vector< ref<Expr> > constraints;
+
+public:
+  typedef std::set< ref<Expr> > merge_conditions_ty;
+  merge_conditions_ty mergeConditions;
 
 public:
 
@@ -129,16 +139,23 @@ public:
 
   typedef std::map<ref<Expr>, SRange> ranges_ty;
 
-private:
+  ConstraintManager(const constraints_ty &_constraints,
+                    const merge_conditions_ty &_mergeConditions,
+                    const ranges_ty &_ranges)
+    : constraints(_constraints),
+      mergeConditions(_mergeConditions),
+      ranges(_ranges) {}
+
   ranges_ty ranges;
 
+private:
   // returns true iff the constraints were modified
-  bool rewriteConstraints(ExprVisitor &visitor);
+  bool rewriteConstraints(ExprVisitor &visitor, bool canBeFalse, bool *ok);
 
   // simplify constraints assuming e is true
-  void simplifyConstraints(const ref<Expr>& e);
+  void simplifyConstraints(const ref<Expr>& e, bool canBeFalse, bool *ok);
 
-  void addConstraintInternal(ref<Expr> e);
+  bool addConstraintInternal(ref<Expr> e, bool canBeFalse);
 
   // return true of the range info already existed
   bool intersectRange(const ref<Expr>& e, const SRange& r);

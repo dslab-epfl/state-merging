@@ -8,6 +8,7 @@
 #include "klee/Solver.h"
 #include "klee/SolverImpl.h"
 #include "klee/Constraints.h"
+#include "klee/util/ExprHashMap.h"
 
 #include <vector>
 #include <deque>
@@ -86,6 +87,8 @@ private:
       constraint_expr_t &crtQuery);
 
   void splitQuery(const Query &query, std::vector<constraint_expr_t> &newQueries);
+  void gatherUsefulSimplifications(const Query& query, const ref<Expr>& expr,
+                                   ConstraintManager::merge_conditions_ty &mc);
 
   void solveQueryInParallel(const Query *query);
   bool solveSubQuerySerially(char *solveBuffer, const Query *query,
@@ -147,6 +150,12 @@ void *subQuerySolverThread(void *ps) {
       _CHECKED(pthread_mutex_lock(&pSolver->mutex), 0);
       if (!pSolver->solutionFound && hasSolution) {
         assert(result);
+
+        std::cerr << std::endl;
+        std::cerr << std::endl;
+        std::cerr << "*** ParallelSolver got solution faster ***" << std::endl;
+        std::cerr << std::endl;
+        std::cerr << std::endl;
 
         pSolver->solutionFound = true;
         pSolver->mainSolver->cancelPendingJobs();
@@ -231,6 +240,56 @@ bool ParallelSolver::solveSubQuerySerially(char *solveBuffer, const Query *query
   return result;
 }
 
+void ParallelSolver::gatherUsefulSimplifications(
+                        const Query& query, const ref<Expr>& expr,
+                        ConstraintManager::merge_conditions_ty &mc) {
+  std::vector< ref<Expr> > stack;
+  ExprHashSet visited;
+
+  {
+    // just in case, if we query one of the merge conditions...
+    ConstraintManager::merge_conditions_ty::iterator it =
+        query.constraints.mergeConditions.find(expr);
+    if (it != query.constraints.mergeConditions.end()) {
+      mc.insert(*it);
+    }
+  }
+
+  if (!isa<ConstantExpr>(expr)) {
+    visited.insert(expr);
+    stack.push_back(expr);
+  }
+
+  while (!stack.empty()) {
+    ref<Expr> top = stack.back();
+    stack.pop_back();
+
+    // Range analysis could help when the top is boolean (comparison
+    // expressions and logical operations) or for a first child of SelectExpr.
+    bool couldBeHelpful = false;//top->getWidth() == Expr::Bool;
+    bool isSelect = isa<SelectExpr>(top);
+
+    if (!isa<ConstantExpr>(top)) {
+      Expr *e = top.get();
+      for (unsigned i = 0; i <e->getNumKids(); ++i) {
+        ref<Expr> k = e->getKid(i);
+        if (isa<ConstantExpr>(k))
+          continue;
+        if (couldBeHelpful || (isSelect && i == 0)) {
+          ConstraintManager::merge_conditions_ty::iterator it =
+              query.constraints.mergeConditions.find(k);
+          if (it != query.constraints.mergeConditions.end()) {
+            mc.insert(*it);
+          }
+        }
+        if (visited.insert(k).second) {
+          stack.push_back(k);
+        }
+      }
+    }
+  }
+}
+
 void ParallelSolver::solveQueryInParallel(const Query *query) {
   if (query == QUERY_FINALIZAE) {
     _CHECKED(pthread_mutex_lock(&mutex), 0);
@@ -246,14 +305,53 @@ void ParallelSolver::solveQueryInParallel(const Query *query) {
     return;
   }
 
-  std::vector<constraint_expr_t> newQueries;
+  //std::vector<constraint_expr_t> newQueries;
   std::vector<ConstraintManager*> newManagers;
-  splitQuery(*query, newQueries);
+  std::vector<Query*> newQueries;
+  //splitQuery(*query, newQueries);
 
-  if (newQueries.size() == 1) {
+  ConstraintManager::merge_conditions_ty mergeConditions;
+  for (ConstraintManager::const_iterator it = query->constraints.begin(),
+                       ie = query->constraints.end(); it != ie; ++it)
+    gatherUsefulSimplifications(*query, *it, mergeConditions);
+
+  gatherUsefulSimplifications(*query, query->expr, mergeConditions);
+
+  unsigned size = mergeConditions.size(), unfeasible = 0;
+  if (size == 0) {
     // Really don't have anything to do here. Pass...
     return;
   }
+
+  std::vector<bool> m(size, false);
+  for(bool done = false; !done;) {
+    ConstraintManager *cm = new ConstraintManager(query->constraints);
+    unsigned i = 0;
+    for (ConstraintManager::merge_conditions_ty::iterator
+          it = mergeConditions.begin(), ie = mergeConditions.end();
+          it != ie; ++it, ++i) {
+      ref<Expr> e = m[i] ? Expr::createIsZero(*it) : *it;
+      if (!cm->checkAddConstraint(e)) {
+        break;
+      }
+    }
+    if (i == size) {
+      Query *q = new Query(*cm, cm->simplifyExpr(query->expr));
+      newManagers.push_back(cm);
+      newQueries.push_back(q);
+    } else {
+      ++unfeasible;
+    }
+    for (i = 0, done = true; i < size && done; ++i) {
+      done = m[i];
+      m[i] = !m[i];
+    }
+  }
+
+  assert(newQueries.size() + unfeasible == (1u<<size));
+
+  if (newQueries.size() == 0)
+    return;
 
   CLOUD9_DEBUG("Generated " << newQueries.size() << " orthogonal queries");
 
@@ -263,9 +361,10 @@ void ParallelSolver::solveQueryInParallel(const Query *query) {
   assert(subQueryQueue.empty() && "queries leaked from previous invocation");
 
   for (unsigned i = 0; i < newQueries.size(); i++) {
-    ConstraintManager *m = new ConstraintManager(newQueries[i]);
-    newManagers.push_back(m);
-    subQueryQueue.push_back(new Query(*m, mainQuery->expr));
+    //ConstraintManager *m = new ConstraintManager(newQueries[i]);
+    //newManagers.push_back(m);
+    //subQueryQueue.push_back(new Query(*m, mainQuery->expr));
+    subQueryQueue.push_back(newQueries[i]);
   }
   _CHECKED(pthread_mutex_unlock(&mutex), 0);
 

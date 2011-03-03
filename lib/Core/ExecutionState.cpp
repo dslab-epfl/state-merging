@@ -664,6 +664,9 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
                 << ") different values in memory\n";
   }
 
+  ConstraintManager::merge_conditions_ty aMergeConditions;
+  aMergeConditions.swap(a.constraints().mergeConditions);
+
   a.constraints() = ConstraintManager();
 
   for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
@@ -671,8 +674,10 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
     a.constraints().addConstraint(*it);
   a.constraints().addConstraint(OrExpr::create(inA, inB));
 
-  a.mergeConditions.push_back(useInA ? std::make_pair(inA, inB) :
-                                       std::make_pair(inB, inA));
+  a.constraints().mergeConditions.swap(aMergeConditions);
+  a.constraints().mergeConditions.insert(b.constraints().mergeConditions.begin(),
+                                         b.constraints().mergeConditions.end());
+  a.constraints().mergeConditions.insert(useInA ? inA : inB);
 
   a.queryCost += b.queryCost;
   a.weight += b.weight;
