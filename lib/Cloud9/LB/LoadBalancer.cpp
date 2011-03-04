@@ -44,6 +44,14 @@ namespace cloud9 {
 
 namespace lb {
 
+typedef std::pair<worker_id_t, unsigned> load_t;
+
+struct LoadCompare {
+  bool operator()(const load_t &a, const load_t &b) {
+    return a.second < b.second;
+  }
+};
+
 LoadBalancer::LoadBalancer(boost::asio::io_service &service) :
   timer(service), worryTimer(0), balanceTimer(0), nextWorkerID(1), rounds(0),
   done(false) {
@@ -109,9 +117,6 @@ void LoadBalancer::deregisterWorker(worker_id_t id) {
   // Cleanup any pending information about the worker
   workers.erase(id);
   reports.erase(id);
-
-  reqDetails.erase(id);
-  reqTransfer.erase(id);
 }
 
 void LoadBalancer::updateWorkerStatNodes(worker_id_t id, std::vector<
@@ -139,15 +144,6 @@ void LoadBalancer::updateWorkerStatNodes(worker_id_t id, std::vector<
 
     node = *it;
     assert((**node).workerData.size() >= 1);
-
-    if ((**node).workerData.size() > 1) {
-      // Request details from all parts
-      for (std::map<int, TreeNodeInfo::WorkerInfo>::iterator it =
-          (**node).workerData.begin(); it != (**node).workerData.end(); it++) {
-
-        reqDetails.insert((*it).first);
-      }
-    }
   }
 
   // Remove old branches
@@ -209,7 +205,13 @@ void LoadBalancer::analyze(worker_id_t id) {
 
   if (rounds == BalanceRate) {
     rounds = 0;
-    analyzeBalance();
+
+    // First, attempt partitioned load balancing
+    bool result = analyzePartitionBalance();
+    if (!result) {
+      // Fall back on global load balancing
+      analyzeAggregateBalance();
+    }
   }
 }
 
@@ -320,69 +322,62 @@ void LoadBalancer::getAndResetCoverageUpdates(worker_id_t id,
   }
 }
 
-void LoadBalancer::analyzeBalance() {
-  if (workers.size() < 2) {
-    return;
+bool LoadBalancer::requestAndResetTransfer(worker_id_t id, transfer_t &globalTrans,
+      part_transfers_t &partTrans) {
+  Worker *w = workers[id];
+
+  if (!w->transferReq && w->partTransfers.empty()) {
+    return false;
   }
 
-  std::vector<Worker*> wList;
-  Worker::LoadCompare comp;
+  if (w->transferReq)
+    globalTrans = w->globalTransfer;
+  if (!w->partTransfers.empty())
+    partTrans = w->partTransfers;
 
-  // TODO: optimize this further
-  for (std::map<worker_id_t, Worker*>::iterator it = workers.begin(); it
-      != workers.end(); it++) {
-    wList.push_back((*it).second);
-  }
+  w->transferReq = false;
+  w->partTransfers.clear();
 
-  std::sort(wList.begin(), wList.end(), comp);
+  return true;
+}
+
+bool LoadBalancer::analyzeBalance(std::map<worker_id_t, unsigned> &load,
+      std::map<worker_id_t, transfer_t> &xfers, unsigned balanceThreshold) {
+  if (load.size() < 2)
+    return true;
+
+  std::vector<load_t> loadVec;
+  loadVec.insert(loadVec.begin(), load.begin(), load.end());
+
+  std::sort(loadVec.begin(), loadVec.end(), LoadCompare());
 
   // Compute average and deviation
   unsigned loadAvg = 0;
   unsigned sqDeviation = 0;
 
-  for (std::vector<Worker*>::iterator it = wList.begin(); it != wList.end(); it++) {
-    loadAvg += (*it)->totalJobs;
+  for (std::vector<load_t>::iterator it = loadVec.begin(); it != loadVec.end(); it++) {
+    loadAvg += it->second;
   }
 
   if (loadAvg == 0) {
-    done = true;
-    return;
+    return false;
   }
 
-  if (BalanceTimeOut != 0 && balanceTimer > BalanceTimeOut)
-    return;
+  loadAvg /= loadVec.size();
 
-  CLOUD9_INFO("Performing load balancing");
-
-  loadAvg /= wList.size();
-
-  for (std::vector<Worker*>::iterator it = wList.begin(); it != wList.end(); it++) {
-    sqDeviation += (loadAvg - (*it)->totalJobs) * (loadAvg - (*it)->totalJobs);
+  for (std::vector<load_t>::iterator it = loadVec.begin(); it != loadVec.end(); it++) {
+    sqDeviation += (loadAvg - it->second) * (loadAvg - it->second);
   }
 
-  sqDeviation /= workers.size() - 1;
+  sqDeviation /= loadVec.size() - 1;
 
-  std::vector<Worker*>::iterator lowLoadIt = wList.begin();
-  std::vector<Worker*>::iterator highLoadIt = wList.end() - 1;
+  std::vector<load_t>::iterator lowLoadIt = loadVec.begin();
+  std::vector<load_t>::iterator highLoadIt = loadVec.end() - 1;
 
   while (lowLoadIt < highLoadIt) {
-    if (reqTransfer.count((*lowLoadIt)->id) > 0) {
-      lowLoadIt++;
-      continue;
-    }
-    if (reqTransfer.count((*highLoadIt)->id) > 0) {
-      highLoadIt--;
-      continue;
-    }
-
-    if ((*lowLoadIt)->totalJobs * 10 < loadAvg) {
-      TransferRequest *req = computeTransfer((*highLoadIt)->id,
-          (*lowLoadIt)->id,
-          ((*highLoadIt)->totalJobs - (*lowLoadIt)->totalJobs) / 2);
-
-      reqTransfer[(*lowLoadIt)->id] = req;
-      reqTransfer[(*highLoadIt)->id] = req;
-
+    if (lowLoadIt->second * balanceThreshold < loadAvg) {
+      xfers[highLoadIt->first] = std::make_pair(lowLoadIt->first,
+          (highLoadIt->second - lowLoadIt->second) / 2);
       highLoadIt--;
       lowLoadIt++;
       continue;
@@ -390,29 +385,107 @@ void LoadBalancer::analyzeBalance() {
       break; // The next ones will have a larger load anyway
   }
 
+  return true;
 }
 
-void LoadBalancer::analyzePartitionBalance() {
+void LoadBalancer::analyzeAggregateBalance() {
+  if (workers.size() < 2) {
+    return;
+  }
+
+  std::map<worker_id_t, unsigned> load;
+  std::map<worker_id_t, transfer_t> xfers;
+
+  for (std::map<worker_id_t, Worker*>::iterator it = workers.begin(); it
+      != workers.end(); it++) {
+    load[it->first] = it->second->totalJobs;
+  }
+
+  bool result = analyzeBalance(load, xfers, 10);
+
+  if (!result) {
+    done = true;
+    return;
+  }
+
+  CLOUD9_INFO("Performing load balancing");
+
+  if (xfers.size() > 0) {
+    for (std::map<worker_id_t, transfer_t>::iterator it = xfers.begin();
+        it != xfers.end(); it++) {
+      Worker *worker = workers[it->first];
+      if (worker->transferReq) {
+        // Skip this one...
+        continue;
+      }
+
+      worker->transferReq = true;
+      worker->globalTransfer = it->second;
+
+      CLOUD9_DEBUG("Created transfer request from " << it->first << " to " <<
+            it->second.first << " for " << it->second.second << " states");
+    }
+  }
+}
+
+bool LoadBalancer::analyzePartitionBalance() {
   // Compute the aggregate situation
+  if (workers.size() < 2) {
+    return true;
+  }
 
-}
+  part_stat_t globalPart;
 
-TransferRequest *LoadBalancer::computeTransfer(worker_id_t fromID,
-    worker_id_t toID, unsigned count) {
-  // XXX Be more intelligent
-  TransferRequest *req = new TransferRequest(fromID, toID);
+  for (std::map<worker_id_t, Worker*>::iterator wit = workers.begin();
+      wit != workers.end(); wit++) {
+    part_stat_t &part = wit->second->statePartitions;
 
-  req->counts.push_back(count);
+    for (part_stat_t::iterator pit = part.begin(); pit != part.end(); pit++) {
+      std::pair<unsigned, unsigned> curGlobal = globalPart[pit->first];
+      globalPart[pit->first] = std::make_pair(curGlobal.first + pit->second.first,
+          curGlobal.second + pit->second.second);
+    }
+  }
 
-  std::vector<LBTree::Node*> nodes;
-  nodes.push_back(tree->getRoot());
+  if (globalPart.empty()) {
+    // No partitions defined...
+    return false;
+  }
 
-  req->paths = tree->buildPathSet(nodes.begin(), nodes.end());
+  // Perform load balancing along all partitions
+  for (part_stat_t::iterator pit = globalPart.begin(); pit != globalPart.end();
+      pit++) {
 
-  CLOUD9_DEBUG("Created transfer request from " << fromID << " to " <<
-      toID << " for " << count << " states");
+    std::map<worker_id_t, unsigned> load;
+    std::map<worker_id_t, transfer_t> xfers;
+    for (std::map<worker_id_t, Worker*>::iterator it = workers.begin();
+        it != workers.end(); it++) {
+      load[it->first] = it->second->statePartitions[pit->first].second;
+    }
 
-  return req;
+    analyzeBalance(load, xfers, 10);
+
+    if (xfers.empty()) {
+      // Nothing to see here... move on.
+      continue;
+    }
+
+    for (std::map<worker_id_t, transfer_t>::iterator it = xfers.begin();
+        it != xfers.end(); it++) {
+      Worker *worker = workers[it->first];
+      if (worker->partTransfers.count(pit->first) > 0) {
+        // We just skip this...
+        continue;
+      }
+      worker->partTransfers[pit->first] = it->second;
+
+      CLOUD9_DEBUG("Created transfer request from " << it->first << " to " <<
+          it->second.first << " for " << it->second.second <<
+          " states in partition " << pit->first);
+    }
+  }
+
+  return true;
 }
 
 }

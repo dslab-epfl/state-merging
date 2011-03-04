@@ -21,19 +21,6 @@ class ExecutionPath;
 
 namespace lb {
 
-class TransferRequest {
-public:
-  worker_id_t fromID;
-  worker_id_t toID;
-
-  ExecutionPathSetPin paths;
-  std::vector<int> counts;
-public:
-  TransferRequest(worker_id_t from, worker_id_t to) :
-    fromID(from), toID(to) {
-  }
-};
-
 // TODO: Refactor this into a more generic class
 class LoadBalancer {
 private:
@@ -55,19 +42,15 @@ private:
   std::map<worker_id_t, Worker*> workers;
   std::set<worker_id_t> reports;
 
-  std::set<worker_id_t> reqDetails;
-  std::map<worker_id_t, TransferRequest*> reqTransfer;
-
   // TODO: Restructure this to a more intuitive representation with
   // global coverage + coverage deltas
   std::vector<uint64_t> globalCoverageData;
   std::vector<char> globalCoverageUpdates;
 
-  TransferRequest *computeTransfer(worker_id_t fromID, worker_id_t toID,
-      unsigned count);
-
-  void analyzeBalance();
-  void analyzePartitionBalance();
+  bool analyzeBalance(std::map<worker_id_t, unsigned> &load,
+      std::map<worker_id_t, transfer_t> &xfers, unsigned balanceThreshold);
+  void analyzeAggregateBalance();
+  bool analyzePartitionBalance();
 
   void displayStatistics();
 
@@ -116,29 +99,10 @@ public:
     return done;
   }
 
-  bool requestAndResetDetails(worker_id_t id) {
-    bool result = reqDetails.count(id) > 0;
-
-    if (result)
-      reqDetails.erase(id);
-
-    return result;
-  }
-
   void getAndResetCoverageUpdates(worker_id_t id, cov_update_t &data);
 
-  TransferRequest *requestAndResetTransfer(worker_id_t id) {
-    if (reqTransfer.count(id) > 0) {
-      TransferRequest *result = reqTransfer[id];
-      if (result->fromID == id) {
-        reqTransfer.erase(result->fromID);
-        reqTransfer.erase(result->toID);
-        return result;
-      }
-    }
-
-    return NULL;
-  }
+  bool requestAndResetTransfer(worker_id_t id, transfer_t &globalTrans,
+      part_transfers_t &partTrans);
 };
 
 }

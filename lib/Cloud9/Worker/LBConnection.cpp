@@ -197,32 +197,35 @@ void LBConnection::processResponse(LBResponseMessage &response) {
     jobManager->setRefineStatistics();
   }
 
-  if (response.has_jobtransfer()) {
-    CLOUD9_DEBUG("Job transfer request");
+  if (response.jobtransfer_size() > 0) {
+    // Treat each job request individually
+    for (int i = 0; i < response.jobtransfer_size(); i++) {
+      CLOUD9_DEBUG("Job transfer request");
 
-    const LBResponseMessage_JobTransfer &transDetails = response.jobtransfer();
+      const LBResponseMessage_JobTransfer &transDetails = response.jobtransfer(i);
 
-    std::string destAddress = transDetails.dest_address();
-    int destPort = transDetails.dest_port();
+      std::string destAddress = transDetails.dest_address();
+      int destPort = transDetails.dest_port();
 
-    ExecutionPathSetPin paths;
-    std::vector<int> counts;
+      std::vector<int> counts;
+      std::vector<WorkerTree::Node*> nodes;
+      nodes.push_back(jobManager->getTree()->getRoot());
+      ExecutionPathSetPin paths =
+          jobManager->getTree()->buildPathSet(nodes.begin(), nodes.end());
+      counts.push_back(transDetails.count());
 
-    paths = parseExecutionPathSet(transDetails.path_set());
-
-    counts.insert(counts.begin(), transDetails.count().begin(),
-        transDetails.count().end());
-
-    part_select_t partSelect;
-    if (transDetails.partitions_size() > 0) {
-      for (int i = 0; i < transDetails.partitions_size(); i++) {
-        part_id_t partID = transDetails.partitions(i).partition();
-        unsigned count = transDetails.partitions(i).total();
-        partSelect.insert(std::make_pair(partID, count));
+      part_select_t partSelect;
+      if (transDetails.partitions_size() > 0) {
+        for (int i = 0; i < transDetails.partitions_size(); i++) {
+          part_id_t partID = transDetails.partitions(i).partition();
+          unsigned count = transDetails.partitions(i).total();
+          partSelect.insert(std::make_pair(partID, count));
+        }
       }
-    }
 
-    transferJobs(destAddress, destPort, paths, counts, partSelect);
+      transferJobs(destAddress, destPort, paths, counts, partSelect);
+
+    }
   }
 
   if (response.has_jobseed()) {
