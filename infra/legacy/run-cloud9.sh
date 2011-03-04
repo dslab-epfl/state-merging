@@ -1,5 +1,8 @@
 #!/bin/bash
 
+export CLOUD9_ROOT=/home/stefan/symbex/state-merging
+export KLEE_ROOT=$CLOUD9_ROOT
+
 RUN_WORKER="./run-worker.sh"
 RUN_LB="$(dirname $0)/run-lb.sh"
 

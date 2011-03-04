@@ -50,7 +50,7 @@ private:
   transfer_t globalTransfer;
   part_transfers_t partTransfers;
 
-  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0) {
+  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0), transferReq(false) {
 
   }
 public:

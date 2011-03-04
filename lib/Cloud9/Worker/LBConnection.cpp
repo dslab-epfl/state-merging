@@ -145,13 +145,15 @@ void LBConnection::sendCoverageUpdates(WorkerReportMessage &message) {
 void LBConnection::sendPartitionStatistics(WorkerReportMessage &message) {
   RandomJobFromStateStrategy *jStrategy =
       dynamic_cast<RandomJobFromStateStrategy*>(jobManager->getStrategy());
-  if (!jStrategy)
+  if (!jStrategy) {
     return;
+  }
 
   PartitioningStrategy *pStrategy =
       dynamic_cast<PartitioningStrategy*>(jStrategy->getStateStrategy());
-  if (!pStrategy)
+  if (!pStrategy) {
     return;
+  }
 
   part_stats_t stats;
   pStrategy->getStatistics(stats);

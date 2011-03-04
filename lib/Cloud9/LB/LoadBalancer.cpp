@@ -209,6 +209,7 @@ void LoadBalancer::analyze(worker_id_t id) {
     // First, attempt partitioned load balancing
     bool result = analyzePartitionBalance();
     if (!result) {
+      CLOUD9_DEBUG("Partitions not found, falling back on global LB.");
       // Fall back on global load balancing
       analyzeAggregateBalance();
     }
@@ -342,7 +343,8 @@ bool LoadBalancer::requestAndResetTransfer(worker_id_t id, transfer_t &globalTra
 }
 
 bool LoadBalancer::analyzeBalance(std::map<worker_id_t, unsigned> &load,
-      std::map<worker_id_t, transfer_t> &xfers, unsigned balanceThreshold) {
+      std::map<worker_id_t, transfer_t> &xfers, unsigned balanceThreshold,
+      unsigned minTransfer) {
   if (load.size() < 2)
     return true;
 
@@ -375,9 +377,9 @@ bool LoadBalancer::analyzeBalance(std::map<worker_id_t, unsigned> &load,
   std::vector<load_t>::iterator highLoadIt = loadVec.end() - 1;
 
   while (lowLoadIt < highLoadIt) {
-    if (lowLoadIt->second * balanceThreshold < loadAvg) {
-      xfers[highLoadIt->first] = std::make_pair(lowLoadIt->first,
-          (highLoadIt->second - lowLoadIt->second) / 2);
+    unsigned xferCount = (highLoadIt->second - lowLoadIt->second) / 2;
+    if (lowLoadIt->second * balanceThreshold < loadAvg && xferCount >= minTransfer) {
+      xfers[highLoadIt->first] = std::make_pair(lowLoadIt->first, xferCount);
       highLoadIt--;
       lowLoadIt++;
       continue;
@@ -401,7 +403,7 @@ void LoadBalancer::analyzeAggregateBalance() {
     load[it->first] = it->second->totalJobs;
   }
 
-  bool result = analyzeBalance(load, xfers, 10);
+  bool result = analyzeBalance(load, xfers, 10, 1);
 
   if (!result) {
     done = true;
@@ -463,7 +465,7 @@ bool LoadBalancer::analyzePartitionBalance() {
       load[it->first] = it->second->statePartitions[pit->first].second;
     }
 
-    analyzeBalance(load, xfers, 10);
+    analyzeBalance(load, xfers, 10, 2);
 
     if (xfers.empty()) {
       // Nothing to see here... move on.

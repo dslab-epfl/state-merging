@@ -48,7 +48,8 @@ private:
   std::vector<char> globalCoverageUpdates;
 
   bool analyzeBalance(std::map<worker_id_t, unsigned> &load,
-      std::map<worker_id_t, transfer_t> &xfers, unsigned balanceThreshold);
+      std::map<worker_id_t, transfer_t> &xfers, unsigned balanceThreshold,
+      unsigned minTransfer);
   void analyzeAggregateBalance();
   bool analyzePartitionBalance();
 

@@ -1176,12 +1176,6 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
     fireActivateState(state);
   }
 
-  dumpSymbolicTree(NULL,
-      DotNodeDefaultDecorator<WorkerTree::Node>(
-          WORKER_LAYER_STATES,
-          WORKER_LAYER_JOBS,
-          state->getNode().get()));
-
   // Reset the number of instructions since forking
   state->_instrSinceFork = 0;
   pState->_instrSinceFork = 0;

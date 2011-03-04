@@ -167,8 +167,6 @@ SymbolicState* ClusteredRandomPathStrategy::onNextStateSelection() {
 
   assert(state != NULL);
 
-  CLOUD9_DEBUG("Selected state using clustered random path.");
-
   return state;
 }
 
@@ -263,8 +261,6 @@ SymbolicState* KleeStrategy::onNextStateSelection() {
 
   klee::ExecutionState &kState = searcher->selectState();
   SymbolicState *state = kState.getCloud9State();
-
-  CLOUD9_DEBUG("Selected state using Klee strategy.");
 
   return state;
 }

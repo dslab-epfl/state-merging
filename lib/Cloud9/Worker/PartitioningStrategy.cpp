@@ -219,6 +219,8 @@ ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
     }
   }
 
+  CLOUD9_DEBUG("Selected " << stateRoots.size() << " from partitioning strategy.");
+
   ExecutionPathSetPin paths = tree->buildPathSet(stateRoots.begin(),
         stateRoots.end());
 
