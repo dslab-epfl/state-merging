@@ -351,7 +351,8 @@ void JobManager::processTestCase(SymbolicState *state) {
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
     char **argv, char **envp) :
-  terminationRequest(false), jobCount(0), currentJob(NULL), replaying(false), traceCounter(0) {
+  terminationRequest(false), jobCount(0), currentJob(NULL), currentState(NULL),
+  replaying(false), traceCounter(0) {
 
   tree = new WorkerTree();
 
@@ -517,13 +518,6 @@ unsigned JobManager::getModuleCRC() const {
   crc.process_bytes(moduleContents.c_str(), moduleContents.size());
 
   return crc.checksum();
-}
-
-WorkerTree::Node *JobManager::getCurrentNode() {
-  if (!currentJob)
-    return NULL;
-
-  return currentJob->getNode().get();
 }
 
 /* Job Manipulation Methods ***************************************************/
@@ -1010,6 +1004,7 @@ long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
   while ((**node).symState != NULL) {
 
     SymbolicState *state = (**node).symState;
+    currentState = state;
 
     if (!codeBreaks.empty()) {
       if (codeBreaks.find(state->getKleeState()->pc()->info->assemblyLine)
@@ -1047,6 +1042,8 @@ long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
       count--;
     }
   }
+
+  currentState = NULL;
 
   return totalExec;
 }

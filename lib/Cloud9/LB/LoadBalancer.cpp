@@ -378,7 +378,7 @@ bool LoadBalancer::analyzeBalance(std::map<worker_id_t, unsigned> &load,
 
   while (lowLoadIt < highLoadIt) {
     unsigned xferCount = (highLoadIt->second - lowLoadIt->second) / 2;
-    if (lowLoadIt->second * balanceThreshold < loadAvg && xferCount >= minTransfer) {
+    if (lowLoadIt->second * balanceThreshold <= loadAvg && xferCount >= minTransfer) {
       xfers[highLoadIt->first] = std::make_pair(lowLoadIt->first, xferCount);
       highLoadIt--;
       lowLoadIt++;
@@ -465,7 +465,7 @@ bool LoadBalancer::analyzePartitionBalance() {
       load[it->first] = it->second->statePartitions[pit->first].second;
     }
 
-    analyzeBalance(load, xfers, 10, 2);
+    analyzeBalance(load, xfers, 10, 1);
 
     if (xfers.empty()) {
       // Nothing to see here... move on.

@@ -80,7 +80,7 @@ public:
 
   void getStatistics(part_stats_t &stats);
   void setActivation(std::set<part_id_t> &activation);
-  ExecutionPathSetPin selectStates(part_select_t &counts);
+  ExecutionPathSetPin selectStates(JobManager *jobManager, part_select_t &counts);
 };
 
 class KleeForkCapStrategy: public KleeStrategy {

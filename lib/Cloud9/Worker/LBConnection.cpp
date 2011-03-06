@@ -286,7 +286,7 @@ void LBConnection::transferJobs(std::string &destAddr, int destPort,
         dynamic_cast<PartitioningStrategy*>(jStrategy->getStateStrategy());
     assert(pStrategy);
 
-    ExecutionPathSetPin stateRoots = pStrategy->selectStates(partHints);
+    ExecutionPathSetPin stateRoots = pStrategy->selectStates(jobManager, partHints);
     std::vector<int> emptyCounts;
     jobPaths = jobManager->exportJobs(stateRoots, emptyCounts, replayInstrs);
   } else {

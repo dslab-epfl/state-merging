@@ -86,6 +86,7 @@ private:
    * Job execution state
    */
   ExecutionJob *currentJob;
+  SymbolicState *currentState;
   bool replaying;
 
   /*
@@ -193,7 +194,13 @@ public:
     return tree;
   }
 
-  WorkerTree::Node *getCurrentNode();
+  ExecutionJob* getCurrentJob() {
+    return currentJob;
+  }
+
+  SymbolicState* getCurrentState() {
+    return currentState;
+  }
 
   JobSelectionStrategy *getStrategy() {
     return selStrategy;

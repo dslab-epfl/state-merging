@@ -179,7 +179,10 @@ void PartitioningStrategy::setActivation(std::set<part_id_t> &activation) {
   }
 }
 
-ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
+ExecutionPathSetPin PartitioningStrategy::selectStates(JobManager *jobManager,
+    part_select_t &counts) {
+  jobManager->lockJobs();
+
   std::vector<WorkerTree::Node*> stateRoots;
 
   for (part_select_t::iterator it = counts.begin();
@@ -201,10 +204,14 @@ ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
       unsigned int counter = inactiveCount;
       for (std::set<SymbolicState*>::iterator it = inactiveStates.begin();
           it != inactiveStates.end(); it++) {
+        if (*it == jobManager->getCurrentState())
+          continue;
         stateRoots.push_back((*it)->getNode().get());
         counter--;
         if (!counter) break;
       }
+
+      inactiveCount -= counter; // Add back states that couldn't be selected
     }
 
     // Now grab the active ones...
@@ -212,6 +219,8 @@ ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
       unsigned int counter = it->second - inactiveCount;
       for (std::set<SymbolicState*>::iterator it = part.activeStates.begin();
           it != part.activeStates.end(); it++) {
+        if (*it == jobManager->getCurrentState())
+          continue;
         stateRoots.push_back((*it)->getNode().get());
         counter--;
         if (!counter) break;
@@ -223,6 +232,8 @@ ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
 
   ExecutionPathSetPin paths = tree->buildPathSet(stateRoots.begin(),
         stateRoots.end());
+
+  jobManager->unlockJobs();
 
   return paths;
 }
