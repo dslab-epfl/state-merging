@@ -206,6 +206,8 @@ public:
     return selStrategy;
   }
 
+  bool mergeStates(SymbolicState* dest, SymbolicState *src);
+
   void lockJobs() {
     jobsMutex.lock();
   }

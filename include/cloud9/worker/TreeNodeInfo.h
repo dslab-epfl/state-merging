@@ -25,16 +25,29 @@ namespace worker {
 class ExecutionTrace;
 class SymbolicState;
 class ExecutionJob;
+class WorkerNodeInfo;
+
+#define WORKER_LAYER_COUNT          5
+
+#define WORKER_LAYER_JOBS           1
+#define WORKER_LAYER_STATES         2
+#define WORKER_LAYER_STATISTICS     3
+#define WORKER_LAYER_BREAKPOINTS    4
+#define WORKER_LAYER_SKELETON       5
 
 class WorkerNodeInfo {
 	friend class JobManager;
 	friend class SymbolicState;
 	friend class ExecutionJob;
+public:
+	typedef TreeNode<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> worker_tree_node_t;
+	typedef std::vector<std::pair<std::pair<unsigned long, unsigned long>, worker_tree_node_t::Pin> > merge_points_t;
 private:
 	SymbolicState *symState;
 	ExecutionJob *job;
 	ExecutionTrace trace;
 	klee::ForkTag forkTag;
+	merge_points_t mergePoints;
 public:
 	WorkerNodeInfo() : symState(NULL), job(NULL), forkTag(klee::KLEE_FORK_DEFAULT) { }
 
@@ -45,14 +58,8 @@ public:
 	klee::ForkTag getForkTag() const { return forkTag; }
 
 	const ExecutionTrace &getTrace() const { return trace; }
+	merge_points_t &getMergePoints() { return mergePoints; }
 };
-
-#define WORKER_LAYER_COUNT			4
-
-#define WORKER_LAYER_JOBS			1
-#define WORKER_LAYER_STATES			2
-#define WORKER_LAYER_STATISTICS		3
-#define WORKER_LAYER_BREAKPOINTS	4
 
 typedef ExecutionTree<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Four layered, binary tree
 

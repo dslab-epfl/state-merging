@@ -96,6 +96,9 @@ public:
 
 	virtual klee::KModule *getModule() = 0;
 
+	virtual klee::ExecutionState* merge(klee::ExecutionState &current,
+	    klee::ExecutionState &other) = 0;
+
 	void registerStateEventHandler(StateEventHandler *handler);
 	void deregisterStateEventHandler(StateEventHandler *handler);
 };

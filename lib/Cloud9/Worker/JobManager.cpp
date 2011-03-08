@@ -1125,6 +1125,22 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
   cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ReplayBatch, timer);
 }
 
+bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
+  // Perform the actual merging
+  // ...
+  // Record the event
+  WorkerTree::Node *destNode = dest->getNode().get();
+  // Pin the skeleton layer on source
+  WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_SKELETON,
+      src->getNode())->pin(WORKER_LAYER_SKELETON);
+
+  (**destNode).getMergePoints().push_back(std::make_pair(std::make_pair(dest->_instrSinceFork,
+      src->_instrSinceFork), srcNodePin));
+  // Now terminate the source state. Issue this from the executor - this will
+  // propagate all way through the entire infrastructure
+  symbEngine->destroyState(src->getKleeState());
+}
+
 /* Symbolic Engine Callbacks **************************************************/
 
 bool JobManager::onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
