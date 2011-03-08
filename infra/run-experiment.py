@@ -4,6 +4,7 @@ import sys
 
 from expmanager import ExperimentManager
 from argparse import ArgumentParser
+from expmanager import DEFAULT_BASE_PORT
 
 def main():
     parser = ArgumentParser(description="Run Cloud9 experiments.",
@@ -22,6 +23,8 @@ def main():
     parser.add_argument("--lb-stop", type=int,
                         help="The duraction of load balancing")
     parser.add_argument("--strategy", help="Worker search strategy.")
+    parser.add_argument("--base-port", type=int, default=DEFAULT_BASE_PORT, 
+                        help="Base port to use.")
     
     args = parser.parse_args()
 
@@ -30,7 +33,8 @@ def main():
                                 debugcomm=args.debugcomm, uidprefix=args.prefix,
                                 duration=args.duration,
                                 balancetout=args.lb_stop,
-                                strategy=args.strategy)
+                                strategy=args.strategy,
+                                basePort=args.base_port)
     manager.initHosts()
     manager.runExperiment()
 

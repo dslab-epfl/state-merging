@@ -6,6 +6,7 @@ import subprocess
 import os.path
 import time
 import re
+import signal
 
 from common import readHosts, readCmdlines, readExp, readKleeCmd, getCoverablePath, runBashScript
 from datetime import datetime, timedelta
@@ -24,7 +25,7 @@ KLEE_PATH = "Release/bin/klee"
 class ExperimentManager:
     def __init__(self, hostsName, cmdlinesName, expName, kleeCmdName, coverableName,
                  uid=None, uidprefix="test", debugcomm=False, duration=DEFAULT_EXP_DURATION,
-                 balancetout=None, strategy=None):
+                 balancetout=None, strategy=None, subprocKill=True, basePort=DEFAULT_BASE_PORT):
         self.hosts = readHosts(hostsName)
         self.cmdlines = readCmdlines(cmdlinesName)
         self.exp = readExp(expName)
@@ -37,6 +38,8 @@ class ExperimentManager:
         self.duration = duration
         self.balancetout = balancetout
         self.strategy = strategy
+        self.subprocKill = subprocKill
+        self.basePort = basePort
 
         self._logMsg("Using experiment name: %s" % self.uid)
         self._logMsg("Using as localhost: %s" % self.localhost)
@@ -62,7 +65,7 @@ class ExperimentManager:
             time.sleep(DEFAULT_INTER_SLEEP)
 
             # Initializing port mappings
-            ports = dict((host, DEFAULT_BASE_PORT) for host in self.hosts)
+            ports = dict((host, self.basePort) for host in self.hosts)
 
             processes = {}
             
@@ -99,15 +102,22 @@ class ExperimentManager:
             self._monitorProcs(processes, self.duration)
             if not len(processes):
                 continue
+            
+            if self.subprocKill:
+                self._killAllProcesses(processes, "SIGTERM")
+            else:
+                self._killAll("SIGINT")
 
-            self._killAll("SIGINT")
             self._monitorProcs(processes, 200)
             if len(processes) == 0:
                 continue
 
             while True:
                 # Here we risk going into an infinite loop, but it's better than aborting
-                self._killAll("SIGKILL", aggressive=True)
+                if self.subprocKill:
+                    self._killAllProcesses(processes, "SIGTERM")
+                else:
+                    self._killAll("SIGKILL", aggressive=True)
                 self._monitorProcs(processes, 40)
                 if len(processes) == 0:
                     break
@@ -120,6 +130,11 @@ class ExperimentManager:
             self._killAllRemote(host, signal=signal, aggressive=aggressive)
 
         self._killAllLocal(signal=signal)
+
+    def _killAllProcesses(self, processes, sig):
+        self._logMsg("Sending the %s signal to the active processes..." % sig)
+        for proc in processes.itervalues():
+            proc.send_signal(getattr(signal, sig))
 
     def _monitorProcs(self, processes, duration, sleeptime=1):
         targetTime = datetime.now()
