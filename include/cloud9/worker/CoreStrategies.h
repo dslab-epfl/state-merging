@@ -48,6 +48,7 @@ public:
 	virtual void onStateActivated(SymbolicState *state) = 0;
 	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) = 0;
 	virtual void onStateDeactivated(SymbolicState *state) = 0;
+	virtual void onStateStepped(SymbolicState *state) = 0;
 };
 
 class StateSelectionStrategy {
@@ -61,6 +62,7 @@ public:
   virtual void onStateActivated(SymbolicState *state) { };
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { };
   virtual void onStateDeactivated(SymbolicState *state) { };
+  virtual void onStateStepped(SymbolicState *state) { };
 
   virtual SymbolicState* onNextStateSelection() = 0;
 };
@@ -76,13 +78,14 @@ public:
 	virtual ~BasicStrategy() { }
 
 public:
-	virtual void onJobAdded(ExecutionJob *job) { };
+	virtual void onJobAdded(ExecutionJob *job) { }
 	virtual ExecutionJob* onNextJobSelection() = 0;
-	virtual void onRemovingJob(ExecutionJob *job) { };
+	virtual void onRemovingJob(ExecutionJob *job) { }
 
-	virtual void onStateActivated(SymbolicState *state) { };
-	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { };
-	virtual void onStateDeactivated(SymbolicState *state) { };
+	virtual void onStateActivated(SymbolicState *state) { }
+	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { }
+	virtual void onStateDeactivated(SymbolicState *state) { }
+	virtual void onStateStepped(SymbolicState *state) { }
 };
 
 class RandomJobFromStateStrategy: public BasicStrategy {
@@ -100,6 +103,7 @@ public:
   virtual void onStateActivated(SymbolicState *state);
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
   virtual void onStateDeactivated(SymbolicState *state);
+  virtual void onStateStepped(SymbolicState *state);
 
   virtual ExecutionJob* onNextJobSelection();
 

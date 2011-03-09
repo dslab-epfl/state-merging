@@ -45,15 +45,63 @@ bool LazyMergingStrategy::canFastForwardState(const SymbolicState* state) const 
 }
 
 void LazyMergingStrategy::onStateActivated(SymbolicState *state) {
-
+  // TODO: we could add every newly created state to fast-forward track,
+  // that would be more aggressive. This can be done be removing the following
+  // 'if' condition. Worth trying and evaluating.
+  if (!statesToForward.empty()) {
+    // States created during fast-forward are also candidates for fast-forward
+    // We would like to check it as soon as possible
+    if (canFastForwardState(state)) {
+      statesToForward.insert(state);
+      //stats::fastForwardsStart += 1;
+    }
+  }
+  strategy->onStateActivated(state);
 }
 
 void LazyMergingStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
-
+  strategy->onStateUpdated(state, oldNode);
 }
 
 void LazyMergingStrategy::onStateDeactivated(SymbolicState *state) {
+  statesToForward.erase(state);
 
+  // Terminated states are useless for merge, remove them from traces
+  for (StatesTrace::iterator it1 = statesTrace.begin(),
+                             ie1 = statesTrace.end(); it1 != ie1;) {
+    it1->second->erase(state);
+    if (it1->second->empty()) {
+      delete it1->second;
+      statesTrace.erase(it1++);
+    } else {
+      ++it1;
+    }
+  }
+}
+
+void LazyMergingStrategy::onStateStepped(SymbolicState *state) {
+  // At this point, the pc of current state corresponds to the instruction
+  // that is not yet executed. It will be executed when the state is selected.
+  if (!MaxStateMultiplicity || (**state).multiplicity < MaxStateMultiplicity) {
+    uint32_t mergeIndex = (**state).getMergeIndex();
+    StatesTrace::iterator it = statesTrace.find(mergeIndex);
+    if (it == statesTrace.end()) {
+        it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
+    }
+    it->second->insert(state);
+
+    // XXX for some reason the following causes a slowdown
+    /*
+    if (statesToForward.empty() && it->second->size() > 1) {
+        // We are not currently fast-forwarding, but the current
+        // state can now be fast-forwarded
+        statesToForward.insert(current);
+        stats::fastForwardsStart += 1;
+    }
+    */
+  }
+
+  strategy->onStateStepped(state);
 }
 
 SymbolicState* LazyMergingStrategy::onNextStateSelection() {
@@ -170,72 +218,3 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
 }
 
 }
-
-#if 0
-
-ExecutionState &LazyMergingSearcher::selectState() {
-
-}
-
-void LazyMergingSearcher::update(ExecutionState *current,
-                             const std::set<ExecutionState*> &addedStates,
-                             const std::set<ExecutionState*> &removedStates) {
-  // At this point, the pc of current state corresponds to the instruction
-  // that is not yet executed. It will be executed when the state is selected.
-  if (current && removedStates.count(current) == 0 &&
-        (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
-    uint32_t mergeIndex = current->getMergeIndex();
-    StatesTrace::iterator it = statesTrace.find(mergeIndex);
-    if (it == statesTrace.end()) {
-        it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
-    }
-    it->second->insert(current);
-
-    // XXX for some reason the following causes a slowdown
-    /*
-    if (statesToForward.empty() && it->second->size() > 1) {
-        // We are not currently fast-forwarding, but the current
-        // state can now be fast-forwarded
-        statesToForward.insert(current);
-        stats::fastForwardsStart += 1;
-    }
-    */
-  }
-
-  // TODO: we could add every newly created state to fast-forward track,
-  // that would be more aggressive. This can be done be removing the following
-  // 'if' condition. Worth trying and evaluating.
-  if (!statesToForward.empty()) {
-    // States created during fast-forward are also candidates for fast-forward
-    // We would like to check it as soon as possible
-    for (std::set<ExecutionState*>::const_iterator it = addedStates.begin(),
-                                   ie = addedStates.end(); it != ie; ++it) {
-      if (canFastForwardState(*it)) {
-        statesToForward.insert(*it);
-        stats::fastForwardsStart += 1;
-      }
-    }
-  }
-
-  for (std::set<ExecutionState*>::const_iterator it = removedStates.begin(),
-                                 ie = removedStates.end(); it != ie; ++it) {
-    ExecutionState *state = *it;
-    statesToForward.erase(const_cast<ExecutionState*>(state));
-
-    // Terminated states are useless for merge, remove them from traces
-    for (StatesTrace::iterator it1 = statesTrace.begin(),
-                               ie1 = statesTrace.end(); it1 != ie1;) {
-      it1->second->erase(const_cast<ExecutionState*>(state));
-      if (it1->second->empty()) {
-        delete it1->second;
-        statesTrace.erase(it1++);
-      } else {
-        ++it1;
-      }
-    }
-  }
-
-  baseSearcher->update(current, addedStates, removedStates);
-}
-
-#endif

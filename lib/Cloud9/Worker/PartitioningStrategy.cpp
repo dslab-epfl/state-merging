@@ -135,6 +135,13 @@ void PartitioningStrategy::onStateDeactivated(SymbolicState *state) {
   part.states.erase(state);
 }
 
+void PartitioningStrategy::onStateStepped(SymbolicState *state) {
+  // Just forward this to the relevant strategy
+  part_id_t key = hashState(state);
+  StatePartition &part = partitions.find(key)->second;
+  part.strategy->onStateStepped(state);
+}
+
 SymbolicState* PartitioningStrategy::onNextStateSelection() {
   if (nextPartition == nonEmpty.end()) {
     nextPartition = nonEmpty.begin();

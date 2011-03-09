@@ -44,6 +44,7 @@ public:
   virtual void onStateActivated(SymbolicState *state);
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
   virtual void onStateDeactivated(SymbolicState *state);
+  virtual void onStateStepped(SymbolicState *state);
 
   virtual SymbolicState* onNextStateSelection();
 };

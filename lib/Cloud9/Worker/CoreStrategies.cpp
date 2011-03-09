@@ -93,6 +93,10 @@ void RandomJobFromStateStrategy::onStateDeactivated(SymbolicState *state) {
   stateStrat->onStateDeactivated(state);
 }
 
+void RandomJobFromStateStrategy::onStateStepped(SymbolicState *state) {
+  stateStrat->onStateStepped(state);
+}
+
 ExecutionJob* RandomJobFromStateStrategy::onNextJobSelection() {
   SymbolicState *state = stateStrat->onNextStateSelection();
 
