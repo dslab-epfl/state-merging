@@ -183,7 +183,7 @@ private:
 	unsigned int _refCount[Layers];
 	unsigned int _totalRefCount;
 
-	NodeInfo _info;
+	NodeInfo *_info;
 
 	/*
 	 * Creates a new node and connects it in position "index" in a parent
@@ -197,6 +197,8 @@ private:
 		memset(count, 0, Layers*sizeof(unsigned int));
 		memset(_refCount, 0, Layers*sizeof(unsigned int));
 		memset(exists, 0, Layers*sizeof(bool));
+
+		_info = new NodeInfo();
 
 		if (p != NULL) {
 			p->childrenNodes[index] = this;
@@ -242,6 +244,10 @@ private:
 	}
 public:
 
+	virtual ~TreeNode() {
+	  delete _info;
+	}
+
 	ptr getParent() const { return parent; }
 
 
@@ -272,11 +278,11 @@ public:
 
 
 	NodeInfo& operator*() {
-		return _info;
+		return *_info;
 	}
 
 	const NodeInfo& operator*() const {
-		return _info;
+		return *_info;
 	}
 
 	Pin pin(int layer) {

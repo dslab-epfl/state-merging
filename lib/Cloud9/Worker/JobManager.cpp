@@ -1007,7 +1007,7 @@ long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     currentState = state;
 
     if (!codeBreaks.empty()) {
-      if (codeBreaks.find(state->getKleeState()->pc()->info->assemblyLine)
+      if (codeBreaks.find((**state).pc()->info->assemblyLine)
           != codeBreaks.end()) {
         // We hit a breakpoint
         fireBreakpointHit(node);
@@ -1018,14 +1018,14 @@ long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     //  fprintf(stderr, "%d ", state->getKleeState()->pc()->info->assemblyLine);
 
     if (state->collectProgress) {
-      state->_instrProgress.push_back(state->getKleeState()->pc());
+      state->_instrProgress.push_back((**state).pc());
     }
 
     // Execute the instruction
     state->_instrSinceFork++;
     lock.unlock();
 
-    symbEngine->stepInState(state->getKleeState());
+    symbEngine->stepInState(&(**state));
 
     lock.lock();
 
@@ -1083,7 +1083,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
         WorkerTree::Node *node = crtNode->getParent()->getChild(WORKER_LAYER_STATES, 1-crtNode->getIndex());
         if ((**node).getSymbolicState()) {
-          (**node).getSymbolicState()->getKleeState()->getStackTrace().dump(std::cout);
+          (**(**node).getSymbolicState()).getStackTrace().dump(std::cout);
         }
       }
       // We have a broken replay
@@ -1127,18 +1127,26 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
 bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
   // Perform the actual merging
-  // ...
+  klee::ExecutionState *mState = symbEngine->merge(**dest, **src);
+
+  if (!mState)
+    return false;
+
   // Record the event
   WorkerTree::Node *destNode = dest->getNode().get();
   // Pin the skeleton layer on source
-  WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_SKELETON,
-      src->getNode())->pin(WORKER_LAYER_SKELETON);
+  WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_MERGED_STATES,
+      src->getNode().get())->pin(WORKER_LAYER_MERGED_STATES);
 
   (**destNode).getMergePoints().push_back(std::make_pair(std::make_pair(dest->_instrSinceFork,
       src->_instrSinceFork), srcNodePin));
+  // Update the destination state container
+  dest->replaceKleeState(mState);
   // Now terminate the source state. Issue this from the executor - this will
   // propagate all way through the entire infrastructure
-  symbEngine->destroyState(src->getKleeState());
+  symbEngine->destroyState(&(**src));
+
+  return true;
 }
 
 /* Symbolic Engine Callbacks **************************************************/
@@ -1292,8 +1300,7 @@ void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
 
   if (state) {
     CLOUD9_DEBUG("State stack trace: " << *state);
-    klee::ExprPPrinter::printConstraints(std::cerr,
-        state->getKleeState()->constraints());
+    klee::ExprPPrinter::printConstraints(std::cerr, (**state).constraints());
     dumpStateTrace(node);
   }
 
@@ -1318,18 +1325,21 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
 
   if (!replaying) {
     ExecutionJob *job = (**pNodePin).getJob();
-    assert(job != NULL);
+    if (job != NULL) {
+      oldNode = tree->getNode(WORKER_LAYER_JOBS, oldNode);
+      job->rebindToNode(oldNode);
 
-    oldNode = tree->getNode(WORKER_LAYER_JOBS, oldNode);
-    job->rebindToNode(oldNode);
+      newNode = tree->getNode(WORKER_LAYER_JOBS, newNode);
+      ExecutionJob *newJob = new ExecutionJob(newNode, false);
 
-    newNode = tree->getNode(WORKER_LAYER_JOBS, newNode);
-    ExecutionJob *newJob = new ExecutionJob(newNode, false);
+      submitJob(newJob, false);
 
-    submitJob(newJob, false);
+      cloud9::instrum::theInstrManager.incStatistic(
+                  cloud9::instrum::TotalTreePaths);
 
-    cloud9::instrum::theInstrManager.incStatistic(
-                cloud9::instrum::TotalTreePaths);
+    } else {
+      CLOUD9_DEBUG("Job-less state terminated. Probably it was exported while the state was executing.");
+    }
   }
 }
 

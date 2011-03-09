@@ -27,13 +27,13 @@ class SymbolicState;
 class ExecutionJob;
 class WorkerNodeInfo;
 
-#define WORKER_LAYER_COUNT          5
+#define WORKER_LAYER_COUNT          6
 
 #define WORKER_LAYER_JOBS           1
 #define WORKER_LAYER_STATES         2
 #define WORKER_LAYER_STATISTICS     3
 #define WORKER_LAYER_BREAKPOINTS    4
-#define WORKER_LAYER_SKELETON       5
+#define WORKER_LAYER_MERGED_STATES       5
 
 class WorkerNodeInfo {
 	friend class JobManager;

@@ -70,11 +70,21 @@ public:
 		rebindToNode(NULL);
 	}
 
-	klee::ExecutionState *getKleeState() const { return kleeState; }
+	void replaceKleeState(klee::ExecutionState *state) {
+	  kleeState = state;
+	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
 
 	SymbolicState *getParent() const { return parent; }
+
+	klee::ExecutionState& operator*() {
+      return *kleeState;
+    }
+
+	const klee::ExecutionState& operator*() const {
+	  return *kleeState;
+    }
 };
 
 /*

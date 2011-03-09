@@ -238,19 +238,18 @@ KleeStrategy::~KleeStrategy() {
 
 void KleeStrategy::onStateActivated(SymbolicState *state) {
 	std::set<klee::ExecutionState*> added;
-	added.insert(state->getKleeState());
+	added.insert(&(**state));
 
 	searcher->update(NULL, added, std::set<klee::ExecutionState*>());
 }
 
 void KleeStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
-	searcher->update(state->getKleeState(),
-			std::set<klee::ExecutionState*>(), std::set<klee::ExecutionState*>());
+	searcher->update(&(**state), std::set<klee::ExecutionState*>(), std::set<klee::ExecutionState*>());
 }
 
 void KleeStrategy::onStateDeactivated(SymbolicState *state) {
 	std::set<klee::ExecutionState*> removed;
-	removed.insert(state->getKleeState());
+	removed.insert(&(**state));
 
 	searcher->update(NULL, std::set<klee::ExecutionState*>(), removed);
 }
