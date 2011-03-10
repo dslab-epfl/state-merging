@@ -91,10 +91,6 @@ void LazyMergingStrategy::onStateStepped(SymbolicState *state) {
     }
     it->second->insert(state);
 
-    if (it->second->size() > 1) {
-      CLOUD9_DEBUG("Two states at the same merge index");
-    }
-
     // XXX for some reason the following causes a slowdown
     /*
     if (statesToForward.empty() && it->second->size() > 1) {
@@ -158,8 +154,6 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
        break;
    }
 
-   CLOUD9_DEBUG("Checking for merging...");
-
    // Check wether we can already merge
    for (StatesSet::iterator it = traceIt->second->begin(),
                             ie = traceIt->second->end(); it != ie; ++it) {
@@ -167,7 +161,6 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
      assert(!MaxStateMultiplicity || (**state1).multiplicity < MaxStateMultiplicity);
 
      if (state1 != state && (**state1).getMergeIndex() == mergeIndex) {
-       CLOUD9_DEBUG("Found merging point!");
        jobManager->dumpSymbolicTree(NULL,
            MergingDecorator(state1->getNode().get(), state->getNode().get()));
 
@@ -191,8 +184,6 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
          merged = state1;
          break;
        }
-     } else {
-       CLOUD9_DEBUG("Incompatible execution index " << (**state1).getMergeIndex() << " vs " << mergeIndex);
      }
    }
 

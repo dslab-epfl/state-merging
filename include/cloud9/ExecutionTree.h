@@ -182,6 +182,7 @@ private:
 	 */
 	unsigned int _refCount[Layers];
 	unsigned int _totalRefCount;
+	bool _deleting;
 
 	NodeInfo *_info;
 
@@ -190,7 +191,7 @@ private:
 	 * node
 	 */
 	TreeNode(TreeNode* p, int index) :
-		parent(p), totalCount(0), _label(0), _totalRefCount(0) {
+		parent(p), totalCount(0), _label(0), _totalRefCount(0), _deleting(false) {
 
 		memset(childrenNodes, 0, Degree*sizeof(TreeNode*));
 		memset(children, 0, Degree*Layers*sizeof(bool));
@@ -364,7 +365,7 @@ private:
 		// Checking for node->parent ensures that we will never delete the
 		// root node
 		while (node->parent && node != root) {
-			if (node->count[layer] > 0 || node->_refCount[layer] > 0) // Stop when joining another branch, or hitting the job root
+			if (node->count[layer] > 0 || node->_refCount[layer] > 0 || node->_deleting) // Stop when joining another branch, or hitting the job root
 				break;
 
 			Node *temp = node;
@@ -374,16 +375,17 @@ private:
 	}
 
 	static void removeNode(int layer, Node *node) {
-		assert(node->count[layer] == 0);
-		assert(node->_refCount[layer] == 0);
+      assert(node->count[layer] == 0);
+      assert(node->_refCount[layer] == 0);
 
-		node->clearNode(layer);
+      node->clearNode(layer);
 
-		if (node->totalCount == 0 && node->_totalRefCount == 0) {
-			assert(node->parent);
-			node->parent->childrenNodes[node->index] = NULL;
-			delete node; // Clean it for good, nobody references it anymore
-		}
+      if (node->totalCount == 0 && node->_totalRefCount == 0) {
+        assert(node->parent);
+        node->parent->childrenNodes[node->index] = NULL;
+        node->_deleting = true; // This prevents recursive destructors from touching this
+        delete node; // Clean it for good, nobody references it anymore
+      }
 	}
 
 	template<typename NodeIterator>
@@ -886,16 +888,16 @@ void node_pin_add_ref(TreeNode<NI, L, D> *p, int layer) {
 
 template<class NI, int L, int D>
 void node_pin_release(TreeNode<NI, L, D> *p, int layer) {
-	assert(p);
-	assert(p->_refCount[layer] > 0);
+  assert(p);
+  assert(p->_refCount[layer] > 0);
 
-	p->_decRefCount(layer);
+  p->_decRefCount(layer);
 
-	//if (layer == 0) CLOUD9_DEBUG("New dec ref count " << p->_refCount[0] << " for node " << *p);
+  //if (layer == 0) CLOUD9_DEBUG("New dec ref count " << p->_refCount[0] << " for node " << *p);
 
-	if (p->_refCount[layer] == 0) {
-		ExecutionTree<NI, L, D>::removeSupportingBranch(layer, p, NULL);
-	}
+  if (p->_refCount[layer] == 0) {
+    ExecutionTree<NI, L, D>::removeSupportingBranch(layer, p, NULL);
+  }
 }
 
 #if 1 // XXX: debug

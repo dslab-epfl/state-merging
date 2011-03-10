@@ -79,6 +79,7 @@ public:
     WorkerTree::Node *parent = node->getParent();
     if (parent) {
       deco_t deco;
+      deco["label"] = node->getIndex() ? "1" : "0";
       if (!node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS)) {
         deco["style"] = "dotted";
       }
