@@ -2601,7 +2601,6 @@ void Executor::bindModuleConstants() {
 
 void Executor::stepInState(ExecutionState *state) {
   assert(addedStates.count(state) == 0);
-  fireControlFlowEvent(state, ::cloud9::worker::STEP);
 
   std::set<ExecutionState*> duplicates;
   duplicates.swap(state->duplicates);
@@ -2765,6 +2764,8 @@ void Executor::stepInState(ExecutionState *state) {
 			}
 		}
 	}
+
+	fireControlFlowEvent(state, ::cloud9::worker::STEP);
 
 	updateStates(state);
 }
@@ -3924,7 +3925,7 @@ void Executor::destroyStates() {
 }
 
 void Executor::destroyState(ExecutionState *state) {
-	terminateStateEarly(*state, "cancelled");
+	terminateState(*state, true);
 }
 
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv,

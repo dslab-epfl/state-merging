@@ -30,6 +30,7 @@
 #include "cloud9/worker/FIStrategy.h"
 #include "cloud9/worker/TargetedStrategy.h"
 #include "cloud9/worker/PartitioningStrategy.h"
+#include "cloud9/worker/LazyMergingStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
@@ -352,7 +353,7 @@ void JobManager::processTestCase(SymbolicState *state) {
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
     char **argv, char **envp) :
   terminationRequest(false), jobCount(0), currentJob(NULL), currentState(NULL),
-  replaying(false), traceCounter(0) {
+  replaying(false), batching(true), traceCounter(0) {
 
   tree = new WorkerTree();
 
@@ -425,6 +426,7 @@ void JobManager::initStrategy() {
     break;
   case OracleSel:
     selStrategy = createOracleStrategy();
+    batching = false;
     CLOUD9_INFO("Using the oracle");
     break;
   case FaultInjSel:
@@ -446,6 +448,12 @@ void JobManager::initStrategy() {
     selStrategy = new RandomJobFromStateStrategy(tree,
         new KleeForkCapStrategy(5, 0, tree, symbEngine), this);
     CLOUD9_INFO("Using the Klee fork-cap strategy");
+    break;
+  case LazyMergingSel:
+    selStrategy = new RandomJobFromStateStrategy(tree,
+        new LazyMergingStrategy(this, createCoverageOptimizedStrat()), this);
+    batching = false;
+    CLOUD9_INFO("Using the lazy merging strategy");
     break;
   default:
     assert(0 && "undefined job selection strategy");
@@ -852,6 +860,12 @@ void JobManager::fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode
   }
 }
 
+void JobManager::fireStepState(SymbolicState *state) {
+  if (state->_active) {
+    selStrategy->onStateStepped(state);
+  }
+}
+
 void JobManager::fireAddJob(ExecutionJob *job) {
   selStrategy->onJobAdded(job);
   cloud9::instrum::theInstrManager.incStatistic(
@@ -898,7 +912,7 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
     }
 
     currentTime = klee::util::getUserTime();
-  } while (currentTime - startTime < JobQuanta && JobSelection != OracleSel);
+  } while (batching && currentTime - startTime < JobQuanta);
 
   timer.stop();
 
@@ -992,6 +1006,24 @@ void JobManager::cleanInvalidJobs(WorkerTree::Node *rootNode) {
 
 }
 
+void JobManager::requestStateDestroy(SymbolicState *state) {
+  pendingDeletions.insert(state);
+}
+
+void JobManager::processPendingDeletions() {
+  if (pendingDeletions.empty())
+    return;
+  CLOUD9_DEBUG("Pending deletions found...");
+  std::set<SymbolicState*> workingSet;
+  workingSet.swap(pendingDeletions);
+
+  for (std::set<SymbolicState*>::iterator it = workingSet.begin();
+      it != workingSet.end(); it++) {
+    CLOUD9_DEBUG("Processing pending deletion...");
+    symbEngine->destroyState(&(**(*it)));
+  }
+}
+
 long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     WorkerTree::Node *node, long count) {
   assert((**node).symState != NULL);
@@ -1025,6 +1057,7 @@ long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     state->_instrSinceFork++;
     lock.unlock();
 
+    processPendingDeletions();
     symbEngine->stepInState(&(**state));
 
     lock.lock();
@@ -1129,10 +1162,13 @@ bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
   // Perform the actual merging
   klee::ExecutionState *mState = symbEngine->merge(**dest, **src);
 
-  if (!mState)
+  if (!mState) {
+    CLOUD9_DEBUG("States could not be merged...");
     return false;
+  }
 
-  // Record the event
+  // Record the event...
+
   WorkerTree::Node *destNode = dest->getNode().get();
   // Pin the skeleton layer on source
   WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_MERGED_STATES,
@@ -1141,10 +1177,16 @@ bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
   (**destNode).getMergePoints().push_back(std::make_pair(std::make_pair(dest->_instrSinceFork,
       src->_instrSinceFork), srcNodePin));
   // Update the destination state container
-  dest->replaceKleeState(mState);
+  if (&(**dest) != mState) {
+    (**dest).setCloud9State(NULL);
+    dest->replaceKleeState(mState);
+    mState->setCloud9State(dest);
+  }
   // Now terminate the source state. Issue this from the executor - this will
   // propagate all way through the entire infrastructure
-  symbEngine->destroyState(&(**src));
+  requestStateDestroy(src);
+
+  CLOUD9_DEBUG("State merged");
 
   return true;
 }
@@ -1217,6 +1259,13 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState, bool silenced) {
 
   SymbolicState *state = kState->getCloud9State();
 
+  pendingDeletions.erase(state);
+  if (currentState == state) {
+    CLOUD9_DEBUG("Deleting the current state...");
+    currentState = NULL;
+    dumpSymbolicTree(NULL, WorkerNodeDecorator(state->getNode().get()));
+  }
+
   if (!silenced) {
     processTestCase(state);
   }
@@ -1261,7 +1310,23 @@ void JobManager::onEvent(klee::ExecutionState *kState,
 
 void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
     ControlFlowEvent event) {
-  WorkerTree::Node *node = kState->getCloud9State()->getNode().get();
+  boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+  SymbolicState *state = kState->getCloud9State();
+  if (!state) {
+    CLOUD9_DEBUG("Stepping into headless state...");
+    return;
+  }
+
+  WorkerTree::Node *node = state->getNode().get();
+
+  switch(event) {
+  case STEP:
+    fireStepState(state);
+    break;
+  default:
+    break;
+  }
 
   // Add the instruction to the node trace
   if (collectTraces) {
@@ -1346,12 +1411,11 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
 void JobManager::updateTreeOnDestroy(klee::ExecutionState *kState) {
   SymbolicState *state = kState->getCloud9State();
 
-  if (!replaying) {
-    WorkerTree::Node *node = state->getNode().get();
+  WorkerTree::Node *node = state->getNode().get();
 
-    ExecutionJob *job = (**node).getJob();
+  ExecutionJob *job = (**node).getJob();
 
-    assert(job != NULL);
+  if (job != NULL) {
     // Job finished here, need to remove it
     finalizeJob(job, false, false);
 

@@ -30,7 +30,8 @@ enum JobSelectionType {
 	FaultInjSel,
 	LimitedFlowSel,
 	PartitioningSel,
-	KleeForkCapSel
+	KleeForkCapSel,
+	LazyMergingSel
 };
 
 extern std::string InputFile;

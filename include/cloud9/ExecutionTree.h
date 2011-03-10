@@ -330,6 +330,9 @@ class ExecutionTree {
 public:
 	typedef TreeNode<NodeInfo, Layers, Degree> Node;
 	typedef typename TreeNode<NodeInfo, Layers, Degree>::Pin NodePin;
+private:
+	typedef std::map<std::string, std::string> deco_t;
+	typedef std::vector<std::pair<Node*, deco_t> > edge_deco_t;
 
 private:
 	Node* root;
@@ -728,43 +731,71 @@ public:
 	  if (!root)
 	    root = this->root;
 
-	  // Write the Dot header
-	  os << "digraph symbex {" << std::endl;
+	  std::map<Node*, std::string> names;
+      std::stack<std::pair<Node*, std::string> > namesStack;
+      namesStack.push((std::make_pair(root, "r")));
 
-      std::stack<std::pair<Node*, std::string> > nodes;
-      nodes.push((std::make_pair(root, "r")));
-
-      while (!nodes.empty()) {
-        std::pair<Node*, std::string> node = nodes.top();
-        nodes.pop();
-
-        std::map<std::string, std::string> deco;
-        decorator(node.first, deco);
-
-        os << "  " << node.second << " [";
-
-        for (std::map<std::string, std::string>::iterator it = deco.begin();
-            it != deco.end(); it++) {
-          if (it != deco.begin())
-            os << ",";
-          os << it->first << "=" << it->second;
-        }
-
-        os << "];" << std::endl;
-
+      while (!namesStack.empty()) {
+        std::pair<Node*, std::string> node = namesStack.top();
+        namesStack.pop();
+        names[node.first] = node.second;
 
         for (int i = 0; i < Degree; i++) {
           Node *child = node.first->childrenNodes[i];
           if (child) {
             std::string name(node.second);
             name.push_back('0' + i);
-
-            os << "  " << node.second << " -> " << name << ";" << std::endl;
-
-            nodes.push(std::make_pair(child, name));
+            namesStack.push(std::make_pair(child, name));
           }
         }
       }
+
+      // Write the Dot header
+      os << "digraph symbex {" << std::endl;
+
+      std::stack<Node*> nodesStack;
+      nodesStack.push(root);
+
+      while (!nodesStack.empty()) {
+        Node *node = nodesStack.top();
+        nodesStack.pop();
+
+        deco_t deco;
+        edge_deco_t edges;
+        decorator(node, deco, edges);
+
+        os << "  " << names[node] << " [";
+
+         for (deco_t::iterator it = deco.begin(); it != deco.end(); it++) {
+           if (it != deco.begin())
+             os << ",";
+           os << it->first << "=" << it->second;
+         }
+
+         os << "];" << std::endl;
+
+         for (int i = 0; i < Degree; i++) {
+           Node *child = node->childrenNodes[i];
+           if (child) {
+             nodesStack.push(child);
+           }
+         }
+
+         for (typename edge_deco_t::iterator it = edges.begin(); it != edges.end(); it++) {
+
+           os << "  " << names[it->first] << " -> " << names[node];
+           if (it->second.size() > 0) {
+             os << " [";
+             for (deco_t::iterator eit = it->second.begin(); eit != it->second.end(); eit++) {
+               if (eit != it->second.begin())
+                 os << ",";
+               os << eit->first << "=" << eit->second;
+             }
+             os << "]";
+           }
+           os << ";" << std::endl;
+         }
+       }
 
 	  // Write the Dot footer
 	  os << "}" << std::endl;
@@ -781,6 +812,9 @@ public:
 
 template<class Node>
 class DotNodeDefaultDecorator {
+public:
+  typedef std::map<std::string, std::string> deco_t;
+  typedef std::vector<std::pair<Node*, deco_t> > edge_deco_t;
 private:
   int fillLayer;
   int peripheryLayer;
@@ -790,7 +824,7 @@ public:
     : fillLayer(_fillLayer), peripheryLayer(_peripheryLayer), highlight(_highlight) { }
   virtual ~DotNodeDefaultDecorator() { }
 
-  void operator() (Node *node, std::map<std::string, std::string> &deco) {
+  virtual void operator() (Node *node, deco_t &deco, edge_deco_t &inEdges) {
     deco["label"] = "\"\"";
     deco["shape"] = "circle";
     if (node->layerExists(fillLayer)) {

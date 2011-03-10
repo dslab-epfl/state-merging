@@ -55,6 +55,7 @@ static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
 				clEnumValN(LimitedFlowSel, "lim-flow", "Limited flow"),
 				clEnumValN(PartitioningSel, "partitioning", "State partitioning"),
 				clEnumValN(KleeForkCapSel, "klee-fork-cap", "Klee Fork-cap"),
+				clEnumValN(LazyMergingSel, "lazy-merging", "State Merging"),
 				clEnumValEnd),
 		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 

@@ -88,6 +88,9 @@ private:
   ExecutionJob *currentJob;
   SymbolicState *currentState;
   bool replaying;
+  bool batching;
+
+  std::set<SymbolicState*> pendingDeletions;
 
   /*
    * Statistics
@@ -122,6 +125,7 @@ private:
   void fireActivateState(SymbolicState *state);
   void fireDeactivateState(SymbolicState *state);
   void fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode);
+  void fireStepState(SymbolicState *state);
   void fireAddJob(ExecutionJob *job);
   void fireRemovingJob(ExecutionJob *job);
 
@@ -153,6 +157,9 @@ private:
       bool spawnNew);
   void executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
       ExecutionJob *origJob, bool spawnNew);
+
+  void requestStateDestroy(SymbolicState *state);
+  void processPendingDeletions();
 
   long stepInNode(boost::unique_lock<boost::mutex> &lock,
       WorkerTree::Node *node, long count);

@@ -14,6 +14,9 @@
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/ADT/DenseMap.h>
 
+#include <set>
+#include <map>
+
 namespace cloud9 {
 
 namespace worker {
@@ -26,8 +29,8 @@ private:
   StateSelectionStrategy *strategy;
 
   // TODO: use unordered multimap instead
-  typedef llvm::SmallPtrSet<SymbolicState*, 8> StatesSet;
-  typedef llvm::DenseMap<uint32_t, StatesSet*> StatesTrace;
+  typedef std::set<SymbolicState*> StatesSet;
+  typedef std::map<uint32_t, StatesSet*> StatesTrace;
 
   StatesTrace statesTrace;
   StatesSet statesToForward;
@@ -47,6 +50,26 @@ public:
   virtual void onStateStepped(SymbolicState *state);
 
   virtual SymbolicState* onNextStateSelection();
+};
+
+class MergingDecorator: public WorkerNodeDecorator {
+  WorkerTree::Node *dest, *src;
+public:
+  MergingDecorator(WorkerTree::Node *_dest, WorkerTree::Node *_src) :
+    WorkerNodeDecorator(NULL), dest(_dest), src(_src) {
+
+  }
+
+  void operator() (WorkerTree::Node *node, deco_t &deco, edge_deco_t &inEdges) {
+    WorkerNodeDecorator::operator() (node, deco, inEdges);
+
+    if (node == dest) {
+      deco["fillcolor"] = "red";
+    }
+    if (node == src) {
+      deco["fillcolor"] = "green";
+    }
+  }
 };
 
 }

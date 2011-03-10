@@ -63,6 +63,37 @@ public:
 
 typedef ExecutionTree<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Four layered, binary tree
 
+class WorkerNodeDecorator: public DotNodeDefaultDecorator<WorkerTree::Node> {
+public:
+  WorkerNodeDecorator(WorkerTree::Node *highlight) :
+    DotNodeDefaultDecorator<WorkerTree::Node>(WORKER_LAYER_STATES, WORKER_LAYER_JOBS, highlight) {
+
+  }
+
+  void operator() (WorkerTree::Node *node, deco_t &deco, edge_deco_t &inEdges) {
+    DotNodeDefaultDecorator<WorkerTree::Node>::operator() (node, deco, inEdges);
+
+    WorkerNodeInfo::merge_points_t &mpoints = (**node).getMergePoints();
+
+
+    WorkerTree::Node *parent = node->getParent();
+    if (parent) {
+      deco_t deco;
+      if (!node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS)) {
+        deco["style"] = "dotted";
+      }
+      inEdges.push_back(std::make_pair(parent, deco));
+    }
+
+    for (WorkerNodeInfo::merge_points_t::iterator it = mpoints.begin();
+        it != mpoints.end(); it++) {
+      deco_t deco;
+      deco["style"] = "dashed";
+      inEdges.push_back(std::make_pair(it->second.get(), deco));
+    }
+  }
+};
+
 }
 
 }

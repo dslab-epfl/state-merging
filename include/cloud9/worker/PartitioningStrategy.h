@@ -91,18 +91,17 @@ public:
   virtual ~KleeForkCapStrategy();
 };
 
-class PartitioningDecorator: public DotNodeDefaultDecorator<WorkerTree::Node> {
+class PartitioningDecorator: public WorkerNodeDecorator {
 private:
   PartitioningStrategy *strategy;
 public:
   PartitioningDecorator(PartitioningStrategy *_strategy, WorkerTree::Node *highlight) :
-    DotNodeDefaultDecorator<WorkerTree::Node>(WORKER_LAYER_STATES, WORKER_LAYER_JOBS, highlight),
-    strategy(_strategy) {
+    WorkerNodeDecorator(highlight), strategy(_strategy) {
 
   }
 
-  void operator() (WorkerTree::Node *node, std::map<std::string, std::string> &deco) {
-    DotNodeDefaultDecorator<WorkerTree::Node>::operator() (node, deco);
+  void operator() (WorkerTree::Node *node, deco_t &deco, edge_deco_t &inEdges) {
+    WorkerNodeDecorator::operator() (node, deco, inEdges);
 
     SymbolicState *state = (**node).getSymbolicState();
 

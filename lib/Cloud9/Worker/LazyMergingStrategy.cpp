@@ -77,6 +77,7 @@ void LazyMergingStrategy::onStateDeactivated(SymbolicState *state) {
       ++it1;
     }
   }
+  strategy->onStateDeactivated(state);
 }
 
 void LazyMergingStrategy::onStateStepped(SymbolicState *state) {
@@ -89,6 +90,10 @@ void LazyMergingStrategy::onStateStepped(SymbolicState *state) {
         it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
     }
     it->second->insert(state);
+
+    if (it->second->size() > 1) {
+      CLOUD9_DEBUG("Two states at the same merge index");
+    }
 
     // XXX for some reason the following causes a slowdown
     /*
@@ -153,6 +158,8 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
        break;
    }
 
+   CLOUD9_DEBUG("Checking for merging...");
+
    // Check wether we can already merge
    for (StatesSet::iterator it = traceIt->second->begin(),
                             ie = traceIt->second->end(); it != ie; ++it) {
@@ -160,6 +167,10 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
      assert(!MaxStateMultiplicity || (**state1).multiplicity < MaxStateMultiplicity);
 
      if (state1 != state && (**state1).getMergeIndex() == mergeIndex) {
+       CLOUD9_DEBUG("Found merging point!");
+       jobManager->dumpSymbolicTree(NULL,
+           MergingDecorator(state1->getNode().get(), state->getNode().get()));
+
        // State is at the same execution index as state1, let's try merging
        if (jobManager->mergeStates(state1, state)) {
          // We've merged !
@@ -174,17 +185,14 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
            }
          }
 
-         // XXX See what to do here...
-#if 0
-         // Terminate merged state
          statesToForward.erase(state);
-         executor.terminateState(*state, true);
-#endif
 
          state = NULL;
          merged = state1;
          break;
        }
+     } else {
+       CLOUD9_DEBUG("Incompatible execution index " << (**state1).getMergeIndex() << " vs " << mergeIndex);
      }
    }
 
@@ -205,6 +213,9 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
   // Nothing to fast-forward
   // Get state from base searcher
   state = strategy->onNextStateSelection();
+
+  if (state == NULL)
+    return NULL;
 
   if (canFastForwardState(state)) {
    statesToForward.insert(state);
