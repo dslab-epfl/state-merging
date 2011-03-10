@@ -101,6 +101,8 @@ public:
                             const std::vector<const Array*> &objects,
                             std::vector< std::vector<unsigned char> > &values,
                             bool &hasSolution);
+
+  void cancelPendingJobs() { secondary->impl->cancelPendingJobs(); }
 };
 
 }

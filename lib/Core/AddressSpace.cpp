@@ -112,6 +112,31 @@ bool AddressSpace::resolveOne(ExecutionState &state,
     success = resolveOne(CE, result);
     return true;
   } else {
+    if (SelectExpr *se = dyn_cast<SelectExpr>(address)) {
+      if (se->isConstantCases()) {
+        std::vector<uint64_t> cases;
+        se->getConstantCases(&cases);
+        assert(!cases.empty());
+
+        MemoryObject hack(cases[0]);
+        const MemoryMap::value_type *res = objects.lookup_previous(&hack);
+        if (res) {
+          std::vector<uint64_t>::iterator it = cases.begin(), ie = cases.end();
+          for (; it != ie; ++it) {
+            if (*it < res->first->address ||
+                *it - res->first->address >= res->first->size)
+              break;
+          }
+          if (it == ie) {
+            // All cases are within one memory object
+            result = *res;
+            success = true;
+            return true;
+          }
+        }
+      }
+    }
+
     TimerStatIncrementer timer(stats::resolveTime);
 
     // try cheap search, will succeed for any inbounds pointer

@@ -170,8 +170,8 @@ namespace klee {
     /// is off.
     void setTimeout(double timeout);
 
+    /*
     char *getSharedMemSegment();
-
     void releaseSharedMemSegment(char *shMem);
 
     bool getInitialValues(const Query& query,
@@ -186,6 +186,7 @@ namespace klee {
                           char *shMemBuffer);
 
     void cancelPendingJobs();
+    */
 
   };
 
@@ -238,6 +239,10 @@ namespace klee {
   /// createParallelSolver - Create a solver which will solve high-level
   /// disjunctions in parallel.
   Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver);
+
+  /// createHLParallelSolver - Create a solver which will solve high-level
+  /// disjunctions in parallel.
+  Solver *createHLParallelSolver(Solver *solver, unsigned threadCount = 0);
 
   /// createDummySolver - Create a dummy solver implementation which always
   /// fails.

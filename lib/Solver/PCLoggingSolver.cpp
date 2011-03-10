@@ -144,6 +144,8 @@ public:
   void setCurrentStateID(uint64_t _stateID) {
     stateID = _stateID;
   }
+
+  void cancelPendingJobs() { solver->impl->cancelPendingJobs(); }
 };
 
 ///

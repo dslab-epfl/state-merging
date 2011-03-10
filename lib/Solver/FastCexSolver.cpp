@@ -821,11 +821,11 @@ public:
         } else {
           CexValueData cvd = cod.getExactValues(index.min());
           if (range.min() > cvd.min()) {
-            assert(range.min() <= cvd.max());
+            //assert(range.min() <= cvd.max());
             cvd = CexValueData(range.min(), cvd.max());
           }
           if (range.max() < cvd.max()) {
-            assert(range.max() >= cvd.min());
+            //assert(range.max() >= cvd.min());
             cvd = CexValueData(cvd.min(), range.max());
           }
           cod.setExactValues(index.min(), cvd);

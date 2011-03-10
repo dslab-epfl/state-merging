@@ -191,7 +191,7 @@ public:
     CmpKindLast=Sge
   };
 
-  unsigned refCount;
+  uint32_t refCount;
 
 protected:  
   unsigned hashValue;
@@ -563,7 +563,7 @@ class UpdateNode {
   friend class UpdateList;
   friend class STPBuilder; // for setting STPArray
 
-  mutable unsigned refCount;
+  mutable uint32_t refCount;
   // gross
   mutable void *stpArray;
   // cache instead of recalc
@@ -755,6 +755,48 @@ public:
     
   virtual ref<Expr> rebuild(ref<Expr> kids[]) const { 
     return create(kids[0], kids[1], kids[2]);
+  }
+
+  bool isConstantCases() const {
+    bool res = true;
+    if (SelectExpr* te = dyn_cast<SelectExpr>(trueExpr))
+      res &= te->isConstantCases();
+    else
+      res &= isa<ConstantExpr>(trueExpr);
+    if (SelectExpr* fe = dyn_cast<SelectExpr>(falseExpr))
+      res &= fe->isConstantCases();
+    else
+      res &= isa<ConstantExpr>(falseExpr);
+    return res;
+  }
+
+  bool hasConstantCases() const {
+    if (isa<ConstantExpr>(trueExpr) || isa<ConstantExpr>(falseExpr))
+      return true;
+    if (SelectExpr* te = dyn_cast<SelectExpr>(trueExpr))
+      if (te->hasConstantCases())
+        return true;
+    if (SelectExpr* fe = dyn_cast<SelectExpr>(falseExpr))
+      if (fe->hasConstantCases())
+        return true;
+    return false;
+  }
+
+  bool getConstantCases(std::vector<uint64_t> *cases) const {
+    bool res = true;
+    if (ConstantExpr* ce = dyn_cast<ConstantExpr>(trueExpr))
+      cases->push_back(ce->getZExtValue());
+    else if (SelectExpr *se = dyn_cast<SelectExpr>(trueExpr))
+      res &= se->getConstantCases(cases);
+    else
+      res = false;
+    if (ConstantExpr* ce = dyn_cast<ConstantExpr>(falseExpr))
+      cases->push_back(ce->getZExtValue());
+    else if (SelectExpr *se = dyn_cast<SelectExpr>(falseExpr))
+      res &= se->getConstantCases(cases);
+    else
+      res = false;
+    return res;
   }
 
 private:
