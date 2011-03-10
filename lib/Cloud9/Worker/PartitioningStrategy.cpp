@@ -247,7 +247,7 @@ void PartitioningStrategy::getInactiveSet(part_id_t partID,
   }
 }
 
-void PartitioningStrategy::dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight) {
+void PartitioningStrategy::dumpSymbolicTree(WorkerTree::Node *highlight) {
   jobManager->dumpSymbolicTree(NULL, PartitioningDecorator(this, highlight));
 }
 

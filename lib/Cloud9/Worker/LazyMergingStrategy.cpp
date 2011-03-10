@@ -161,14 +161,9 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
      assert(!MaxStateMultiplicity || (**state1).multiplicity < MaxStateMultiplicity);
 
      if (state1 != state && (**state1).getMergeIndex() == mergeIndex) {
-       jobManager->dumpSymbolicTree(NULL,
-           MergingDecorator(state1->getNode().get(), state->getNode().get()));
-
        // State is at the same execution index as state1, let's try merging
        if (jobManager->mergeStates(state1, state)) {
          // We've merged !
-         jobManager->dumpSymbolicTree(NULL, WorkerNodeDecorator(state1->getNode().get()));
-
          // Any of the merged states could be followed for fast forwards.
          // Make traces that was pointing to state to point to state1
          for (StatesTrace::iterator it1 = statesTrace.begin(),

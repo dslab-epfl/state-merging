@@ -28,9 +28,8 @@ private:
   JobManager *jobManager;
   StateSelectionStrategy *strategy;
 
-  // TODO: use unordered multimap instead
-  typedef std::set<SymbolicState*> StatesSet;
-  typedef std::map<uint32_t, StatesSet*> StatesTrace;
+  typedef llvm::SmallPtrSet<SymbolicState*, 8> StatesSet;
+  typedef llvm::DenseMap<uint32_t, StatesSet*> StatesTrace;
 
   StatesTrace statesTrace;
   StatesSet statesToForward;

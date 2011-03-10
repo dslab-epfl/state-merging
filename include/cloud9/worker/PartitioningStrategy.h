@@ -63,7 +63,7 @@ private:
   part_id_t hashState(SymbolicState* state);
   void getInactiveSet(part_id_t partID, std::set<SymbolicState*> &inactiveStates);
 protected:
-  virtual void dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight);
+  virtual void dumpSymbolicTree(WorkerTree::Node *highlight);
 public:
   PartitioningStrategy(JobManager *_jobManager, unsigned _forkQuota = 0)
     : jobManager(_jobManager), forkQuota(_forkQuota) {

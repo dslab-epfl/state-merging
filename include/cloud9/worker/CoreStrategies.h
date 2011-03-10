@@ -57,7 +57,7 @@ public:
   StateSelectionStrategy() { }
   virtual ~StateSelectionStrategy() { }
 protected:
-  virtual void dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight) { }
+  virtual void dumpSymbolicTree(WorkerTree::Node *highlight) { }
 public:
   virtual void onStateActivated(SymbolicState *state) { };
   virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { };

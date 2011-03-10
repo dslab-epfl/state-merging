@@ -107,7 +107,7 @@ ExecutionJob* RandomJobFromStateStrategy::onNextJobSelection() {
 }
 
 void RandomJobFromStateStrategy::dumpSymbolicTree(WorkerTree::Node *highlight) {
-  stateStrat->dumpSymbolicTree(jobManager, highlight);
+  stateStrat->dumpSymbolicTree(highlight);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
