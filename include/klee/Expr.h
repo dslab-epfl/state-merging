@@ -191,7 +191,7 @@ public:
     CmpKindLast=Sge
   };
 
-  unsigned refCount;
+  uint32_t refCount;
 
 protected:  
   unsigned hashValue;
@@ -563,7 +563,7 @@ class UpdateNode {
   friend class UpdateList;
   friend class STPBuilder; // for setting STPArray
 
-  mutable unsigned refCount;
+  mutable uint32_t refCount;
   // gross
   mutable void *stpArray;
   // cache instead of recalc

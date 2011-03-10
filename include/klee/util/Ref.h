@@ -20,6 +20,8 @@ using llvm::dyn_cast_or_null;
 #include <assert.h>
 #include <iosfwd> // FIXME: Remove this!!!
 
+#include <boost/interprocess/detail/atomic.hpp>
+
 namespace klee {
 
 template<class T>
@@ -34,12 +36,17 @@ public:
 private:
   void inc() {
     if (ptr)
-      ++ptr->refCount;
+      boost::interprocess::detail::atomic_inc32(&ptr->refCount);
+      //++ptr->refCount;
   }
   
   void dec() {
-    if (ptr && --ptr->refCount == 0)
-      delete ptr;
+    //if (ptr && --ptr->refCount == 0)
+    //  delete ptr;
+    if (ptr) {
+      if (1 == boost::interprocess::detail::atomic_dec32(&ptr->refCount))
+        delete ptr;
+    }
   }  
 
 public:
