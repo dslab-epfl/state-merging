@@ -75,22 +75,30 @@ public:
 
     WorkerNodeInfo::merge_points_t &mpoints = (**node).getMergePoints();
 
+    bool zombie = !node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS);
+
+    if (zombie) {
+      deco["color"] = "gray";
+    }
 
     WorkerTree::Node *parent = node->getParent();
     if (parent) {
-      deco_t deco;
-      deco["label"] = node->getIndex() ? "1" : "0";
-      if (!node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS)) {
-        deco["style"] = "dotted";
+      deco_t edeco;
+      edeco["label"] = node->getIndex() ? "1" : "0";
+      if (zombie) {
+        edeco["color"] = "gray";
       }
-      inEdges.push_back(std::make_pair(parent, deco));
+      inEdges.push_back(std::make_pair(parent, edeco));
     }
 
     for (WorkerNodeInfo::merge_points_t::iterator it = mpoints.begin();
         it != mpoints.end(); it++) {
-      deco_t deco;
-      deco["style"] = "dashed";
-      inEdges.push_back(std::make_pair(it->second.get(), deco));
+      deco_t edeco;
+      edeco["style"] = "dashed";
+      if (zombie) {
+        edeco["color"] = "gray";
+      }
+      inEdges.push_back(std::make_pair(it->second.get(), edeco));
     }
   }
 };
