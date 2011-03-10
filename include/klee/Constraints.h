@@ -158,11 +158,11 @@ private:
   bool addConstraintInternal(ref<Expr> e, bool canBeFalse);
 
   // return true of the range info already existed
-  bool intersectRange(const ref<Expr>& e, const SRange& r);
+  bool intersectRange(const ref<Expr>& e, const SRange& r, bool *ok);
 
   // update ranges assuming e is true,
   // return true if already existing ranges might be changed
-  bool computeRanges(const ref<Expr>& e);
+  bool computeRanges(const ref<Expr>& e, bool *ok);
   void recomputeAllRanges();
 };
 
