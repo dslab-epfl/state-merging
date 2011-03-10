@@ -78,7 +78,7 @@ public:
     bool zombie = !node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS);
 
     if (zombie) {
-      deco["color"] = "gray";
+      deco["color"] = "gray25";
     }
 
     WorkerTree::Node *parent = node->getParent();
@@ -86,7 +86,7 @@ public:
       deco_t edeco;
       edeco["label"] = node->getIndex() ? "1" : "0";
       if (zombie) {
-        edeco["color"] = "gray";
+        edeco["color"] = "gray25";
       }
       inEdges.push_back(std::make_pair(parent, edeco));
     }
@@ -96,7 +96,7 @@ public:
       deco_t edeco;
       edeco["style"] = "dashed";
       if (zombie) {
-        edeco["color"] = "gray";
+        edeco["color"] = "gray25";
       }
       inEdges.push_back(std::make_pair(it->second.get(), edeco));
     }

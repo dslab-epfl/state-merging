@@ -829,15 +829,28 @@ public:
   virtual void operator() (Node *node, deco_t &deco, edge_deco_t &inEdges) {
     deco["label"] = "\"\"";
     deco["shape"] = "circle";
+    deco["width"] = "0.4";
+
     if (node->layerExists(fillLayer)) {
       deco["style"] = "filled";
-      deco["fillcolor"] = "gray";
+      if (node->isLeaf(fillLayer)) {
+        deco["fillcolor"] = "gray25";
+        deco["width"] = "0.7";
+      } else {
+        deco["fillcolor"] = "gray75";
+      }
     }
+
     if (node->layerExists(peripheryLayer)) {
-      deco["penwidth"] = "3";
+      if (node->isLeaf(peripheryLayer)) {
+        deco["penwidth"] = "5";
+      } else {
+        deco["penwidth"] = "3";
+      }
     }
     if (node == highlight) {
-      deco["peripheries"] = "2";
+      deco["color"] = "red";
+      deco["shape"] = "square";
     }
   }
 };

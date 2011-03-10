@@ -53,7 +53,7 @@ private:
   void initStatistics();
   void initStrategy();
 
-  StateSelectionStrategy *createCoverageOptimizedStrat();
+  StateSelectionStrategy *createCoverageOptimizedStrat(StateSelectionStrategy *base);
   OracleStrategy *createOracleStrategy();
 
   void initRootState(llvm::Function *f, int argc, char **argv, char **envp);
@@ -213,6 +213,9 @@ public:
   JobSelectionStrategy *getStrategy() {
     return selStrategy;
   }
+
+
+  StateSelectionStrategy *createBaseStrategy();
 
   bool mergeStates(SymbolicState* dest, SymbolicState *src);
 

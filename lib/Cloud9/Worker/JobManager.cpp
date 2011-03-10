@@ -85,6 +85,19 @@ extern Statistic globallyUncoveredInstructions;
 }
 
 namespace {
+/* Job Selection Settings *****************************************************/
+
+cl::opt<bool> StratRandom("c9-job-random", cl::desc("Use random job selection"));
+cl::opt<bool> StratRandomPath("c9-job-random-path" , cl::desc("Use random path job selection"));
+cl::opt<bool> StratCovOpt("c9-job-cov-opt", cl::desc("Use coverage optimized job selection"));
+cl::opt<bool> StratOracle("c9-job-oracle", cl::desc("Use the almighty oracle"));
+cl::opt<bool> StratFaultInj("c9-job-fault-inj", cl::desc("Use fault injection"));
+cl::opt<bool> StratLimitedFlow("c9-job-lim-flow", cl::desc("Use limited states flow"));
+cl::opt<bool> StratPartitioning("c9-job-partitioning", cl::desc("Use state partitioning"));
+cl::opt<bool> StratLazyMerging("c9-job-lazy-merging", cl::desc("Use lazy state merging technique"));
+
+/* Other Settings *************************************************************/
+
 cl::opt<unsigned> MakeConcreteSymbolic("make-concrete-symbolic", cl::desc(
   "Rate at which to make concrete reads symbolic (0=off)"), cl::init(0));
 
@@ -138,14 +151,14 @@ namespace worker {
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
 
-StateSelectionStrategy *JobManager::createCoverageOptimizedStrat() {
+StateSelectionStrategy *JobManager::createCoverageOptimizedStrat(StateSelectionStrategy *base) {
   std::vector<StateSelectionStrategy*> strategies;
 
   strategies.push_back(new WeightedRandomStrategy(
          WeightedRandomStrategy::CoveringNew,
          tree,
          symbEngine));
-  strategies.push_back(new RandomPathStrategy(tree));
+  strategies.push_back(base);
   return new TimeMultiplexedStrategy(strategies);
 }
 
@@ -414,59 +427,55 @@ void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
   symbEngine->initRootState(kState, argc, argv, envp);
 }
 
+StateSelectionStrategy *JobManager::createBaseStrategy() {
+  // Step 1: Compose the basic strategy
+  StateSelectionStrategy *stateStrat = NULL;
+
+  if (StratRandomPath) {
+    if (StratPartitioning)
+      stateStrat = new ClusteredRandomPathStrategy(tree);
+    else
+      stateStrat = new RandomPathStrategy(tree);
+  } else {
+    stateStrat = new RandomStrategy();
+  }
+
+  // Step 2: Check to see if want the coverage-optimized strategy
+  if (StratCovOpt) {
+    stateStrat = createCoverageOptimizedStrat(stateStrat);
+  }
+
+  // Step 3: Check to see if we want lazy merging
+  if (StratLazyMerging) {
+    stateStrat = new LazyMergingStrategy(this, stateStrat);
+    batching = false;
+  }
+
+  return stateStrat;
+}
+
 void JobManager::initStrategy() {
-  switch (JobSelection) {
-  case RandomSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, new RandomStrategy(), this);
-    CLOUD9_INFO("Using random job selection strategy");
-    break;
-  case RandomPathSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, new RandomPathStrategy(tree), this);
-    CLOUD9_INFO("Using random path job selection strategy");
-    break;
-  case CoverageOptimizedSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, createCoverageOptimizedStrat(), this);
-    CLOUD9_INFO("Using weighted random job selection strategy");
-    break;
-  case OracleSel:
+  if (StratLazyMerging || StratOracle)
+    batching = false;
+
+  if (StratOracle) {
     selStrategy = createOracleStrategy();
     batching = false;
     CLOUD9_INFO("Using the oracle");
-    break;
-  case FaultInjSel:
-    selStrategy = new FIStrategy(tree, this);
-    CLOUD9_INFO("Using the fault injection strategy");
-    break;
-  case LimitedFlowSel:
-    selStrategy = new RandomJobFromStateStrategy(tree, new LimitedFlowStrategy(
-        createCoverageOptimizedStrat(),
-        new ClusteredRandomPathStrategy(tree), FlowSizeLimit), this);
-    CLOUD9_INFO("Using the limited flow strategy");
-    break;
-  case PartitioningSel:
-    selStrategy = new RandomJobFromStateStrategy(tree,
-        new PartitioningStrategy(tree, symbEngine), this);
-    CLOUD9_INFO("Using the state partitioning strategy");
-    break;
-  case KleeForkCapSel:
-    selStrategy = new RandomJobFromStateStrategy(tree,
-        new KleeForkCapStrategy(5, 0, tree, symbEngine), this);
-    CLOUD9_INFO("Using the Klee fork-cap strategy");
-    break;
-  case LazyMergingSel:
-    selStrategy = new RandomJobFromStateStrategy(tree,
-        new LazyMergingStrategy(this, createCoverageOptimizedStrat()), this);
-    batching = false;
-    CLOUD9_INFO("Using the lazy merging strategy");
-    break;
-  default:
-    assert(0 && "undefined job selection strategy");
+    return;
   }
 
-  //selStrategy = new TargetedStrategy(tree);
+  StateSelectionStrategy *stateStrat = NULL;
 
-  // Wrap this in a batching strategy, to speed up things
-  //selStrategy = new BatchingStrategy(selStrategy);
+  if (StratPartitioning) {
+    stateStrat = new PartitioningStrategy(this);
+    CLOUD9_INFO("Using the state partitioning strategy");
+  } else {
+    stateStrat = createBaseStrategy();
+    CLOUD9_INFO("Using the regular strategy stack");
+  }
+
+  selStrategy = new RandomJobFromStateStrategy(tree, stateStrat, this);
 }
 
 OracleStrategy *JobManager::createOracleStrategy() {
@@ -641,7 +650,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
 
 ExecutionJob* JobManager::selectNextJob() {
   ExecutionJob *job = selStrategy->onNextJobSelection();
-  if (JobSelection != OracleSel)
+  if (!StratOracle)
     assert(job != NULL || jobCount == 0);
 
   return job;
@@ -1201,7 +1210,7 @@ bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
 bool JobManager::onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
   switch (forkTag.forkClass) {
   case KLEE_FORK_FAULTINJ:
-    return JobSelection == FaultInjSel;
+    return StratFaultInj;
   default:
     return false;
   }
@@ -1266,9 +1275,7 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState, bool silenced) {
 
   pendingDeletions.erase(state);
   if (currentState == state) {
-    CLOUD9_DEBUG("Deleting the current state...");
     currentState = NULL;
-    dumpSymbolicTree(NULL, WorkerNodeDecorator(state->getNode().get()));
   }
 
   if (!silenced) {
@@ -1299,7 +1306,7 @@ void JobManager::onEvent(klee::ExecutionState *kState,
       (**node).trace.appendEntry(new BreakpointEntry(value));
     }
 
-    if (JobSelection == OracleSel) {
+    if (StratOracle) {
       if (value == KLEE_BRK_START_TRACING) {
         kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
       }

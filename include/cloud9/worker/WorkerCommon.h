@@ -22,23 +22,9 @@ enum LibcType {
 	NoLibc, UcLibc
 };
 
-enum JobSelectionType {
-	RandomSel,
-	RandomPathSel,
-	CoverageOptimizedSel,
-	OracleSel,
-	FaultInjSel,
-	LimitedFlowSel,
-	PartitioningSel,
-	KleeForkCapSel,
-	LazyMergingSel
-};
-
 extern std::string InputFile;
 extern LibcType Libc;
 extern bool WithPOSIXRuntime;
-
-extern JobSelectionType JobSelection;
 
 extern bool UseGlobalCoverage;
 

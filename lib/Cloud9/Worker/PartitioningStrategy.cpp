@@ -33,15 +33,7 @@ part_id_t PartitioningStrategy::hashState(SymbolicState* state) {
 }
 
 StatePartition PartitioningStrategy::createPartition() {
-  std::vector<StateSelectionStrategy*> strategies;
-
-  strategies.push_back(new WeightedRandomStrategy(
-         WeightedRandomStrategy::CoveringNew,
-         tree,
-         engine));
-  strategies.push_back(new ClusteredRandomPathStrategy(tree));
-
-  return StatePartition(new TimeMultiplexedStrategy(strategies));
+  return StatePartition(jobManager->createBaseStrategy());
 }
 
 void PartitioningStrategy::activateStateInPartition(SymbolicState *state,
@@ -186,8 +178,7 @@ void PartitioningStrategy::setActivation(std::set<part_id_t> &activation) {
   }
 }
 
-ExecutionPathSetPin PartitioningStrategy::selectStates(JobManager *jobManager,
-    part_select_t &counts) {
+ExecutionPathSetPin PartitioningStrategy::selectStates(part_select_t &counts) {
   jobManager->lockJobs();
 
   std::vector<WorkerTree::Node*> stateRoots;
@@ -237,7 +228,7 @@ ExecutionPathSetPin PartitioningStrategy::selectStates(JobManager *jobManager,
 
   CLOUD9_DEBUG("Selected " << stateRoots.size() << " from partitioning strategy.");
 
-  ExecutionPathSetPin paths = tree->buildPathSet(stateRoots.begin(),
+  ExecutionPathSetPin paths = jobManager->getTree()->buildPathSet(stateRoots.begin(),
         stateRoots.end());
 
   jobManager->unlockJobs();

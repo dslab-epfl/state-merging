@@ -19,8 +19,6 @@ std::string InputFile;
 LibcType Libc;
 bool WithPOSIXRuntime;
 
-JobSelectionType JobSelection;
-
 bool UseGlobalCoverage;
 
 std::string LBAddress;
@@ -44,20 +42,6 @@ static cl::opt<LibcType, true> LibcOpt("libc", cl::desc(
 
 static cl::opt<bool, true> WithPOSIXRuntimeOpt("posix-runtime", cl::desc(
 		"Link with POSIX runtime"), cl::location(WithPOSIXRuntime), cl::init(false));
-
-static cl::opt<JobSelectionType, true> JobSelectionOpt("c9-jobsel",
-		cl::desc("Job selection strategy"), cl::values(
-				clEnumValN(RandomSel, "random", "Random selection"),
-				clEnumValN(RandomPathSel, "random-path", "Random path selection"),
-				clEnumValN(CoverageOptimizedSel, "coverage-optimized", "Coverage optimized job selection"),
-				clEnumValN(OracleSel, "oracle", "Almighty oracle"),
-				clEnumValN(FaultInjSel, "fault-inj", "Fault injection"),
-				clEnumValN(LimitedFlowSel, "lim-flow", "Limited flow"),
-				clEnumValN(PartitioningSel, "partitioning", "State partitioning"),
-				clEnumValN(KleeForkCapSel, "klee-fork-cap", "Klee Fork-cap"),
-				clEnumValN(LazyMergingSel, "lazy-merging", "State Merging"),
-				clEnumValEnd),
-		cl::location(JobSelection), cl::init(CoverageOptimizedSel));
 
 static cl::opt<bool, true> UseGlobalCoverageOpt("c9-use-global-cov",
 		cl::desc("Use global coverage information in the searcher"),

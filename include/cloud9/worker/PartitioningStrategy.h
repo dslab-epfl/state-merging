@@ -51,8 +51,7 @@ private:
 
   part_id_set_t::iterator nextPartition;
 
-  WorkerTree *tree;
-  SymbolicEngine *engine;
+  JobManager *jobManager;
 
   unsigned forkQuota;
 
@@ -66,8 +65,8 @@ private:
 protected:
   virtual void dumpSymbolicTree(JobManager *jobManager, WorkerTree::Node *highlight);
 public:
-  PartitioningStrategy(WorkerTree *_tree, SymbolicEngine *_engine, unsigned _forkQuota = 0)
-    : tree(_tree), engine(_engine), forkQuota(_forkQuota) {
+  PartitioningStrategy(JobManager *_jobManager, unsigned _forkQuota = 0)
+    : jobManager(_jobManager), forkQuota(_forkQuota) {
     nextPartition = nonEmpty.begin();
   }
   virtual ~PartitioningStrategy() { }
@@ -81,7 +80,7 @@ public:
 
   void getStatistics(part_stats_t &stats);
   void setActivation(std::set<part_id_t> &activation);
-  ExecutionPathSetPin selectStates(JobManager *jobManager, part_select_t &counts);
+  ExecutionPathSetPin selectStates(part_select_t &counts);
 };
 
 class KleeForkCapStrategy: public KleeStrategy {

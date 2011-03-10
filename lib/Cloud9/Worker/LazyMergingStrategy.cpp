@@ -167,6 +167,7 @@ SymbolicState* LazyMergingStrategy::onNextStateSelection() {
        // State is at the same execution index as state1, let's try merging
        if (jobManager->mergeStates(state1, state)) {
          // We've merged !
+         jobManager->dumpSymbolicTree(NULL, WorkerNodeDecorator(state1->getNode().get()));
 
          // Any of the merged states could be followed for fast forwards.
          // Make traces that was pointing to state to point to state1
