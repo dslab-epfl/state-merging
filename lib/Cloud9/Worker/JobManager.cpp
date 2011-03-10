@@ -120,6 +120,10 @@ cl::opt<bool>
   InjectFaults("c9-fault-inj", cl::desc("Fork at fault injection points"),
       cl::init(false));
 
+cl::opt<bool>
+  ZombieNodes("zombie-nodes", cl::desc("Preserve the structure of the paths that finished."),
+      cl::init(false));
+
 cl::opt<unsigned> FlowSizeLimit("flow-size-limit", cl::init(10));
 
 }
@@ -506,6 +510,7 @@ JobManager::~JobManager() {
 }
 
 void JobManager::finalize() {
+  dumpSymbolicTree(NULL, WorkerNodeDecorator(NULL));
   symbEngine->deregisterStateEventHandler(this);
   symbEngine->destroyStates();
 
@@ -1171,8 +1176,8 @@ bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
 
   WorkerTree::Node *destNode = dest->getNode().get();
   // Pin the skeleton layer on source
-  WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_MERGED_STATES,
-      src->getNode().get())->pin(WORKER_LAYER_MERGED_STATES);
+  WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_SKELETON,
+      src->getNode().get())->pin(WORKER_LAYER_SKELETON);
 
   (**destNode).getMergePoints().push_back(std::make_pair(std::make_pair(dest->_instrSinceFork,
       src->_instrSinceFork), srcNodePin));
@@ -1413,14 +1418,25 @@ void JobManager::updateTreeOnDestroy(klee::ExecutionState *kState) {
 
   WorkerTree::Node *node = state->getNode().get();
 
-  ExecutionJob *job = (**node).getJob();
+  if (ZombieNodes) {
+    // Pin the state on the skeleton layer
+    WorkerTree::NodePin zombiePin =
+        tree->getNode(WORKER_LAYER_SKELETON, node)->pin(WORKER_LAYER_SKELETON);
+    zombieNodes.insert(zombiePin);
+  }
 
-  if (job != NULL) {
-    // Job finished here, need to remove it
-    finalizeJob(job, false, false);
+  if (node->layerExists(WORKER_LAYER_JOBS)) {
+    std::vector<WorkerTree::Node*> jobNodes;
+    tree->getLeaves(WORKER_LAYER_JOBS, node, jobNodes);
 
-    cloud9::instrum::theInstrManager.incStatistic(
-        cloud9::instrum::TotalProcJobs);
+    for (std::vector<WorkerTree::Node*>::iterator it = jobNodes.begin(); it != jobNodes.end(); it++) {
+      ExecutionJob *job = (**(*it)).getJob();
+      assert (job != NULL);
+      finalizeJob(job, false, false);
+
+      cloud9::instrum::theInstrManager.incStatistic(
+          cloud9::instrum::TotalProcJobs);
+    }
   }
 
   state->rebindToNode(NULL);

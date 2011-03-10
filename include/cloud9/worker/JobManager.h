@@ -91,6 +91,7 @@ private:
   bool batching;
 
   std::set<SymbolicState*> pendingDeletions;
+  std::set<WorkerTree::NodePin> zombieNodes;
 
   /*
    * Statistics
