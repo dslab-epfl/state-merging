@@ -22,6 +22,8 @@
 
 #include "llvm/Support/CommandLine.h"
 
+#include <pthread.h>
+
 using namespace klee;
 using namespace llvm;
 
@@ -59,6 +61,8 @@ class CexCachingSolver : public SolverImpl {
   // memo table
   assignmentsTable_ty assignmentsTable;
 
+  pthread_mutex_t mutex;
+
   bool searchForAssignment(KeyType &key, 
                            Assignment *&result);
   
@@ -72,7 +76,9 @@ class CexCachingSolver : public SolverImpl {
   bool getAssignment(const Query& query, Assignment *&result);
   
 public:
-  CexCachingSolver(Solver *_solver) : solver(_solver) {}
+  CexCachingSolver(Solver *_solver) : solver(_solver) {
+    pthread_mutex_init(&mutex, NULL);
+  }
   ~CexCachingSolver();
   
   bool computeTruth(const Query&, bool &isValid);
@@ -82,6 +88,20 @@ public:
                             const std::vector<const Array*> &objects,
                             std::vector< std::vector<unsigned char> > &values,
                             bool &hasSolution);
+
+  void cancelPendingJobs() { solver->impl->cancelPendingJobs(); }
+};
+
+///
+
+class _Lock {
+private:
+  pthread_mutex_t *_mutex;
+public:
+  _Lock(pthread_mutex_t *mutex): _mutex(mutex) {
+    pthread_mutex_lock(_mutex);
+  }
+  ~_Lock() { pthread_mutex_unlock(_mutex); }
 };
 
 ///
@@ -112,6 +132,7 @@ struct NullOrSatisfyingAssignment {
 /// unsatisfiable query).
 /// \return - True if a cached result was found.
 bool CexCachingSolver::searchForAssignment(KeyType &key, Assignment *&result) {
+  _Lock _lock(&mutex);
   Assignment * const *lookup = cache.lookup(key);
   if (lookup) {
     result = *lookup;
@@ -210,7 +231,12 @@ bool CexCachingSolver::getAssignment(const Query& query, Assignment *&result) {
   Assignment *binding;
   if (hasSolution) {
     binding = new Assignment(objects, values);
+  } else {
+    binding = (Assignment*) 0;
+  }
 
+  _Lock _lock(&mutex);
+  if (hasSolution) {
     // Memoize the result.
     std::pair<assignmentsTable_ty::iterator, bool>
       res = assignmentsTable.insert(binding);
@@ -221,8 +247,6 @@ bool CexCachingSolver::getAssignment(const Query& query, Assignment *&result) {
     
     if (DebugCexCacheCheckBinding)
       assert(binding->satisfies(key.begin(), key.end()));
-  } else {
-    binding = (Assignment*) 0;
   }
   
   result = binding;
@@ -234,6 +258,7 @@ bool CexCachingSolver::getAssignment(const Query& query, Assignment *&result) {
 ///
 
 CexCachingSolver::~CexCachingSolver() {
+  pthread_mutex_destroy(&mutex);
   cache.clear();
   delete solver;
   for (assignmentsTable_ty::iterator it = assignmentsTable.begin(), 

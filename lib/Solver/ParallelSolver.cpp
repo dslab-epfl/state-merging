@@ -78,7 +78,6 @@ private:
   unsigned mainSolverTimeout;
 
   STPSolver *mainSolver;
-  char *mainBuffer;
 
   typedef std::vector<ref<Expr> > constraint_expr_t;
 
@@ -91,7 +90,7 @@ private:
                                    ConstraintManager::merge_conditions_ty &mc);
 
   void solveQueryInParallel(const Query *query);
-  bool solveSubQuerySerially(char *solveBuffer, const Query *query,
+  bool solveSubQuerySerially(const Query *query,
       std::vector< std::vector<unsigned char> > &values, bool &hasSolution);
 public:
   ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver);
@@ -109,13 +108,14 @@ public:
                                     std::vector< std::vector<unsigned char> >
                                       &values,
                                     bool &hasSolution);
+  void cancelPendingJobs() { assert(0); }
 };
 
 void *subQuerySolverThread(void *ps) {
   ParallelSolver *pSolver = static_cast<ParallelSolver*>(ps);
 
   // Create our local solver buffer
-  char *solverBuffer = pSolver->mainSolver->getSharedMemSegment();
+  //char *solverBuffer = pSolver->mainSolver->getSharedMemSegment();
 
   CLOUD9_DEBUG("Sub-query solver thread ready");
 
@@ -145,7 +145,7 @@ void *subQuerySolverThread(void *ps) {
       std::vector< std::vector<unsigned char> > values;
       bool hasSolution;
 
-      bool result = pSolver->solveSubQuerySerially(solverBuffer, subQuery, values, hasSolution);
+      bool result = pSolver->solveSubQuerySerially(subQuery, values, hasSolution);
 
       _CHECKED(pthread_mutex_lock(&pSolver->mutex), 0);
       if (!pSolver->solutionFound && hasSolution) {
@@ -158,7 +158,7 @@ void *subQuerySolverThread(void *ps) {
         std::cerr << std::endl;
 
         pSolver->solutionFound = true;
-        pSolver->mainSolver->cancelPendingJobs();
+        pSolver->mainSolver->impl->cancelPendingJobs();
 
         *pSolver->solValues = values;
         *pSolver->hasSolution = hasSolution;
@@ -176,7 +176,7 @@ void *subQuerySolverThread(void *ps) {
   }
 
   // Finalizing...
-  pSolver->mainSolver->releaseSharedMemSegment(solverBuffer);
+  //pSolver->mainSolver->releaseSharedMemSegment(solverBuffer);
 
   return NULL;
 }
@@ -229,10 +229,10 @@ void *subSolversManagerThread(void *ps) {
   return NULL;
 }
 
-bool ParallelSolver::solveSubQuerySerially(char *solveBuffer, const Query *query,
+bool ParallelSolver::solveSubQuerySerially(const Query *query,
     std::vector< std::vector<unsigned char> > &values, bool &hasSolution) {
 
-  bool result = mainSolver->getInitialValues(*query, *solObjects, values, hasSolution, solveBuffer);
+  bool result = mainSolver->impl->computeInitialValues(*query, *solObjects, values, hasSolution);
 
   if (result)
     CLOUD9_DEBUG("Sub-query solved! " << (hasSolution ? "[sat]" : "[unsat]"));
@@ -396,7 +396,7 @@ ParallelSolver::ParallelSolver(unsigned solverCount, unsigned mainSolverTimeout,
 
   // Save the main solver
   mainSolver = solver;
-  mainBuffer = solver->getSharedMemSegment();
+  //mainBuffer = solver->getSharedMemSegment();
   mainQuery = NULL;
 
   // Init the synchronization structures
@@ -433,7 +433,7 @@ ParallelSolver::~ParallelSolver() {
 
   delete subQuerySolvers;
 
-  mainSolver->releaseSharedMemSegment(mainBuffer);
+  //mainSolver->releaseSharedMemSegment(mainBuffer);
 }
 
 void ParallelSolver::splitGeneratorAtPos(const Query &query,
@@ -511,8 +511,8 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   std::vector< std::vector<unsigned char> > localValues;
   bool localHasSolution;
 
-  bool result = mainSolver->getInitialValues(query, objects, localValues,
-		  localHasSolution, mainBuffer);
+  bool result = mainSolver->impl->computeInitialValues(query, objects, localValues,
+      localHasSolution);
 
   // Now check to see whether the sub-query mechanism started
   _CHECKED(pthread_mutex_lock(&mutex), 0);
@@ -520,7 +520,7 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   if (!solutionFound) {
     solutionFound = true;
     // Terminate all the other sub-queries
-    mainSolver->cancelPendingJobs();
+    mainSolver->impl->cancelPendingJobs();
 
     values = localValues;
     hasSolution = localHasSolution;

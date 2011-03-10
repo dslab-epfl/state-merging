@@ -55,7 +55,9 @@ namespace klee {
                                         &objects,
                                       std::vector< std::vector<unsigned char> > 
                                         &values,
-                                      bool &hasSolution) = 0;  
+                                      bool &hasSolution) = 0;
+
+    virtual void cancelPendingJobs() = 0;
 };
 
 }

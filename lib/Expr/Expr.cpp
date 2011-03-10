@@ -545,6 +545,7 @@ ref<Expr> SelectExpr::create(ref<Expr> c, ref<Expr> t, ref<Expr> f) {
     return CE->isTrue() ? t : f;
   } else if (t==f) {
     return t;
+    /*
   } else if (SelectExpr *se = dyn_cast<SelectExpr>(t)) {
     if (f == se->falseExpr)
       return SelectExpr::create(AndExpr::create(c, se->cond), se->trueExpr, f);
@@ -555,6 +556,7 @@ ref<Expr> SelectExpr::create(ref<Expr> c, ref<Expr> t, ref<Expr> f) {
       return SelectExpr::create(OrExpr::create(c, se->cond), t, se->falseExpr);
     else if (t == se->falseExpr)
       return SelectExpr::create(OrExpr::create(c, NotExpr::create(se->cond)), t, se->trueExpr);
+    */
   } else if (kt==Expr::Bool) { // c ? t : f  <=> (c and t) or (not c and f)
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(t)) {      
       if (CE->isTrue()) {

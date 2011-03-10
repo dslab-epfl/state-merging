@@ -302,6 +302,8 @@ public:
     return solver->impl->computeInitialValues(query, objects, values,
                                               hasSolution);
   }
+
+  void cancelPendingJobs() { solver->impl->cancelPendingJobs(); }
 };
   
 bool IndependentSolver::computeValidity(const Query& query,

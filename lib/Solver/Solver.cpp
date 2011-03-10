@@ -290,6 +290,8 @@ public:
                             const std::vector<const Array*> &objects,
                             std::vector< std::vector<unsigned char> > &values,
                             bool &hasSolution);
+
+  void cancelPendingJobs() { assert(0); }
 };
 
 bool ValidatingSolver::computeTruth(const Query& query,
@@ -420,6 +422,7 @@ public:
     ++stats::queryCounterexamples;
     return false; 
   }
+  void cancelPendingJobs() {}
 };
 
 Solver *klee::createDummySolver() {
@@ -438,10 +441,12 @@ private:
   bool useForkedSTP;
   bool enableLogging;
 
-  char *defaultShMem;
-
+  //pthread_mutex_t mutex;
   pthread_mutex_t mutex;
   std::set<pid_t> solverInstances;
+
+  pthread_key_t shmSegmentKey;
+
 public:
   STPSolverImpl(STPSolver *_solver, bool _useForkedSTP, bool _optimizeDivides,
       bool _enabledLogging);
@@ -457,11 +462,6 @@ public:
                             const std::vector<const Array*> &objects,
                             std::vector< std::vector<unsigned char> > &values,
                             bool &hasSolution);
-
-  bool computeInitialValues(const Query&,
-                              const std::vector<const Array*> &objects,
-                              std::vector< std::vector<unsigned char> > &values,
-                              bool &hasSolution, char *shmSegment);
 
   void cancelPendingJobs();
 };
@@ -494,19 +494,26 @@ STPSolverImpl::STPSolverImpl(STPSolver *_solver, bool _useForkedSTP,
 #endif
   vc_registerErrorHandler(::stp_error_handler);
 
+  /*
   if (useForkedSTP)
     defaultShMem = solver->getSharedMemSegment();
   else
     defaultShMem = NULL;
+  */
 
-  if (useForkedSTP)
+  if (useForkedSTP) {
     pthread_mutex_init(&mutex, NULL);
+  }
+
+  pthread_key_create(&shmSegmentKey, (void (*)(void*)) shmdt);
 }
 
 STPSolverImpl::~STPSolverImpl() {
   delete builder;
 
-  shmdt(defaultShMem);
+  //shmdt(defaultShMem);
+
+  pthread_mutex_destroy(&mutex);
 
   vc_Destroy(vc);
 }
@@ -526,6 +533,7 @@ void STPSolver::setTimeout(double timeout) {
   static_cast<STPSolverImpl*>(impl)->setTimeout(timeout);
 }
 
+/*
 char *STPSolver::getSharedMemSegment() {
 	int shmID = shmget(IPC_PRIVATE, SHARED_MEM_SIZE, IPC_CREAT | 0700);
 	assert(shmID>=0 && "shmget failed");
@@ -563,6 +571,7 @@ bool STPSolver::getInitialValues(const Query& query,
 void STPSolver::cancelPendingJobs() {
   dynamic_cast<STPSolverImpl*>(impl)->cancelPendingJobs();
 }
+*/
 
 /***/
 
@@ -624,13 +633,24 @@ bool
 STPSolverImpl::computeInitialValues(const Query& query,
                             const std::vector<const Array*> &objects,
                             std::vector< std::vector<unsigned char> > &values,
-                            bool &hasSolution, char *shmSegment) {
+                            bool &hasSolution) {
   TimerStatIncrementer t(stats::queryTime);
 
   ++stats::queries;
   ++stats::queryCounterexamples;
 
-  unsigned char *pos = (unsigned char*)shmSegment;
+  unsigned char *pos = (unsigned char*) pthread_getspecific(shmSegmentKey);
+  if (pos == NULL) {
+    int shmID = shmget(IPC_PRIVATE, SHARED_MEM_SIZE, IPC_CREAT | 0700);
+    assert(shmID>=0 && "shmget failed");
+
+    pos = (unsigned char*) shmat(shmID, NULL, 0);
+    assert(pos!=(void*)-1 && "shmat failed");
+    shmctl(shmID, IPC_RMID, NULL);
+
+    pthread_setspecific(shmSegmentKey, pos);
+  }
+
   bool success = false;
   int pid = 0;
   Timer timer;
@@ -770,12 +790,15 @@ STPSolverImpl::computeInitialValues(const Query& query,
 
     if (enableLogging) timer.stop();
 
+#warning There is a subtle race condition here: you cannot call kill() on \
+         a PID after you called waitpid() on it before
+
     pthread_mutex_lock(&mutex);
     solverInstances.erase(pid);
     pthread_mutex_unlock(&mutex);
 
     if (res < 0) {
-      fprintf(stderr, "error: waitpid() for STP failed");
+      fprintf(stderr, "error: waitpid() for STP failed\n");
       success = false;
       goto finalize;
     }
@@ -784,7 +807,11 @@ STPSolverImpl::computeInitialValues(const Query& query,
     // "occasion" return a status when the process was terminated by a
     // signal, so test signal first.
     if (WIFSIGNALED(status) || !WIFEXITED(status)) {
-      fprintf(stderr, "error: STP did not return successfully");
+      if (WIFSIGNALED(status) && WTERMSIG(status) == 9) {
+        // The solver was canceled
+      } else {
+        fprintf(stderr, "error: STP did not return successfully\n");
+      }
       success = false;
       goto finalize;
     }
@@ -795,11 +822,11 @@ STPSolverImpl::computeInitialValues(const Query& query,
     } else if (exitcode==1) {
       hasSolution = false;
     } else if (exitcode==52) {
-      fprintf(stderr, "error: STP timed out");
+      fprintf(stderr, "error: STP timed out\n");
       success = false;
       goto finalize;
     } else {
-      fprintf(stderr, "error: STP did not return a recognized code");
+      fprintf(stderr, "error: STP did not return a recognized code\n");
       success = false;
       goto finalize;
     }
@@ -857,6 +884,7 @@ void STPSolverImpl::cancelPendingJobs() {
   pthread_mutex_unlock(&mutex);
 }
 
+/*
 bool
 STPSolverImpl::computeInitialValues(const Query &query,
                                     const std::vector<const Array*>
@@ -867,3 +895,4 @@ STPSolverImpl::computeInitialValues(const Query &query,
 	return computeInitialValues(query, objects, values, hasSolution,
 			defaultShMem);
 }
+*/
