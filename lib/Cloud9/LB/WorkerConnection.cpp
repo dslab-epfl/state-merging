@@ -11,11 +11,19 @@
 #include "cloud9/lb/LBCommon.h"
 #include "cloud9/Logger.h"
 
+#include "llvm/Support/CommandLine.h"
+
 #include <boost/bind.hpp>
 #include <string>
 #include <vector>
+#include <sstream>
 
+using namespace llvm;
 using namespace cloud9::data;
+
+namespace {
+  cl::opt<bool> DebugWorkerCommunication("debug-worker-communication", cl::init(false));
+}
 
 namespace cloud9 {
 
@@ -82,6 +90,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
     response.set_id(id);
     response.set_more_details(false);
+    response.set_terminate(false);
 
     if (lb->getWorkerCount() == 1) {
       // Send the seed information
@@ -105,11 +114,13 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
     //processNodeSetUpdate(message); // XXX We disable this for now, it's useless
     processNodeDataUpdate(message);
     processStatisticsUpdates(message);
+    processPartitionUpdates(message);
 
     lb->analyze(id);
 
     response.set_id(id);
-    response.set_more_details(lb->requestAndResetDetails(id));
+    response.set_more_details(false);
+    response.set_terminate(lb->isDone());
 
     sendJobTransfers(response);
 
@@ -128,25 +139,46 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
   worker_id_t id = response.id();
-  TransferRequest *transfer = lb->requestAndResetTransfer(id);
 
-  if (transfer) {
-    const Worker *destination = lb->getWorker(transfer->toID);
+  transfer_t globalTrans;
+  part_transfers_t partTrans;
 
-    LBResponseMessage_JobTransfer *transMsg = response.mutable_jobtransfer();
+  bool result = lb->requestAndResetTransfer(id, globalTrans,
+      partTrans);
 
-    transMsg->set_dest_address(destination->getAddress());
-    transMsg->set_dest_port(destination->getPort());
+  if (result) {
+    if (partTrans.empty()) {
+      // This is a global transfer...
+      const Worker *destination = lb->getWorker(globalTrans.first);
+      LBResponseMessage_JobTransfer *transMsg = response.add_jobtransfer();
 
-    cloud9::data::ExecutionPathSet *pathSet = transMsg->mutable_path_set();
-    serializeExecutionPathSet(transfer->paths, *pathSet);
+      transMsg->set_dest_address(destination->getAddress());
+      transMsg->set_dest_port(destination->getPort());
+      transMsg->set_count(globalTrans.second);
+    } else {
+      // Fill in the partitioning structures
+      std::map<worker_id_t, LBResponseMessage_JobTransfer*> destinations;
 
-    for (std::vector<int>::iterator it = transfer->counts.begin(); it
-        != transfer->counts.end(); it++) {
-      transMsg->add_count(*it);
+      for (part_transfers_t::iterator it = partTrans.begin();
+          it != partTrans.end(); it++) {
+        LBResponseMessage_JobTransfer *transMsg;
+
+        if (destinations.count(it->second.first) == 0) {
+          transMsg = (destinations[it->second.first] = response.add_jobtransfer());
+          const Worker *destination = lb->getWorker(it->second.first);
+          transMsg->set_dest_address(destination->getAddress());
+          transMsg->set_dest_port(destination->getPort());
+          transMsg->set_count(0);
+        } else {
+          transMsg = destinations[it->second.first];
+        }
+
+        PartitionData *pData = transMsg->add_partitions();
+        pData->set_partition(it->first);
+        pData->set_active(it->second.second);
+        pData->set_total(it->second.second); // The same as active
+      }
     }
-
-    delete transfer;
   }
 }
 
@@ -157,6 +189,10 @@ void WorkerConnection::sendStatisticsUpdates(LBResponseMessage &response) {
   lb->getAndResetCoverageUpdates(id, data);
 
   if (data.size() > 0) {
+    if (DebugWorkerCommunication) {
+      CLOUD9_WRK_DEBUG(worker, "Sent coverage updates: " << covUpdatesToString(data));
+    }
+
     StatisticUpdate *update = response.add_globalupdates();
     serializeStatisticUpdate(CLOUD9_STAT_NAME_GLOBAL_COVERAGE, data, *update);
   }
@@ -173,8 +209,7 @@ void WorkerConnection::handleMessageSent(const boost::system::error_code &error)
   }
 }
 
-bool WorkerConnection::processStatisticsUpdates(
-    const WorkerReportMessage &message) {
+bool WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
   if (message.localupdates_size() == 0)
     return false;
 
@@ -187,10 +222,34 @@ bool WorkerConnection::processStatisticsUpdates(
       cov_update_t data;
       parseStatisticUpdate(update, data);
 
+      if (DebugWorkerCommunication) {
+        CLOUD9_WRK_DEBUG(worker, "Received coverage updates: " << covUpdatesToString(data));
+      }
+
       if (data.size() > 0)
         lb->updateCoverageData(id, data);
     }
   }
+
+  return true;
+}
+
+bool WorkerConnection::processPartitionUpdates(const WorkerReportMessage &message) {
+  if (message.partitionupdates_size() == 0)
+    return false;
+
+  worker_id_t id = message.id();
+
+  part_stat_t partStat;
+
+  for (int i = 0; i < message.partitionupdates_size(); i++) {
+    const PartitionData &pData = message.partitionupdates(i);
+
+    partStat.insert(std::make_pair(pData.partition(),
+        std::make_pair(pData.total(), pData.active())));
+  }
+
+  lb->updatePartitioningData(id, partStat);
 
   return true;
 }

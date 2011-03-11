@@ -11,6 +11,8 @@
 #include "config.h"
 
 #include <sys/types.h>
+#include <unistd.h>
+
 
 #ifdef __USE_MISC
 #undef __USE_MISC

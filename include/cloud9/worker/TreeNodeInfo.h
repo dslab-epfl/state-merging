@@ -25,16 +25,29 @@ namespace worker {
 class ExecutionTrace;
 class SymbolicState;
 class ExecutionJob;
+class WorkerNodeInfo;
+
+#define WORKER_LAYER_COUNT          6
+
+#define WORKER_LAYER_JOBS           1
+#define WORKER_LAYER_STATES         2
+#define WORKER_LAYER_STATISTICS     3
+#define WORKER_LAYER_BREAKPOINTS    4
+#define WORKER_LAYER_SKELETON       5
 
 class WorkerNodeInfo {
 	friend class JobManager;
 	friend class SymbolicState;
 	friend class ExecutionJob;
+public:
+	typedef TreeNode<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> worker_tree_node_t;
+	typedef std::vector<std::pair<std::pair<unsigned long, unsigned long>, worker_tree_node_t::Pin> > merge_points_t;
 private:
 	SymbolicState *symState;
 	ExecutionJob *job;
 	ExecutionTrace trace;
 	klee::ForkTag forkTag;
+	merge_points_t mergePoints;
 public:
 	WorkerNodeInfo() : symState(NULL), job(NULL), forkTag(klee::KLEE_FORK_DEFAULT) { }
 
@@ -45,16 +58,50 @@ public:
 	klee::ForkTag getForkTag() const { return forkTag; }
 
 	const ExecutionTrace &getTrace() const { return trace; }
+	merge_points_t &getMergePoints() { return mergePoints; }
 };
 
-#define WORKER_LAYER_COUNT			4
-
-#define WORKER_LAYER_JOBS			0
-#define WORKER_LAYER_STATES			1
-#define WORKER_LAYER_STATISTICS		2
-#define WORKER_LAYER_BREAKPOINTS	3
-
 typedef ExecutionTree<WorkerNodeInfo, WORKER_LAYER_COUNT, 2> WorkerTree; // Four layered, binary tree
+
+class WorkerNodeDecorator: public DotNodeDefaultDecorator<WorkerTree::Node> {
+public:
+  WorkerNodeDecorator(WorkerTree::Node *highlight) :
+    DotNodeDefaultDecorator<WorkerTree::Node>(WORKER_LAYER_STATES, WORKER_LAYER_JOBS, highlight) {
+
+  }
+
+  void operator() (WorkerTree::Node *node, deco_t &deco, edge_deco_t &inEdges) {
+    DotNodeDefaultDecorator<WorkerTree::Node>::operator() (node, deco, inEdges);
+
+    WorkerNodeInfo::merge_points_t &mpoints = (**node).getMergePoints();
+
+    bool zombie = !node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS);
+
+    if (zombie) {
+      deco["color"] = "gray25";
+    }
+
+    WorkerTree::Node *parent = node->getParent();
+    if (parent) {
+      deco_t edeco;
+      edeco["label"] = node->getIndex() ? "1" : "0";
+      if (zombie) {
+        edeco["color"] = "gray25";
+      }
+      inEdges.push_back(std::make_pair(parent, edeco));
+    }
+
+    for (WorkerNodeInfo::merge_points_t::iterator it = mpoints.begin();
+        it != mpoints.end(); it++) {
+      deco_t edeco;
+      edeco["style"] = "dashed";
+      if (zombie) {
+        edeco["color"] = "gray25";
+      }
+      inEdges.push_back(std::make_pair(it->second.get(), edeco));
+    }
+  }
+};
 
 }
 

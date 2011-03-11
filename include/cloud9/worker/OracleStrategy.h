@@ -23,7 +23,8 @@ private:
 
   bool checkProgress(SymbolicState *state);
 public:
-  OracleStrategy(WorkerTree *_tree, std::vector<unsigned int> &_goalPath);
+  OracleStrategy(WorkerTree *_tree, std::vector<unsigned int> &_goalPath,
+      JobManager *_jobManager);
   virtual ~OracleStrategy();
 
   virtual ExecutionJob* onNextJobSelection();

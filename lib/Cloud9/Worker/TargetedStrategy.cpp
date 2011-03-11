@@ -27,7 +27,8 @@ namespace worker {
 
 TargetedStrategy::interests_t TargetedStrategy::anything = interests_t();
 
-TargetedStrategy::TargetedStrategy(WorkerTree *_workerTree) :
+TargetedStrategy::TargetedStrategy(WorkerTree *_workerTree, JobManager *_jobManager) :
+    BasicStrategy(_jobManager),
     workerTree(_workerTree),
     adoptionRate(DEFAULT_ADOPTION_RATE),
     explosionLimitSize(DEFAULT_EXPLOSION_SIZE),

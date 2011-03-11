@@ -15,7 +15,7 @@ namespace worker {
 // Composed Strategy
 ////////////////////////////////////////////////////////////////////////////////
 
-ComposedStrategy::ComposedStrategy(std::vector<JobSelectionStrategy*> &_underlying) : underlying(_underlying) {
+ComposedStrategy::ComposedStrategy(std::vector<StateSelectionStrategy*> &_underlying) : underlying(_underlying) {
 	assert(underlying.size() > 0);
 }
 
@@ -23,38 +23,23 @@ ComposedStrategy::~ComposedStrategy() {
 
 }
 
-
-void ComposedStrategy::onJobAdded(ExecutionJob *job) {
-	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		JobSelectionStrategy *strat = *it;
-		strat->onJobAdded(job);
-	}
-}
-
-void ComposedStrategy::onRemovingJob(ExecutionJob *job) {
-	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		JobSelectionStrategy *strat = *it;
-		strat->onRemovingJob(job);
-	}
-}
-
 void ComposedStrategy::onStateActivated(SymbolicState *state) {
 	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		JobSelectionStrategy *strat = *it;
+		StateSelectionStrategy *strat = *it;
 		strat->onStateActivated(state);
 	}
 }
 
 void ComposedStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
 	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		JobSelectionStrategy *strat = *it;
+		StateSelectionStrategy *strat = *it;
 		strat->onStateUpdated(state, oldNode);
 	}
 }
 
 void ComposedStrategy::onStateDeactivated(SymbolicState *state) {
 	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		JobSelectionStrategy *strat = *it;
+		StateSelectionStrategy *strat = *it;
 		strat->onStateDeactivated(state);
 	}
 }
@@ -64,7 +49,7 @@ void ComposedStrategy::onStateDeactivated(SymbolicState *state) {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-TimeMultiplexedStrategy::TimeMultiplexedStrategy(std::vector<JobSelectionStrategy*> strategies) :
+TimeMultiplexedStrategy::TimeMultiplexedStrategy(std::vector<StateSelectionStrategy*> strategies) :
 	ComposedStrategy(strategies), position(0) {
 
 }
@@ -73,12 +58,12 @@ TimeMultiplexedStrategy::~TimeMultiplexedStrategy() {
 
 }
 
-ExecutionJob* TimeMultiplexedStrategy::onNextJobSelection() {
-	ExecutionJob *job = underlying[position]->onNextJobSelection();
+SymbolicState* TimeMultiplexedStrategy::onNextStateSelection() {
+  SymbolicState *state = underlying[position]->onNextStateSelection();
 
-	position = (position + 1) % underlying.size();
+  position = (position + 1) % underlying.size();
 
-	return job;
+  return state;
 }
 
 }

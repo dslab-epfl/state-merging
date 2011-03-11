@@ -31,11 +31,13 @@ class SymbolicState {
 private:
 	klee::ExecutionState *kleeState;
 	WorkerTree::NodePin nodePin;
+	SymbolicState *parent;
 
 	bool _active;
 
 	std::vector<klee::KInstruction*> _instrProgress;
 	unsigned int _instrPos;
+	unsigned long _instrSinceFork;
 
 	bool collectProgress;
 
@@ -53,11 +55,13 @@ private:
 	}
 
 public:
-	SymbolicState(klee::ExecutionState *state) :
+	SymbolicState(klee::ExecutionState *state, SymbolicState *_parent) :
 		kleeState(state),
 		nodePin(WORKER_LAYER_STATES),
+		parent(_parent),
 		_active(false),
 		_instrPos(0),
+		_instrSinceFork(0),
 		collectProgress(false) {
       kleeState->setCloud9State(this);
 	}
@@ -66,9 +70,21 @@ public:
 		rebindToNode(NULL);
 	}
 
-	klee::ExecutionState *getKleeState() const { return kleeState; }
+	void replaceKleeState(klee::ExecutionState *state) {
+	  kleeState = state;
+	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
+
+	SymbolicState *getParent() const { return parent; }
+
+	klee::ExecutionState& operator*() {
+      return *kleeState;
+    }
+
+	const klee::ExecutionState& operator*() const {
+	  return *kleeState;
+    }
 };
 
 /*
@@ -82,6 +98,8 @@ private:
 	bool imported;
 	bool exported;
 	bool removing;
+
+	long replayInstr;
 
 	klee::ForkTag forkTag;
 
@@ -99,11 +117,12 @@ private:
     }
 public:
 	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
-		exported(false), removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {}
+		exported(false), removing(false), replayInstr(0),
+		forkTag(klee::KLEE_FORK_DEFAULT) {}
 
 	ExecutionJob(WorkerTree::Node *node, bool _imported) :
 		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
-		removing(false), forkTag(klee::KLEE_FORK_DEFAULT) {
+		removing(false), replayInstr(0), forkTag(klee::KLEE_FORK_DEFAULT) {
 
 		rebindToNode(node);
 

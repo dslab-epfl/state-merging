@@ -292,6 +292,27 @@ DEFINE_MODEL(int, stat, const char *path, struct stat *buf) {
   return _stat_dfile(dfile, buf);
 }
 
+#if 0
+DEFINE_MODEL(int, fstatat, int dirfd, const char *pathname, struct stat *buf,
+                   int flags) {
+  disk_file_t *dfile = __get_sym_file(pathname);
+
+  if (!dfile) {
+    int concrete_dirfd = __get_concrete_fd(dirfd);
+    if (concrete_dirfd < 0)
+      return -1;
+
+    int res = CALL_UNDERLYING(fstatat, concrete_dirfd,
+        __concretize_string(pathname), buf, flags);
+    if (res == -1)
+      errno = klee_get_errno();
+    return res;
+  }
+
+  return _stat_dfile(dfile, buf);
+}
+#endif
+
 DEFINE_MODEL(int, lstat, const char *path, struct stat *buf) {
   disk_file_t *dfile = __get_sym_file(path);
 

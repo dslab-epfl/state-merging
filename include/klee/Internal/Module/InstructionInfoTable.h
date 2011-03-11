@@ -48,6 +48,10 @@ namespace klee {
       }
     };
 
+    struct ltfunc {
+      bool operator()(const llvm::Function *f1, const llvm::Function *f2) const;
+    };
+
     std::string dummyString;
     InstructionInfo dummyInfo;
     std::map<const llvm::Instruction*, InstructionInfo> infos;

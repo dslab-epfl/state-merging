@@ -18,21 +18,15 @@ namespace cloud9 {
 namespace lb {
 
 typedef unsigned int worker_id_t;
+typedef unsigned int part_id_t;
+
+typedef std::map<part_id_t, std::pair<unsigned, unsigned> > part_stat_t;
+
+typedef std::pair<worker_id_t, unsigned> transfer_t;
+typedef std::map<part_id_t, transfer_t> part_transfers_t;
 
 class Worker {
   friend class LoadBalancer;
-public:
-  struct IDCompare {
-    bool operator()(const Worker *a, const Worker *b) {
-      return a->getID() < b->getID();
-    }
-  };
-
-  struct LoadCompare {
-    bool operator()(const Worker *a, const Worker *b) {
-      return a->getTotalJobs() < b->getTotalJobs();
-    }
-  };
 private:
   worker_id_t id;
   std::string address;
@@ -47,15 +41,16 @@ private:
 
   unsigned int totalJobs;
 
-  std::set<std::string> interests;
-  bool updatedInterests;
-
-  std::map<std::string, unsigned int> jobsBreakdown;
-
+  part_stat_t statePartitions;
+  std::set<part_id_t> activePartitions;
 
   unsigned int lastReportTime;
 
-  Worker() : nodesRevision(1), totalJobs(0), updatedInterests(false), lastReportTime(0) {
+  bool transferReq;
+  transfer_t globalTransfer;
+  part_transfers_t partTransfers;
+
+  Worker() : nodesRevision(1), totalJobs(0), lastReportTime(0), transferReq(false) {
 
   }
 public:

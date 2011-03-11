@@ -18,25 +18,13 @@
 
 #include "cloud9/Common.h"
 
-//#define KLEE_LIBRARY_PATH 	KLEE_DIR "/" RUNTIME_CONFIGURATION "/lib"
-
 enum LibcType {
 	NoLibc, UcLibc
-};
-
-enum JobSelectionType {
-	RandomSel,
-	RandomPathSel,
-	CoverageOptimizedSel,
-	OracleSel,
-	FaultInjSel
 };
 
 extern std::string InputFile;
 extern LibcType Libc;
 extern bool WithPOSIXRuntime;
-
-extern JobSelectionType JobSelection;
 
 extern bool UseGlobalCoverage;
 

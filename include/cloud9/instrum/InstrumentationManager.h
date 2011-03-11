@@ -41,13 +41,15 @@ enum Statistics {
 
   TotalTreePaths = 17,
 
-  TotalReplayInstructions = 20,
-
   CurrentJobCount = 11,
   CurrentActiveStateCount = 18,
   CurrentStateCount = 19,
 
-  MAX_STATISTICS = 21
+  TotalReplayInstructions = 20,
+  TotalWastedInstructions = 21,
+
+
+  MAX_STATISTICS = 22
 };
 
 enum EventClass {
@@ -76,8 +78,8 @@ class IOServices;
 class InstrumentationManager {
 public:
 	typedef double TimeStamp;
-
-	typedef vector<int> statistics_t;
+	typedef long int stat_value_t;
+	typedef vector<stat_value_t> statistics_t;
 
 	typedef map<int, string> event_attributes_t;
 	typedef pair<TimeStamp, int> event_id_t;
@@ -153,20 +155,20 @@ public:
 	  recordEvent(id);
 	}
 
-	void setStatistic(Statistics id, int value) {
+	void setStatistic(Statistics id, stat_value_t value) {
 		stats[id] = value;
 	}
 
-	void topStatistic(Statistics id, int value) {
+	void topStatistic(Statistics id, stat_value_t value) {
 		if (value > stats[id])
 			stats[id] = value;
 	}
 
-	void incStatistic(Statistics id, int value = 1) {
+	void incStatistic(Statistics id, stat_value_t value = 1) {
 		stats[id] += value;
 	}
 
-	void decStatistic(Statistics id, int value = 1) {
+	void decStatistic(Statistics id, stat_value_t value = 1) {
 		stats[id] -= value;
 	}
 

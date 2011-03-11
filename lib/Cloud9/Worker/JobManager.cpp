@@ -29,6 +29,8 @@
 #include "cloud9/worker/OracleStrategy.h"
 #include "cloud9/worker/FIStrategy.h"
 #include "cloud9/worker/TargetedStrategy.h"
+#include "cloud9/worker/PartitioningStrategy.h"
+#include "cloud9/worker/LazyMergingStrategy.h"
 #include "cloud9/Logger.h"
 #include "cloud9/Common.h"
 #include "cloud9/ExecutionTree.h"
@@ -83,6 +85,19 @@ extern Statistic globallyUncoveredInstructions;
 }
 
 namespace {
+/* Job Selection Settings *****************************************************/
+
+cl::opt<bool> StratRandom("c9-job-random", cl::desc("Use random job selection"));
+cl::opt<bool> StratRandomPath("c9-job-random-path" , cl::desc("Use random path job selection"));
+cl::opt<bool> StratCovOpt("c9-job-cov-opt", cl::desc("Use coverage optimized job selection"));
+cl::opt<bool> StratOracle("c9-job-oracle", cl::desc("Use the almighty oracle"));
+cl::opt<bool> StratFaultInj("c9-job-fault-inj", cl::desc("Use fault injection"));
+cl::opt<bool> StratLimitedFlow("c9-job-lim-flow", cl::desc("Use limited states flow"));
+cl::opt<bool> StratPartitioning("c9-job-partitioning", cl::desc("Use state partitioning"));
+cl::opt<bool> StratLazyMerging("c9-job-lazy-merging", cl::desc("Use lazy state merging technique"));
+
+/* Other Settings *************************************************************/
+
 cl::opt<unsigned> MakeConcreteSymbolic("make-concrete-symbolic", cl::desc(
   "Rate at which to make concrete reads symbolic (0=off)"), cl::init(0));
 
@@ -118,6 +133,12 @@ cl::opt<bool>
   InjectFaults("c9-fault-inj", cl::desc("Fork at fault injection points"),
       cl::init(false));
 
+cl::opt<bool>
+  ZombieNodes("zombie-nodes", cl::desc("Preserve the structure of the paths that finished."),
+      cl::init(false));
+
+cl::opt<unsigned> FlowSizeLimit("flow-size-limit", cl::init(10));
+
 }
 
 using namespace klee;
@@ -129,6 +150,17 @@ namespace worker {
 /*******************************************************************************
  * HELPER FUNCTIONS FOR THE JOB MANAGER
  ******************************************************************************/
+
+StateSelectionStrategy *JobManager::createCoverageOptimizedStrat(StateSelectionStrategy *base) {
+  std::vector<StateSelectionStrategy*> strategies;
+
+  strategies.push_back(new WeightedRandomStrategy(
+         WeightedRandomStrategy::CoveringNew,
+         tree,
+         symbEngine));
+  strategies.push_back(base);
+  return new TimeMultiplexedStrategy(strategies);
+}
 
 bool JobManager::isJob(WorkerTree::Node *node) {
   return (**node).getJob() != NULL;
@@ -337,7 +369,8 @@ void JobManager::processTestCase(SymbolicState *state) {
 
 JobManager::JobManager(llvm::Module *module, std::string mainFnName, int argc,
     char **argv, char **envp) :
-  terminationRequest(false), jobCount(0), currentJob(NULL), replaying(false), traceCounter(0) {
+  terminationRequest(false), jobCount(0), currentJob(NULL), currentState(NULL),
+  replaying(false), batching(true), traceCounter(0) {
 
   tree = new WorkerTree();
 
@@ -387,48 +420,62 @@ void JobManager::initialize(llvm::Module *module, llvm::Function *_mainFn,
 void JobManager::initRootState(llvm::Function *f, int argc, char **argv,
     char **envp) {
   klee::ExecutionState *kState = symbEngine->createRootState(f);
-  SymbolicState *state = new SymbolicState(kState);
+  SymbolicState *state = new SymbolicState(kState, NULL);
 
   state->rebindToNode(tree->getRoot());
 
   symbEngine->initRootState(kState, argc, argv, envp);
 }
 
-void JobManager::initStrategy() {
-  std::vector<JobSelectionStrategy*> strategies;
+StateSelectionStrategy *JobManager::createBaseStrategy() {
+  // Step 1: Compose the basic strategy
+  StateSelectionStrategy *stateStrat = NULL;
 
-  switch (JobSelection) {
-  case RandomSel:
-    selStrategy = new RandomStrategy();
-    CLOUD9_INFO("Using random job selection strategy");
-    break;
-  case RandomPathSel:
-    selStrategy = new RandomPathStrategy(tree);
-    CLOUD9_INFO("Using random path job selection strategy");
-    break;
-  case CoverageOptimizedSel:
-    strategies.push_back(new WeightedRandomStrategy(
-        WeightedRandomStrategy::CoveringNew, tree, symbEngine));
-    strategies.push_back(new RandomPathStrategy(tree));
-    selStrategy = new TimeMultiplexedStrategy(strategies);
-    CLOUD9_INFO("Using weighted random job selection strategy");
-    break;
-  case OracleSel:
-    selStrategy = createOracleStrategy();
-    CLOUD9_INFO("Using the oracle");
-    break;
-  case FaultInjSel:
-    selStrategy = new FIStrategy(tree);
-    CLOUD9_INFO("Using the fault injection strategy");
-    break;
-  default:
-    assert(0 && "undefined job selection strategy");
+  if (StratRandomPath) {
+    if (StratPartitioning)
+      stateStrat = new ClusteredRandomPathStrategy(tree);
+    else
+      stateStrat = new RandomPathStrategy(tree);
+  } else {
+    stateStrat = new RandomStrategy();
   }
 
-  //selStrategy = new TargetedStrategy(tree);
+  // Step 2: Check to see if want the coverage-optimized strategy
+  if (StratCovOpt) {
+    stateStrat = createCoverageOptimizedStrat(stateStrat);
+  }
 
-  // Wrap this in a batching strategy, to speed up things
-  //selStrategy = new BatchingStrategy(selStrategy);
+  // Step 3: Check to see if we want lazy merging
+  if (StratLazyMerging) {
+    stateStrat = new LazyMergingStrategy(this, stateStrat);
+    batching = false;
+  }
+
+  return stateStrat;
+}
+
+void JobManager::initStrategy() {
+  if (StratLazyMerging || StratOracle)
+    batching = false;
+
+  if (StratOracle) {
+    selStrategy = createOracleStrategy();
+    batching = false;
+    CLOUD9_INFO("Using the oracle");
+    return;
+  }
+
+  StateSelectionStrategy *stateStrat = NULL;
+
+  if (StratPartitioning) {
+    stateStrat = new PartitioningStrategy(this);
+    CLOUD9_INFO("Using the state partitioning strategy");
+  } else {
+    stateStrat = createBaseStrategy();
+    CLOUD9_INFO("Using the regular strategy stack");
+  }
+
+  selStrategy = new RandomJobFromStateStrategy(tree, stateStrat, this);
 }
 
 OracleStrategy *JobManager::createOracleStrategy() {
@@ -440,7 +487,7 @@ OracleStrategy *JobManager::createOracleStrategy() {
 
   parseInstructionTrace(ifs, goalPath);
 
-  OracleStrategy *result = new OracleStrategy(tree, goalPath);
+  OracleStrategy *result = new OracleStrategy(tree, goalPath, this);
 
   return result;
 }
@@ -472,6 +519,7 @@ JobManager::~JobManager() {
 }
 
 void JobManager::finalize() {
+  dumpSymbolicTree(NULL, WorkerNodeDecorator(NULL));
   symbEngine->deregisterStateEventHandler(this);
   symbEngine->destroyStates();
 
@@ -494,13 +542,6 @@ unsigned JobManager::getModuleCRC() const {
   return crc.checksum();
 }
 
-WorkerTree::Node *JobManager::getCurrentNode() {
-  if (!currentJob)
-    return NULL;
-
-  return currentJob->getNode().get();
-}
-
 /* Job Manipulation Methods ***************************************************/
 
 void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
@@ -510,7 +551,8 @@ void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
 
   if (standAlone) {
     // We need to import the root job
-    importJobs(ExecutionPathSet::getRootSet());
+    std::vector<long> replayInstrs;
+    importJobs(ExecutionPathSet::getRootSet(), replayInstrs);
   }
 
   processLoop(true, !standAlone, timeOut);
@@ -518,7 +560,8 @@ void JobManager::processJobs(bool standAlone, unsigned int timeOut) {
 
 void JobManager::replayJobs(ExecutionPathSetPin paths, unsigned int timeOut) {
   // First, we need to import the jobs in the manager
-  importJobs(paths);
+  std::vector<long> replayInstrs;
+  importJobs(paths, replayInstrs);
 
   // Then we execute them, but only them (non blocking, don't allow growth),
   // until the queue is exhausted
@@ -553,7 +596,7 @@ void JobManager::processLoop(bool allowGrowth, bool blocking,
       job = selectNextJob();
     }
 
-    if (blocking && timeOut == 0) {
+    if (blocking && timeOut == 0 && !terminationRequest) {
       assert(job != NULL);
     } else {
       if (job == NULL)
@@ -577,7 +620,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
   ExecutionJob *job = selectNextJob();
   assert(job != NULL || jobCount == 0);
 
-  while (job == NULL) {
+  while (job == NULL && !terminationRequest) {
     CLOUD9_INFO("No jobs in the queue, waiting for...");
     cloud9::instrum::theInstrManager.recordEvent(
         cloud9::instrum::JobExecutionState, "idle");
@@ -607,7 +650,7 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
 
 ExecutionJob* JobManager::selectNextJob() {
   ExecutionJob *job = selStrategy->onNextJobSelection();
-  if (JobSelection != OracleSel)
+  if (!StratOracle)
     assert(job != NULL || jobCount == 0);
 
   return job;
@@ -625,6 +668,11 @@ void JobManager::submitJob(ExecutionJob* job, bool activateStates) {
       SymbolicState *state = (**node).getSymbolicState();
 
       if (state) {
+        if (!state->_active) {
+          cloud9::instrum::theInstrManager.decStatistic(
+              cloud9::instrum::TotalWastedInstructions,
+              state->_instrSinceFork);
+        }
         fireActivateState(state);
         break;
       }
@@ -651,6 +699,9 @@ void JobManager::finalizeJob(ExecutionJob *job, bool deactivateStates, bool inva
 
       if (state) {
         fireDeactivateState(state);
+        cloud9::instrum::theInstrManager.incStatistic(
+            cloud9::instrum::TotalWastedInstructions,
+            state->_instrSinceFork);
         break;
       }
 
@@ -689,7 +740,8 @@ unsigned int JobManager::countJobs(WorkerTree::Node *root) {
   return tree->countLeaves(WORKER_LAYER_JOBS, root, &isJob);
 }
 
-void JobManager::importJobs(ExecutionPathSetPin paths) {
+void JobManager::importJobs(ExecutionPathSetPin paths,
+    std::vector<long> &replayInstrs) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   std::vector<WorkerTree::Node*> nodes;
@@ -716,6 +768,9 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
       // longer needed
       ExecutionJob *job = new ExecutionJob(crtNode, true);
 
+      if (replayInstrs.size() > 0)
+        job->replayInstr = replayInstrs[i];
+
       if (!isValidJob(crtNode)) {
         droppedCount++;
 
@@ -739,7 +794,7 @@ void JobManager::importJobs(ExecutionPathSetPin paths) {
 }
 
 ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
-    std::vector<int> &counts) {
+    std::vector<int> &counts, std::vector<long> &replayInstrs) {
   boost::unique_lock<boost::mutex> lock(jobsMutex);
 
   std::vector<WorkerTree::Node*> roots;
@@ -748,15 +803,23 @@ ExecutionPathSetPin JobManager::exportJobs(ExecutionPathSetPin seeds,
 
   tree->getNodes(WORKER_LAYER_JOBS, seeds, roots);
 
-  assert(roots.size() == counts.size());
-
   for (unsigned int i = 0; i < seeds->count(); i++) {
-    selectJobs(roots[i], jobs, counts[i]);
+    selectJobs(roots[i], jobs, (counts.size() > 0) ? counts[i] : 0);
   }
+
+  replayInstrs.clear();
 
   for (std::vector<ExecutionJob*>::iterator it = jobs.begin(); it != jobs.end(); it++) {
     ExecutionJob *job = *it;
-    jobRoots.push_back(job->getNode().get());
+    WorkerTree::Node *node = job->getNode().get();
+
+    jobRoots.push_back(node);
+
+    if ((**node).symState != NULL) {
+      replayInstrs.push_back((**node).symState->_instrSinceFork);
+    } else {
+      replayInstrs.push_back(job->replayInstr);
+    }
   }
 
   // Do this before de-registering the jobs, in order to keep the nodes pinned
@@ -811,6 +874,12 @@ void JobManager::fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode
   }
 }
 
+void JobManager::fireStepState(SymbolicState *state) {
+  if (state->_active) {
+    selStrategy->onStateStepped(state);
+  }
+}
+
 void JobManager::fireAddJob(ExecutionJob *job) {
   selStrategy->onJobAdded(job);
   cloud9::instrum::theInstrManager.incStatistic(
@@ -857,7 +926,7 @@ void JobManager::executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
     }
 
     currentTime = klee::util::getUserTime();
-  } while (currentTime - startTime < JobQuanta && JobSelection != OracleSel);
+  } while (batching && currentTime - startTime < JobQuanta);
 
   timer.stop();
 
@@ -902,15 +971,31 @@ void JobManager::executeJob(boost::unique_lock<boost::mutex> &lock,
 
     CLOUD9_INFO("Job canceled before start");
   } else {
-    stepInNode(lock, nodePin.get(), false);
+    if (job->replayInstr > 0) {
+      long done = (**nodePin).symState->_instrSinceFork;
+
+      if (job->replayInstr - done > 0) {
+        long count = stepInNode(lock, nodePin.get(), job->replayInstr - done);
+        if (count < job->replayInstr - done) {
+          CLOUD9_DEBUG("BUG: Replayed " << count << " instructions instead of " << (job->replayInstr - done));
+        } else {
+          CLOUD9_DEBUG("Replayed " << count << " instructions");
+        }
+
+        cloud9::instrum::theInstrManager.incStatistic(cloud9::instrum::TotalReplayInstructions, count);
+      } else {
+        stepInNode(lock, nodePin.get(), 1);
+      }
+
+      job->replayInstr = 0;
+    } else {
+      stepInNode(lock, nodePin.get(), 1);
+    }
   }
 
   currentJob = NULL;
 
-  if ((**nodePin).symState != NULL) {
-    // Just mark the state as updated, no node progress
-    fireUpdateState((**nodePin).symState, nodePin.get());
-  } else if (brokenNode != NULL) {
+  if ((**nodePin).symState == NULL && brokenNode != NULL) {
     cleanInvalidJobs(brokenNode);
   }
 }
@@ -935,19 +1020,40 @@ void JobManager::cleanInvalidJobs(WorkerTree::Node *rootNode) {
 
 }
 
-void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
-    WorkerTree::Node *node, bool exhaust) {
+void JobManager::requestStateDestroy(SymbolicState *state) {
+  pendingDeletions.insert(state);
+}
+
+void JobManager::processPendingDeletions() {
+  if (pendingDeletions.empty())
+    return;
+  CLOUD9_DEBUG("Pending deletions found...");
+  std::set<SymbolicState*> workingSet;
+  workingSet.swap(pendingDeletions);
+
+  for (std::set<SymbolicState*>::iterator it = workingSet.begin();
+      it != workingSet.end(); it++) {
+    CLOUD9_DEBUG("Processing pending deletion...");
+    symbEngine->destroyState(&(**(*it)));
+  }
+}
+
+long JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
+    WorkerTree::Node *node, long count) {
   assert((**node).symState != NULL);
 
   // Keep the node alive until we finish with it
   WorkerTree::NodePin nodePin = node->pin(WORKER_LAYER_STATES);
 
+  long totalExec = 0;
+
   while ((**node).symState != NULL) {
 
     SymbolicState *state = (**node).symState;
+    currentState = state;
 
     if (!codeBreaks.empty()) {
-      if (codeBreaks.find(state->getKleeState()->pc()->info->assemblyLine)
+      if (codeBreaks.find((**state).pc()->info->assemblyLine)
           != codeBreaks.end()) {
         // We hit a breakpoint
         fireBreakpointHit(node);
@@ -958,24 +1064,35 @@ void JobManager::stepInNode(boost::unique_lock<boost::mutex> &lock,
     //  fprintf(stderr, "%d ", state->getKleeState()->pc()->info->assemblyLine);
 
     if (state->collectProgress) {
-      state->_instrProgress.push_back(state->getKleeState()->pc());
+      state->_instrProgress.push_back((**state).pc());
     }
 
     // Execute the instruction
+    state->_instrSinceFork++;
     lock.unlock();
 
-    symbEngine->stepInState(state->getKleeState());
+    processPendingDeletions();
+    symbEngine->stepInState(&(**state));
+
     lock.lock();
 
+    totalExec++;
     cloud9::instrum::theInstrManager.incStatistic(
         cloud9::instrum::TotalProcInstructions);
     if (replaying)
       cloud9::instrum::theInstrManager.incStatistic(
           cloud9::instrum::TotalReplayInstructions);
 
-    if (!exhaust)
+    if (count == 1) {
       break;
+    } else if (count > 1) {
+      count--;
+    }
   }
+
+  currentState = NULL;
+
+  return totalExec;
 }
 
 void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
@@ -1013,7 +1130,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
         WorkerTree::Node *node = crtNode->getParent()->getChild(WORKER_LAYER_STATES, 1-crtNode->getIndex());
         if ((**node).getSymbolicState()) {
-          (**node).getSymbolicState()->getKleeState()->getStackTrace().dump(std::cout);
+          (**(**node).getSymbolicState()).getStackTrace().dump(std::cout);
         }
       }
       // We have a broken replay
@@ -1023,7 +1140,7 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
 
 
     if ((**crtNode).symState != NULL) {
-      stepInNode(lock, crtNode, true);
+      stepInNode(lock, crtNode, -1);
     }
 
     if (crtNode->getChild(WORKER_LAYER_JOBS, 1-path[i]) &&
@@ -1055,12 +1172,45 @@ void JobManager::replayPath(boost::unique_lock<boost::mutex> &lock,
   cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::ReplayBatch, timer);
 }
 
+bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
+  // Perform the actual merging
+  klee::ExecutionState *mState = symbEngine->merge(**dest, **src);
+
+  if (!mState) {
+    CLOUD9_DEBUG("States could not be merged...");
+    return false;
+  }
+
+  // Record the event...
+
+  WorkerTree::Node *destNode = dest->getNode().get();
+  // Pin the skeleton layer on source
+  WorkerTree::NodePin srcNodePin = tree->getNode(WORKER_LAYER_SKELETON,
+      src->getNode().get())->pin(WORKER_LAYER_SKELETON);
+
+  (**destNode).getMergePoints().push_back(std::make_pair(std::make_pair(dest->_instrSinceFork,
+      src->_instrSinceFork), srcNodePin));
+  // Update the destination state container
+  if (&(**dest) != mState) {
+    (**dest).setCloud9State(NULL);
+    dest->replaceKleeState(mState);
+    mState->setCloud9State(dest);
+  }
+  // Now terminate the source state. Issue this from the executor - this will
+  // propagate all way through the entire infrastructure
+  requestStateDestroy(src);
+
+  CLOUD9_DEBUG("State merged");
+
+  return true;
+}
+
 /* Symbolic Engine Callbacks **************************************************/
 
 bool JobManager::onStateBranching(klee::ExecutionState *state, klee::ForkTag forkTag) {
   switch (forkTag.forkClass) {
   case KLEE_FORK_FAULTINJ:
-    return JobSelection == FaultInjSel;
+    return StratFaultInj;
   default:
     return false;
   }
@@ -1088,20 +1238,24 @@ void JobManager::onStateBranched(klee::ExecutionState *kState,
     state->_instrPos = parent->getCloud9State()->_instrPos;
   }
 
-  if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
-    fireActivateState(state);
-  }
-
   //CLOUD9_DEBUG("State forked at level " << state->getNode()->getLevel());
-
 
   SymbolicState *pState = parent->getCloud9State();
 
   if (pState->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
     fireUpdateState(pState, pNode.get());
   } else {
+    fireUpdateState(pState, pNode.get());
     fireDeactivateState(pState);
   }
+
+  if (state->getNode()->layerExists(WORKER_LAYER_JOBS) || !replaying) {
+    fireActivateState(state);
+  }
+
+  // Reset the number of instructions since forking
+  state->_instrSinceFork = 0;
+  pState->_instrSinceFork = 0;
 
 }
 
@@ -1118,6 +1272,11 @@ void JobManager::onStateDestroy(klee::ExecutionState *kState, bool silenced) {
   //CLOUD9_DEBUG("State destroyed");
 
   SymbolicState *state = kState->getCloud9State();
+
+  pendingDeletions.erase(state);
+  if (currentState == state) {
+    currentState = NULL;
+  }
 
   if (!silenced) {
     processTestCase(state);
@@ -1147,7 +1306,7 @@ void JobManager::onEvent(klee::ExecutionState *kState,
       (**node).trace.appendEntry(new BreakpointEntry(value));
     }
 
-    if (JobSelection == OracleSel) {
+    if (StratOracle) {
       if (value == KLEE_BRK_START_TRACING) {
         kState->getCloud9State()->collectProgress = true; // Enable progress collection in the manager
       }
@@ -1163,7 +1322,23 @@ void JobManager::onEvent(klee::ExecutionState *kState,
 
 void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
     ControlFlowEvent event) {
-  WorkerTree::Node *node = kState->getCloud9State()->getNode().get();
+  boost::unique_lock<boost::mutex> lock(jobsMutex);
+
+  SymbolicState *state = kState->getCloud9State();
+  if (!state) {
+    CLOUD9_DEBUG("Stepping into headless state...");
+    return;
+  }
+
+  WorkerTree::Node *node = state->getNode().get();
+
+  switch(event) {
+  case STEP:
+    fireStepState(state);
+    break;
+  default:
+    break;
+  }
 
   // Add the instruction to the node trace
   if (collectTraces) {
@@ -1202,8 +1377,7 @@ void JobManager::fireBreakpointHit(WorkerTree::Node *node) {
 
   if (state) {
     CLOUD9_DEBUG("State stack trace: " << *state);
-    klee::ExprPPrinter::printConstraints(std::cerr,
-        state->getKleeState()->constraints());
+    klee::ExprPPrinter::printConstraints(std::cerr, (**state).constraints());
     dumpStateTrace(node);
   }
 
@@ -1223,40 +1397,53 @@ void JobManager::updateTreeOnBranch(klee::ExecutionState *kState,
   parent->getCloud9State()->rebindToNode(oldNode);
 
   newNode = tree->getNode(WORKER_LAYER_STATES, pNodePin.get(), index);
-  SymbolicState *state = new SymbolicState(kState);
+  SymbolicState *state = new SymbolicState(kState, parent->getCloud9State());
   state->rebindToNode(newNode);
 
   if (!replaying) {
     ExecutionJob *job = (**pNodePin).getJob();
-    assert(job != NULL);
+    if (job != NULL) {
+      oldNode = tree->getNode(WORKER_LAYER_JOBS, oldNode);
+      job->rebindToNode(oldNode);
 
-    oldNode = tree->getNode(WORKER_LAYER_JOBS, oldNode);
-    job->rebindToNode(oldNode);
+      newNode = tree->getNode(WORKER_LAYER_JOBS, newNode);
+      ExecutionJob *newJob = new ExecutionJob(newNode, false);
 
-    newNode = tree->getNode(WORKER_LAYER_JOBS, newNode);
-    ExecutionJob *newJob = new ExecutionJob(newNode, false);
+      submitJob(newJob, false);
 
-    submitJob(newJob, false);
+      cloud9::instrum::theInstrManager.incStatistic(
+                  cloud9::instrum::TotalTreePaths);
 
-    cloud9::instrum::theInstrManager.incStatistic(
-                cloud9::instrum::TotalTreePaths);
+    } else {
+      CLOUD9_DEBUG("Job-less state terminated. Probably it was exported while the state was executing.");
+    }
   }
 }
 
 void JobManager::updateTreeOnDestroy(klee::ExecutionState *kState) {
   SymbolicState *state = kState->getCloud9State();
 
-  if (!replaying) {
-    WorkerTree::Node *node = state->getNode().get();
+  WorkerTree::Node *node = state->getNode().get();
 
-    ExecutionJob *job = (**node).getJob();
+  if (ZombieNodes) {
+    // Pin the state on the skeleton layer
+    WorkerTree::NodePin zombiePin =
+        tree->getNode(WORKER_LAYER_SKELETON, node)->pin(WORKER_LAYER_SKELETON);
+    zombieNodes.insert(zombiePin);
+  }
 
-    assert(job != NULL);
-    // Job finished here, need to remove it
-    finalizeJob(job, false, false);
+  if (node->layerExists(WORKER_LAYER_JOBS)) {
+    std::vector<WorkerTree::Node*> jobNodes;
+    tree->getLeaves(WORKER_LAYER_JOBS, node, jobNodes);
 
-    cloud9::instrum::theInstrManager.incStatistic(
-        cloud9::instrum::TotalProcJobs);
+    for (std::vector<WorkerTree::Node*>::iterator it = jobNodes.begin(); it != jobNodes.end(); it++) {
+      ExecutionJob *job = (**(*it)).getJob();
+      assert (job != NULL);
+      finalizeJob(job, false, false);
+
+      cloud9::instrum::theInstrManager.incStatistic(
+          cloud9::instrum::TotalProcJobs);
+    }
   }
 
   state->rebindToNode(NULL);

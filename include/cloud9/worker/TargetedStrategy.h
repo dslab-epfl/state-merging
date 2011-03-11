@@ -56,7 +56,7 @@ private:
       interests_t &interests, std::vector<ExecutionJob*> &jobs,
       unsigned int maxCount);
 public:
-  TargetedStrategy(WorkerTree *_workerTree);
+  TargetedStrategy(WorkerTree *_workerTree, JobManager *_jobManager);
   virtual ~TargetedStrategy() { }
 
   virtual ExecutionJob* onNextJobSelection();

@@ -182,21 +182,24 @@ private:
 	 */
 	unsigned int _refCount[Layers];
 	unsigned int _totalRefCount;
+	bool _deleting;
 
-	NodeInfo _info;
+	NodeInfo *_info;
 
 	/*
 	 * Creates a new node and connects it in position "index" in a parent
 	 * node
 	 */
 	TreeNode(TreeNode* p, int index) :
-		parent(p), totalCount(0), _label(0), _totalRefCount(0) {
+		parent(p), totalCount(0), _label(0), _totalRefCount(0), _deleting(false) {
 
 		memset(childrenNodes, 0, Degree*sizeof(TreeNode*));
 		memset(children, 0, Degree*Layers*sizeof(bool));
 		memset(count, 0, Layers*sizeof(unsigned int));
 		memset(_refCount, 0, Layers*sizeof(unsigned int));
 		memset(exists, 0, Layers*sizeof(bool));
+
+		_info = new NodeInfo();
 
 		if (p != NULL) {
 			p->childrenNodes[index] = this;
@@ -242,6 +245,10 @@ private:
 	}
 public:
 
+	virtual ~TreeNode() {
+	  delete _info;
+	}
+
 	ptr getParent() const { return parent; }
 
 
@@ -272,11 +279,11 @@ public:
 
 
 	NodeInfo& operator*() {
-		return _info;
+		return *_info;
 	}
 
 	const NodeInfo& operator*() const {
-		return _info;
+		return *_info;
 	}
 
 	Pin pin(int layer) {
@@ -324,39 +331,10 @@ class ExecutionTree {
 public:
 	typedef TreeNode<NodeInfo, Layers, Degree> Node;
 	typedef typename TreeNode<NodeInfo, Layers, Degree>::Pin NodePin;
+private:
+	typedef std::map<std::string, std::string> deco_t;
+	typedef std::vector<std::pair<Node*, deco_t> > edge_deco_t;
 
-	struct NodeBreadthCompare {
-		bool operator()(const Node *a, const Node *b) {
-			if (a->level > b->level)
-				while (a->level > b->level)
-					a = a->getParent();
-			else
-				while (a->level < b->level)
-					b = b->getParent();
-
-			if (a == b) // One of them is the ancestor of the other
-				return false;
-
-			while (a->level > 0) {
-				Node *pa = a->parent;
-				Node *pb = b->parent;
-
-				if (pa == pb)
-					return a->index < b->index;
-
-				a = pa;
-				b = pb;
-			}
-
-			return false;
-		}
-	};
-
-	struct NodeDepthCompare {
-		bool operator()(const Node *a, const Node *b) {
-			return a->level < b->level;
-		}
-	};
 private:
 	Node* root;
 
@@ -387,7 +365,7 @@ private:
 		// Checking for node->parent ensures that we will never delete the
 		// root node
 		while (node->parent && node != root) {
-			if (node->count[layer] > 0 || node->_refCount[layer] > 0) // Stop when joining another branch, or hitting the job root
+			if (node->count[layer] > 0 || node->_refCount[layer] > 0 || node->_deleting) // Stop when joining another branch, or hitting the job root
 				break;
 
 			Node *temp = node;
@@ -397,16 +375,34 @@ private:
 	}
 
 	static void removeNode(int layer, Node *node) {
-		assert(node->count[layer] == 0);
-		assert(node->_refCount[layer] == 0);
+      assert(node->count[layer] == 0);
+      assert(node->_refCount[layer] == 0);
 
-		node->clearNode(layer);
+      node->clearNode(layer);
 
-		if (node->totalCount == 0 && node->_totalRefCount == 0) {
-			assert(node->parent);
-			node->parent->childrenNodes[node->index] = NULL;
-			delete node; // Clean it for good, nobody references it anymore
-		}
+      if (node->totalCount == 0 && node->_totalRefCount == 0) {
+        assert(node->parent);
+        node->parent->childrenNodes[node->index] = NULL;
+        node->_deleting = true; // This prevents recursive destructors from touching this
+        delete node; // Clean it for good, nobody references it anymore
+      }
+	}
+
+	template<typename NodeIterator>
+	void cleanupLabels(NodeIterator begin, NodeIterator end) {
+
+      for (NodeIterator it = begin; it != end; it++) {
+          Node *crtNode = *it;
+
+          while (crtNode != root) {
+              if (crtNode->_label == 0)
+                  break;
+              else {
+                  crtNode->_label = 0;
+                  crtNode = crtNode->parent;
+              }
+          }
+      }
 	}
 
 public:
@@ -560,29 +556,109 @@ public:
 	}
 
 	template<class Generator>
-	Node* selectRandomLeaf(int layer, Node *root, Generator &gen) {
-		assert(root->exists[layer]);
-		Node *crtNode = root;
-		int crtCount;
+    Node* selectRandomLeaf(int layer, Node *root, Generator &gen,
+        int layerMask = 0) {
 
-		while ((crtCount = crtNode->getCount(layer)) > 0) {
-			int index = gen.getInt32() % crtCount;
+      assert(root->exists[layer]);
+      Node *crtNode = root;
+      int crtCount;
 
-			for (int i = 0; i < Degree; i++) {
-				Node *child = crtNode->getChild(layer, i);
-				if (child) {
-					if (index == 0) {
-						crtNode = child;
-						break;
-					} else {
-						index--;
-					}
-				}
-			}
-		}
+      while (1) {
+        Node *candidate = NULL;
+        if (!layerMask)
+          crtCount = crtNode->getCount(layer);
+        else {
+          crtCount = 0;
+          for (int i = 0; i < Degree; i++) {
+            Node *child = crtNode->getChild(layer, i);
+            if (child && child->exists[layerMask]) {
+              candidate = child;
+              crtCount++;
+            }
+          }
+        }
 
-		return crtNode;
+        if (!crtCount)
+          break;
+        if (layerMask && crtCount == 1) {
+          crtNode = candidate;
+          continue;
+        }
 
+        int index = gen.getInt32() % crtCount;
+        for (int i = 0; i < Degree; i++) {
+          Node *child = crtNode->getChild(layer, i);
+          if (child && (!layerMask || child->exists[layerMask])) {
+            if (index == 0) {
+              crtNode = child;
+              break;
+            } else {
+              index--;
+            }
+          }
+        }
+      }
+
+      return crtNode;
+
+    }
+
+	template<class Generator, typename NodeIterator>
+	Node *selectRandomLeaf(int layer, Node *root, Generator &gen,
+	    NodeIterator begin, NodeIterator end) {
+
+	  assert(root->exists[layer]);
+
+	  for (NodeIterator it = begin; it != end; it++) {
+	    Node *crtNode = *it;
+	    assert(crtNode->exists[layer]);
+
+	    while (crtNode != root) {
+	      if (crtNode->_label == 1)
+	        break;
+
+	      crtNode->_label = 1;
+	      crtNode = crtNode->parent;
+	    }
+	  }
+
+	  Node *crtNode = root;
+
+	  while(1) {
+	    int crtCount = 0;
+	    Node *candidate = NULL;
+	    for (int i = 0; i < Degree; i++) {
+	      Node *child = crtNode->getChild(layer, i);
+	      if (child && child->_label == 1) {
+	        candidate = child;
+	        crtCount++;
+	      }
+	    }
+
+	    if (!crtCount)
+	      break;
+	    if (crtCount == 1) {
+	      crtNode = candidate;
+	      continue;
+	    }
+
+	    int index = gen.getInt32() % crtCount;
+	    for (int i = 0; i < Degree; i++) {
+	      Node *child = crtNode->getChild(layer, i);
+	      if (child && child->_label == 1) {
+	        if (!index) {
+	          crtNode = child;
+	          break;
+	        } else {
+	          index--;
+	        }
+	      }
+	    }
+	  }
+
+	  cleanupLabels(begin, end);
+
+	  return crtNode;
 	}
 
 	template<typename NodeIterator>
@@ -624,19 +700,7 @@ public:
 			i++;
 		}
 
-		// Clean up the labels
-		for (NodeIterator it = begin; it != end; it++) {
-			Node *crtNode = *it;
-
-			while (crtNode != root) {
-				if (crtNode->_label == 0)
-					break;
-				else {
-					crtNode->_label = 0;
-					crtNode = crtNode->parent;
-				}
-			}
-		}
+		cleanupLabels(begin, end);
 
 		return ExecutionPathSetPin(set);
 	}
@@ -664,6 +728,81 @@ public:
 		}
 	}
 
+	template<typename Decorator>
+	void dumpDotGraph(Node *root, std::ostream &os, Decorator decorator) {
+	  if (!root)
+	    root = this->root;
+
+	  std::map<Node*, std::string> names;
+      std::stack<std::pair<Node*, std::string> > namesStack;
+      namesStack.push((std::make_pair(root, "r")));
+
+      while (!namesStack.empty()) {
+        std::pair<Node*, std::string> node = namesStack.top();
+        namesStack.pop();
+        names[node.first] = node.second;
+
+        for (int i = 0; i < Degree; i++) {
+          Node *child = node.first->childrenNodes[i];
+          if (child) {
+            std::string name(node.second);
+            name.push_back('0' + i);
+            namesStack.push(std::make_pair(child, name));
+          }
+        }
+      }
+
+      // Write the Dot header
+      os << "digraph symbex {" << std::endl;
+
+      std::stack<Node*> nodesStack;
+      nodesStack.push(root);
+
+      while (!nodesStack.empty()) {
+        Node *node = nodesStack.top();
+        nodesStack.pop();
+
+        deco_t deco;
+        edge_deco_t edges;
+        decorator(node, deco, edges);
+
+        os << "  " << names[node] << " [";
+
+         for (deco_t::iterator it = deco.begin(); it != deco.end(); it++) {
+           if (it != deco.begin())
+             os << ",";
+           os << it->first << "=" << it->second;
+         }
+
+         os << "];" << std::endl;
+
+         for (int i = 0; i < Degree; i++) {
+           Node *child = node->childrenNodes[i];
+           if (child) {
+             nodesStack.push(child);
+           }
+         }
+
+         for (typename edge_deco_t::iterator it = edges.begin(); it != edges.end(); it++) {
+
+           os << "  " << names[it->first] << " -> " << names[node];
+           if (it->second.size() > 0) {
+             os << " [";
+             for (deco_t::iterator eit = it->second.begin(); eit != it->second.end(); eit++) {
+               if (eit != it->second.begin())
+                 os << ",";
+               os << eit->first << "=" << eit->second;
+             }
+             os << "]";
+           }
+           os << ";" << std::endl;
+         }
+       }
+
+	  // Write the Dot footer
+	  os << "}" << std::endl;
+	}
+
 #undef BEGIN_LAYERED_DFS_SCAN
 #undef END_LAYERED_DFS_SCAN
 
@@ -671,6 +810,50 @@ public:
 #undef END_DFS_SCAN
 
 }; // End of ExecutionTree class
+
+
+template<class Node>
+class DotNodeDefaultDecorator {
+public:
+  typedef std::map<std::string, std::string> deco_t;
+  typedef std::vector<std::pair<Node*, deco_t> > edge_deco_t;
+private:
+  int fillLayer;
+  int peripheryLayer;
+  Node *highlight;
+public:
+  DotNodeDefaultDecorator(int _fillLayer, int _peripheryLayer, Node *_highlight)
+    : fillLayer(_fillLayer), peripheryLayer(_peripheryLayer), highlight(_highlight) { }
+  virtual ~DotNodeDefaultDecorator() { }
+
+  virtual void operator() (Node *node, deco_t &deco, edge_deco_t &inEdges) {
+    deco["label"] = "\"\"";
+    deco["shape"] = "circle";
+    deco["width"] = "0.4";
+
+    if (node->layerExists(fillLayer)) {
+      deco["style"] = "filled";
+      if (node->isLeaf(fillLayer)) {
+        deco["fillcolor"] = "gray25";
+        deco["width"] = "0.7";
+      } else {
+        deco["fillcolor"] = "gray75";
+      }
+    }
+
+    if (node->layerExists(peripheryLayer)) {
+      if (node->isLeaf(peripheryLayer)) {
+        deco["penwidth"] = "5";
+      } else {
+        deco["penwidth"] = "3";
+      }
+    }
+    if (node == highlight) {
+      deco["color"] = "red";
+      deco["shape"] = "square";
+    }
+  }
+};
 
 
 template<class NI, int L, int D>
@@ -718,16 +901,16 @@ void node_pin_add_ref(TreeNode<NI, L, D> *p, int layer) {
 
 template<class NI, int L, int D>
 void node_pin_release(TreeNode<NI, L, D> *p, int layer) {
-	assert(p);
-	assert(p->_refCount[layer] > 0);
+  assert(p);
+  assert(p->_refCount[layer] > 0);
 
-	p->_decRefCount(layer);
+  p->_decRefCount(layer);
 
-	//if (layer == 0) CLOUD9_DEBUG("New dec ref count " << p->_refCount[0] << " for node " << *p);
+  //if (layer == 0) CLOUD9_DEBUG("New dec ref count " << p->_refCount[0] << " for node " << *p);
 
-	if (p->_refCount[layer] == 0) {
-		ExecutionTree<NI, L, D>::removeSupportingBranch(layer, p, NULL);
-	}
+  if (p->_refCount[layer] == 0) {
+    ExecutionTree<NI, L, D>::removeSupportingBranch(layer, p, NULL);
+  }
 }
 
 #if 1 // XXX: debug

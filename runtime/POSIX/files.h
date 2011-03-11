@@ -8,6 +8,7 @@
 #ifndef FILES_H_
 #define FILES_H_
 
+#include "common.h"
 #include "buffers.h"
 #include "fd.h"
 

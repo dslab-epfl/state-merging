@@ -34,7 +34,7 @@ private:
   void mapState(SymbolicState *state, unsigned count, bool isInt);
   void unmapState(SymbolicState *state, unsigned count);
 public:
-  FIStrategy(WorkerTree *_workerTree);
+  FIStrategy(WorkerTree *_workerTree, JobManager *_jobManager);
   virtual ~FIStrategy() { }
 
   virtual ExecutionJob* onNextJobSelection();
