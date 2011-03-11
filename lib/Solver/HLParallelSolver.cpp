@@ -452,25 +452,6 @@ void *HLParallelSolver::subsolverThread(void *arg) {
     pthread_mutex_unlock(&pSolver->mutex);
 
     /*
-    ConstraintManager cm(queryInfo->constraints);
-    bool feasible = true;
-    for (unsigned i = 0; i < queryInfo->subqueryConditions.size(); ++i) {
-      ref<Expr> e = queryInfo->subqueryConditions[i];
-      if (subqueryIndex & (1ul << i))
-        e = Expr::createIsZero(e);
-      if (!cm.checkAddConstraint(e)) {
-        feasible = false;
-        break;
-      }
-    }
-    */
-
-    /*
-    ref<Expr> expr = cm.simplifyExpr(queryInfo->query.expr);
-    Query query(cm, expr);
-    */
-
-    /*
     SubqueryBuilderVisitor visitor(queryInfo->subqueryConditions, subqueryIndex);
     */
     ConstraintManager cm(queryInfo->constraints);
@@ -489,7 +470,9 @@ void *HLParallelSolver::subsolverThread(void *arg) {
     }
 
     //ref<Expr> expr = visitor.visit(queryInfo->query.expr);
-    ref<Expr> expr = cm.simplifyExpr(queryInfo->query.expr);
+    ref<Expr> expr = queryInfo->query.expr;
+    if (!infeasible)
+        expr = cm.simplifyExpr(expr);
 
     do {
       solved = notDone = false;
