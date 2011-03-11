@@ -1027,13 +1027,13 @@ void JobManager::requestStateDestroy(SymbolicState *state) {
 void JobManager::processPendingDeletions() {
   if (pendingDeletions.empty())
     return;
-  CLOUD9_DEBUG("Pending deletions found...");
+  //CLOUD9_DEBUG("Pending deletions found...");
   std::set<SymbolicState*> workingSet;
   workingSet.swap(pendingDeletions);
 
   for (std::set<SymbolicState*>::iterator it = workingSet.begin();
       it != workingSet.end(); it++) {
-    CLOUD9_DEBUG("Processing pending deletion...");
+    //CLOUD9_DEBUG("Processing pending deletion...");
     symbEngine->destroyState(&(**(*it)));
   }
 }
@@ -1200,7 +1200,7 @@ bool JobManager::mergeStates(SymbolicState* dest, SymbolicState *src) {
   // propagate all way through the entire infrastructure
   requestStateDestroy(src);
 
-  CLOUD9_DEBUG("State merged");
+  //CLOUD9_DEBUG("State merged");
 
   return true;
 }
@@ -1326,7 +1326,7 @@ void JobManager::onControlFlowEvent(klee::ExecutionState *kState,
 
   SymbolicState *state = kState->getCloud9State();
   if (!state) {
-    CLOUD9_DEBUG("Stepping into headless state...");
+    //CLOUD9_DEBUG("Stepping into headless state...");
     return;
   }
 

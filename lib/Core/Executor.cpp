@@ -280,7 +280,8 @@ namespace {
 
   cl::opt<bool>
   DumpPTreeOnChange("dump-ptree-on-change",
-          cl::desc("Dump PTree each time it changes"));
+          cl::desc("Dump PTree each time it changes"),
+          cl::init(false));
 
   cl::opt<bool>
   KeepMergedDuplicates("keep-merged-duplicates",
