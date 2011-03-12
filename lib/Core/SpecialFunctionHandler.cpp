@@ -115,6 +115,8 @@ HandlerInfo handlerInfo[] = {
   add("klee_get_time", handleGetTime, true),
   add("klee_set_time", handleSetTime, false),
 
+  add("klee_merge_disable", handleMergeDisable, false),
+
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
   add("valloc", handleValloc, true),
@@ -1180,4 +1182,18 @@ void SpecialFunctionHandler::handleLoopExit(ExecutionState &state,
     assert(indexStack.size() > 1 && "Unexpected loop end");
     indexStack.pop_back();
   }
+}
+
+void SpecialFunctionHandler::handleMergeDisable(ExecutionState &state,
+                                                KInstruction *target,
+                                                std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+         "invalid number of arguments klee_merge_disable");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         "argument to klee_merge_disable is not a constant");
+
+  uint64_t disabled = cast<ConstantExpr>(arguments[0])->getZExtValue();
+  state.mergeDisabled = disabled;
 }

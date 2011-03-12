@@ -658,6 +658,7 @@ void Executor::branch(ExecutionState &state,
   assert(N);
 
   stats::forks += N-1;
+  stats::forksMult += (N-1) * state.multiplicity;
 
   ForkTag tag = getForkTag(state, reason);
 
@@ -895,6 +896,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
     ExecutionState *falseState, *trueState = &current;
 
     ++stats::forks;
+    stats::forksMult += current.multiplicity;
 
     falseState = trueState->branch();
     addedStates.insert(falseState);
@@ -1271,6 +1273,7 @@ void Executor::stepInstruction(ExecutionState &state) {
     statsTracker->stepInstruction(state);
 
   ++stats::instructions;
+  stats::instructionsMult += state.multiplicity;
   state.setPrevPC(state.pc());
   state.setPC(state.pc().next());
 
@@ -2651,9 +2654,12 @@ void Executor::stepInState(ExecutionState *state) {
     executionTime = timer.check();
 
     stats::executionTime += executionTime;
+    stats::instructionsMultExact += duplicates.size();
     if (KeepMergedDuplicates && duplicates.empty()) {
       duplicatesExecutionTime += executionTime;
       stats::duplicatesExecutionTime += executionTime;
+      stats::forksMultExact += addedStates.size();
+      ++stats::instructionsMultExact;
     }
   }
   if (UseQueryPCLog)
@@ -2676,6 +2682,9 @@ void Executor::stepInState(ExecutionState *state) {
     if (!stateIsTerminated)
       nextStates.insert(state);
 
+    uint64_t forks = stats::forks.getValue();
+    uint64_t forksMult = stats::forksMult.getValue();
+
     foreach (ExecutionState* duplicate, duplicates) {
       // Execute the same instruction in a duplicate state
       assert(duplicate->isDuplicate);
@@ -2696,6 +2705,17 @@ void Executor::stepInState(ExecutionState *state) {
       if (UseQueryPCLog)
         setPCLoggingSolverStateID(solver->solver, 0);
       duplicate->stateTime++;
+
+      assert(stats::forks.getValue() == forks + addedStates.size());
+      assert(stats::forksMult.getValue() == forksMult + addedStates.size());
+
+      stats::forks += forks - stats::forks.getValue();
+      stats::forksMult += forksMult - stats::forksMult.getValue();
+
+      assert(stats::forks.getValue() == forks);
+      assert(stats::forksMult.getValue() == forksMult);
+
+      stats::forksMultExact += addedStates.size();
 
       // Sort all next states into duplicates of the main state
       if (removedStates.count(duplicate) == 0)

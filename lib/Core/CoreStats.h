@@ -18,6 +18,8 @@ namespace stats {
   extern Statistic allocations;
   extern Statistic resolveTime;
   extern Statistic instructions;
+  extern Statistic instructionsMult;
+  extern Statistic instructionsMultExact;
   extern Statistic instructionTime;
   extern Statistic instructionRealTime;
   extern Statistic locallyCoveredInstructions;
@@ -33,6 +35,8 @@ namespace stats {
 
   /// The number of process forks.
   extern Statistic forks;
+  extern Statistic forksMult;
+  extern Statistic forksMultExact;
 
   /// The number of started fast forwards.
   extern Statistic fastForwardsStart;

@@ -129,6 +129,9 @@ namespace klee {
 
     HANDLER(handleLoopIter);
     HANDLER(handleLoopExit);
+
+    HANDLER(handleMergeDisable);
+
 #undef HANDLER
   };
 } // End klee namespace

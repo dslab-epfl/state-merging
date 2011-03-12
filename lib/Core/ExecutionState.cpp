@@ -53,6 +53,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     depth(0),
     multiplicity(1),
     forkDisabled(false),
+    mergeDisabled(false),
     queryCost(0.), 
     weight(1),
     instsSinceCovNew(0),

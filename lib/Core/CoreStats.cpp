@@ -17,6 +17,8 @@ Statistic stats::globallyCoveredInstructions("GloballyCoveredInstructions", "GIc
 Statistic stats::falseBranches("FalseBranches", "Bf");
 Statistic stats::forkTime("ForkTime", "Ftime", true);
 Statistic stats::forks("Forks", "Forks");
+Statistic stats::forksMult("ForksMult", "ForksMult");
+Statistic stats::forksMultExact("ForksMultExact", "ForksMultExact");
 Statistic stats::mergeSuccessTime("MergeSuccessTime", "MStime", true);
 Statistic stats::mergeFailTime("MergeFailTime", "MFtime", true);
 Statistic stats::mergesSuccess("MergesSuccess", "MergesS");
@@ -26,6 +28,8 @@ Statistic stats::fastForwardsFail("FastForwardFail", "FForwardF");
 Statistic stats::instructionRealTime("InstructionRealTimes", "Ireal", true);
 Statistic stats::instructionTime("InstructionTimes", "Itime", true);
 Statistic stats::instructions("Instructions", "I");
+Statistic stats::instructionsMult("InstructionsMult", "InstructionsMult");
+Statistic stats::instructionsMultExact("InstructionsMultExact", "InstructionsMultExact");
 Statistic stats::minDistToReturn("MinDistToReturn", "Rdist");
 Statistic stats::minDistToGloballyUncovered("MinDistToGloballyUncovered", "UCdist");
 Statistic stats::reachableGloballyUncovered("ReachableGloballyUncovered", "IuncovReach");

@@ -473,6 +473,9 @@ LazyMergingSearcher::~LazyMergingSearcher() {
 ///
 
 inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const {
+  if (state->mergeDisabled)
+    return false;
+
   if (MaxStateMultiplicity && state->multiplicity >= MaxStateMultiplicity)
     return false;
 
@@ -519,10 +522,15 @@ ExecutionState &LazyMergingSearcher::selectState() {
     /* Find the state that has maximum number of potential targets to merge */
     for (StatesSet::iterator it = statesToForward.begin(),
                         ie = statesToForward.end(); it != ie;) {
-      uint32_t _mergeIndex = (*it)->getMergeIndex();
-      StatesTrace::iterator _traceIt = statesTrace.find(_mergeIndex);
-      unsigned _candidates = (_traceIt == statesTrace.end() ? 0
-                     : _traceIt->second->size() - _traceIt->second->count(*it));
+      unsigned _candidates = 0;
+      uint32_t _mergeIndex;
+      StatesTrace::iterator _traceIt;
+      if (!(*it)->mergeDisabled) {
+        _mergeIndex = (*it)->getMergeIndex();
+        _traceIt = statesTrace.find(_mergeIndex);
+        _candidates = (_traceIt == statesTrace.end() ? 0
+                       : _traceIt->second->size() - _traceIt->second->count(*it));
+      }
 
       if (_candidates == 0) {
           // State can no longer be fast-forwarded, perhaps it branched
@@ -555,13 +563,18 @@ ExecutionState &LazyMergingSearcher::selectState() {
 
 #endif
 
+    assert(!MaxStateMultiplicity || state->multiplicity < MaxStateMultiplicity);
+    assert(!state->mergeDisabled);
+
     // Check wether we can already merge
     for (StatesSet::iterator it = traceIt->second->begin(),
                              ie = traceIt->second->end(); it != ie; ++it) {
       ExecutionState *state1 = *it;
       assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
+      //assert(!state1->mergeDisabled);
 
-      if (state1 != state && state1->getMergeIndex() == mergeIndex) {
+      if (state1 != state && !state1->mergeDisabled &&
+                state1->getMergeIndex() == mergeIndex) {
         // State is at the same execution index as state1, let's try merging
         merged = executor.merge(*state1, *state);
         if (merged) {
@@ -631,7 +644,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
                              const std::set<ExecutionState*> &removedStates) {
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
-  if (current && removedStates.count(current) == 0 &&
+  if (current && !current->mergeDisabled && removedStates.count(current) == 0 &&
         (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
     uint32_t mergeIndex = current->getMergeIndex();
     StatesTrace::iterator it = statesTrace.find(mergeIndex);
