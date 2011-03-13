@@ -42,3 +42,7 @@ Statistic stats::globallyUncoveredInstructions("GloballyUncoveredInstructions", 
 
 Statistic stats::executionTime("ExecutionTime", "ETime", true);
 Statistic stats::duplicatesExecutionTime("ExecutionDuplicatesTime", "EDTime", true);
+
+Statistic stats::paths("Paths", "Paths");
+Statistic stats::pathsMult("PathsMult", "PathsMult");
+Statistic stats::pathsMultExact("PathsMultExact", "PathsMultExact");

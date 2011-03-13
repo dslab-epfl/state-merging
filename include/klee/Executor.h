@@ -176,7 +176,9 @@ private:
   bool ivcEnabled;
 
   /// The maximum time to allow for a single stp query.
-  double stpTimeout; 
+  double stpTimeout;
+
+  std::ostream* constraintsLog;
 
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   

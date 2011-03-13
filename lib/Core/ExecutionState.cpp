@@ -52,6 +52,7 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     fakeState(false),
     depth(0),
     multiplicity(1),
+    multiplicityExact(1),
     forkDisabled(false),
     mergeDisabled(false),
     queryCost(0.), 
@@ -684,6 +685,7 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
   a.weight += b.weight;
   a.coveredNew |= b.coveredNew;
   a.multiplicity += b.multiplicity;
+  a.multiplicityExact += b.multiplicityExact;
   if(a.instsSinceCovNew > b.instsSinceCovNew)
       a.instsSinceCovNew = b.instsSinceCovNew;
   for(std::map<const std::string*, std::set<unsigned> >::const_iterator

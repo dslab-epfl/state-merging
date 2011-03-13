@@ -38,6 +38,10 @@ namespace stats {
   extern Statistic forksMult;
   extern Statistic forksMultExact;
 
+  extern Statistic paths;
+  extern Statistic pathsMult;
+  extern Statistic pathsMultExact;
+
   /// The number of started fast forwards.
   extern Statistic fastForwardsStart;
 

@@ -286,6 +286,18 @@ namespace {
   cl::opt<bool>
   KeepMergedDuplicates("keep-merged-duplicates",
           cl::desc("Keep execuring merged states as duplicates"));
+
+  cl::opt<bool>
+  OutputConstraints("output-constraints",
+          cl::desc("Output path constratins for each explored state"),
+          cl::init(false));
+
+  /*
+  cl::opt<bool>
+  OutputForkedStatesConstraints("output-finished-states-constraints",
+          cl::desc("Output path constratins for each finished state"),
+          cl::init(false));
+  */
 }
 
 
@@ -381,6 +393,10 @@ Executor::Executor(const InterpreterOptions &opts,
 
   memory = new MemoryManager();
 
+  if (OutputConstraints) {
+    constraintsLog = interpreterHandler->openOutputFile("constraints.log");
+    assert(constraintsLog);
+  }
 }
 
 
@@ -2636,6 +2652,7 @@ void Executor::stepInState(ExecutionState *state) {
 
   std::set<ExecutionState*> duplicates;
   duplicates.swap(state->duplicates);
+  state->multiplicityExact = std::max(duplicates.size(), 1ul);
 
 	KInstruction *ki = state->pc();
 	stepInstruction(*state);
@@ -2684,6 +2701,9 @@ void Executor::stepInState(ExecutionState *state) {
 
     uint64_t forks = stats::forks.getValue();
     uint64_t forksMult = stats::forksMult.getValue();
+
+    foreach (ExecutionState* state, nextStates)
+      state->multiplicityExact = 0;
 
     foreach (ExecutionState* duplicate, duplicates) {
       // Execute the same instruction in a duplicate state
@@ -2739,6 +2759,7 @@ void Executor::stepInState(ExecutionState *state) {
               assert(!found);
               found = true;
               nextMain->duplicates.insert(addedState);
+              nextMain->multiplicityExact++;
             }
           }
           assert(found);
@@ -2759,7 +2780,8 @@ void Executor::stepInState(ExecutionState *state) {
     }
 
     foreach (ExecutionState* nextMain, nextStates) {
-      assert(!nextMain->duplicates.empty());
+      assert(!nextMain->duplicates.empty()
+             && nextMain->multiplicityExact == nextMain->duplicates.size());
     }
 
     addedStates.swap(savedAddedStates);
@@ -2977,7 +2999,27 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
 				"replay did not consume all objects in test input.");
 	}
 
-	interpreterHandler->incPathsExplored();
+  if (state.ptreeNode->state != PTreeNode::MERGED && !state.isDuplicate) {
+    interpreterHandler->incPathsExplored();
+    ++stats::paths;
+    stats::pathsMult += state.multiplicity;
+    stats::pathsMultExact += state.multiplicityExact;
+
+    if (OutputConstraints) {
+      (*constraintsLog) << "# STATE[";
+      (*constraintsLog) << "Instructions=" << stats::instructions
+                        << ",WallTime=" << statsTracker->elapsed()
+                        << ",ExecutionTime=" << stats::executionTime / 1000000.
+                        << ",Paths=" << stats::paths
+                        << ",PathsMult=" << stats::pathsMult
+                        << ",PathsMultExact=" << stats::pathsMultExact
+                        << ",StateMultiplicity=" << state.multiplicity
+                        << ",StateMultiplicityExact=" << state.multiplicityExact
+                        << "]" << std::endl;
+      ExprPPrinter::printConstraints(*constraintsLog, state.constraints());
+      (*constraintsLog) << "# END_STATE" << std::endl << std::flush;
+    }
+  }
 
 	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
 	if (it == addedStates.end()) {
@@ -3763,9 +3805,15 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                                    const MemoryObject *mo, bool shared) {
   // Create a new object state for the memory object (instead of a copy).
   if (!replayOut) {
+    if (OutputConstraints)
+      assert(states.size() == 1 && "Can't add new symbolics after fork!\n");
+
     static unsigned id = 0;
-    const Array *array = new Array("arr" + llvm::utostr(++id),
-                                   mo->size);
+    std::string name = "arr" + llvm::utostr(++id) + "_";
+    for (unsigned i = 0; i < mo->name.size(); ++i)
+      name += (isalnum(mo->name[i]) ? mo->name[i] : '_');
+
+    const Array *array = new Array(name, mo->size);
     ObjectState *os = bindObjectInState(state, mo, false, array);
     os->isShared = shared;
 

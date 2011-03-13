@@ -126,7 +126,11 @@ public:
   // Are we currently underconstrained?  Hack: value is size to make fake
   // objects.
   unsigned depth;
-  unsigned long multiplicity; // An upper bound of the number of paths merged in this one
+
+  // An upper bound of the number of paths merged in this one
+  unsigned long multiplicity;
+  // Exact number of paths merged in this one (requires KeepMergedDuplicates)
+  unsigned long multiplicityExact;
 
   /// Disables forking, set by user code.
   bool forkDisabled;
