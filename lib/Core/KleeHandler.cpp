@@ -254,7 +254,7 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 		exit(1);
 	}
 
-	if (!NoOutput) {
+  if (!NoOutput || errorMessage) {
 		std::vector<std::pair<std::string, std::vector<unsigned char> > > out;
 		bool success = m_interpreter->getSymbolicSolution(state, out);
 
