@@ -335,11 +335,14 @@ bool ConstraintManager::intersectRange(const ref<Expr> &e, const SRange &r, bool
 }
 
 bool ConstraintManager::computeRanges(const ref<Expr>& expr, bool *ok) {
+  bool changed = intersectRange(expr, SRange(1, 1), ok);
+  if (ok && !*ok)
+    return changed;
   if (const CmpExpr *e = dyn_cast<const CmpExpr>(expr)) {
     switch (e->getKind()) {
     case Expr::Eq:
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->left)) {
-        bool changed =
+        changed |=
             intersectRange(e->right, SRange(ce->getWidth(), ce->getZExtValue()), ok);
         if (ok && !*ok)
           return changed;
@@ -369,18 +372,18 @@ bool ConstraintManager::computeRanges(const ref<Expr>& expr, bool *ok) {
     case Expr::Ne:
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->left)) {
         if (ce->getWidth() == 1) {
-          return intersectRange(e->right, SRange(1, 1ull-ce->getZExtValue(1)), ok);
+          return intersectRange(e->right, SRange(1, 1ull-ce->getZExtValue(1)), ok) | changed;
         } else {
           uint64_t val = ce->getZExtValue();
           uint64_t max = bits64::maxValueOfNBits(ce->getWidth());
           if (val == 0)
-            return intersectRange(e->right, SRange(ce->getWidth(), 1ull, max), ok);
+            return intersectRange(e->right, SRange(ce->getWidth(), 1ull, max), ok) | changed;
           else if (val == (max>>1)) // maximum positive
-            return intersectRange(e->right, SRange(ce->getWidth(), (max>>1)+1, (max>>1)-1), ok);
+            return intersectRange(e->right, SRange(ce->getWidth(), (max>>1)+1, (max>>1)-1), ok) | changed;
           else if (val == (max>>1)+1) // minimum negative
-            return intersectRange(e->right, SRange(ce->getWidth(), (max>>1)+2, (max>>1)), ok);
+            return intersectRange(e->right, SRange(ce->getWidth(), (max>>1)+2, (max>>1)), ok) | changed;
           else if (val == max)
-            return intersectRange(e->right, SRange(ce->getWidth(), 0, max-1), ok);
+            return intersectRange(e->right, SRange(ce->getWidth(), 0, max-1), ok) | changed;
         }
       }
       break;
@@ -388,45 +391,45 @@ bool ConstraintManager::computeRanges(const ref<Expr>& expr, bool *ok) {
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->left)) {
         assert(ce->getZExtValue() < bits64::maxValueOfNBits(ce->getWidth()));
         return intersectRange(e->right, SRange(ce->getWidth(),
-                                     ce->getZExtValue()+1, ULLONG_MAX), ok);
+                                     ce->getZExtValue()+1, ULLONG_MAX), ok) | changed;
       } else if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->right)) {
         assert(ce->getZExtValue() > 0);
-        return intersectRange(e->left, SRange(ce->getWidth(), 0ull, ce->getZExtValue()-1), ok);
+        return intersectRange(e->left, SRange(ce->getWidth(), 0ull, ce->getZExtValue()-1), ok) | changed;
       }
       break;
     case Expr::Ule:
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->left)) {
         return intersectRange(e->right, SRange(ce->getWidth(),
-                                     ce->getZExtValue(), ULLONG_MAX), ok);
+                                     ce->getZExtValue(), ULLONG_MAX), ok) | changed;
       } else if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->right)) {
-        return intersectRange(e->left, SRange(ce->getWidth(), 0ull, ce->getZExtValue()), ok);
+        return intersectRange(e->left, SRange(ce->getWidth(), 0ull, ce->getZExtValue()), ok) | changed;
       }
       break;
     case Expr::Slt:
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->left)) {
         uint64_t max = bits64::maxValueOfNBits(ce->getWidth()-1);
         assert(ce->getZExtValue() != max); // +1 won't wrap
-        return intersectRange(e->right, SRange(ce->getWidth(), ce->getZExtValue()+1, max), ok);
+        return intersectRange(e->right, SRange(ce->getWidth(), ce->getZExtValue()+1, max), ok) | changed;
       } else if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->right)) {
         uint64_t min = 1 << (ce->getWidth()-1);
         assert(ce->getZExtValue() != min); // -1 won't wrap
-        return intersectRange(e->left, SRange(ce->getWidth(), min, ce->getZExtValue()-1), ok);
+        return intersectRange(e->left, SRange(ce->getWidth(), min, ce->getZExtValue()-1), ok) | changed;
       }
       break;
     case Expr::Sle:
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->left)) {
         return intersectRange(e->right, SRange(ce->getWidth(), ce->getZExtValue(),
-                                     bits64::maxValueOfNBits(ce->getWidth()-1)), ok);
+                                     bits64::maxValueOfNBits(ce->getWidth()-1)), ok) | changed;
       } else if (ConstantExpr *ce = dyn_cast<ConstantExpr>(e->right)) {
         return intersectRange(e->left, SRange(ce->getWidth(), 1 << (ce->getWidth()-1),
-                                    ce->getZExtValue()), ok);
+                                    ce->getZExtValue()), ok) | changed;
       }
       break;
     default:
       break;
     }
   }
-  return false;
+  return changed;
 }
 
 void ConstraintManager::recomputeAllRanges() {
