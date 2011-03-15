@@ -68,7 +68,9 @@ static void _init_stats(disk_file_t *dfile, const struct stat *defstats) {
   /* Important since we copy this out through getdents, and readdir
      will otherwise skip this entry. For same reason need to make sure
      it fits in low bits. */
-  klee_assume((stat->st_ino & 0x7FFFFFFF) != 0);
+  //klee_assume((stat->st_ino & 0x7FFFFFFF) != 0);
+  klee_assume(((uint32_t)stat->st_ino) != 0);
+  klee_assume(((uint32_t)stat->st_ino) != 0x80000000);
 
   /* uclibc opendir uses this as its buffer size, try to keep
      reasonable. */
@@ -211,8 +213,22 @@ ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset) {
 
 ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
-    buf = __concretize_ptr(buf);
-    count = __concretize_size(count);
+    char buf1[4096];
+    if (file->concrete_fd == 1) {
+      size_t i;
+      const void* cbuf = (void*) klee_get_valuel((long) buf);
+      count = klee_get_valuel(count - ((uintptr_t)cbuf - (uintptr_t)buf));
+      if (count > 4096)
+        count = 4096;
+      for (i=0; i<count; ++i) {
+        buf1[i] = klee_get_value_i32(((const char*)cbuf)[i]);
+      }
+      buf = buf1;
+    } else {
+      const void* cbuf = __concretize_ptr(buf);
+      count = __concretize_size(count - ((uintptr_t)cbuf - (uintptr_t)buf));
+      buf = cbuf;
+    }
     /* XXX In terms of looking for bugs we really should do this check
       before concretization, at least once the routine has been fixed
       to properly work with symbolics. */
