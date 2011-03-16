@@ -14,6 +14,9 @@
 
 #define SUBQUERY_CONDITIONS_MAX 8
 
+//#define __DISABLE_MAIN_SOLVER
+//#define __DISABLE_SUBSOLVERS
+
 using namespace klee;
 
 namespace klee {
@@ -75,7 +78,8 @@ protected:
     QueryInfo(QueryType _type)
         : type(_type), query(constraints, 0),
           solved(false), mainSolverActive(false), mainSolverDone(false),
-          subsolversActive(0), subsolversDone(false) {
+          subsolversActive(0), subsolversDone(false),
+          subqueryIndex(ULLONG_MAX) {
       assert(type == ExitRequest);
     }
 
@@ -180,14 +184,17 @@ void *HLParallelSolver::mainSolverThread(void *arg) {
     assert(!queryInfo->mainSolverActive);
     assert(!queryInfo->mainSolverDone);
     queryInfo->mainSolverActive = true;
+    solved = false;
 
-#if 0
+#ifdef __DISABLE_MAIN_SOLVER
 #warning Main solver is disabled!
+    // Wait for generator thread to finish
     while (queryInfo->subqueryIndex == ULLONG_MAX) {
       pthread_mutex_unlock(&pSolver->mutex);
       pthread_yield();
       pthread_mutex_lock(&pSolver->mutex);
     }
+    // If generator produced subqueries, mark ourselfs as done
     if (queryInfo->subqueryIndex != ULLONG_MAX-1) {
       // XXX
       queryInfo->mainSolverActive = false;
@@ -199,6 +206,7 @@ void *HLParallelSolver::mainSolverThread(void *arg) {
       }
       continue;
     }
+    // Otherwise, we have to solve the query anyway
 #endif
 
     pthread_mutex_unlock(&pSolver->mutex);
@@ -221,7 +229,8 @@ void *HLParallelSolver::mainSolverThread(void *arg) {
 
     case InitialValuesQuery:
       solved = pSolver->solver->impl->computeInitialValues(
-          queryInfo->query, queryInfo->objects, initialValues, hasSolution);
+          queryInfo->query.asOneExpr(), queryInfo->objects,
+          initialValues, hasSolution);
       break;
 
     case ExitRequest:
@@ -289,6 +298,8 @@ public:
 
 void HLParallelSolver::QueryInfo::gatherSubqueryConditionsFor(
                                           const ref<Expr>& expr) {
+  if (subqueryConditions.size() >= SUBQUERY_CONDITIONS_MAX)
+    return;
   std::vector< ref<Expr> > stack;
   ExprHashSet visited;
 
@@ -351,6 +362,7 @@ void *HLParallelSolver::subqueryGeneratorThread(void *arg) {
 
     QueryInfo *queryInfo = pSolver->queriesInfo.back();
     if (queryInfo->type == ExitRequest) {
+      queryInfo->subqueryIndex = 0;
       pthread_cond_broadcast(&pSolver->subqueryReadyCond);
       break;
     }
@@ -360,6 +372,21 @@ void *HLParallelSolver::subqueryGeneratorThread(void *arg) {
     assert(queryInfo->subqueryIndex == ULLONG_MAX);
     assert(queryInfo->subqueryConditions.empty());
     queryInfo->subsolversActive = 1;
+
+#ifdef __DISABLE_SUBSOLVERS
+#warning Subsolvers are disabled!
+    if (!queryInfo->isDone()) {
+      queryInfo->subsolversActive = 0;
+      queryInfo->subsolversDone = true;
+      queryInfo->subqueryIndex = ULLONG_MAX-1;
+      if (queryInfo->isDone()) {
+        pthread_cond_signal(&pSolver->queryDoneCond);
+      }
+    } else {
+      queryInfo->subsolversActive = 0;
+    }
+    continue;
+#endif
 
     if (!queryInfo->constraints.mergeConditions.empty()) {
       pthread_mutex_unlock(&pSolver->mutex);
@@ -371,15 +398,13 @@ void *HLParallelSolver::subqueryGeneratorThread(void *arg) {
 
       queryInfo->gatherSubqueryConditionsFor(queryInfo->query.expr);
 
-      /*
       for (ConstraintManager::const_iterator it = queryInfo->constraints.begin(),
                          ie = queryInfo->constraints.end(); it != ie; ++it) {
         if (queryInfo->isDone() ||
-                 queryInfo.subqueryConditions.size() > SUBQUERY_CONDITIONS_MAX)
+                 queryInfo->subqueryConditions.size() >= SUBQUERY_CONDITIONS_MAX)
           break;
         queryInfo->gatherSubqueryConditionsFor(*it);
       }
-      */
 
       assert(queryInfo->subqueryConditions.size() <= SUBQUERY_CONDITIONS_MAX);
 
@@ -455,14 +480,11 @@ void *HLParallelSolver::subsolverThread(void *arg) {
     SubqueryBuilderVisitor visitor(queryInfo->subqueryConditions, subqueryIndex);
     */
     ConstraintManager cm(queryInfo->constraints);
-    ref<Expr> cond = ConstantExpr::create(1, Expr::Bool);
     bool infeasible = false;
     for (unsigned i = 0; i < queryInfo->subqueryConditions.size(); ++i) {
       ref<Expr> e = queryInfo->subqueryConditions[i];
       if (!(subqueryIndex & (1ul << i)))
         e = Expr::createIsZero(e);
-      e = cm.simplifyExpr(e);
-      cond = AndExpr::create(cond, e);
       if (!cm.checkAddConstraint(e)) {
         infeasible = true;
         break;
@@ -497,10 +519,10 @@ void *HLParallelSolver::subsolverThread(void *arg) {
                 break;
               }
             }
-            ref<Expr> expr1 =
-                OrExpr::create(Expr::createIsZero(expr), Expr::createIsZero(cond));
+            //ref<Expr> expr1 =
+            //    OrExpr::create(Expr::createIsZero(expr), Expr::createIsZero(cond));
             solved = pSolver->solver->impl->computeTruth(
-                queryInfo->query.withExpr(expr1), isUnsat);
+                Query(cm, Expr::createIsZero(expr)).asOneExpr(), isUnsat);
             break;
           }
         }
@@ -524,9 +546,9 @@ void *HLParallelSolver::subsolverThread(void *arg) {
             break;
           }
         }
-        expr = OrExpr::create(expr, Expr::createIsZero(cond));
+        //expr = OrExpr::create(expr, Expr::createIsZero(cond));
         solved = pSolver->solver->impl->computeTruth(
-            queryInfo->query.withExpr(expr), isValid);
+            Query(cm, expr).asOneExpr(), isValid);
         break;
 
       case InitialValuesQuery:
@@ -542,9 +564,9 @@ void *HLParallelSolver::subsolverThread(void *arg) {
             break;
           }
         }
-        expr = OrExpr::create(expr, Expr::createIsZero(cond));
+        //expr = OrExpr::create(expr, Expr::createIsZero(cond));
         solved = pSolver->solver->impl->computeInitialValues(
-            queryInfo->query.withExpr(expr), queryInfo->objects,
+            Query(cm, expr).asOneExpr(), queryInfo->objects,
             initialValues, hasSolution);
         isValid = !hasSolution;
         break;
@@ -557,12 +579,12 @@ void *HLParallelSolver::subsolverThread(void *arg) {
         }
         if (isa<ConstantExpr>(expr)) {
           solved = pSolver->solver->impl->computeTruth(
-              queryInfo->query.withExpr(Expr::createIsZero(cond)), isValid);
+              Query(cm, ConstantExpr::create(1,1)).asOneExpr(), isValid);
           if (solved && !isValid)
             value = expr;
         } else {
           solved = pSolver->solver->impl->computeInitialValues(
-              queryInfo->query.withExpr(Expr::createIsZero(cond)),
+              Query(cm, ConstantExpr::create(1,1)).asOneExpr(),
               queryInfo->objects,
               initialValues, hasSolution);
           if (solved && hasSolution) {

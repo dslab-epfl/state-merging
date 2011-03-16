@@ -20,6 +20,7 @@
 #include "klee/util/ExprPPrinter.h"
 #include "klee/util/ExprUtil.h"
 #include "klee/Internal/Support/Timer.h"
+#include "../Core/Common.h"
 
 #include "llvm/System/Process.h"
 
@@ -53,6 +54,17 @@ using namespace llvm;
 using cloud9::instrum::Timer;
 
 #define SHARED_MEM_SIZE	(1<<20)
+
+const ConstraintManager Query::emptyConstraintManager;
+
+Query Query::asOneExpr() const {
+  ref<Expr> newExpr = expr;
+  for (ConstraintManager::const_iterator it = constraints.begin(),
+              ie = constraints.end(); it != ie; ++it) {
+    newExpr = OrExpr::create(newExpr, Expr::createIsZero(*it));
+  }
+  return Query(emptyConstraintManager, newExpr);
+}
 
 /***/
 

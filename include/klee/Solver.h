@@ -20,6 +20,8 @@ namespace klee {
   class SolverImpl;
 
   struct Query {
+    static const ConstraintManager emptyConstraintManager;
+
   public:
     const ConstraintManager &constraints;
     ref<Expr> expr;
@@ -42,6 +44,8 @@ namespace klee {
     Query negateExpr() const {
       return withExpr(Expr::createIsZero(expr));
     }
+
+    Query asOneExpr() const;
   };
 
   class Solver {
