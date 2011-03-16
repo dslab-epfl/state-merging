@@ -237,6 +237,11 @@ public:
   /// isFalse - Is this the false expression.
   bool isFalse() const;
 
+  /// isIsZero - Is this expression Eq(0, e)
+  bool isIsZeroOf(ref<Expr> e) const;
+
+  bool isNegationOf(ref<Expr> e) const;
+
   /* Static utility methods */
 
   static void printKind(std::ostream &os, Kind k);
