@@ -135,6 +135,15 @@ public:
 
     int64_t smin() { assert(!empty()); return sext(minU <= maxU ? minU : minL); }
     int64_t smax() { assert(!empty()); return sext(minL <= maxL ? maxL : maxU); }
+
+    bool operator==(const SRange& o) {
+      return ((minL > maxL && o.minL > o.maxL) ||
+              (minL == o.minL && maxL == o.maxL)) &&
+             ((minU > maxU && o.minU > o.maxU) ||
+              (minU == o.minU && maxU == o.maxU)) && width == o.width;
+    }
+
+    bool operator!=(const SRange& o) { return !(*this == o); }
   };
 
   typedef std::map<ref<Expr>, SRange> ranges_ty;

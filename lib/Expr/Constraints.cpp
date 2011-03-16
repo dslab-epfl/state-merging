@@ -322,13 +322,17 @@ bool ConstraintManager::checkAddConstraint(ref<Expr> e) {
 
 bool ConstraintManager::intersectRange(const ref<Expr> &e, const SRange &r, bool *ok) {
   std::pair<ranges_ty::iterator, bool> p = ranges.insert(std::make_pair(e, r));
-  if (!p.second) {
-    // compute the intersection
-    p.first->second = p.first->second.intersection(r);
+  if (p.second)
+    return true;
+
+  // compute the intersection
+  SRange s = p.first->second.intersection(r);
+  if (p.first->second != s) {
     if (ok)
-      *ok = !p.first->second.empty();
+      *ok = !s.empty();
     else
-      assert(!p.first->second.empty());
+      assert(!s.empty());
+    p.first->second = s;
     return true;
   }
   return false;
