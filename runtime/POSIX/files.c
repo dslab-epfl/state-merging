@@ -213,28 +213,33 @@ ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset) {
 
 ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
-    char buf1[4096];
     if (file->concrete_fd == 1) {
-      size_t i;
-      const void* cbuf = (void*) klee_get_valuel((long) buf);
-      count = klee_get_valuel(count - ((uintptr_t)cbuf - (uintptr_t)buf));
-      if (count > 4096)
-        count = 4096;
-      for (i=0; i<count; ++i) {
-        buf1[i] = klee_get_value_i32(((const char*)cbuf)[i]);
+      // Ugh
+      if (klee_is_symbolic((long)buf) && klee_is_symbolic((long)count)) {
+        CALL_UNDERLYING(write, file->concrete_fd, "(S)", 4);
+      } else {
+        char ch;
+        size_t i;
+        size_t count1 = klee_get_valuel((long) count);
+        buf = (void*) klee_get_valuel((long) buf);
+        klee_check_memory_access(buf, count1);
+
+        for (i=0; i<count1; ++i) {
+          ch = klee_get_value_i32(((const char*)buf)[i]);
+          CALL_UNDERLYING(write, file->concrete_fd, &ch, 1);
+        }
       }
-      buf = buf1;
-    } else {
-      const void* cbuf = __concretize_ptr(buf);
-      count = __concretize_size(count - ((uintptr_t)cbuf - (uintptr_t)buf));
-      buf = cbuf;
+      return count;
     }
+
+    int res;
+
+    buf = __concretize_ptr(buf);
+    count = __concretize_size(count);
     /* XXX In terms of looking for bugs we really should do this check
       before concretization, at least once the routine has been fixed
       to properly work with symbolics. */
     klee_check_memory_access(buf, count);
-
-    int res;
 
     if (offset >= 0)
       res = CALL_UNDERLYING(pwrite, file->concrete_fd, buf, count, offset);
