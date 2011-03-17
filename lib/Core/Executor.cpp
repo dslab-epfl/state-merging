@@ -2785,8 +2785,14 @@ void Executor::stepInState(ExecutionState *state) {
             }
           }
           //assert(found);
-          if (!found)
+          if (!found) {
             klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
+            // These will be fixed later, when states will diverge
+            foreach (ExecutionState* nextMain, nextStates) {
+              nextMain->duplicates.insert(addedState);
+              nextMain->multiplicityExact++;
+            }
+          }
         } else {
           // delete addedState;
         }
