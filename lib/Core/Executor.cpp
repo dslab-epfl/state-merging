@@ -2772,7 +2772,10 @@ void Executor::stepInState(ExecutionState *state) {
             }
 
             if (match) {
-              assert(!found);
+              //assert(!found);
+              if (found) {
+                klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
+              }
               found = true;
               nextMain->duplicates.insert(addedState);
               nextMain->multiplicityExact++;
