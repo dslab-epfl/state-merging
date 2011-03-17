@@ -1068,6 +1068,10 @@ ExecutionState* Executor::merge(ExecutionState &current, ExecutionState &other) 
 
     ExecutionState *merged = current.merge(other, KeepMergedDuplicates);
     if (merged) {
+        if (!UseHLParallelSolver) {
+          // Merge conditions are useless in this case
+          merged->constraints().mergeConditions.clear();
+        }
         if (KeepMergedDuplicates) {
             addedStates.insert(merged);
 
@@ -1294,7 +1298,12 @@ void Executor::stepInstruction(ExecutionState &state) {
     statsTracker->stepInstruction(state);
 
   ++stats::instructions;
+
+  uint64_t instructionsMultOld = stats::instructionsMult.getValue();
   stats::instructionsMult += state.multiplicity;
+  if (stats::instructionsMult.getValue() < instructionsMultOld) // overflow
+    stats::instructionsMultHigh+=1;
+
   state.setPrevPC(state.pc());
   state.setPC(state.pc().next());
 
@@ -3068,7 +3077,7 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
                         << ",Paths=" << stats::paths
                         << ",PathsMult=" << stats::pathsMult
                         << ",PathsMultExact=" << stats::pathsMultExact
-                        << ",StateMultiplicity=" << state.multiplicity
+                        << ",StateMultiplicity=" << uint64_t(state.multiplicity)
                         << ",StateMultiplicityExact=" << state.multiplicityExact
                         << "]" << std::endl;
       ExprPPrinter::printConstraints(*constraintsLog, state.constraints());

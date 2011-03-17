@@ -29,7 +29,7 @@ static void recordStateInfo(cloud9::instrum::EventClass instrumEvent, const Exec
   cloud9::instrum::theInstrManager.recordEventAttribute(
         instrumEvent, cloud9::instrum::StateDepth, state.depth);
   cloud9::instrum::theInstrManager.recordEventAttribute(
-        instrumEvent, cloud9::instrum::StateMultiplicity, state.multiplicity);
+        instrumEvent, cloud9::instrum::StateMultiplicity, uint64_t(state.multiplicity));
 }
 
 static void recordTiming(const Timer &t, const ExecutionState &state) {

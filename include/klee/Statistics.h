@@ -76,6 +76,7 @@ namespace klee {
     
     void registerStatistic(Statistic &s);
     void incrementStatistic(Statistic &s, uint64_t addend);
+    void setStatistic(Statistic &s, uint64_t value);
     uint64_t getValue(const Statistic &s) const;
     void incrementIndexedValue(const Statistic &s, unsigned index, 
                                uint64_t addend);
@@ -102,6 +103,22 @@ namespace klee {
         if (contextStats) {
           //CLOUD9_DEBUG("Size: " << theStatisticManager->getNumStatistics() << " offset: " << s.id);
           contextStats->data[s.id] += addend;
+        }
+      }
+    }
+  }
+
+  inline void StatisticManager::setStatistic(Statistic &s,
+                                             uint64_t value) {
+    if (enabled) {
+      globalStats[s.id] = value;
+      if (indexedStats) {
+        indexedStats[index*stats.size() + s.id] = value;
+        recordChange(s.id, index);
+
+        if (contextStats) {
+          //CLOUD9_DEBUG("Size: " << theStatisticManager->getNumStatistics() << " offset: " << s.id);
+          contextStats->data[s.id] = value;
         }
       }
     }

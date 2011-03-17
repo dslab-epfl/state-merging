@@ -93,3 +93,7 @@ Statistic &Statistic::operator +=(const uint64_t addend) {
 uint64_t Statistic::getValue() const {
   return theStatisticManager->getValue(*this);
 }
+
+void Statistic::setValue(uint64_t value) {
+  theStatisticManager->setStatistic(*this, value);
+}

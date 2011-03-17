@@ -19,6 +19,7 @@ namespace stats {
   extern Statistic resolveTime;
   extern Statistic instructions;
   extern Statistic instructionsMult;
+  extern Statistic instructionsMultHigh;
   extern Statistic instructionsMultExact;
   extern Statistic instructionTime;
   extern Statistic instructionRealTime;

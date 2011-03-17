@@ -128,9 +128,9 @@ public:
   unsigned depth;
 
   // An upper bound of the number of paths merged in this one
-  unsigned long multiplicity;
+  uint64_t multiplicity;
   // Exact number of paths merged in this one (requires KeepMergedDuplicates)
-  unsigned long multiplicityExact;
+  uint64_t multiplicityExact;
 
   /// Disables forking, set by user code.
   bool forkDisabled;

@@ -459,7 +459,7 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
     ref<Expr> bValue = b.addressSpace().findObject(p.first)->read8(p.second);
     if (aValue != bValue) {
       // XXX: try different heuristics here
-      if (1 || isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
+      if (isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
         if (DebugLogStateMerge)
           std::cerr << "---- merge failed: mergeBlacklists contain different values\n";
         return NULL;

@@ -29,6 +29,7 @@ Statistic stats::instructionRealTime("InstructionRealTimes", "Ireal", true);
 Statistic stats::instructionTime("InstructionTimes", "Itime", true);
 Statistic stats::instructions("Instructions", "I");
 Statistic stats::instructionsMult("InstructionsMult", "InstructionsMult");
+Statistic stats::instructionsMultHigh("InstructionsMultHigh", "InstructionsMultHigh");
 Statistic stats::instructionsMultExact("InstructionsMultExact", "InstructionsMultExact");
 Statistic stats::minDistToReturn("MinDistToReturn", "Rdist");
 Statistic stats::minDistToGloballyUncovered("MinDistToGloballyUncovered", "UCdist");
