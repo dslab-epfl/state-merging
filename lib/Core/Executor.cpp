@@ -2724,7 +2724,10 @@ void Executor::stepInState(ExecutionState *state) {
     foreach (ExecutionState* duplicate, duplicates) {
       // Execute the same instruction in a duplicate state
       assert(duplicate->isDuplicate);
-      assert(/*stateIsTerminated || */duplicate->pc() == state->prevPC());
+      //assert(/*stateIsTerminated || */duplicate->pc() == state->prevPC());
+      // XXX
+      if (duplicate->pc() != state->prevPC())
+        continue;
       ki = duplicate->pc();
       duplicate->setPrevPC(duplicate->pc());
       duplicate->setPC(duplicate->pc().next());
