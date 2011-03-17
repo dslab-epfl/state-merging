@@ -135,8 +135,6 @@ public:
   /// Disables forking, set by user code.
   bool forkDisabled;
 
-  bool mergeDisabled;
-
   mutable double queryCost;
   double weight;
 

@@ -298,6 +298,11 @@ namespace {
           cl::desc("Output path constratins for each finished state"),
           cl::init(false));
   */
+
+  cl::opt<bool>
+  DebugMergeSlowdown("debug-merge-slowdown",
+          cl::desc("Debug slow-down of merged states"),
+          cl::init(false));
 }
 
 
@@ -2142,8 +2147,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> base = eval(ki, 0, state).value;
     if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
       base = state.constraints().simplifyExpr(base);
-      if (!isa<ConstantExpr>(base))
-        base = toUnique(state, base);
+      //if (!isa<ConstantExpr>(base))
+      //  base = toUnique(state, base);
       int vnumber = ki->operands[0];
       if (vnumber >= 0)
         state.stack().back().locals[vnumber].value = base;
@@ -2156,8 +2161,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> value = eval(ki, 0, state).value;
     if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
       base = state.constraints().simplifyExpr(base);
-      if (!isa<ConstantExpr>(base))
-        base = toUnique(state, base);
+      //if (!isa<ConstantExpr>(base))
+      //  base = toUnique(state, base);
       int vnumber = ki->operands[1];
       if (vnumber >= 0)
         state.stack().back().locals[vnumber].value = base;
@@ -2555,7 +2560,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
+    WallTimer searcherTimer;
     searcher->update(current, addedStates, removedStates);
+    stats::searcherTime += searcherTimer.check();
   }
   
   states.insert(addedStates.begin(), addedStates.end());
@@ -2726,8 +2733,8 @@ void Executor::stepInState(ExecutionState *state) {
         setPCLoggingSolverStateID(solver->solver, 0);
       duplicate->stateTime++;
 
-      assert(stats::forks.getValue() == forks + addedStates.size());
-      assert(stats::forksMult.getValue() == forksMult + addedStates.size());
+      //assert(stats::forks.getValue() == forks + addedStates.size());
+      //assert(stats::forksMult.getValue() == forksMult + addedStates.size());
 
       stats::forks += forks - stats::forks.getValue();
       stats::forksMult += forksMult - stats::forksMult.getValue();
@@ -2762,7 +2769,9 @@ void Executor::stepInState(ExecutionState *state) {
               nextMain->multiplicityExact++;
             }
           }
-          assert(found);
+          //assert(found);
+          if (!found)
+            klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
         } else {
           // delete addedState;
         }
@@ -2779,10 +2788,12 @@ void Executor::stepInState(ExecutionState *state) {
       removedStates.clear();
     }
 
+    /*
     foreach (ExecutionState* nextMain, nextStates) {
       assert(!nextMain->duplicates.empty()
              && nextMain->multiplicityExact == nextMain->duplicates.size());
     }
+    */
 
     addedStates.swap(savedAddedStates);
     removedStates.swap(savedRemovedStates);
@@ -2790,9 +2801,50 @@ void Executor::stepInState(ExecutionState *state) {
     //klee_warning("<<< Finished running duplicated states.\n");
   }
 
-  if (KeepMergedDuplicates && executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
-    klee_warning("Merged state is slow: %g instead of %g for individual states\n",
+  if (KeepMergedDuplicates && DebugMergeSlowdown &&
+      executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
+    klee_warning("Merged state is slow: %g instead of %g for individual states",
                  executionTime / 1000000., duplicatesExecutionTime / 1000000.);
+    KInstruction *ki = (KInstruction*) state->prevPC();
+    std::cerr << "  " << duplicates.size() << " duplicares, "
+        << addedStates.size() << " added states" << std::endl;
+    std::cerr << "  At " << ki->info->file << ":"
+        << ki->info->line << std::endl;
+    uint64_t size = state->stack().size();
+    for (unsigned i = 1; i <= std::min(5ul, size); ++i) {
+      std::cerr << "    " << state->stack()[size-i].caller->info->file
+          << ":" << state->stack()[size-i].caller->info->line << std::endl;
+    }
+    if (size > 5)
+      std::cerr << "    ..." << std::endl;
+    std::cerr << "  Instruction:" << std::endl << "    ";
+    ki->inst->dump();
+    if (isa<BranchInst>(ki->inst)) {
+      std::cerr << "  Branch condition in merged state:"<< std::endl << "    ";
+      eval(ki, 0, *state).value->dump();
+      std::cerr << "  Branch conditions in duplicates:" << std::endl;
+      foreach (ExecutionState *d, duplicates) {
+        std::cerr << "    ";
+        eval(ki, 0, *d).value->dump();
+      }
+    } else if (isa<LoadInst>(ki->inst)) {
+      std::cerr << "  Load address in merged state:"<< std::endl << "    ";
+      eval(ki, 0, *state).value->dump();
+      std::cerr << "  Load address in duplicates:" << std::endl;
+      foreach (ExecutionState *d, duplicates) {
+        std::cerr << "    ";
+        eval(ki, 0, *d).value->dump();
+      }
+    } else if (isa<StoreInst>(ki->inst)) {
+      std::cerr << "  Store address in merged state:"<< std::endl << "    ";
+      eval(ki, 1, *state).value->dump();
+      std::cerr << "  Store address in duplicates:" << std::endl;
+      foreach (ExecutionState *d, duplicates) {
+        std::cerr << "    ";
+        eval(ki, 1, *d).value->dump();
+      }
+    }
+    std::cerr << std::endl;
   }
 
 	if (MaxMemory) {
@@ -2917,7 +2969,10 @@ void Executor::run(ExecutionState &initialState) {
   //while (!states.empty() && !haltExecution) {
   while (!searcher->empty() && !haltExecution) {
     assert(addedStates.empty() && removedStates.empty());
+
+    WallTimer searcherTimer;
     ExecutionState &state = searcher->selectState();
+    stats::searcherTime += searcherTimer.check();
 
     if (!addedStates.empty())
       updateStates(0);

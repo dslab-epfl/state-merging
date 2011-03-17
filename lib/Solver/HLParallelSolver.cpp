@@ -120,7 +120,7 @@ protected:
 HLParallelSolver::HLParallelSolver(Solver *_solver, unsigned subsolversCount)
     : solver(_solver) {
   if (subsolversCount == 0)
-    subsolversCount = 5;
+    subsolversCount = 2;
 
   _CHECKED(pthread_mutex_init(&mutex, NULL));
   _CHECKED(pthread_cond_init(&queryReadyCond, NULL));

@@ -116,6 +116,8 @@ HandlerInfo handlerInfo[] = {
   add("klee_set_time", handleSetTime, false),
 
   add("klee_merge_disable", handleMergeDisable, false),
+  add("klee_merge_blacklist", handleMergeBlacklist, false),
+  add("klee_merge_blacklist_clear", handleMergeBlacklistClear, false),
 
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -1195,5 +1197,50 @@ void SpecialFunctionHandler::handleMergeDisable(ExecutionState &state,
          "argument to klee_merge_disable is not a constant");
 
   uint64_t disabled = cast<ConstantExpr>(arguments[0])->getZExtValue();
-  state.mergeDisabled = disabled;
+  state.addressSpace().mergeDisabled = disabled;
 }
+
+void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
+                                                  KInstruction *target,
+                                                  std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==3 &&
+         "invalid number of arguments klee_merge_blacklist");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         isa<ConstantExpr>(arguments[1]) &&
+         isa<ConstantExpr>(arguments[2]) &&
+         "arguments to klee_merge_blacklist are not a constant");
+
+  ref<ConstantExpr> address = cast<ConstantExpr>(arguments[0]);
+  uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
+
+  ObjectPair op;
+  bool ok = state.addressSpace().resolveOne(address, op);
+  assert(ok && "arguments to klee_merge_set_active are invalid");
+
+  ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
+  assert(chk->isTrue() && "arguments to klee_merge_set_active are invalid");
+
+  uint64_t offset = address->getZExtValue() - op.first->address;
+  uint64_t activate = cast<ConstantExpr>(arguments[2])->getZExtValue();
+  if (activate) {
+    for (unsigned i = 0; i < size; ++i)
+      state.addressSpace().mergeBlacklist.insert(
+          std::make_pair(op.first, offset+i));
+  } else {
+    for (unsigned i = 0; i < size; ++i)
+      state.addressSpace().mergeBlacklist.erase(
+          std::make_pair(op.first, offset+i));
+  }
+}
+
+void SpecialFunctionHandler::handleMergeBlacklistClear(ExecutionState &state,
+                                                  KInstruction *target,
+                                                  std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==0 &&
+         "invalid number of arguments klee_merge_blacklist");
+  state.addressSpace().mergeBlacklist.clear();
+}
+

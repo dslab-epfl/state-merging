@@ -18,6 +18,8 @@
 #include "klee/AddressPool.h"
 #include "cloud9/Logger.h"
 
+#include "../Core/Common.h"
+
 #include "klee/Expr.h"
 
 #include "Memory.h"
@@ -54,7 +56,6 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     multiplicity(1),
     multiplicityExact(1),
     forkDisabled(false),
-    mergeDisabled(false),
     queryCost(0.), 
     weight(1),
     instsSinceCovNew(0),
@@ -445,6 +446,27 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
       std::cerr << "---- merge failed: symbolics sets are different\n";
     return NULL;
   }
+
+  if (addressSpace().mergeBlacklist != b.addressSpace().mergeBlacklist) {
+    if (DebugLogStateMerge)
+      std::cerr << "---- merge failed: mergeBlacklists are different\n";
+    return NULL;
+  }
+
+  foreach (const AddressSpace::MergeBlacklist::value_type& p,
+           addressSpace().mergeBlacklist) {
+    ref<Expr> aValue =   addressSpace().findObject(p.first)->read8(p.second);
+    ref<Expr> bValue = b.addressSpace().findObject(p.first)->read8(p.second);
+    if (aValue != bValue) {
+      // XXX: try different heuristics here
+      if (1 || isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
+        if (DebugLogStateMerge)
+          std::cerr << "---- merge failed: mergeBlacklists contain different values\n";
+        return NULL;
+      }
+    }
+  }
+
 
   // We cannot merge if addresses would resolve differently in the
   // states. This means:

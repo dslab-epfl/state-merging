@@ -131,6 +131,8 @@ namespace klee {
     HANDLER(handleLoopExit);
 
     HANDLER(handleMergeDisable);
+    HANDLER(handleMergeBlacklist);
+    HANDLER(handleMergeBlacklistClear);
 
 #undef HANDLER
   };

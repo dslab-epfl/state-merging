@@ -61,10 +61,20 @@ namespace klee {
     /// Hash value that uniquely identifies address space mappings
     /// NOTE: the hash is very weak due to performance reasons
     uint32_t hash;
-    
+
+    typedef std::set< std::pair<const MemoryObject*, uint64_t> > MergeBlacklist;
+    /// A set of values that should not differ when merging states
+    MergeBlacklist mergeBlacklist;
+
+    bool mergeDisabled;
+
   public:
-    AddressSpace() : cowKey(1), cowDomain(NULL), hash(hashInit()) {}
-    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL), objects(b.objects), hash(b.hash)  { }
+    AddressSpace() : cowKey(1), cowDomain(NULL), hash(hashInit()),
+                     mergeDisabled(false) {}
+    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL),
+                                          objects(b.objects), hash(b.hash),
+                                          mergeBlacklist(b.mergeBlacklist),
+                                          mergeDisabled(b.mergeDisabled) { }
 
     ~AddressSpace() {}
 

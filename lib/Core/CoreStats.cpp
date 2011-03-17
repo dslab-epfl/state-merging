@@ -46,3 +46,5 @@ Statistic stats::duplicatesExecutionTime("ExecutionDuplicatesTime", "EDTime", tr
 Statistic stats::paths("Paths", "Paths");
 Statistic stats::pathsMult("PathsMult", "PathsMult");
 Statistic stats::pathsMultExact("PathsMultExact", "PathsMultExact");
+
+Statistic stats::searcherTime("SearcherTime", "SearcherTime", true);

@@ -74,6 +74,8 @@ namespace stats {
   /// Execution time (excluding initialization, statistics, the searcher, etc.)
   extern Statistic executionTime;
   extern Statistic duplicatesExecutionTime;
+
+  extern Statistic searcherTime;
 }
 }
 

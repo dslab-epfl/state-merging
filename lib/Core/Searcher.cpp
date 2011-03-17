@@ -473,7 +473,7 @@ LazyMergingSearcher::~LazyMergingSearcher() {
 ///
 
 inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const {
-  if (state->mergeDisabled)
+  if (state->addressSpace().mergeDisabled)
     return false;
 
   if (MaxStateMultiplicity && state->multiplicity >= MaxStateMultiplicity)
@@ -525,7 +525,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
       unsigned _candidates = 0;
       uint32_t _mergeIndex;
       StatesTrace::iterator _traceIt;
-      if (!(*it)->mergeDisabled) {
+      if (!(*it)->addressSpace().mergeDisabled) {
         _mergeIndex = (*it)->getMergeIndex();
         _traceIt = statesTrace.find(_mergeIndex);
         _candidates = (_traceIt == statesTrace.end() ? 0
@@ -564,7 +564,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
 #endif
 
     assert(!MaxStateMultiplicity || state->multiplicity < MaxStateMultiplicity);
-    assert(!state->mergeDisabled);
+    assert(!state->addressSpace().mergeDisabled);
 
     // Check wether we can already merge
     for (StatesSet::iterator it = traceIt->second->begin(),
@@ -573,7 +573,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
       assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
       //assert(!state1->mergeDisabled);
 
-      if (state1 != state && !state1->mergeDisabled &&
+      if (state1 != state && !state1->addressSpace().mergeDisabled &&
                 state1->getMergeIndex() == mergeIndex) {
         // State is at the same execution index as state1, let's try merging
         merged = executor.merge(*state1, *state);
@@ -644,7 +644,8 @@ void LazyMergingSearcher::update(ExecutionState *current,
                              const std::set<ExecutionState*> &removedStates) {
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
-  if (current && !current->mergeDisabled && removedStates.count(current) == 0 &&
+  if (current && !current->addressSpace().mergeDisabled &&
+        removedStates.count(current) == 0 &&
         (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
     uint32_t mergeIndex = current->getMergeIndex();
     StatesTrace::iterator it = statesTrace.find(mergeIndex);
