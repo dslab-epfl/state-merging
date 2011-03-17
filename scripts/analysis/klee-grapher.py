@@ -4,6 +4,7 @@ import sys
 from data import Experiment
 from itertools import izip
 from scipy import *
+from scipy import optimize
 
 def eplot(*args, **kwargs):
     opts = {
@@ -54,8 +55,7 @@ def compute_instructions_top(el):
     el.a['InstructionsTop'] = el.a.InstructionsMult + el.a.InstructionsMultHigh * float(2**64)
     el.stats['InstructionsTop'] = list(el.a.InstructionsTop)
 
-"""
-def compute_instructions_approx(el, eldup, cuttime=10, upcuttime=None, deg=1):
+def compute_instructions_approx_1(el, eldup, cuttime=50, upcuttime=None, deg=1):
     compute_instructions_top(el)
     compute_instructions_top(eldup)
     
@@ -75,7 +75,9 @@ def compute_instructions_approx(el, eldup, cuttime=10, upcuttime=None, deg=1):
 
     el.a['InstructionsApprox'] = el.a.InstructionsTop / el.pratio
     el.stats['InstructionsApprox'] = list(el.a.InstructionsApprox)
-"""
+
+    #eldup.a['InstructionsApprox'] = eldup.a.InstructionsTop / el.pratio
+    #eldup.stats['InstructionsApprox'] = list(eldup.a.InstructionsApprox)
 
 def compute_instructions_approx(el, eldup, deg=1):
     compute_instructions_top(el)
@@ -91,6 +93,27 @@ def compute_instructions_approx(el, eldup, deg=1):
     eldup.a['InstructionsApprox'] = polyval(el.pfit, eldup.a.InstructionsTop)
     eldup.stats['InstructionsApprox'] = list(eldup.a.InstructionsApprox)
 
+def compute_instructions_approx_2(el, eldup):
+    compute_instructions_top(el)
+    compute_instructions_top(eldup)
+
+    fitfunc = lambda p, x: p[0]*log(p[1]*x+1)
+    errfunc = lambda p, x, y: fitfunc(p, x) - y
+
+    p0 = [1500000, 0.00000001] # XXX
+
+    p1, ok = optimize.leastsq(errfunc, p0[:],
+            args=(eldup.a.InstructionsTop, eldup.a.InstructionsMultExact))
+
+    if not ok:
+        print 'WARNING: fitting unsuccessful'
+
+    eldup.a['InstructionsApprox'] = fitfunc(p1, eldup.a.InstructionsTop)
+    eldup.stats['InstructionsApprox'] = list(eldup.a.InstructionsApprox)
+
+    el.a['InstructionsApprox'] = fitfunc(p1, el.a.InstructionsTop)
+    el.stats['InstructionsApprox'] = list(el.a.InstructionsApprox)
+
 def compute_corrected_time(el, eldup):
     maxpaths = eldup.a.InstructionsMult[-1]
     idx = where(el.a.InstructionsMult > maxpaths)[0][0]
@@ -100,7 +123,7 @@ def compute_corrected_time(el, eldup):
     eldup.stats['ExecutionTimeCorr'] = list(eldup.a.ExecutionTimeCorr)
 
 def plot_pc_time(el, eldup, elv, compute=True):
-    compute_instructions_approx(el, eldup)
+    compute_instructions_approx_2(el, eldup)
     eplot((el, 'InstructionsApprox'), (eldup, 'InstructionsMultExact'), (elv, 'Instructions'))
 
 def output_files(el, eldup, elv, compute=True):
