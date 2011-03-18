@@ -174,6 +174,8 @@ def compute_improvements(exps=None,compute=True):
     imp.sort(lambda x,y: cmp(x[0], y[0]))
     for r,m,k,tool in imp:
       print '%s: %e (%e/%e)' % (tool, r,m,k)
+
+    return imp
         
 
 def output_files_all(exps=None, compute=True, order=None):
