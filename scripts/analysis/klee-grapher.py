@@ -171,7 +171,7 @@ def compute_improvements(exps=None,compute=True):
 
         imp.append((merge_max/klee_max, merge_max, klee_max, tool))
 
-    imp.sort(lambda x,y: x[0] < y[0])
+    imp.sort(lambda x,y: cmp(x[0], y[0]))
     for r,m,k,tool in imp:
       print '%s: %e (%e/%e)' % (tool, r,m,k)
         
