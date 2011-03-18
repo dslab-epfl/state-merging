@@ -127,7 +127,7 @@ def plot_pc_time(el, eldup, elv, compute=True):
         compute_instructions_approx_2(el, eldup)
     eplot((el, 'InstructionsApprox'), (eldup, 'InstructionsMultExact'), (elv, 'Instructions'))
 
-def output_files_all(exps=None, compute=True, order=None):
+def collect_exp_map(exps=None,compute=True):
     if exps is None:
         exps = el
 
@@ -143,6 +143,41 @@ def output_files_all(exps=None, compute=True, order=None):
             l[2] = e
         else:
             assert False, 'Unknown experiment kind %s' % kind
+
+    emap1 = {}
+    for tool,v in emap.iteritems():
+        if v[0] is None or v[1] is None or v[2] is None:
+          continue
+        if compute:
+            compute_instructions_approx_2(v[0], v[1])
+        emap1[tool] = v
+
+    return emap1
+
+def compute_improvements(exps=None,compute=True):
+    emap = collect_exp_map(exps,compute)
+
+    imp = []
+
+    for tool,v in emap.iteritems():
+        merge_max = v[0].a.InstructionsApprox[-1]
+
+        try:
+            klee_idx = where(v[2].a.ExecutionTime > v[0].a.ExecutionTime[-1])[0][0]
+        except IndexError:
+            klee_idx = -1
+
+        klee_max = v[2].a.Instructions[klee_idx]
+
+        imp.append((merge_max/klee_max, merge_max, klee_max, tool))
+
+    imp.sort(lambda x,y: x[0] < y[0])
+    for r,m,k,tool in imp:
+      print '%s: %e (%e/%e)' % (tool, r,m,k)
+        
+
+def output_files_all(exps=None, compute=True, order=None):
+    emap = collect_exp_map(exps,compute)
 
     elist = []
 
