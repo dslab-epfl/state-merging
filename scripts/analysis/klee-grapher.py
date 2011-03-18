@@ -123,13 +123,88 @@ def compute_corrected_time(el, eldup):
     eldup.stats['ExecutionTimeCorr'] = list(eldup.a.ExecutionTimeCorr)
 
 def plot_pc_time(el, eldup, elv, compute=True):
-    compute_instructions_approx_2(el, eldup)
+    if compute:
+        compute_instructions_approx_2(el, eldup)
     eplot((el, 'InstructionsApprox'), (eldup, 'InstructionsMultExact'), (elv, 'Instructions'))
 
-def output_files(el, eldup, elv, compute=True):
-    compute_instructions_approx(el, eldup)
+def output_files_all(exps=None, compute=True, order=None):
+    if exps is None:
+        exps = el
 
-    f = open('paths-vs-klee.txt', 'w')
+    emap = {}
+    for e in exps:
+        tool, kind = e.name.split('-', 1)
+        l = emap.setdefault(tool, [None,None,None])
+        if kind == 'lazy-merge':
+            l[0] = e
+        elif kind == 'duplicates':
+            l[1] = e
+        elif kind == 'vanilla':
+            l[2] = e
+        else:
+            assert False, 'Unknown experiment kind %s' % kind
+
+    elist = []
+
+    if order is not None:
+        for x in order:
+            if x in emap:
+                elist.append((x, emap[x]))
+                del emap[x]
+
+    for k,v in emap.iteritems():
+        elist.append((k, v))
+
+    for tool,v in elist:
+        assert v[0] is not None
+        assert v[1] is not None
+        assert v[2] is not None
+        if compute:
+            compute_instructions_approx_2(v[0], v[1])
+
+    fapprox = open('output/paths-vs-klee-approx.txt', 'w')
+    fexact = open('output/paths-vs-klee-exact.txt', 'w')
+    fmult = open('output/paths-mult.txt', 'w')
+
+    for tool,v in elist:
+        # Approx
+        fapprox.write('time %s-sidekick\n' % tool)
+        for t,p in izip(v[0].a.ExecutionTime, v[0].a.InstructionsApprox):
+            fapprox.write('%f %f\n' % (t, p))
+        fapprox.write('\n\n')
+
+        fapprox.write('time %s-klee\n' % tool)
+        for t,p in izip(v[2].a.ExecutionTime, v[2].a.Instructions):
+            fapprox.write('%f %f\n' % (t, p))
+        fapprox.write('\n\n')
+
+        # Exact
+        fexact.write('time %s-sidekick-approx %s-sidekick-exact\n' % (tool, tool))
+        for t,p1,p2 in izip(v[1].a.ExecutionTime, v[1].a.InstructionsApprox, v[1].a.InstructionsMultExact):
+            fexact.write('%f %f %f\n' % (t, p1, p2))
+        fexact.write('\n\n')
+
+        fexact.write('time %s-klee\n' % tool)
+        for t,p in izip(v[2].a.ExecutionTime, v[2].a.Instructions):
+            fexact.write('%f %f\n' % (t, p))
+        fexact.write('\n\n')
+
+        # Mult-vs-exact
+        fmult.write('%s-inst-mult %s-inst-exact %s-inst-estimate\n')
+        for t,p,e in izip(v[1].a.InstructionsTop, v[1].a.InstructionsMultExact,
+                          v[1].a.InstructionsApprox):
+            fmult.write('%f %f %f\n' % (t, p, e))
+        fmult.write('\n\n')
+
+    fapprox.close()
+    fexact.close()
+    fmult.close()
+
+def output_files(el, eldup, elv, name, compute=True):
+    if compute:
+        compute_instructions_approx_2(el, eldup)
+
+    f = open('paths-vs-klee-%s.txt' % name, 'w')
 
     f.write('Time Sidekick-Approx\n')
     for t,p in izip(el.a.ExecutionTime, el.a.InstructionsApprox):
@@ -142,7 +217,7 @@ def output_files(el, eldup, elv, compute=True):
 
     f.close()
 
-    f = open('paths-vs-klee-exact.txt', 'w')
+    f = open('paths-vs-klee-exact-%s.txt' % name, 'w')
     f.write('Time Sidekick-Exact\n')
     for t,p in izip(eldup.a.ExecutionTime, eldup.a.InstructionsMultExact):
         f.write('%f %f\n' % (t, p))
@@ -152,7 +227,10 @@ def output_files(el, eldup, elv, compute=True):
     for t,p in izip(eldup.a.ExecutionTime, eldup.a.InstructionsApprox):
         f.write('%f %f\n' % (t, p))
 
-    maxtime_idx = where(elv.a.ExecutionTime > 2*eldup.a.ExecutionTime[-1])[0][0]
+    try:
+        maxtime_idx = where(elv.a.ExecutionTime > 2*eldup.a.ExecutionTime[-1])[0][0]
+    except IndexError:
+        maxtime_idx = -1
 
     f.write('\n\n')
     f.write('Time KLEE\n')
@@ -160,7 +238,7 @@ def output_files(el, eldup, elv, compute=True):
         f.write('%f %f\n' % (t, p))
     f.close()
 
-    f = open('paths-multiplicity.txt', 'w')
+    f = open('paths-multiplicity-%s.txt' % name, 'w')
     f.write('MultInstructions ExactInstructions ApproxInstructions\n')
     for t,p,e in izip(eldup.a.InstructionsMult, eldup.a.InstructionsMultExact,
                       eldup.a.InstructionsApprox):
