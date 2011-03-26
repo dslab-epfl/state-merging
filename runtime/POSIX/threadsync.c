@@ -267,3 +267,70 @@ int pthread_cond_signal(pthread_cond_t *cond) {
 
   return res;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// POSIX Barriers
+////////////////////////////////////////////////////////////////////////////////
+
+static void _barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t *attr, unsigned int count) {
+  barrier_data_t *bdata = (barrier_data_t*)malloc(sizeof(barrier_data_t));
+  memset(bdata, 0, sizeof(barrier_data_t));
+
+  *((barrier_data_t**)barrier) = bdata;
+
+  bdata->wlist = klee_get_wlist();
+  bdata->curr_event = 0;
+  bdata->init_count = count;
+  bdata->left = count;
+}
+
+static barrier_data_t *_get_barrier_data(pthread_barrier_t *barrier) {
+  barrier_data_t *bdata = *((barrier_data_t**)barrier);
+
+  if (bdata == STATIC_BARRIER_VALUE) {
+    _barrier_init(barrier, 0, 0);
+
+    bdata = *((barrier_data_t**)barrier);
+  }
+
+  return bdata;
+}
+
+int pthread_barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t *attr, unsigned int count) {
+  if (INJECT_FAULT(pthread_barrier_init, ENOMEM, EPERM)) {
+    return -1;
+  }
+
+  _barrier_init(barrier, attr, count);
+
+  return 0;
+}
+
+int pthread_barrier_destroy(pthread_barrier_t *barrier) {
+  barrier_data_t *bdata = _get_barrier_data(barrier);
+
+  free(bdata);
+
+  return 0;
+}
+
+int pthread_barrier_wait(pthread_barrier_t *barrier) {
+  barrier_data_t *bdata = _get_barrier_data(barrier);
+  int result = 0;
+
+  bdata->left--;
+
+  if (bdata->left == 0) {
+    bdata->curr_event++;
+    bdata->left = bdata->init_count;
+
+    klee_thread_notify_all(bdata->wlist);
+
+    result = PTHREAD_BARRIER_SERIAL_THREAD;
+  }
+  else {
+    klee_thread_sleep(bdata->wlist);
+  }
+
+  return result;
+}

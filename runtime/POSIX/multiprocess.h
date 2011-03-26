@@ -54,6 +54,9 @@ typedef uint64_t wlist_id_t;
 
 #define STATIC_MUTEX_VALUE      0
 #define STATIC_CVAR_VALUE       0
+#define STATIC_BARRIER_VALUE    0
+
+#define PTHREAD_BARRIER_SERIAL_THREAD    -1
 
 ////////////////////////////////////////////////////////////////////////////////
 // System Wide Data Structures
@@ -110,6 +113,14 @@ typedef struct {
   char terminated;
   char joinable;
 } thread_data_t;
+
+typedef struct {
+	wlist_id_t wlist;
+
+	unsigned int curr_event;
+	unsigned int left;
+	unsigned int init_count;
+} barrier_data_t;
 
 typedef struct {
   wlist_id_t wlist;
