@@ -55,6 +55,7 @@ typedef uint64_t wlist_id_t;
 #define STATIC_MUTEX_VALUE      0
 #define STATIC_CVAR_VALUE       0
 #define STATIC_BARRIER_VALUE    0
+#define STATIC_RWLOCK_VALUE    0
 
 #define PTHREAD_BARRIER_SERIAL_THREAD    -1
 
@@ -115,14 +116,6 @@ typedef struct {
 } thread_data_t;
 
 typedef struct {
-	wlist_id_t wlist;
-
-	unsigned int curr_event;
-	unsigned int left;
-	unsigned int init_count;
-} barrier_data_t;
-
-typedef struct {
   wlist_id_t wlist;
 
   char taken;
@@ -138,6 +131,24 @@ typedef struct {
   mutex_data_t *mutex;
   unsigned int queued;
 } condvar_data_t;
+
+typedef struct {
+  wlist_id_t wlist;
+
+  unsigned int curr_event;
+  unsigned int left;
+  unsigned int init_count;
+} barrier_data_t;
+
+typedef struct {
+  wlist_id_t wlist_readers;
+  wlist_id_t wlist_writers;
+
+  unsigned int nr_readers;
+  unsigned int nr_readers_queued;
+  unsigned int nr_writers_queued;
+  int writer;
+} rwlock_data_t;
 
 typedef struct {
   thread_data_t threads[MAX_THREADS];

@@ -315,13 +315,18 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier) {
 }
 
 int pthread_barrier_wait(pthread_barrier_t *barrier) {
-  barrier_data_t *bdata = _get_barrier_data(barrier);
+  barrier_data_t *bdata = *((barrier_data_t**)barrier);
   int result = 0;
 
-  bdata->left--;
+  if (bdata == STATIC_BARRIER_VALUE) {
+      errno = EINVAL;
+      return -1;
+  }
+
+  --bdata->left;
 
   if (bdata->left == 0) {
-    bdata->curr_event++;
+    ++bdata->curr_event;
     bdata->left = bdata->init_count;
 
     klee_thread_notify_all(bdata->wlist);
@@ -333,4 +338,190 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
   }
 
   return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// POSIX Read Write Locks
+////////////////////////////////////////////////////////////////////////////////
+
+static void _rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr) {
+  rwlock_data_t *rwdata = (rwlock_data_t*)malloc(sizeof(rwlock_data_t));
+  memset(rwdata, 0, sizeof(rwlock_data_t));
+
+  *((rwlock_data_t**)rwlock) = rwdata;
+
+  rwdata->wlist_readers = klee_get_wlist();
+  rwdata->wlist_writers = klee_get_wlist();
+  rwdata->nr_readers = 0;
+}
+
+static rwlock_data_t *_get_rwlock_data(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = *((rwlock_data_t**)rwlock);
+
+  if (rwdata == STATIC_RWLOCK_VALUE) {
+    _rwlock_init(rwlock, 0);
+
+    rwdata = *((rwlock_data_t**)rwlock);
+  }
+
+  return rwdata;
+}
+
+int pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr) {
+  if (INJECT_FAULT(pthread_rwlock_init, ENOMEM, EPERM)) {
+    return -1;
+  }
+
+  _rwlock_init(rwlock, attr);
+
+  return 0;
+}
+
+int pthread_rwlock_destroy(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = _get_rwlock_data(rwlock);
+
+  free(rwdata);
+
+  return 0;
+}
+
+static int _atomic_rwlock_rdlock(rwlock_data_t *rwdata, char try) {
+  if (rwdata == STATIC_RWLOCK_VALUE) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (rwdata->writer == 0 && rwdata->nr_writers_queued == 0) {
+    if (++rwdata->nr_readers == 0) {
+      --rwdata->nr_readers;
+      errno = EAGAIN;
+      return -1;
+    }
+
+    return 0;
+  }
+
+  if (try != 0) {
+    errno = EBUSY;
+    return -1;
+  }
+  else {
+    if (++rwdata->nr_readers_queued == 0) {
+      --rwdata->nr_readers_queued;
+      errno = EAGAIN;
+      return -1;
+    }
+
+    klee_thread_sleep(rwdata->wlist_readers);
+    ++rwdata->nr_readers;
+    --rwdata->nr_readers_queued;
+  }
+
+  return 0;
+}
+
+int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = *((rwlock_data_t**)rwlock);
+
+  int res = _atomic_rwlock_rdlock(rwdata, 0);
+
+  if (res == 0)
+    klee_thread_preempt(0);
+
+  return res;
+}
+
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = *((rwlock_data_t**)rwlock);
+
+  int res = _atomic_rwlock_rdlock(rwdata, 1);
+
+  if (res == 0)
+    klee_thread_preempt(0);
+
+  return res;
+}
+
+static int _atomic_rwlock_wrlock(rwlock_data_t *rwdata, char try) {
+  if (rwdata == STATIC_RWLOCK_VALUE) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (rwdata->writer == 0 && rwdata->nr_readers == 0) {
+    rwdata->writer = pthread_self();
+    return 0;
+  }
+
+  if (try != 0) {
+    errno = EBUSY;
+    return -1;
+  }
+  else {
+    if (++rwdata->nr_writers_queued == 0) {
+      --rwdata->nr_writers_queued;
+      errno = EAGAIN;
+      return -1;
+    }
+
+    klee_thread_sleep(rwdata->wlist_writers);
+    rwdata->writer = pthread_self();
+    --rwdata->nr_writers_queued;
+  }
+
+  return 0;
+}
+
+int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = *((rwlock_data_t**)rwlock);
+
+  int res = _atomic_rwlock_wrlock(rwdata, 0);
+
+  if (res == 0)
+    klee_thread_preempt(0);
+
+  return res;
+}
+
+int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = *((rwlock_data_t**)rwlock);
+
+  int res = _atomic_rwlock_wrlock(rwdata, 1);
+
+  if (res == 0)
+    klee_thread_preempt(0);
+
+  return res;
+}
+
+static int _atomic_rwlock_unlock(rwlock_data_t *rwdata) {
+  if (rwdata == STATIC_RWLOCK_VALUE) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (rwdata->writer != 0)
+    rwdata->writer = 0;
+  else
+    --rwdata->nr_readers;
+
+  if (rwdata->nr_readers == 0 && rwdata->nr_writers_queued)
+    klee_thread_notify_one(rwdata->wlist_writers);
+  else {
+    if (rwdata->nr_readers_queued > 0)
+      klee_thread_notify_all(rwdata->wlist_readers);
+  }
+
+  return 0;
+}
+
+int pthread_rwlock_unlock(pthread_rwlock_t *rwlock) {
+  rwlock_data_t *rwdata = *((rwlock_data_t**)rwlock);
+
+  int res = _atomic_rwlock_unlock(rwdata);
+
+  if (res == 0)
+    klee_thread_preempt(0);
+
+  return res;
 }
