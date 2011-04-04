@@ -52,10 +52,12 @@ typedef uint64_t wlist_id_t;
 #define PID_TO_INDEX(pid)   ((pid) - 2)
 #define INDEX_TO_PID(idx)   ((idx) + 2)
 
+#define PTHREAD_ONCE_INIT       0
+
 #define STATIC_MUTEX_VALUE      0
 #define STATIC_CVAR_VALUE       0
 #define STATIC_BARRIER_VALUE    0
-#define STATIC_RWLOCK_VALUE    0
+#define STATIC_RWLOCK_VALUE     0
 
 #define PTHREAD_BARRIER_SERIAL_THREAD    -1
 
