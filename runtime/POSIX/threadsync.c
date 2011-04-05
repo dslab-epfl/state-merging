@@ -31,6 +31,7 @@
 */
 
 #include "multiprocess.h"
+#include "signals.h"
 
 #include <pthread.h>
 #include <errno.h>
@@ -90,7 +91,7 @@ static int _atomic_mutex_lock(mutex_data_t *mdata, char try) {
       return -1;
     } else {
       mdata->queued++;
-      klee_thread_sleep(mdata->wlist);
+      __klee_thread_sleep(mdata->wlist);
       mdata->queued--;
     }
   }
@@ -106,7 +107,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
   int res = _atomic_mutex_lock(mdata, 0);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __klee_thread_preempt(0);
 
   return res;
 }
@@ -117,7 +118,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   int res = _atomic_mutex_lock(mdata, 1);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __klee_thread_preempt(0);
 
   return res;
 }
@@ -141,7 +142,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 
   int res = _atomic_mutex_unlock(mdata);
 
-  klee_thread_preempt(0);
+  __klee_thread_preempt(0);
 
   return res;
 }
@@ -211,7 +212,7 @@ static int _atomic_cond_wait(condvar_data_t *cdata, mutex_data_t *mdata) {
   }
 
   cdata->queued++;
-  klee_thread_sleep(cdata->wlist);
+  __klee_thread_sleep(cdata->wlist);
   cdata->queued--;
 
   if (_atomic_mutex_lock(mdata, 0) != 0) {
@@ -229,7 +230,7 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
   int res = _atomic_cond_wait(cdata, mdata);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __klee_thread_preempt(0);
 
   return res;
 }
@@ -251,7 +252,7 @@ int pthread_cond_broadcast(pthread_cond_t *cond) {
   int res = _atomic_cond_notify(cdata, 1);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __klee_thread_preempt(0);
 
   return res;
 }
@@ -262,7 +263,7 @@ int pthread_cond_signal(pthread_cond_t *cond) {
   int res = _atomic_cond_notify(cdata, 0);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __klee_thread_preempt(0);
 
   return res;
 }

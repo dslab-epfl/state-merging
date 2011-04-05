@@ -38,6 +38,7 @@
 #include "sockets.h"
 #include "pipes.h"
 #include "buffers.h"
+#include "signals.h"
 
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
@@ -736,7 +737,7 @@ DEFINE_MODEL(int, select, int nfds, fd_set *readfds, fd_set *writefds,
     klee_warning("simulating timeout");
     // We just return timeout
     if (timeout->tv_sec != 0 || timeout->tv_usec != 0)
-      klee_thread_preempt(1);
+      __klee_thread_preempt(1);
 
     return 0;
   }
@@ -823,7 +824,7 @@ DEFINE_MODEL(int, select, int nfds, fd_set *readfds, fd_set *writefds,
     }
 
     if (!fail)
-      klee_thread_sleep(wlist);
+      __klee_thread_sleep(wlist);
 
     // Now deregister, in order to avoid useless notifications
     for (fd = 0; fd < nfds; fd++) {

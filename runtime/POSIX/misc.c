@@ -32,6 +32,7 @@
 
 #include "misc.h"
 #include "models.h"
+#include "signals.h"
 
 #include <sched.h>
 #include <unistd.h>
@@ -53,7 +54,7 @@ int usleep(useconds_t usec) {
   klee_warning("yielding instead of usleep()-ing");
 
   uint64_t tstart = klee_get_time();
-  klee_thread_preempt(1);
+  __klee_thread_preempt(1);
   uint64_t tend = klee_get_time();
 
   if (tend - tstart < (uint64_t)usec)
@@ -66,7 +67,7 @@ unsigned int sleep(unsigned int seconds) {
   klee_warning("yielding instead of sleep()-ing");
 
   uint64_t tstart = klee_get_time();
-  klee_thread_preempt(1);
+  __klee_thread_preempt(1);
   uint64_t tend = klee_get_time();
 
   if (tend - tstart < ((uint64_t)seconds)*1000000) {
@@ -256,7 +257,7 @@ int munmap(void *addr, size_t length) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int sched_yield(void) {
-  klee_thread_preempt(1);
+  __klee_thread_preempt(1);
   return 0;
 }
 

@@ -31,6 +31,7 @@
 */
 
 #include "multiprocess.h"
+#include "signals.h"
 
 #include "models.h"
 
@@ -64,6 +65,8 @@ void klee_init_processes(void) {
   klee_init_semaphores();
 
   klee_init_threads();
+
+  klee_init_signals();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -33,6 +33,7 @@
 #include "buffers.h"
 
 #include "common.h"
+#include "signals.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -155,7 +156,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
     }
 
     buff->queued++;
-    klee_thread_sleep(buff->empty_wlist);
+    __klee_thread_sleep(buff->empty_wlist);
     buff->queued--;
 
     if (buff->status & BUFFER_STATUS_DESTROYING) {
@@ -206,7 +207,7 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
 
   while (buff->size == buff->max_size) {
     buff->queued++;
-    klee_thread_sleep(buff->full_wlist);
+    __klee_thread_sleep(buff->full_wlist);
     buff->queued--;
 
     if (buff->status & BUFFER_STATUS_DESTROYING) {

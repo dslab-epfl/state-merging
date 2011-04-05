@@ -32,6 +32,7 @@
 
 #include "multiprocess.h"
 #include "fd.h"
+#include "signals.h"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -98,6 +99,7 @@ void _exit(int status) {
 }
 
 pid_t fork(void) {
+  int i;
   unsigned int newIdx;
   STATIC_LIST_ALLOC(__pdata, newIdx);
 
@@ -118,6 +120,10 @@ pid_t fork(void) {
   pdata->children_wlist = klee_get_wlist();
   pdata->parent = getpid();
   pdata->umask = ppdata->umask;
+  for(i = 0 ; i < 32 ; i++)
+    pdata->sig_handlers[i] = ppdata->sig_handlers[i];
+  pdata->signaled = 0;
+  pdata->curr_signal = -1;
 
   fd_entry_t shadow_fdt[MAX_FDS];
 
@@ -130,6 +136,12 @@ pid_t fork(void) {
   if (res == 0) {
     // We're in the child. Re-initialize the threading structures
     klee_init_threads();
+    /*
+     * The child is always scheduled after the parent.
+     * During this time it may have been signaled.
+     */
+    if(pdata->signaled)
+      __handle_signal();
   } else {
     memcpy(__fdt, shadow_fdt, sizeof(__fdt));
   }
@@ -200,7 +212,7 @@ pid_t waitpid(pid_t pid, int *status, int options) {
       if (WNOHANG & options)
         return 0;
 
-      klee_thread_sleep(__pdata[PID_TO_INDEX(ppid)].children_wlist);
+      __klee_thread_sleep(__pdata[PID_TO_INDEX(ppid)].children_wlist);
 
     } while (1);
 
@@ -223,7 +235,7 @@ pid_t waitpid(pid_t pid, int *status, int options) {
       if (WNOHANG & options)
         return 0;
 
-      klee_thread_sleep(pdata->wlist);
+      __klee_thread_sleep(pdata->wlist);
     }
   }
 

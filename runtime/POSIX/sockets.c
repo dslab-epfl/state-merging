@@ -34,6 +34,8 @@
 
 #include "fd.h"
 
+#include "signals.h"
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -1096,7 +1098,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
   // ... and we wait for a notification
   sock->__bdata.queued++;
-  klee_thread_sleep(sock->conn_wlist);
+  __klee_thread_sleep(sock->conn_wlist);
   sock->__bdata.queued--;
 
   if (sock->status == SOCK_STATUS_CLOSING) {

@@ -69,6 +69,9 @@ typedef struct {
 
   char allocated;
   char terminated;
+  char signaled;
+  void *sig_handlers[32];
+  int curr_signal;
 } proc_data_t;
 
 extern proc_data_t __pdata[MAX_PROCESSES];

@@ -32,6 +32,8 @@
 
 #include "multiprocess.h"
 
+#include "signals.h"
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,7 +122,7 @@ int pthread_join(pthread_t thread, void **value_ptr) {
   }
 
   if (!tdata->terminated)
-    klee_thread_sleep(tdata->wlist);
+    __klee_thread_sleep(tdata->wlist);
 
   if (value_ptr) {
     *value_ptr = tdata->ret_value;

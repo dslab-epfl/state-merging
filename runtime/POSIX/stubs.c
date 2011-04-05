@@ -40,7 +40,7 @@ void klee_warning(const char*);
 void klee_warning_once(const char*);
 
 /* Silent ignore */
-
+/*
 int __syscall_rt_sigaction(int signum, const struct sigaction *act, 
                            struct sigaction *oldact, size_t _something)
      __attribute__((weak));
@@ -98,6 +98,8 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   klee_warning_once("silently ignoring");
   return 0;
 }
+
+*/
 
 /* Not even worth warning about these */
 int fdatasync(int fd) __attribute__((weak));
