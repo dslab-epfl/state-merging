@@ -197,4 +197,38 @@ int __inject_fault(const char *fname, int errno, ...);
 #define STATIC_LIST_CHECK(list, item) \
   (((item) < sizeof(list)/sizeof(list[0])) && (list[item].allocated))
 
+////////////////////////////////////////////////////////////////////////////////
+// Double Linked Lists (Linux kernel style)
+////////////////////////////////////////////////////////////////////////////////
+struct list_head {
+  struct list_head *next, *prev;
+};
+
+#define list_entry(ptr, type, member) \
+  ((type *)((char *)(ptr) - (unsigned long)(&((type *)0)->member)))
+
+#define list_for_each_entry(pos, head, member)                    \
+  for (pos = list_entry((head)->next, typeof(*pos), member);      \
+       &pos->member != (head);                                    \
+       pos = list_entry(pos->member.next, typeof(*pos), member))
+
+#define list_del(l_prev, l_next) \
+  do { \
+    (l_next)->prev = (struct list_head *)l_prev; \
+    (l_prev)->next = (struct list_head *)l_next;  \
+  } while(0)
+
+#define list_del_init(entry) 			\
+  do { 						\
+    list_del(((struct list_head *)entry)->prev, \
+      ((struct list_head *)entry)->next);	\
+    INIT_LIST_HEAD(entry);			\
+  } while(0)
+
+#define INIT_LIST_HEAD(list) \
+  do { \
+    ((struct list_head *)list)->next = (list); \
+    ((struct list_head *)list)->prev = (list); \
+  } while(0)
+
 #endif /* COMMON_H_ */

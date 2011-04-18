@@ -39,6 +39,7 @@
 #include <sys/sem.h>
 
 #include "common.h"
+#include "signals.h"
 
 typedef uint64_t wlist_id_t;
 
@@ -70,8 +71,9 @@ typedef struct {
   char allocated;
   char terminated;
   char signaled;
-  void *sig_handlers[32];
-  int curr_signal;
+  sigset_t blocked;
+  struct sighand_struct *sighand;
+  struct sigpending pending;
 } proc_data_t;
 
 extern proc_data_t __pdata[MAX_PROCESSES];

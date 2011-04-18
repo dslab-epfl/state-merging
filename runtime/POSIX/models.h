@@ -42,6 +42,7 @@
 #include <sys/uio.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <signal.h>
 
 DECLARE_MODEL(int, stat, const char *path, struct stat *buf);
 DECLARE_MODEL(int, fstat, int fd, struct stat *buf);
@@ -104,5 +105,8 @@ DECLARE_MODEL(const unsigned short **, __ctype_b_loc, void);
 
 DECLARE_MODEL(int, select, int nfds, fd_set *readfds, fd_set *writefds,
     fd_set *exceptfds, struct timeval *timeout)
+
+DECLARE_MODEL(int, sigaction, int signum, const struct sigaction *act,
+    struct sigaction *oldact);
 
 #endif /* UNDERLYING_H_ */

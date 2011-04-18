@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 // The POSIX API
@@ -99,7 +100,6 @@ void _exit(int status) {
 }
 
 pid_t fork(void) {
-  int i;
   unsigned int newIdx;
   STATIC_LIST_ALLOC(__pdata, newIdx);
 
@@ -120,10 +120,13 @@ pid_t fork(void) {
   pdata->children_wlist = klee_get_wlist();
   pdata->parent = getpid();
   pdata->umask = ppdata->umask;
-  for(i = 0 ; i < 32 ; i++)
-    pdata->sig_handlers[i] = ppdata->sig_handlers[i];
+
+  /* Clone necessary signal info.*/
   pdata->signaled = 0;
-  pdata->curr_signal = -1;
+  INIT_LIST_HEAD(&pdata->pending.list);
+  sigemptyset(&pdata->blocked);
+  pdata->sighand = calloc(1, sizeof(struct sighand_struct));
+  memcpy(&pdata->sighand->action, &ppdata->sighand->action, sizeof(pdata->sighand->action));
 
   fd_entry_t shadow_fdt[MAX_FDS];
 
