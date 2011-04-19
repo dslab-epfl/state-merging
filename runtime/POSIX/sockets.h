@@ -21,11 +21,12 @@
 #define DEFAULT_NETWORK_ADDR    ((((((192 << 8) | 168) << 8) | 1) << 8) | 1) // 192.168.1.1
 #define DEFAULT_HOST_NAME       "192.168.1.1"
 
-#define SOCK_STATUS_CREATED     (1 << 0)
-#define SOCK_STATUS_LISTENING   (1 << 1)
-#define SOCK_STATUS_CONNECTING  (1 << 2)
-#define SOCK_STATUS_CONNECTED   (1 << 3)
-#define SOCK_STATUS_CLOSING     (1 << 4) // Transient state due to concurrency
+#define SOCK_STATUS_CREATED         (1 << 0)
+#define SOCK_STATUS_LISTENING       (1 << 1)
+#define SOCK_STATUS_CONNECTING      (1 << 2)
+#define SOCK_STATUS_CONNECTED       (1 << 3)
+#define SOCK_STATUS_CLOSING         (1 << 4) // Transient state due to concurrency
+//todo: ah: strange: no CLOSED state
 
 struct socket;
 
@@ -54,6 +55,13 @@ typedef struct {
 extern network_t __net;
 extern unix_t __unix_net;
 
+typedef struct {
+  struct sockaddr* src;
+  size_t src_len;
+
+  char* contents;
+  size_t contents_len;
+} datagram_t;
 
 typedef struct socket {
   file_base_t __bdata;
@@ -78,8 +86,8 @@ typedef struct socket {
 } socket_t;
 
 int _close_socket(socket_t *sock);
-ssize_t _read_socket(socket_t *sock, void *buf, size_t count);
-ssize_t _write_socket(socket_t *sock, const void *buf, size_t count);
+ssize_t _read_socket(socket_t *sock, void *buf, size_t count, struct sockaddr* addr, socklen_t* addr_len);
+ssize_t _write_socket(socket_t *sock, const void *buf, size_t count, const void* addr, size_t addr_len);
 int _stat_socket(socket_t *sock, struct stat *buf);
 int _ioctl_socket(socket_t *sock, unsigned long request, char *argp);
 

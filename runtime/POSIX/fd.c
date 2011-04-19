@@ -28,6 +28,7 @@
 
 #include <klee/klee.h>
 
+
 // For multiplexing multiple syscalls into a single _read/_write op. set
 #define _IO_TYPE_SCATTER_GATHER  0x1
 #define _IO_TYPE_POSITIONAL      0x2
@@ -124,13 +125,15 @@ static ssize_t _clean_read(int fd, void *buf, size_t count, off_t offset) {
   } else if (fde->attr & FD_IS_PIPE) {
     return _read_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
-    return _read_socket((socket_t*)fde->io_object, buf, count);
+    return _read_socket((socket_t*)fde->io_object, buf, count, NULL, NULL);
   } else {
     assert(0 && "Invalid file descriptor");
   }
 }
 
-static ssize_t _clean_write(int fd, const void *buf, size_t count, off_t offset) {
+static ssize_t _clean_write(int fd, const void *buf, size_t count, off_t offset,
+    void* msg_name, size_t msg_name_len) {
+
   fd_entry_t *fde = &__fdt[fd];
 
   if (offset >= 0 && !(fde->attr & FD_IS_FILE)) {
@@ -139,11 +142,13 @@ static ssize_t _clean_write(int fd, const void *buf, size_t count, off_t offset)
   }
 
   if (fde->attr & FD_IS_FILE) {
+    assert(msg_name == NULL);
     return _write_file((file_t*)fde->io_object, buf, count, offset);
   } else if (fde->attr & FD_IS_PIPE) {
+    assert(msg_name == NULL);
     return _write_pipe((pipe_end_t*)fde->io_object, buf, count);
   } else if (fde->attr & FD_IS_SOCKET) {
-    return _write_socket((socket_t*)fde->io_object, buf, count);
+    return _write_socket((socket_t*)fde->io_object, buf, count, msg_name, msg_name_len);
   } else {
     assert(0 && "Invalid file descriptor");
   }
@@ -178,7 +183,8 @@ ssize_t _scatter_read(int fd, const struct iovec *iov, int iovcnt) {
   return count;
 }
 
-ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt) {
+ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt,
+    void* msg_name, size_t msg_name_len) {
   size_t count = 0;
 
   int i;
@@ -191,7 +197,7 @@ ssize_t _gather_write(int fd, const struct iovec *iov, int iovcnt) {
     if (count > 0 && _is_blocking(fd, EVENT_WRITE))
       return count;
 
-    ssize_t res = _clean_write(fd, iov[i].iov_base, iov[i].iov_len, -1);
+    ssize_t res = _clean_write(fd, iov[i].iov_base, iov[i].iov_len, -1, msg_name, msg_name_len);
 
     if (res == -1) {
       assert(count == 0);
@@ -320,7 +326,7 @@ static ssize_t _write(int fd, int type, ...) {
     int iovcnt = va_arg(ap, int);
     va_end(ap);
 
-    return _gather_write(fd, iov, iovcnt);
+    return _gather_write(fd, iov, iovcnt, NULL, 0);
   } else {
     va_list ap;
     va_start(ap, type);
@@ -331,7 +337,7 @@ static ssize_t _write(int fd, int type, ...) {
       offset = va_arg(ap, off_t);
     va_end(ap);
 
-    return _clean_write(fd, buf, count, offset);
+    return _clean_write(fd, buf, count, offset, NULL, 0);
   }
 }
 
@@ -420,7 +426,7 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
       rtotal += res;
     }
 
-    res = _clean_write(out_fd, &buffer[wpos], rpos - wpos, -1);
+    res = _clean_write(out_fd, &buffer[wpos], rpos - wpos, -1, NULL, 0);
     if (res <= 0) {
       if (res == -1)
         assert(wtotal == 0);
@@ -718,10 +724,24 @@ DEFINE_MODEL(int, select, int nfds, fd_set *readfds, fd_set *writefds,
 
   if (readfds) {
     out_readfds = (fd_set*)malloc(setsize);
+
+    if(out_readfds == NULL) {
+      errno = ENOMEM;
+      return -1;
+    }
+
     memset(out_readfds, 0, setsize);
   }
+
   if (writefds) {
     out_writefds = (fd_set*)malloc(setsize);
+
+    if(out_writefds == NULL) {
+      free(out_readfds);
+      errno = ENOMEM;
+      return -1;
+    }
+
     memset(out_writefds, 0, setsize);
   }
 

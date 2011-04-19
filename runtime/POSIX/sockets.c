@@ -23,8 +23,19 @@
 #include <stdio.h>
 #include <netdb.h>
 #include <sys/ioctl.h>
-
+#include <sys/param.h>  //MIN/MAX macros
 #include <klee/klee.h>
+
+
+#define CHECK_SEND_FLAGS(flags) \
+		do { \
+		  /*XXX: Ignore the MSG_NOSIGNAL flag since we don't support signals anyway*/ \
+			if ((flags != 0) && (flags != MSG_NOSIGNAL)) { \
+				klee_warning("sendto() flags unsupported for now"); \
+				errno = EINVAL; \
+				return -1;\
+			}\
+		} while (0)
 
 #define CHECK_IS_SOCKET(fd) \
   do { \
@@ -51,7 +62,7 @@ static in_port_t __get_unused_port(void) {
       if (!STATIC_LIST_CHECK(__net.end_points, i))
         continue;
 
-      struct sockaddr_in *addr = (struct sockaddr_in*)__net.end_points[i].addr;
+      struct sockaddr_in *addr = (struct sockaddr_in*) __net.end_points[i].addr;
 
       if (__net.next_port == addr->sin_port) {
         __net.next_port = htons(ntohs(__net.next_port) + 1);
@@ -69,47 +80,61 @@ static in_port_t __get_unused_port(void) {
   return res;
 }
 
-static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
-  if (addr->sin_addr.s_addr != INADDR_ANY && addr->sin_addr.s_addr != htonl(INADDR_LOOPBACK) &&
-      addr->sin_addr.s_addr != __net.net_addr.s_addr)
-    return NULL;
+static end_point_t* __find_inet_end(const struct sockaddr_in* addr) {
+  assert(addr != NULL);
+  assert(addr->sin_port != 0);
 
   unsigned int i;
-  in_port_t port = addr->sin_port;
+  for (i = 0; i < MAX_PORTS; i++) {
+    if (!STATIC_LIST_CHECK(__net.end_points, i))
+      continue;
 
+    struct sockaddr_in *crt = (struct sockaddr_in*) __net.end_points[i].addr;
+
+    if (crt->sin_port == addr->sin_port) {
+      return &__net.end_points[i];
+    }
+  }
+  return NULL;
+}
+
+static end_point_t *__get_inet_end(const struct sockaddr_in *addr) {
+  if (addr->sin_addr.s_addr != INADDR_ANY && addr->sin_addr.s_addr != htonl(INADDR_LOOPBACK)
+      && addr->sin_addr.s_addr != __net.net_addr.s_addr)
+    return NULL;
+
+  in_port_t port = addr->sin_port;
   if (port == 0) {
     port = __get_unused_port();
   } else {
-    for (i = 0; i < MAX_PORTS; i++) {
-      if (!STATIC_LIST_CHECK(__net.end_points, i))
-        continue;
-
-      struct sockaddr_in *crt = (struct sockaddr_in*)__net.end_points[i].addr;
-
-      if (crt->sin_port == port) {
-        __net.end_points[i].refcount++;
-        return &__net.end_points[i];
-      }
+    end_point_t* exising_endpoint = __find_inet_end(addr);
+    if (exising_endpoint != NULL) {
+      exising_endpoint->refcount++;
+      return exising_endpoint;
     }
   }
 
+  unsigned int i;
   STATIC_LIST_ALLOC(__net.end_points, i);
 
   if (i == MAX_PORTS)
     return NULL;
 
-  __net.end_points[i].addr = (struct sockaddr*)malloc(sizeof(struct sockaddr_in));
+  __net.end_points[i].addr = (struct sockaddr*) malloc(sizeof(struct sockaddr_in));
   klee_make_shared(__net.end_points[i].addr, sizeof(struct sockaddr_in));
   __net.end_points[i].refcount = 1;
   __net.end_points[i].socket = NULL;
 
-  struct sockaddr_in *newaddr = (struct sockaddr_in*)__net.end_points[i].addr;
-
+  struct sockaddr_in *newaddr = (struct sockaddr_in*) __net.end_points[i].addr;
   newaddr->sin_family = AF_INET;
   newaddr->sin_addr = __net.net_addr;
   newaddr->sin_port = port;
 
   return &__net.end_points[i];
+}
+
+socket_t* __get_socket(int sockfd) {
+  return (socket_t*) __fdt[sockfd].io_object;
 }
 
 static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
@@ -120,7 +145,7 @@ static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
       if (!STATIC_LIST_CHECK(__unix_net.end_points, i))
         continue;
 
-      struct sockaddr_un *crt = (struct sockaddr_un*)__unix_net.end_points[i].addr;
+      struct sockaddr_un *crt = (struct sockaddr_un*) __unix_net.end_points[i].addr;
 
       if (!crt)
         continue;
@@ -144,10 +169,10 @@ static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
 
   if (addr) {
     size_t addrsize = sizeof(addr->sun_family) + strlen(addr->sun_path) + 1;
-    __unix_net.end_points[i].addr = (struct sockaddr*)malloc(addrsize);
+    __unix_net.end_points[i].addr = (struct sockaddr*) malloc(addrsize);
     klee_make_shared(__unix_net.end_points[i].addr, addrsize);
 
-    struct sockaddr_un *newaddr = (struct sockaddr_un*)__unix_net.end_points[i].addr;
+    struct sockaddr_un *newaddr = (struct sockaddr_un*) __unix_net.end_points[i].addr;
 
     newaddr->sun_family = AF_UNIX;
     strcpy(newaddr->sun_path, addr->sun_path);
@@ -155,12 +180,11 @@ static end_point_t *__get_unix_end(const struct sockaddr_un *addr) {
 
   return &__unix_net.end_points[i];
 }
-
 static void __release_end_point(end_point_t *end_point) {
   assert(end_point->allocated);
   assert(end_point->refcount > 0);
-  end_point->refcount--;
 
+  end_point->refcount--;
   if (end_point->refcount == 0) {
     if (end_point->addr)
       free(end_point->addr);
@@ -169,7 +193,66 @@ static void __release_end_point(end_point_t *end_point) {
   }
 }
 
+static int __create_shared_datagram(
+    datagram_t* datagram,
+    const struct sockaddr* addr, size_t addr_len,
+    const char* buff, size_t count) {
+
+  count = MIN(count, MAX_DGRAM_SIZE);
+
+  datagram->contents = (char*) malloc(count);
+  if(datagram->contents == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  klee_make_shared(datagram->contents, count);
+  memcpy(datagram->contents, buff, count);
+  datagram->contents_len = count;
+
+  datagram->src = (struct sockaddr*)malloc(addr_len);
+  if(datagram->src == NULL) {
+    free(datagram->contents);
+    errno = ENOMEM;
+    return -1;
+  }
+  klee_make_shared(datagram->src, addr_len);
+  memcpy(datagram->src, addr, addr_len);
+  datagram->src_len = addr_len;
+
+  return 0;
+}
+
+static void __free_datagram(datagram_t* datagram) {
+  free(datagram->contents);
+  free(datagram->src);
+}
+
+static void __free_all_datagrams(stream_buffer_t* buf) {
+  while (!_stream_is_empty(buf)) {
+    datagram_t datagram;
+    ssize_t read = _stream_read(buf, (char*)&datagram, sizeof(datagram_t)) ;
+    assert(read == sizeof(datagram_t));
+    __free_datagram(&datagram);
+  }
+}
+
 // close() /////////////////////////////////////////////////////////////////////
+
+static int _bind(socket_t *sock, const struct sockaddr *addr, socklen_t addrlen);
+
+static int __is_bound(socket_t* sock) {
+  assert(sock->type == SOCK_DGRAM);
+
+  return sock->local_end != NULL;
+}
+
+static int __autobind(socket_t* sock) {
+  assert(sock->status == SOCK_STATUS_CREATED || sock->status == SOCK_STATUS_CONNECTED);
+  assert(sock->local_end == NULL);
+
+  struct sockaddr_in addr = { .sin_port = 0, .sin_family = sock->domain, .sin_addr = __net.net_addr };
+  return _bind(sock, (struct sockaddr*) &addr, sizeof addr);
+}
 
 static void _shutdown(socket_t *sock, int how);
 
@@ -183,7 +266,7 @@ int _close_socket(socket_t *sock) {
   if (sock->status == SOCK_STATUS_LISTENING) {
     while (!_stream_is_empty(sock->listen)) {
       socket_t *remote;
-      ssize_t res = _stream_read(sock->listen, (char*)&remote, sizeof(socket_t*));
+      ssize_t res = _stream_read(sock->listen, (char*) &remote, sizeof(socket_t*));
       assert(res == sizeof(socket_t*));
 
       remote->__bdata.queued--;
@@ -246,18 +329,8 @@ int _close_socket(socket_t *sock) {
 }
 
 // read() //////////////////////////////////////////////////////////////////////
-
-ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
-  if (sock->status != SOCK_STATUS_CONNECTED) {
-    errno = ENOTCONN;
-    return -1;
-  }
-
-  if (sock->in == NULL || count == 0) {
-    // The socket is shut down for reading
-    return 0;
-  }
-
+//todo: ah: funny name - bad smell
+static ssize_t __read_and_possible_free_socket(socket_t* sock, void *buf, size_t count) {
   if (sock->__bdata.flags & O_NONBLOCK) {
     if (_stream_is_empty(sock->in) && !_stream_is_closed(sock->in)) {
       errno = EAGAIN;
@@ -285,15 +358,115 @@ ssize_t _read_socket(socket_t *sock, void *buf, size_t count) {
   return res;
 }
 
+static ssize_t __read_datagram_socket(socket_t *sock, void *buf, size_t count,
+    struct sockaddr* addr, socklen_t* addr_len) {
+
+  assert(__is_bound(sock) && "read: dgram socket autobind is not supported");
+
+  datagram_t datagram;
+  ssize_t datagram_read = __read_and_possible_free_socket(sock, (void*) &datagram, sizeof(datagram_t));
+  if(datagram_read == -1)
+    return -1;
+
+  assert(datagram_read == sizeof(datagram_t));
+
+  ssize_t real_count = MIN(count, datagram.contents_len);
+  memcpy(buf, datagram.contents, real_count);
+
+  if (addr != NULL) {
+    memcpy(addr, datagram.src, MIN(*addr_len, datagram.src_len));
+    *addr_len = datagram.src_len;
+  }
+
+  __free_datagram(&datagram);
+
+  return real_count;
+}
+
+static ssize_t __read_stream_socket(socket_t* sock, void* buf, size_t count) {
+  if(sock->status != SOCK_STATUS_CONNECTED) {
+    errno = ENOTCONN;
+    return -1;
+  }
+
+  if (sock->in == NULL) // The socket is shut down for reading
+    return 0;
+
+  if (count == 0)
+    return 0;
+
+  return __read_and_possible_free_socket(sock, buf, count);
+}
+
+ssize_t _read_socket(socket_t *sock, void *buf, size_t count,
+    struct sockaddr* addr, socklen_t* addr_len) {
+
+  if (sock->type == SOCK_STREAM) {
+    assert(addr == NULL && "address of message source for stream is not supported");
+    return __read_stream_socket(sock, buf, count);
+  } else if(sock->type == SOCK_DGRAM) {
+    return __read_datagram_socket(sock, buf, count, addr, addr_len);
+  }
+
+  assert(0 && "unreachable");
+}
+
 // write() /////////////////////////////////////////////////////////////////////
 
-ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
+static ssize_t __write_datagram_to_stream(stream_buffer_t *stream,
+    const struct sockaddr* from, size_t addr_len,
+    const char *buf, size_t count) {
+
+  if (count == 0)
+      return 0;
+
+  if (stream->max_size - stream->size < sizeof(datagram_t))
+    return count;
+
+  datagram_t datagram;
+  if(__create_shared_datagram(&datagram, from, addr_len, buf, count) == -1)
+    return -1;
+
+  size_t written = _stream_write(stream, (char*) &datagram, sizeof(datagram_t));
+  assert(written == sizeof(datagram_t));
+
+  return datagram.contents_len;
+}
+
+//non blocking call
+static ssize_t __write_datagram_socket(socket_t *sock, const char *buf, size_t count,
+    const struct sockaddr_in* dst_addr, size_t addr_len) {
+  assert(sock->status != SOCK_STATUS_CLOSING && "impossible");
+
+  if(dst_addr == NULL && sock->status != SOCK_STATUS_CONNECTED) {
+    errno = EDESTADDRREQ;
+    return -1;
+  }
+
+  const end_point_t* remote_end;
+  if (dst_addr != NULL) {
+    remote_end = __find_inet_end(dst_addr);
+  } else {
+    remote_end = sock->remote_end;
+    assert(sock->remote_end != NULL);
+  }
+
+  if (remote_end == NULL || remote_end->socket == NULL || remote_end->socket->in == NULL)
+    return count; //no such remote in net, closed, shutdown
+
+  return __write_datagram_to_stream(remote_end->socket->in,
+      sock->local_end->addr, sizeof(struct sockaddr_in), buf, count);
+}
+
+static ssize_t __write_stream_socket(socket_t *sock, const char *buf, size_t count) {
   if (sock->status != SOCK_STATUS_CONNECTED) {
     errno = ENOTCONN;
     return -1;
   }
 
-  if (sock->out == NULL || _stream_is_closed(sock->out)) {
+  stream_buffer_t* out_stream = sock->out;
+
+  if (out_stream == NULL || _stream_is_closed(out_stream)) {
     // The socket is shut down for writing
     errno = EPIPE;
     return -1;
@@ -304,14 +477,14 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
   }
 
   if (sock->__bdata.flags & O_NONBLOCK) {
-    if (_stream_is_full(sock->out) & !_stream_is_closed(sock->out)) {
+    if (_stream_is_full(out_stream) & !_stream_is_closed(out_stream)) {
       errno = EAGAIN;
       return -1;
     }
   }
 
   sock->__bdata.queued++;
-  ssize_t res = _stream_write(sock->out, buf, count);
+  ssize_t res = _stream_write(out_stream, buf, count);
   sock->__bdata.queued--;
 
   if (sock->status == SOCK_STATUS_CLOSING) {
@@ -330,6 +503,38 @@ ssize_t _write_socket(socket_t *sock, const void *buf, size_t count) {
   return res;
 }
 
+ssize_t _write_socket(socket_t *sock, const void *buf, size_t count,
+    const void* addr, size_t addr_len) {
+  if (buf == NULL) {
+    errno = EFAULT;
+    return -1;
+  }
+
+  if (sock->type == SOCK_DGRAM) {
+    int is_autobound = 0;
+    if (!__is_bound(sock)) {
+      if(__autobind(sock) == -1)
+        return -1;
+      is_autobound = 1;
+    }
+
+    int res = __write_datagram_socket(sock, buf, count, (const struct sockaddr_in*)addr, addr_len);
+
+    if(is_autobound) {
+      __release_end_point(sock->local_end);
+      sock->local_end = NULL;
+      _stream_destroy(sock->in); //todo: ah: autobind: potential bug: race: recv may listen to it
+      sock->in = NULL;
+    }
+
+    return res;
+  }
+  else if(sock->type == SOCK_STREAM)
+    return __write_stream_socket(sock, buf, count);
+
+  assert(0 && "unreachable");
+}
+
 // fstat() /////////////////////////////////////////////////////////////////////
 
 int _stat_socket(socket_t *sock, struct stat *buf) {
@@ -346,22 +551,24 @@ int _ioctl_socket(socket_t *sock, unsigned long request, char *argp) {
       return -1;
     }
 
+    assert(sock->type != SOCK_DGRAM);
+
     sock->out->status |= BUFFER_STATUS_SYM_READS;
     return 0;
   case KLEE_SIO_READCAP:
     if (sock->status != SOCK_STATUS_CONNECTED || sock->out == NULL) {
       errno = ENOTTY;
-      return-1;
+      return -1;
     }
 
-    _stream_set_rsize(sock->out, (size_t)argp);
+    _stream_set_rsize(sock->out, (size_t) argp);
     return 0;
   case FIONREAD:
     if (sock->status != SOCK_STATUS_CONNECTED || sock->in == NULL) {
-      *((int*)argp) = 0;
+      *((int*) argp) = 0;
       return 0;
     }
-    *((int*)argp) = sock->in->size;
+    *((int*) argp) = sock->in->size;
     return 0;
   default:
     errno = EINVAL;
@@ -372,19 +579,22 @@ int _ioctl_socket(socket_t *sock, unsigned long request, char *argp) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int _is_blocking_socket(socket_t *sock, int event) {
-  if (sock->status == SOCK_STATUS_CREATED)
-    return 0;
+  assert((event == EVENT_READ) || (event == EVENT_WRITE));
 
-  if (sock->status == SOCK_STATUS_CONNECTING) {
-    switch(event) {
-    case EVENT_READ:
+  if (sock->type == SOCK_DGRAM) {
+    assert(__is_bound(sock) && "only bound sockets are supported");
+
+    if (event == EVENT_READ)
+      return _stream_is_empty(sock->in) && !_stream_is_closed(sock->in);
+    else
       return 0;
-    case EVENT_WRITE:
-      return 1;
-    default:
-      assert(0 && "invalid event");
-    }
   }
+
+  if (sock->status == SOCK_STATUS_CREATED)
+    return 0;//TODO: ah: strange: why not 1??
+
+  if (sock->status == SOCK_STATUS_CONNECTING)
+    return event == EVENT_WRITE;
 
   if (sock->status == SOCK_STATUS_CONNECTED) {
     switch (event) {
@@ -392,8 +602,6 @@ int _is_blocking_socket(socket_t *sock, int event) {
       return sock->in && _stream_is_empty(sock->in) && !_stream_is_closed(sock->in);
     case EVENT_WRITE:
       return sock->out && _stream_is_full(sock->out) && !_stream_is_closed(sock->out);
-    default:
-      assert(0 && "invalid event");
     }
   }
 
@@ -404,8 +612,6 @@ int _is_blocking_socket(socket_t *sock, int event) {
       return _stream_is_empty(sock->listen);
     case EVENT_WRITE:
       return 0;
-    default:
-      assert(0 && "invalid event");
     }
   }
 
@@ -414,6 +620,18 @@ int _is_blocking_socket(socket_t *sock, int event) {
 }
 
 int _register_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
+
+  if (sock->type == SOCK_DGRAM) {
+    assert(__is_bound(sock) && "only bound sockets are supported");
+    assert(sock->status == SOCK_STATUS_CONNECTED || sock->status == SOCK_STATUS_CREATED);
+
+    if (events & EVENT_READ) {
+      return _stream_register_event(sock->in, wlist);
+    }
+    //ignore EVENT_WRITE
+    return 0;
+  }
+
   if (sock->status == SOCK_STATUS_CONNECTED) {
     if ((events & EVENT_READ) && _stream_register_event(sock->in, wlist) == -1)
       return -1;
@@ -438,6 +656,18 @@ int _register_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
 }
 
 void _deregister_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
+
+  if (sock->type == SOCK_DGRAM) {
+    assert(__is_bound(sock) && "only bound sockets are supported");
+    assert(sock->status == SOCK_STATUS_CONNECTED || sock->status == SOCK_STATUS_CREATED);
+
+    if (events & EVENT_READ)
+      _stream_clear_event(sock->in, wlist);
+
+    //ignore EVENT_WRITE
+    return;
+  }
+
   if (sock->status == SOCK_STATUS_CONNECTED) {
     if ((events & EVENT_READ) && sock->in)
       _stream_clear_event(sock->in, wlist);
@@ -456,7 +686,8 @@ void _deregister_events_socket(socket_t *sock, wlist_id_t wlist, int events) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int socket(int domain, int type, int protocol) {
-  klee_debug("Attempting to create a socket\n");
+  klee_debug("Attempting to create a socket: domain = %d, type = %d, protocol = %d\n", domain,
+      type, protocol);
   int base_type = type & ~(SOCK_NONBLOCK | SOCK_CLOEXEC);
   // Check the validity of the request
   switch (domain) {
@@ -464,8 +695,19 @@ int socket(int domain, int type, int protocol) {
   case AF_UNIX:
     switch (base_type) {
     case SOCK_STREAM:
-    //case SOCK_DGRAM:
       if (protocol != 0 && protocol != IPPROTO_TCP) {
+        klee_warning("unsupported protocol");
+        errno = EPROTONOSUPPORT;
+        return -1;
+      }
+      break;
+    case SOCK_DGRAM:
+      if (domain == AF_UNIX) {
+        klee_warning("unsupported protocol: UDP for AF_INET only"); //TODO: ah: implement
+        errno = EPROTONOSUPPORT;
+        return -1;
+      }
+      if (protocol != 0 && protocol != IPPROTO_UDP) {
         klee_warning("unsupported protocol");
         errno = EPROTONOSUPPORT;
         return -1;
@@ -504,13 +746,14 @@ int socket(int domain, int type, int protocol) {
   }
 
   // Create the socket object
-  socket_t *sock = (socket_t*)malloc(sizeof(socket_t));
+  socket_t *sock = (socket_t*) malloc(sizeof(socket_t));
   klee_make_shared(sock, sizeof(socket_t));
   memset(sock, 0, sizeof(socket_t));
 
   sock->__bdata.flags |= O_RDWR;
-  if (type & SOCK_NONBLOCK)
+  if (type & SOCK_NONBLOCK) {
     sock->__bdata.flags |= O_NONBLOCK;
+  }
 
   sock->__bdata.refcount = 1;
   sock->__bdata.queued = 0;
@@ -519,19 +762,15 @@ int socket(int domain, int type, int protocol) {
   sock->type = base_type;
   sock->domain = domain;
 
-  fde->io_object = (file_base_t*)sock;
+  fde->io_object = (file_base_t*) sock;
 
-  klee_debug("Socket created: %d\n", fd);
+  klee_debug("Socket created: fd = %d\n", fd);
   return fd;
 }
 
 // bind() //////////////////////////////////////////////////////////////////////
 
-int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-  CHECK_IS_SOCKET(sockfd);
-
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
-
+static int _bind(socket_t *sock, const struct sockaddr *addr, socklen_t addrlen) {
   if (sock->local_end != NULL) {
     errno = EINVAL;
     return -1;
@@ -549,9 +788,9 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   end_point_t *end_point;
 
   if (sock->domain == AF_INET) {
-    end_point = __get_inet_end((struct sockaddr_in*)addr);
+    end_point = __get_inet_end((struct sockaddr_in*) addr);
   } else if (sock->domain == AF_UNIX) {
-    end_point = __get_unix_end((struct sockaddr_un*)addr);
+    end_point = __get_unix_end((struct sockaddr_un*) addr);
   } else {
     assert(0 && "invalid socket");
   }
@@ -570,13 +809,24 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   sock->local_end = end_point;
   end_point->socket = sock;
 
+  if(sock->type == SOCK_DGRAM)
+      sock->in = _stream_create(sizeof(datagram_t) * MAX_NUMBER_DGRAMS, 1); //todo: refactor when implement shutdown for write part
+
   return 0;
+}
+
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  CHECK_IS_SOCKET(sockfd);
+
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
+
+  return _bind(sock, addr, addrlen);
 }
 
 // get{sock,peer}name() ////////////////////////////////////////////////////////
 
-static void _get_endpoint_name(socket_t *sock, end_point_t *end_point,
-    struct sockaddr *addr, socklen_t *addrlen) {
+static void _get_endpoint_name(socket_t *sock, end_point_t *end_point, struct sockaddr *addr,
+    socklen_t *addrlen) {
   if (sock->domain == AF_INET) {
     socklen_t len = *addrlen;
 
@@ -589,7 +839,7 @@ static void _get_endpoint_name(socket_t *sock, end_point_t *end_point,
     socklen_t len = *addrlen;
 
     if (end_point->addr) {
-      struct sockaddr_un *ep_addr = (struct sockaddr_un*)end_point->addr;
+      struct sockaddr_un *ep_addr = (struct sockaddr_un*) end_point->addr;
       socklen_t ep_len = sizeof(ep_addr->sun_family) + strlen(ep_addr->sun_path) + 1;
 
       if (len > ep_len)
@@ -615,7 +865,7 @@ static void _get_endpoint_name(socket_t *sock, end_point_t *end_point,
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   CHECK_IS_SOCKET(sockfd);
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
   if (sock->local_end == NULL) {
     errno = EINVAL;
@@ -630,7 +880,7 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   CHECK_IS_SOCKET(sockfd);
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
   if (sock->remote_end == NULL) {
     errno = ENOTCONN;
@@ -647,15 +897,15 @@ int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 int listen(int sockfd, int backlog) {
   CHECK_IS_SOCKET(sockfd);
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
-  if (sock->local_end == NULL || (sock->status != SOCK_STATUS_CREATED &&
-      sock->status != SOCK_STATUS_LISTENING)) {
+  if (sock->type != SOCK_STREAM) {
     errno = EOPNOTSUPP;
     return -1;
   }
 
-  if (sock->type != SOCK_STREAM) {
+  if (sock->local_end == NULL || (sock->status != SOCK_STATUS_CREATED && sock->status
+      != SOCK_STATUS_LISTENING)) {
     errno = EOPNOTSUPP;
     return -1;
   }
@@ -667,10 +917,8 @@ int listen(int sockfd, int backlog) {
   // Create the listening queue
   if (sock->status != SOCK_STATUS_LISTENING) {
     sock->status = SOCK_STATUS_LISTENING;
-    sock->listen = _stream_create(backlog*sizeof(socket_t*), 1);
+    sock->listen = _stream_create(backlog * sizeof(socket_t*), 1);
   }
-
-  klee_debug("Socket %d is listening\n", sockfd);
 
   return 0;
 }
@@ -700,7 +948,7 @@ static int _inet_stream_reach(socket_t *sock, const struct sockaddr *addr, sockl
     return -1;
   }
 
-  sock->remote_end = __get_inet_end((struct sockaddr_in*)addr);
+  sock->remote_end = __get_inet_end((struct sockaddr_in*) addr);
   if (!sock->remote_end) {
     errno = EINVAL;
     return -1;
@@ -727,13 +975,40 @@ static int _unix_stream_reach(socket_t *sock, const struct sockaddr *addr, sockl
     return -1;
   }
 
-  sock->remote_end = __get_unix_end((struct sockaddr_un*)addr);
+  sock->remote_end = __get_unix_end((struct sockaddr_un*) addr);
 
   if (!sock->remote_end) {
     errno = EINVAL;
     return -1;
   }
 
+  return 0;
+}
+
+static int _datagram_connect(int sockfd, socket_t *sock, const struct sockaddr *addr,
+    socklen_t addrlen) {
+  assert(sock->domain == AF_INET && "only AF_INET is supported");
+
+  if (sock->status != SOCK_STATUS_CREATED && sock->status != SOCK_STATUS_CONNECTED) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  //reset previous connection
+  if (sock->status == SOCK_STATUS_CONNECTED) {
+    __release_end_point(sock->remote_end);
+    sock->remote_end = NULL;
+  }
+
+  if (sock->remote_end == NULL) {
+    sock->remote_end = __get_inet_end((struct sockaddr_in*) addr);
+    if (!sock->remote_end) {
+      errno = EINVAL;
+      return -1;
+    }
+  }
+
+  sock->status = SOCK_STATUS_CONNECTED;
   return 0;
 }
 
@@ -759,9 +1034,8 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
     assert(0 && "invalid socket");
   }
 
-  if (sock->remote_end->socket == NULL ||
-      sock->remote_end->socket->status != SOCK_STATUS_LISTENING ||
-      sock->remote_end->socket->domain != sock->domain) {
+  if (sock->remote_end->socket == NULL || sock->remote_end->socket->status != SOCK_STATUS_LISTENING
+      || sock->remote_end->socket->domain != sock->domain) {
 
     __release_end_point(sock->remote_end);
     sock->remote_end = NULL;
@@ -781,12 +1055,12 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
   sock->status = SOCK_STATUS_CONNECTING;
 
   // We queue ourselves in the list...
-  ssize_t res = _stream_write(remote->listen, (char*)&sock, sizeof(socket_t*));
+  ssize_t res = _stream_write(remote->listen, (char*) &sock, sizeof(socket_t*));
   assert(res == sizeof(socket_t*));
   sock->__bdata.queued++; // Now we're also referenced by the dest. socket
 
   sock->conn_wlist = klee_get_wlist();
-  sock->conn_evt_queue = (event_queue_t*)malloc(sizeof(event_queue_t));
+  sock->conn_evt_queue = (event_queue_t*) malloc(sizeof(event_queue_t));
   klee_make_shared(sock->conn_evt_queue, sizeof(event_queue_t));
   _event_queue_init(sock->conn_evt_queue, MAX_EVENTS, 1);
 
@@ -818,8 +1092,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   CHECK_IS_SOCKET(sockfd);
-
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
   if (INJECT_FAULT(connect, EACCES, EPERM, ECONNREFUSED)) {
     return -1;
@@ -828,9 +1101,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   if (sock->type == SOCK_STREAM) {
     return _stream_connect(sock, addr, addrlen);
   } else if (sock->type == SOCK_DGRAM) {
-    klee_warning("datagrams not yet supported in connect");
-    errno = EINVAL;
-    return -1;
+    return _datagram_connect(sockfd, sock, addr, addrlen);
   } else {
     assert(0 && "invalid socket");
   }
@@ -841,7 +1112,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   CHECK_IS_SOCKET(sockfd);
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
   if (sock->type != SOCK_STREAM) {
     errno = EOPNOTSUPP;
@@ -868,7 +1139,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   end_point_t *end_point;
 
   sock->__bdata.queued++;
-  ssize_t res = _stream_read(sock->listen, (char*)&remote, sizeof(socket_t*));
+  ssize_t res = _stream_read(sock->listen, (char*) &remote, sizeof(socket_t*));
   sock->__bdata.queued--;
 
   if (sock->status == SOCK_STATUS_CLOSING) {
@@ -916,7 +1187,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
       errno = EINVAL;
       failure = 1;
     }
-  } else if (sock->domain == AF_UNIX){
+  } else if (sock->domain == AF_UNIX) {
     end_point = __get_unix_end(NULL);
 
     if (end_point == NULL) {
@@ -948,12 +1219,12 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   }
 
   // Setup socket attributes
-  local = (socket_t*)malloc(sizeof(socket_t));
+  local = (socket_t*) malloc(sizeof(socket_t));
   klee_make_shared(local, sizeof(socket_t));
   memset(local, 0, sizeof(socket_t));
 
   __fdt[fd].attr |= FD_IS_SOCKET;
-  __fdt[fd].io_object = (file_base_t*)local;
+  __fdt[fd].io_object = (file_base_t*) local;
 
   local->__bdata.flags |= O_RDWR;
   local->__bdata.refcount = 1;
@@ -974,10 +1245,10 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   local->remote_end->refcount++;
 
   // Setup streams
-  local->in = _stream_create(SOCKET_BUFFER_SIZE, 1);
+  local->in = _stream_create(STREAM_BUFFER_SIZE, 1);
   remote->out = local->in;
 
-  local->out = _stream_create(SOCKET_BUFFER_SIZE, 1);
+  local->out = _stream_create(STREAM_BUFFER_SIZE, 1);
   remote->in = local->out;
 
   // All is good for the remote socket
@@ -1014,6 +1285,13 @@ int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
 
 static void _shutdown(socket_t *sock, int how) {
   if ((how == SHUT_RD || how == SHUT_RDWR) && sock->in != NULL) {
+    if (sock->type == SOCK_DGRAM) { //todo: ah: add support for shutting down SHUT_WR part of UDP socket
+      __free_all_datagrams(sock->in);
+      _stream_destroy(sock->in);
+      sock->in = NULL;
+      return;
+    }
+
     // Shutting down the reading part...
     if (_stream_is_closed(sock->in)) {
       _stream_destroy(sock->in);
@@ -1039,7 +1317,7 @@ static void _shutdown(socket_t *sock, int how) {
 int shutdown(int sockfd, int how) {
   CHECK_IS_SOCKET(sockfd);
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
   if (sock->status != SOCK_STATUS_CONNECTED) {
     errno = ENOTCONN;
@@ -1055,31 +1333,81 @@ int shutdown(int sockfd, int how) {
 
 ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
   CHECK_IS_SOCKET(sockfd);
+  CHECK_SEND_FLAGS(flags);
 
-  // XXX: Ignore the MSG_NOSIGNAL flag since we don't support signals anyway
-  if ((flags != 0) && (flags != MSG_NOSIGNAL)) {
-    klee_warning("send() flags unsupported for now");
-    errno = EINVAL;
-    return -1;
-  }
-
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
-
-  return _write_socket(sock, buf, len);
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
+  return _write_socket(sock, buf, len, NULL, 0);
 }
 
 ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
   CHECK_IS_SOCKET(sockfd);
-
   if (flags != 0) {
     klee_warning("recv() flags unsupported for now");
     errno = EINVAL;
     return -1;
   }
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
-  return _read_socket(sock, buf, len);
+  return _read_socket(sock, buf, len, NULL, NULL);
+}
+
+// sendto()/recvfrom() /////////////////////////////////////////////////////////
+ssize_t sendto(int fd, const void *buf, size_t count, int flags,
+    const struct sockaddr* addr, socklen_t addr_len) {
+  CHECK_IS_SOCKET(fd);
+  CHECK_SEND_FLAGS(flags);
+
+  if (addr == NULL) {
+    errno = EDESTADDRREQ;
+    return -1;
+  }
+
+  if (addr_len != sizeof(struct sockaddr_in)) { //TODO: ah
+    klee_debug("not supported: only sockaddr_in address as a dest address");
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (((const struct sockaddr_in*) addr)->sin_port == 0) { //TODO: ah: correct errno value
+    errno = EINVAL;
+    return -1;
+  }
+
+  socket_t *sock = (socket_t*) __fdt[fd].io_object;
+  return _write_socket(sock, buf, count, addr, addr_len);
+}
+
+
+ssize_t recvfrom(int fd, void *buf, size_t len, int flags, struct sockaddr* addr,
+    socklen_t* addr_len) {
+
+  CHECK_IS_SOCKET(fd);
+  klee_debug("recvfrom: fd = %d\n", fd); //TODO: ah: remove me
+  if (flags != 0) {
+    klee_warning("recvfrom() flags unsupported for now");
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (buf == NULL) {
+    errno = EFAULT;
+    return -1;
+  }
+
+  if (addr != NULL) {
+    if (addr_len == NULL) {
+      errno = EINVAL;
+      return -1;
+    }
+  }
+
+  socket_t *sock = (socket_t*) __fdt[fd].io_object;
+  assert(sock != NULL);
+
+  int res = _read_socket(sock, buf, len, addr, addr_len);
+  klee_debug("recvfrom: res = %d\n", (int)res);
+  return res;
 }
 
 // sendmsg()/recvmsg() /////////////////////////////////////////////////////////
@@ -1092,31 +1420,37 @@ ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
     errno = EINVAL;
     return -1;
   }
-
   if (msg->msg_control != NULL) {
     klee_warning("control data unsupported");
     errno = EINVAL;
     return -1;
   }
 
-  return _gather_write(sockfd, msg->msg_iov, msg->msg_iovlen);
+  return _gather_write(sockfd, msg->msg_iov, msg->msg_iovlen, msg->msg_name, msg->msg_namelen);
 }
 
 ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  klee_debug("recvmsg: fd = %d\n", sockfd);
   CHECK_IS_SOCKET(sockfd);
 
   if (flags != 0) {
-    klee_warning("recvmsg() flags unsupported for now");
+    klee_warning("flags unsupported for now");
     errno = EINVAL;
     return -1;
   }
-
   if (msg->msg_control != NULL) {
     klee_warning("control data unsupported");
     errno = EINVAL;
     return -1;
   }
 
+  if(msg->msg_name != NULL) {
+    klee_warning("msg_name unsupported");
+    errno = EINVAL;
+    return -1;
+  }
+
+  msg->msg_flags = 0;
   return _scatter_read(sockfd, msg->msg_iov, msg->msg_iovlen);
 }
 
@@ -1125,7 +1459,7 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
 int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen) {
   CHECK_IS_SOCKET(sockfd);
 
-  socket_t *sock = (socket_t*)__fdt[sockfd].io_object;
+  socket_t *sock = (socket_t*) __fdt[sockfd].io_object;
 
   switch (level) {
   case SOL_SOCKET:
@@ -1136,7 +1470,7 @@ int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optl
         return -1;
       }
 
-      *((int*)optval) = (sock->status == SOCK_STATUS_LISTENING);
+      *((int*) optval) = (sock->status == SOCK_STATUS_LISTENING);
       *optlen = sizeof(int);
       break;
     case SO_ERROR:
@@ -1145,7 +1479,7 @@ int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optl
         return -1;
       }
       // XXX: We currently do not support any of the possible socket errors
-      *((int*)optval) = 0;
+      *((int*) optval) = 0;
       *optlen = sizeof(int);
       break;
     default:
@@ -1249,12 +1583,12 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   }
 
   // Create the first socket object
-  socket_t *sock1 = (socket_t*)malloc(sizeof(socket_t));
+  socket_t *sock1 = (socket_t*) malloc(sizeof(socket_t));
   klee_make_shared(sock1, sizeof(socket_t));
   memset(sock1, 0, sizeof(socket_t));
 
   __fdt[fd1].attr |= FD_IS_SOCKET;
-  __fdt[fd1].io_object = (file_base_t*)sock1;
+  __fdt[fd1].io_object = (file_base_t*) sock1;
 
   sock1->__bdata.flags |= O_RDWR;
   sock1->__bdata.refcount = 1;
@@ -1270,16 +1604,16 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   sock1->remote_end = ep2;
   sock1->remote_end->refcount++;
 
-  sock1->in = _stream_create(SOCKET_BUFFER_SIZE, 1);
-  sock1->out = _stream_create(SOCKET_BUFFER_SIZE, 1);
+  sock1->in = _stream_create(STREAM_BUFFER_SIZE, 1);
+  sock1->out = _stream_create(STREAM_BUFFER_SIZE, 1);
 
   // Create the second socket object
-  socket_t *sock2 = (socket_t*)malloc(sizeof(socket_t));
+  socket_t *sock2 = (socket_t*) malloc(sizeof(socket_t));
   klee_make_shared(sock2, sizeof(socket_t));
   memset(sock2, 0, sizeof(socket_t));
 
   __fdt[fd2].attr |= FD_IS_SOCKET;
-  __fdt[fd2].io_object = (file_base_t*)sock2;
+  __fdt[fd2].io_object = (file_base_t*) sock2;
 
   sock2->__bdata.flags |= O_RDWR;
   sock2->__bdata.refcount = 1;
@@ -1309,7 +1643,8 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   }
 
   // Finalize
-  sv[0] = fd1; sv[1] = fd2;
+  sv[0] = fd1;
+  sv[1] = fd2;
   klee_debug("Socket pair created (%d, %d)\n", fd1, fd2);
   return 0;
 }
@@ -1328,12 +1663,15 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
       return EAI_ADDRFAMILY;
     }
 
-    if (hints->ai_socktype != SOCK_STREAM && hints->ai_socktype != 0) {
+    if (hints->ai_socktype != 0 && hints->ai_socktype != SOCK_STREAM
+        && hints->ai_socktype != SOCK_DGRAM) {
       klee_warning("unsupported socket type (EAI_SOCKTYPE)");
       return EAI_SOCKTYPE;
     }
 
-    if (hints->ai_protocol != 0 && hints->ai_protocol != IPPROTO_TCP) {
+    if (hints->ai_protocol != 0
+        && hints->ai_protocol != IPPROTO_TCP
+        && hints->ai_protocol != IPPROTO_UDP) {
       klee_warning("unsupported protocol (EAI_SERVICE)");
       return EAI_SERVICE;
     }
@@ -1362,30 +1700,28 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
     }
   }
 
-
   if (node != NULL) {
     if (strcmp(node, "localhost") != 0 && strcmp(node, DEFAULT_HOST_NAME) != 0) {
       klee_debug("resolving '%s' to localhost\n", node);
     }
   }
 
-
-  struct addrinfo *info = (struct addrinfo*)malloc(sizeof(struct addrinfo));
+  struct addrinfo *info = (struct addrinfo*) malloc(sizeof(struct addrinfo));
   memset(info, 0, sizeof(struct addrinfo));
 
-  struct sockaddr_in *addr = (struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
+  struct sockaddr_in *addr = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
   memset(addr, 0, sizeof(struct sockaddr_in));
 
-  info->ai_addr = (struct sockaddr*)addr;
+  info->ai_addr = (struct sockaddr*) addr;
   info->ai_addrlen = sizeof(struct sockaddr_in);
   info->ai_family = AF_INET;
   info->ai_protocol = 0;
-  info->ai_socktype = SOCK_STREAM;
+  info->ai_socktype = hints->ai_socktype;
 
   addr->sin_family = AF_INET;
   addr->sin_addr.s_addr = htonl(DEFAULT_NETWORK_ADDR);
   if (port != 0)
-    addr->sin_port = htons((uint16_t)port);
+    addr->sin_port = htons((uint16_t) port);
 
   *res = info;
   return 0;
@@ -1397,24 +1733,24 @@ void freeaddrinfo(struct addrinfo *res) {
       free(res->ai_addr);
     }
 
-  free(res);
+    free(res);
   }
 }
 
 // getnameinfo() ///////////////////////////////////////////////////////////////
 
-int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
-    socklen_t hostlen, char *serv, socklen_t servlen, unsigned int flags) {
+int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host, socklen_t hostlen,
+    char *serv, socklen_t servlen, unsigned int flags) {
 
   if (sa->sa_family != AF_INET || salen < sizeof(struct sockaddr_in)) {
     return EAI_FAMILY;
   }
 
-  const struct sockaddr_in *addr = (struct sockaddr_in*)sa;
+  const struct sockaddr_in *addr = (struct sockaddr_in*) sa;
 
   if (host != NULL) {
-    if (addr->sin_addr.s_addr != htonl(INADDR_LOOPBACK) &&
-        addr->sin_addr.s_addr != __net.net_addr.s_addr) {
+    if (addr->sin_addr.s_addr != htonl(INADDR_LOOPBACK) && addr->sin_addr.s_addr
+        != __net.net_addr.s_addr) {
       klee_warning("foreign IP address solved to local network");
     }
 
