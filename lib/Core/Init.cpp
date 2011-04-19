@@ -84,8 +84,7 @@ static std::string strip(std::string &in) {
     return in.substr(lead, trail - lead);
 }
 
-static int initEnv(Module *mainModule) {
-
+static int patchMain(Module *mainModule) {
   /*
     nArgcP = alloc oldArgc->getType()
     nArgvV = alloc oldArgv->getType()
@@ -98,7 +97,7 @@ static int initEnv(Module *mainModule) {
     oldArgv->replaceAllUsesWith(nArgv)
   */
 
-  Function *mainFn = mainModule->getFunction("main");
+  Function *mainFn = mainModule->getFunction("__user_main");
 
   if (mainFn->arg_size() < 2) {
     std::cerr << "Cannot handle ""-init-env"" when main() has less than two arguments.\n";
@@ -119,17 +118,12 @@ static int initEnv(Module *mainModule) {
   std::vector<const Type*> params;
   params.push_back(Type::getInt32Ty(getGlobalContext()));
   params.push_back(Type::getInt32Ty(getGlobalContext()));
-  Function* initEnvFn =
-    cast<Function>(mainModule->getOrInsertFunction("klee_init_env",
-                                                   Type::getVoidTy(getGlobalContext()),
-                                                   argcPtr->getType(),
-                                                   argvPtr->getType(),
-                                                   NULL));
-  assert(initEnvFn);
+  Function* procArgsFn = mainModule->getFunction("klee_process_args");
+  assert(procArgsFn);
   std::vector<Value*> args;
   args.push_back(argcPtr);
   args.push_back(argvPtr);
-  Instruction* initEnvCall = CallInst::Create(initEnvFn, args.begin(), args.end(),
+  Instruction* procArgsCall = CallInst::Create(procArgsFn, args.begin(), args.end(),
                           "", firstInst);
   Value *argc = new LoadInst(argcPtr, "newArgc", firstInst);
   Value *argv = new LoadInst(argvPtr, "newArgv", firstInst);
@@ -137,8 +131,36 @@ static int initEnv(Module *mainModule) {
   oldArgc->replaceAllUsesWith(argc);
   oldArgv->replaceAllUsesWith(argv);
 
-  new StoreInst(oldArgc, argcPtr, initEnvCall);
-  new StoreInst(oldArgv, argvPtr, initEnvCall);
+  new StoreInst(oldArgc, argcPtr, procArgsCall);
+  new StoreInst(oldArgv, argvPtr, procArgsCall);
+
+  return 0;
+}
+
+static int patchLibcMain(Module *mainModule) {
+  Function *libcMainFn = mainModule->getFunction("__uClibc_main");
+
+  Instruction* firstInst = libcMainFn->begin()->begin();
+
+  Value* argc = ++libcMainFn->arg_begin();
+  Value* argv = ++(++libcMainFn->arg_begin());
+
+  Function* initEnvFn = mainModule->getFunction("klee_init_env");
+  assert(initEnvFn);
+  std::vector<Value*> args;
+  args.push_back(argc);
+  args.push_back(argv);
+  CallInst::Create(initEnvFn, args.begin(), args.end(),
+                          "", firstInst);
+  return 0;
+}
+
+static int initEnv(Module *mainModule) {
+  if (patchMain(mainModule) != 0)
+    return -1;
+
+  if (patchLibcMain(mainModule) != 0)
+    return -1;
 
   return 0;
 }
@@ -410,8 +432,14 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
 #else
 
 static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
+  Function *mainFn = mainModule->getFunction("main");
   mainModule->getOrInsertFunction("__force_model_linkage",
       Type::getVoidTy(getGlobalContext()), NULL);
+  mainModule->getOrInsertFunction("klee_init_env",
+      Type::getVoidTy(getGlobalContext()),
+      PointerType::getUnqual(mainFn->getFunctionType()->getParamType(0)),
+      PointerType::getUnqual(mainFn->getFunctionType()->getParamType(1)),
+      NULL);
 
   //mainModule->getOrInsertFunction("_exit",
   //    Type::getVoidTy(getGlobalContext()),
@@ -690,12 +718,6 @@ Module* prepareModule(Module *module) {
   if (WithPOSIXRuntime)
     InitEnv = true;
 
-  if (InitEnv) {
-    int r = initEnv(module);
-    if (r != 0)
-      return NULL;
-  }
-
   llvm::sys::Path LibraryDir(getKleeLibraryPath());
 
   switch (Libc) {
@@ -710,6 +732,12 @@ Module* prepareModule(Module *module) {
   if (WithPOSIXRuntime) {
     module = linkWithPOSIX(module);
     module = linkWithUclibc(module);
+  }
+
+  if (InitEnv) {
+    int r = initEnv(module);
+    if (r != 0)
+      return NULL;
   }
 
   return module;

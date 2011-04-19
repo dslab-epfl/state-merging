@@ -241,6 +241,8 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
       to properly work with symbolics. */
     klee_check_memory_access(buf, count);
 
+    int res;
+
     if (offset >= 0)
       res = CALL_UNDERLYING(pwrite, file->concrete_fd, buf, count, offset);
     if (file->offset >= 0)
@@ -257,6 +259,8 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
 
     return res;
   }
+
+  //klee_debug("Writing symbolically %d bytes...\n", count);
 
   ssize_t res = _block_write(&file->storage->contents, buf, count,
       offset >= 0 ? offset : file->offset);

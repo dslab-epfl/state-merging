@@ -81,7 +81,38 @@ static void __add_arg(int *argc, char **argv, char *arg, int argcMax) {
   }
 }
 
-void klee_init_env(int* argcPtr, char*** argvPtr) {
+void klee_init_env(int argc, char **argv) {
+  unsigned sym_files = 0, sym_file_len = 0;
+  char unsafe_flag = 0;
+  int k=0;
+
+  while (k < argc) {
+    if (__streq(argv[k], "--sym-files") || __streq(argv[k], "-sym-files")) {
+      const char* msg = "--sym-files expects two integer arguments <no-sym-files> <sym-file-len>";
+
+      if (k+2 >= argc)
+        __emit_error(msg);
+
+      k++;
+      sym_files = __str_to_int(argv[k++], msg);
+      sym_file_len = __str_to_int(argv[k++], msg);
+
+    }
+    else if (__streq(argv[k], "--unsafe") || __streq(argv[k], "-unsafe")) {
+      unsafe_flag = 1;
+      k++;
+    }
+    else {
+      k++;
+    }
+  }
+
+  klee_init_processes();
+  klee_init_fds(sym_files, sym_file_len, unsafe_flag);
+  klee_init_mmap();
+}
+
+void klee_process_args(int* argcPtr, char*** argvPtr) {
   int argc = *argcPtr;
   char** argv = *argvPtr;
 
@@ -89,30 +120,12 @@ void klee_init_env(int* argcPtr, char*** argvPtr) {
   char* new_argv[1024];
   char* tmp_argv[1024];
   unsigned max_len, min_argvs, max_argvs;
-  unsigned sym_files = 0, sym_file_len = 0;
-  char unsafe_flag = 0;
   char** final_argv;
   char sym_arg_name[5] = "arg";
   unsigned sym_arg_num = 0;
   int k=0, i;
 
   sym_arg_name[4] = '\0';
-
-#if 0
-  // Recognize --help when it is the sole argument.
-  if (argc == 2 && __streq(argv[1], "--help")) {
-  __emit_error("klee_init_env\n\n\
-usage: (klee_init_env) [options] [program arguments]\n\
-  -sym-arg <N>              - Replace by a symbolic argument with length N\n\
-  -sym-args <MIN> <MAX> <N> - Replace by at least MIN arguments and at most\n\
-                              MAX arguments, each with maximum length N\n\
-  -sym-files <NUM> <N>      - Make stdin and up to NUM symbolic files, each\n\
-                              with maximum size N.\n\
-  -sym-stdout               - Make stdout symbolic.\n\
-  -max-fail <N>             - Allow up to <N> injected failures\n\
-  -fd-fail                  - Shortcut for '-max-fail 1'\n\n");
-  }
-#endif
 
   while (k < argc) {
     if (__streq(argv[k], "--sym-arg") || __streq(argv[k], "-sym-arg")) {
@@ -151,18 +164,9 @@ usage: (klee_init_env) [options] [program arguments]\n\
       }
     }
     else if (__streq(argv[k], "--sym-files") || __streq(argv[k], "-sym-files")) {
-      const char* msg = "--sym-files expects two integer arguments <no-sym-files> <sym-file-len>";      
-
-      if (k+2 >= argc)
-	__emit_error(msg);
-      
       k++;
-      sym_files = __str_to_int(argv[k++], msg);
-      sym_file_len = __str_to_int(argv[k++], msg);
-
     }
     else if (__streq(argv[k], "--unsafe") || __streq(argv[k], "-unsafe")) {
-      unsafe_flag = 1;
       k++;
     }
     else {
@@ -178,12 +182,6 @@ usage: (klee_init_env) [options] [program arguments]\n\
 
   *argcPtr = new_argc;
   *argvPtr = final_argv;
-
-  klee_init_processes();
-
-  klee_init_fds(sym_files, sym_file_len, unsafe_flag);
-
-  klee_init_mmap();
 
   klee_event(__KLEE_EVENT_BREAKPOINT, __KLEE_BREAK_TRACE);
 }
