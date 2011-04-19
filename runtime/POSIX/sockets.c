@@ -1383,7 +1383,6 @@ ssize_t recvfrom(int fd, void *buf, size_t len, int flags, struct sockaddr* addr
     socklen_t* addr_len) {
 
   CHECK_IS_SOCKET(fd);
-  klee_debug("recvfrom: fd = %d\n", fd); //TODO: ah: remove me
   if (flags != 0) {
     klee_warning("recvfrom() flags unsupported for now");
     errno = EINVAL;
