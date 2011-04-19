@@ -1,9 +1,0 @@
-base64 12 dslab-worf.epfl.ch 12 basename 12 dslab-worf.epfl.ch 12 cat 12 dslab-worf.epfl.ch 12 chcon 12 dslab-worf.epfl.ch 12
-chroot 12 dslab-worf.epfl.ch 12 cut 12 dslab-worf.epfl.ch 12 df 12 dslab-worf.epfl.ch 12 dirname 12 dslab-worf.epfl.ch 12
-echo 12 dslab-worf.epfl.ch 12 env 12 dslab-worf.epfl.ch 12 false 12 dslab-worf.epfl.ch 12 id 12 dslab-worf.epfl.ch 12
-logname 12 dslab-worf.epfl.ch 12 md5sum 12 dslab-worf.epfl.ch 12 mktemp 12 dslab-worf.epfl.ch 12 mv 12 dslab-worf.epfl.ch 12
-nice 12 dslab-worf.epfl.ch 12 nl 12 dslab-worf.epfl.ch 12 ptx 12 dslab-worf.epfl.ch 12 pwd 12 dslab-worf.epfl.ch 12
-seq 12 dslab-worf.epfl.ch 12 setuidgid 12 dslab-worf.epfl.ch 12 sha1sum 12 dslab-worf.epfl.ch 12 sha512sum 12 dslab-worf.epfl.ch 12
-sleep 12 dslab-worf.epfl.ch 12 stat 12 dslab-worf.epfl.ch 12 stty 12 dslab-worf.epfl.ch 12 su 12 dslab-worf.epfl.ch 12
-sum 12 dslab-worf.epfl.ch 12 tee 12 dslab-worf.epfl.ch 12 tty 12 dslab-worf.epfl.ch 12 uptime 12 dslab-worf.epfl.ch 12
-users 12 dslab-worf.epfl.ch 12 vdir 12 dslab-worf.epfl.ch 12 yes 12 dslab-worf.epfl.ch 12
