@@ -502,8 +502,10 @@ static int _atomic_rwlock_unlock(rwlock_data_t *rwdata) {
 
   if (rwdata->writer != 0)
     rwdata->writer = 0;
-  else
-    --rwdata->nr_readers;
+  else {
+    if (rwdata->nr_readers > 0)
+      --rwdata->nr_readers;
+  }
 
   if (rwdata->nr_readers == 0 && rwdata->nr_writers_queued)
     klee_thread_notify_one(rwdata->wlist_writers);
