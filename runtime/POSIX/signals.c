@@ -310,11 +310,6 @@ int sigaction(int signum, const struct sigaction *act,
   return result;
 }
 
-DEFINE_MODEL(int, sigaction, int signum, const struct sigaction *act,
-    struct sigaction *oldact) {
-	return sigaction(signum, act, oldact);
-}
-
 int kill(int pid, int signum) {
 
   proc_data_t *pdata = &__pdata[PID_TO_INDEX(pid)];
