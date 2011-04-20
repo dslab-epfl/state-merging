@@ -25,7 +25,7 @@ int kill(pid_t pid, int sig) {
   errno = EPERM;
   return -1;
 }
-*/
+ */
 
 int _setjmp (struct __jmp_buf_tag __env[1]) __attribute__((weak));
 int _setjmp (struct __jmp_buf_tag __env[1]) {

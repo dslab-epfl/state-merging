@@ -28,7 +28,7 @@
  *
  * All contributors are listed in CLOUD9-AUTHORS file.
  *
-*/
+ */
 
 #ifndef SOCKETS_H_
 #define SOCKETS_H_

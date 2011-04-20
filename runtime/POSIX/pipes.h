@@ -28,7 +28,7 @@
  *
  * All contributors are listed in CLOUD9-AUTHORS file.
  *
-*/
+ */
 
 #ifndef PIPES_H_
 #define PIPES_H_

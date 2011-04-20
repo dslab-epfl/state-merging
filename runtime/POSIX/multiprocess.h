@@ -28,7 +28,7 @@
  *
  * All contributors are listed in CLOUD9-AUTHORS file.
  *
-*/
+ */
 
 #ifndef THREADS_H_
 #define THREADS_H_

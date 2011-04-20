@@ -28,7 +28,7 @@
  *
  * All contributors are listed in CLOUD9-AUTHORS file.
  *
-*/
+ */
 
 #ifndef BUFFERS_H_
 #define BUFFERS_H_

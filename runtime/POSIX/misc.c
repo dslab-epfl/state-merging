@@ -28,7 +28,7 @@
  *
  * All contributors are listed in CLOUD9-AUTHORS file.
  *
-*/
+ */
 
 #include "misc.h"
 #include "models.h"

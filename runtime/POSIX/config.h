@@ -28,7 +28,7 @@
  *
  * All contributors are listed in CLOUD9-AUTHORS file.
  *
-*/
+ */
 
 #ifndef POSIX_CONFIG_H_
 #define POSIX_CONFIG_H_

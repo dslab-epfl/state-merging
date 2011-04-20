@@ -99,7 +99,7 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   return 0;
 }
 
-*/
+ */
 
 /* Not even worth warning about these */
 int fdatasync(int fd) __attribute__((weak));
