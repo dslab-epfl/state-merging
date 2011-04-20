@@ -42,12 +42,12 @@ void * work1 (void *arg)
     {
       do {
         pthread_rwlock_trywrlock (&cs0);
-      }while(errno != EAGAIN);
+      }while(errno != EBUSY);
       printf("work1: got write lock 0\n");
       globalX++;
       do {
         pthread_rwlock_tryrdlock (&cs1);
-      }while(errno != EAGAIN);
+      }while(errno != EBUSY);
       printf("work1: got read lock 1\n");
       globalY++;
     }
@@ -55,12 +55,12 @@ void * work1 (void *arg)
     {
       do {
         pthread_rwlock_trywrlock (&cs1);
-      }while(errno != EAGAIN);
+      }while(errno != EBUSY);
       printf("work1: got write lock 1\n");
       globalX++;
       do {
         pthread_rwlock_tryrdlock (&cs0);
-      }while(errno != EAGAIN);
+      }while(errno != EBUSY);
       printf("work1: got read lock 0\n");
       globalY++;
     }

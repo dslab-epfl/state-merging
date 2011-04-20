@@ -20,12 +20,12 @@ void * work0 (void *arg)
 {
   do {
     pthread_rwlock_trywrlock (&cs0);
-  }while(errno == EAGAIN);
+  }while(errno == EBUSY);
   printf("work0: got write lock 0\n");
   globalX++;
   do {
     pthread_rwlock_trywrlock (&cs0);
-  }while(errno == EAGAIN);
+  }while(errno == EBUSY);
   printf("work0: got write lock 0\n");
   globalY++;
   pthread_rwlock_unlock (&cs0);
