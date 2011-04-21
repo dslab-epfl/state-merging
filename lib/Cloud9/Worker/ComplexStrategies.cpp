@@ -41,7 +41,7 @@ namespace worker {
 ////////////////////////////////////////////////////////////////////////////////
 
 ComposedStrategy::ComposedStrategy(std::vector<StateSelectionStrategy*> &_underlying) : underlying(_underlying) {
-	assert(underlying.size() > 0);
+    assert(underlying.size() > 0);
 }
 
 ComposedStrategy::~ComposedStrategy() {
@@ -49,24 +49,24 @@ ComposedStrategy::~ComposedStrategy() {
 }
 
 void ComposedStrategy::onStateActivated(SymbolicState *state) {
-	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		StateSelectionStrategy *strat = *it;
-		strat->onStateActivated(state);
-	}
+    for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+        StateSelectionStrategy *strat = *it;
+        strat->onStateActivated(state);
+    }
 }
 
 void ComposedStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
-	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		StateSelectionStrategy *strat = *it;
-		strat->onStateUpdated(state, oldNode);
-	}
+    for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+        StateSelectionStrategy *strat = *it;
+        strat->onStateUpdated(state, oldNode);
+    }
 }
 
 void ComposedStrategy::onStateDeactivated(SymbolicState *state) {
-	for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
-		StateSelectionStrategy *strat = *it;
-		strat->onStateDeactivated(state);
-	}
+    for (strat_vector::iterator it = underlying.begin(); it != underlying.end(); it++) {
+        StateSelectionStrategy *strat = *it;
+        strat->onStateDeactivated(state);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,7 +75,7 @@ void ComposedStrategy::onStateDeactivated(SymbolicState *state) {
 
 
 TimeMultiplexedStrategy::TimeMultiplexedStrategy(std::vector<StateSelectionStrategy*> strategies) :
-	ComposedStrategy(strategies), position(0) {
+    ComposedStrategy(strategies), position(0) {
 
 }
 

@@ -44,25 +44,25 @@ namespace worker {
 
 class ComposedStrategy: public StateSelectionStrategy {
 protected:
-	typedef std::vector<StateSelectionStrategy*> strat_vector;
-	strat_vector underlying;
+    typedef std::vector<StateSelectionStrategy*> strat_vector;
+    strat_vector underlying;
 public:
-	ComposedStrategy(std::vector<StateSelectionStrategy*> &_underlying);
-	virtual ~ComposedStrategy();
+    ComposedStrategy(std::vector<StateSelectionStrategy*> &_underlying);
+    virtual ~ComposedStrategy();
 
-	virtual void onStateActivated(SymbolicState *state);
-	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
-	virtual void onStateDeactivated(SymbolicState *state);
+    virtual void onStateActivated(SymbolicState *state);
+    virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode);
+    virtual void onStateDeactivated(SymbolicState *state);
 };
 
 class TimeMultiplexedStrategy: public ComposedStrategy {
 private:
-	unsigned int position;
+    unsigned int position;
 public:
-	TimeMultiplexedStrategy(std::vector<StateSelectionStrategy*> strategies);
-	virtual ~TimeMultiplexedStrategy();
+    TimeMultiplexedStrategy(std::vector<StateSelectionStrategy*> strategies);
+    virtual ~TimeMultiplexedStrategy();
 
-	virtual SymbolicState* onNextStateSelection();
+    virtual SymbolicState* onNextStateSelection();
 };
 
 }

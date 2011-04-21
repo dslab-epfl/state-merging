@@ -53,7 +53,6 @@
 #include "cloud9/worker/ComplexStrategies.h"
 #include "cloud9/worker/OracleStrategy.h"
 #include "cloud9/worker/FIStrategy.h"
-#include "cloud9/worker/TargetedStrategy.h"
 #include "cloud9/worker/PartitioningStrategy.h"
 #include "cloud9/worker/LazyMergingStrategy.h"
 #include "cloud9/Logger.h"
@@ -127,9 +126,6 @@ cl::opt<bool> StratRandomPath("c9-job-random-path" , cl::desc("Use random path j
 cl::opt<bool> StratCovOpt("c9-job-cov-opt", cl::desc("Use coverage optimized job selection"));
 cl::opt<bool> StratOracle("c9-job-oracle", cl::desc("Use the almighty oracle"));
 cl::opt<bool> StratFaultInj("c9-job-fault-inj", cl::desc("Use fault injection"));
-cl::opt<bool> StratLimitedFlow("c9-job-lim-flow", cl::desc("Use limited states flow"));
-cl::opt<bool> StratPartitioning("c9-job-partitioning", cl::desc("Use state partitioning"));
-cl::opt<bool> StratLazyMerging("c9-job-lazy-merging", cl::desc("Use lazy state merging technique"));
 
 /* Other Settings *************************************************************/
 
@@ -472,10 +468,7 @@ StateSelectionStrategy *JobManager::createBaseStrategy() {
   StateSelectionStrategy *stateStrat = NULL;
 
   if (StratRandomPath) {
-    if (StratPartitioning)
-      stateStrat = new ClusteredRandomPathStrategy(tree);
-    else
-      stateStrat = new RandomPathStrategy(tree);
+    stateStrat = new RandomPathStrategy(tree);
   } else {
     stateStrat = new RandomStrategy();
   }
@@ -485,17 +478,11 @@ StateSelectionStrategy *JobManager::createBaseStrategy() {
     stateStrat = createCoverageOptimizedStrat(stateStrat);
   }
 
-  // Step 3: Check to see if we want lazy merging
-  if (StratLazyMerging) {
-    stateStrat = new LazyMergingStrategy(this, stateStrat);
-    batching = false;
-  }
-
   return stateStrat;
 }
 
 void JobManager::initStrategy() {
-  if (StratLazyMerging || StratOracle)
+  if (StratOracle)
     batching = false;
 
   if (StratOracle) {
@@ -506,13 +493,8 @@ void JobManager::initStrategy() {
 
   StateSelectionStrategy *stateStrat = NULL;
 
-  if (StratPartitioning) {
-    stateStrat = new PartitioningStrategy(this);
-    CLOUD9_INFO("Using the state partitioning strategy");
-  } else {
-    stateStrat = createBaseStrategy();
-    CLOUD9_INFO("Using the regular strategy stack");
-  }
+  stateStrat = createBaseStrategy();
+  CLOUD9_INFO("Using the regular strategy stack");
 
   selStrategy = new RandomJobFromStateStrategy(tree, stateStrat, this);
 }

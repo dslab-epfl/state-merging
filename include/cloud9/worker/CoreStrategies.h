@@ -61,22 +61,22 @@ class JobManager;
  */
 class JobSelectionStrategy {
 public:
-	JobSelectionStrategy() {};
-	virtual ~JobSelectionStrategy() {};
+    JobSelectionStrategy() {};
+    virtual ~JobSelectionStrategy() {};
 
 public:
-	virtual void onJobAdded(ExecutionJob *job) = 0;
-	virtual ExecutionJob* onNextJobSelection() = 0;
-	virtual ExecutionJob* onNextJobSelectionEx(bool &canBatch, uint32_t &batchDest) {
-	  return onNextJobSelection();
-	}
+    virtual void onJobAdded(ExecutionJob *job) = 0;
+    virtual ExecutionJob* onNextJobSelection() = 0;
+    virtual ExecutionJob* onNextJobSelectionEx(bool &canBatch, uint32_t &batchDest) {
+      return onNextJobSelection();
+    }
 
-	virtual void onRemovingJob(ExecutionJob *job) = 0;
+    virtual void onRemovingJob(ExecutionJob *job) = 0;
 
-	virtual void onStateActivated(SymbolicState *state) = 0;
-	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) = 0;
-	virtual void onStateDeactivated(SymbolicState *state) = 0;
-	virtual void onStateStepped(SymbolicState *state) = 0;
+    virtual void onStateActivated(SymbolicState *state) = 0;
+    virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) = 0;
+    virtual void onStateDeactivated(SymbolicState *state) = 0;
+    virtual void onStateStepped(SymbolicState *state) = 0;
 };
 
 class StateSelectionStrategy {
@@ -105,18 +105,18 @@ protected:
   ExecutionJob *selectJob(WorkerTree *tree, SymbolicState* state);
   virtual void dumpSymbolicTree(WorkerTree::Node *highlight);
 public:
-	BasicStrategy(JobManager *_jobManager) : jobManager(_jobManager) { }
-	virtual ~BasicStrategy() { }
+    BasicStrategy(JobManager *_jobManager) : jobManager(_jobManager) { }
+    virtual ~BasicStrategy() { }
 
 public:
-	virtual void onJobAdded(ExecutionJob *job) { }
-	virtual ExecutionJob* onNextJobSelection() = 0;
-	virtual void onRemovingJob(ExecutionJob *job) { }
+    virtual void onJobAdded(ExecutionJob *job) { }
+    virtual ExecutionJob* onNextJobSelection() = 0;
+    virtual void onRemovingJob(ExecutionJob *job) { }
 
-	virtual void onStateActivated(SymbolicState *state) { }
-	virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { }
-	virtual void onStateDeactivated(SymbolicState *state) { }
-	virtual void onStateStepped(SymbolicState *state) { }
+    virtual void onStateActivated(SymbolicState *state) { }
+    virtual void onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) { }
+    virtual void onStateDeactivated(SymbolicState *state) { }
+    virtual void onStateStepped(SymbolicState *state) { }
 };
 
 class RandomJobFromStateStrategy: public BasicStrategy {
@@ -214,6 +214,7 @@ public:
         MinDistToUncovered,
         CoveringNew
       };
+
 public:
     WeightedRandomStrategy(WeightType _type, WorkerTree *_tree, SymbolicEngine *_engine);
     virtual ~WeightedRandomStrategy();

@@ -109,3 +109,4 @@ void OracleStrategy::onStateDeactivated(SymbolicState *state) {
 }
 
 }
+

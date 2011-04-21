@@ -266,7 +266,7 @@ KleeStrategy::KleeStrategy(WorkerTree *_tree) : tree(_tree), searcher(NULL) {
 }
 
 KleeStrategy::KleeStrategy(WorkerTree *_tree, klee::Searcher *_searcher) :
-		tree(_tree), searcher(_searcher) {
+        tree(_tree), searcher(_searcher) {
 
 }
 
@@ -275,21 +275,21 @@ KleeStrategy::~KleeStrategy() {
 }
 
 void KleeStrategy::onStateActivated(SymbolicState *state) {
-	std::set<klee::ExecutionState*> added;
-	added.insert(&(**state));
+    std::set<klee::ExecutionState*> added;
+    added.insert(&(**state));
 
-	searcher->update(NULL, added, std::set<klee::ExecutionState*>());
+    searcher->update(NULL, added, std::set<klee::ExecutionState*>());
 }
 
 void KleeStrategy::onStateUpdated(SymbolicState *state, WorkerTree::Node *oldNode) {
-	searcher->update(&(**state), std::set<klee::ExecutionState*>(), std::set<klee::ExecutionState*>());
+    searcher->update(&(**state), std::set<klee::ExecutionState*>(), std::set<klee::ExecutionState*>());
 }
 
 void KleeStrategy::onStateDeactivated(SymbolicState *state) {
-	std::set<klee::ExecutionState*> removed;
-	removed.insert(&(**state));
+    std::set<klee::ExecutionState*> removed;
+    removed.insert(&(**state));
 
-	searcher->update(NULL, std::set<klee::ExecutionState*>(), removed);
+    searcher->update(NULL, std::set<klee::ExecutionState*>(), removed);
 }
 
 SymbolicState* KleeStrategy::onNextStateSelection() {
@@ -308,19 +308,20 @@ SymbolicState* KleeStrategy::onNextStateSelection() {
 ////////////////////////////////////////////////////////////////////////////////
 
 WeightedRandomStrategy::WeightedRandomStrategy(WeightType _type,
-		WorkerTree *_tree, SymbolicEngine *_engine) : KleeStrategy(_tree) {
+        WorkerTree *_tree, SymbolicEngine *_engine) : KleeStrategy(_tree) {
 
-    klee::Executor *executor = dyn_cast<klee::Executor>(_engine); // XXX I should be ashamed of this
-	searcher = new WeightedRandomSearcher(*executor,
-			static_cast<klee::WeightedRandomSearcher::WeightType>(_type)); // XXX This is truly ugly
+    klee::Executor *executor = dynamic_cast<klee::Executor*>(_engine); // XXX I should be ashamed of this
+    searcher = new WeightedRandomSearcher(*executor,
+            static_cast<klee::WeightedRandomSearcher::WeightType>(_type)); // XXX This is truly ugly
 
 }
 
 WeightedRandomStrategy::~WeightedRandomStrategy() {
-	delete searcher;
+    delete searcher;
 }
 
 
 }
 
 }
+
