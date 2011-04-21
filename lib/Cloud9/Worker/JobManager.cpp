@@ -695,8 +695,10 @@ ExecutionJob* JobManager::selectNextJob(boost::unique_lock<boost::mutex> &lock,
   return job;
 }
 
+
 ExecutionJob* JobManager::selectNextJob(bool &canBatch, uint32_t &batchDest) {
   ExecutionJob *job = selStrategy->onNextJobSelectionEx(canBatch, batchDest);
+
   if (!StratOracle)
     assert(job != NULL || jobCount == 0);
 

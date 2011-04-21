@@ -248,7 +248,6 @@ public:
     return selStrategy;
   }
 
-
   StateSelectionStrategy *createBaseStrategy();
 
   bool mergeStates(SymbolicState* dest, SymbolicState *src);
