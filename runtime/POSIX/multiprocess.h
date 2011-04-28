@@ -37,6 +37,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
+#include <klee/klee.h>
 
 #include "common.h"
 #include "signals.h"
@@ -76,10 +77,12 @@ typedef struct {
 
   char allocated;
   char terminated;
+#ifdef HAVE_POSIX_SIGNALS
   char signaled;
   sigset_t blocked;
   struct sighand_struct *sighand;
   struct sigpending pending;
+#endif
 } proc_data_t;
 
 extern proc_data_t __pdata[MAX_PROCESSES];
@@ -100,8 +103,6 @@ typedef struct {
 } sem_set_t;
 
 extern sem_set_t __sems[MAX_SEMAPHORES];
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Process Specific Data Structures
@@ -161,5 +162,42 @@ extern tsync_data_t __tsync;
 void klee_init_processes(void);
 void klee_init_threads(void);
 
+/*
+ * Wrapper over the klee_thread_preempt() call.
+ * This is done to simulate checking for received
+ * signals when being first planned.
+ */
+static inline void __thread_preempt(int yield) {
+  klee_thread_preempt(yield);
+#ifdef HAVE_POSIX_SIGNALS
+  if((&__pdata[PID_TO_INDEX(getpid())])->signaled)
+      __handle_signal();
+#endif
+}
+
+/*
+ * Wrapper over the klee_thread_sleep() call.
+ * This is done to simulate checking for received
+ * signals when being first planned.
+ */
+static inline void __thread_sleep(uint64_t wlist) {
+  klee_thread_sleep(wlist);
+#ifdef HAVE_POSIX_SIGNALS
+  if((&__pdata[PID_TO_INDEX(getpid())])->signaled)
+      __handle_signal();
+#endif
+}
+
+static inline void __thread_notify(uint64_t wlist, int all) {
+  klee_thread_notify(wlist, all);
+}
+
+static inline void __thread_notify_one(uint64_t wlist) {
+  __thread_notify(wlist, 0);
+}
+
+static inline void __thread_notify_all(uint64_t wlist) {
+  __thread_notify(wlist, 1);
+}
 
 #endif /* THREADS_H_ */

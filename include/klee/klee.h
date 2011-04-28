@@ -173,14 +173,6 @@ extern "C" {
 
   void klee_thread_notify(uint64_t wlist, int all);
 
-  static inline void klee_thread_notify_one(uint64_t wlist) {
-    klee_thread_notify(wlist, 0);
-  }
-
-  static inline void klee_thread_notify_all(uint64_t wlist) {
-    klee_thread_notify(wlist, 1);
-  }
-
   //////////////////////////////////////////////////////////////////////////////
   // Misc
   //////////////////////////////////////////////////////////////////////////////

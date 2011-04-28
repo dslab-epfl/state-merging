@@ -30,6 +30,8 @@
  *
  */
 
+#ifdef HAVE_POSIX_SIGNALS
+
 #include "multiprocess.h"
 #include "models.h"
 
@@ -211,28 +213,6 @@ void __handle_signal() {
 
 } 
 
-/*
- * Wrapper over the klee_thread_preempt() call.
- * This is done to simulate checking for received
- * signals when being first planned.
- */
-void __klee_thread_preempt(int yield) {
-  klee_thread_preempt(yield);
-  if((&__pdata[PID_TO_INDEX(getpid())])->signaled)
-      __handle_signal();
-}
-
-/*
- * Wrapper over the klee_thread_sleep() call.
- * This is done to simulate checking for received
- * signals when being first planned.
- */
-void __klee_thread_sleep(uint64_t wlist) {
-  klee_thread_sleep(wlist);
-  if((&__pdata[PID_TO_INDEX(getpid())])->signaled)
-      __handle_signal();
-}
-
 void klee_init_signals() {
   proc_data_t *pdata = &__pdata[PID_TO_INDEX(getpid())];
 
@@ -374,3 +354,5 @@ unsigned int alarm(unsigned int seconds) {
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   return 0;
 }
+
+#endif /* HAVE_POSIX_SIGNALS */

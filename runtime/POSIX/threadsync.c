@@ -91,7 +91,7 @@ static int _atomic_mutex_lock(mutex_data_t *mdata, char try) {
       return -1;
     } else {
       mdata->queued++;
-      __klee_thread_sleep(mdata->wlist);
+      __thread_sleep(mdata->wlist);
       mdata->queued--;
     }
   }
@@ -107,7 +107,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
   int res = _atomic_mutex_lock(mdata, 0);
 
   if (res == 0)
-    __klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -118,7 +118,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   int res = _atomic_mutex_lock(mdata, 1);
 
   if (res == 0)
-    __klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -132,7 +132,7 @@ static int _atomic_mutex_unlock(mutex_data_t *mdata) {
   mdata->taken = 0;
 
   if (mdata->queued > 0)
-    klee_thread_notify_one(mdata->wlist);
+    __thread_notify_one(mdata->wlist);
 
   return 0;
 }
@@ -142,7 +142,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 
   int res = _atomic_mutex_unlock(mdata);
 
-  __klee_thread_preempt(0);
+  __thread_preempt(0);
 
   return res;
 }
@@ -212,7 +212,7 @@ static int _atomic_cond_wait(condvar_data_t *cdata, mutex_data_t *mdata) {
   }
 
   cdata->queued++;
-  __klee_thread_sleep(cdata->wlist);
+  __thread_sleep(cdata->wlist);
   cdata->queued--;
 
   if (_atomic_mutex_lock(mdata, 0) != 0) {
@@ -230,7 +230,7 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
   int res = _atomic_cond_wait(cdata, mdata);
 
   if (res == 0)
-    __klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -238,9 +238,9 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 static int _atomic_cond_notify(condvar_data_t *cdata, char all) {
   if (cdata->queued > 0) {
     if (all)
-      klee_thread_notify_all(cdata->wlist);
+      __thread_notify_all(cdata->wlist);
     else
-      klee_thread_notify_one(cdata->wlist);
+      __thread_notify_one(cdata->wlist);
   }
 
   return 0;
@@ -252,7 +252,7 @@ int pthread_cond_broadcast(pthread_cond_t *cond) {
   int res = _atomic_cond_notify(cdata, 1);
 
   if (res == 0)
-    __klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -263,7 +263,7 @@ int pthread_cond_signal(pthread_cond_t *cond) {
   int res = _atomic_cond_notify(cdata, 0);
 
   if (res == 0)
-    __klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -329,12 +329,12 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
     ++bdata->curr_event;
     bdata->left = bdata->init_count;
 
-    klee_thread_notify_all(bdata->wlist);
+    __thread_notify_all(bdata->wlist);
 
     result = PTHREAD_BARRIER_SERIAL_THREAD;
   }
   else {
-    klee_thread_sleep(bdata->wlist);
+    __thread_sleep(bdata->wlist);
   }
 
   return result;
@@ -412,7 +412,7 @@ static int _atomic_rwlock_rdlock(rwlock_data_t *rwdata, char try) {
       return -1;
     }
 
-    klee_thread_sleep(rwdata->wlist_readers);
+    __thread_sleep(rwdata->wlist_readers);
     ++rwdata->nr_readers;
     --rwdata->nr_readers_queued;
   }
@@ -426,7 +426,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock) {
   int res = _atomic_rwlock_rdlock(rwdata, 0);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -437,7 +437,7 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock) {
   int res = _atomic_rwlock_rdlock(rwdata, 1);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -464,7 +464,7 @@ static int _atomic_rwlock_wrlock(rwlock_data_t *rwdata, char try) {
       return -1;
     }
 
-    klee_thread_sleep(rwdata->wlist_writers);
+    __thread_sleep(rwdata->wlist_writers);
     rwdata->writer = pthread_self();
     --rwdata->nr_writers_queued;
   }
@@ -478,7 +478,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock) {
   int res = _atomic_rwlock_wrlock(rwdata, 0);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -489,7 +489,7 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock) {
   int res = _atomic_rwlock_wrlock(rwdata, 1);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }
@@ -508,10 +508,10 @@ static int _atomic_rwlock_unlock(rwlock_data_t *rwdata) {
   }
 
   if (rwdata->nr_readers == 0 && rwdata->nr_writers_queued)
-    klee_thread_notify_one(rwdata->wlist_writers);
+    __thread_notify_one(rwdata->wlist_writers);
   else {
     if (rwdata->nr_readers_queued > 0)
-      klee_thread_notify_all(rwdata->wlist_readers);
+      __thread_notify_all(rwdata->wlist_readers);
   }
 
   return 0;
@@ -523,7 +523,7 @@ int pthread_rwlock_unlock(pthread_rwlock_t *rwlock) {
   int res = _atomic_rwlock_unlock(rwdata);
 
   if (res == 0)
-    klee_thread_preempt(0);
+    __thread_preempt(0);
 
   return res;
 }

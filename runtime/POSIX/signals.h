@@ -30,6 +30,8 @@
  *
  */
 
+#ifdef HAVE_POSIX_SIGNALS
+
 #include <signal.h>
 #include <stdint.h>
 
@@ -171,8 +173,6 @@ struct sighand_struct {
 };
 
 void __handle_signal();
-void __klee_thread_preempt(int yield); 
-void __klee_thread_sleep(uint64_t wlist); 
 void klee_init_signals();
 
 int __syscall_rt_sigaction(int signum, const struct k_sigaction *act,
@@ -193,3 +193,5 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
      __attribute__((weak));
 
 #endif /* SIGNALS_H_ */
+
+#endif /* HAVE_POSIX_SIGNALS */

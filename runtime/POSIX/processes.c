@@ -89,11 +89,11 @@ void _exit(int status) {
   proc_data_t *pdata = &__pdata[PID_TO_INDEX(pid)];
   pdata->terminated = 1;
   pdata->ret_value = status;
-  klee_thread_notify_all(pdata->wlist);
+  __thread_notify_all(pdata->wlist);
 
   if (pdata->parent != DEFAULT_PARENT) {
     proc_data_t *ppdata = &__pdata[PID_TO_INDEX(pdata->parent)];
-    klee_thread_notify_all(ppdata->children_wlist);
+    __thread_notify_all(ppdata->children_wlist);
   }
 
   klee_process_terminate();
@@ -121,12 +121,14 @@ pid_t fork(void) {
   pdata->parent = getpid();
   pdata->umask = ppdata->umask;
 
+#ifdef HAVE_POSIX_SIGNALS
   /* Clone necessary signal info.*/
   pdata->signaled = 0;
   INIT_LIST_HEAD(&pdata->pending.list);
   sigemptyset(&pdata->blocked);
   pdata->sighand = calloc(1, sizeof(struct sighand_struct));
   memcpy(&pdata->sighand->action, &ppdata->sighand->action, sizeof(pdata->sighand->action));
+#endif
 
   fd_entry_t shadow_fdt[MAX_FDS];
 
@@ -139,12 +141,14 @@ pid_t fork(void) {
   if (res == 0) {
     // We're in the child. Re-initialize the threading structures
     klee_init_threads();
+#ifdef HAVE_POSIX_SIGNALS
     /*
      * The child is always scheduled after the parent.
      * During this time it may have been signaled.
      */
     if(pdata->signaled)
       __handle_signal();
+#endif
   } else {
     memcpy(__fdt, shadow_fdt, sizeof(__fdt));
   }
@@ -215,7 +219,7 @@ pid_t waitpid(pid_t pid, int *status, int options) {
       if (WNOHANG & options)
         return 0;
 
-      __klee_thread_sleep(__pdata[PID_TO_INDEX(ppid)].children_wlist);
+      __thread_sleep(__pdata[PID_TO_INDEX(ppid)].children_wlist);
 
     } while (1);
 
@@ -238,7 +242,7 @@ pid_t waitpid(pid_t pid, int *status, int options) {
       if (WNOHANG & options)
         return 0;
 
-      __klee_thread_sleep(pdata->wlist);
+      __thread_sleep(pdata->wlist);
     }
   }
 

@@ -89,7 +89,7 @@ void pthread_exit(void *value_ptr) {
     tdata->terminated = 1;
     tdata->ret_value = value_ptr;
 
-    klee_thread_notify_all(tdata->wlist);
+    __thread_notify_all(tdata->wlist);
   } else {
     STATIC_LIST_CLEAR(__tsync.threads, idx);
   }
@@ -122,7 +122,7 @@ int pthread_join(pthread_t thread, void **value_ptr) {
   }
 
   if (!tdata->terminated)
-    __klee_thread_sleep(tdata->wlist);
+    __thread_sleep(tdata->wlist);
 
   if (value_ptr) {
     *value_ptr = tdata->ret_value;

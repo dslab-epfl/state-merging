@@ -86,7 +86,7 @@ void _event_queue_notify(event_queue_t *q) {
   unsigned i;
   for (i = 0; i < q->count; i++) {
     if (q->queue[i] > 0)
-      klee_thread_notify_all(q->queue[i]);
+      __thread_notify_all(q->queue[i]);
   }
 
   memset(q->queue, 0, q->count*sizeof(wlist_id_t));
@@ -98,10 +98,10 @@ void _event_queue_notify(event_queue_t *q) {
 
 void __notify_event(stream_buffer_t *buff, char event) {
   if (event & EVENT_READ)
-    klee_thread_notify_all(buff->empty_wlist);
+    __thread_notify_all(buff->empty_wlist);
 
   if (event & EVENT_WRITE)
-    klee_thread_notify_all(buff->full_wlist);
+    __thread_notify_all(buff->full_wlist);
 
   _event_queue_notify(&buff->evt_queue);
 }
@@ -156,7 +156,7 @@ ssize_t _stream_read(stream_buffer_t *buff, char *dest, size_t count) {
     }
 
     buff->queued++;
-    __klee_thread_sleep(buff->empty_wlist);
+    __thread_sleep(buff->empty_wlist);
     buff->queued--;
 
     if (buff->status & BUFFER_STATUS_DESTROYING) {
@@ -207,7 +207,7 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
 
   while (buff->size == buff->max_size) {
     buff->queued++;
-    __klee_thread_sleep(buff->full_wlist);
+    __thread_sleep(buff->full_wlist);
     buff->queued--;
 
     if (buff->status & BUFFER_STATUS_DESTROYING) {

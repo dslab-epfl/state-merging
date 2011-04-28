@@ -39,8 +39,10 @@
 void klee_warning(const char*);
 void klee_warning_once(const char*);
 
+#ifndef HAVE_POSIX_SIGNALS
+
 /* Silent ignore */
-/*
+
 int __syscall_rt_sigaction(int signum, const struct sigaction *act, 
                            struct sigaction *oldact, size_t _something)
      __attribute__((weak));
@@ -99,7 +101,7 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   return 0;
 }
 
- */
+#endif /* HAVE_POSIX_SIGNALS */
 
 /* Not even worth warning about these */
 int fdatasync(int fd) __attribute__((weak));

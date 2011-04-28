@@ -304,7 +304,7 @@ int _close_socket(socket_t *sock) {
 
       } else {
         assert(remote->conn_wlist > 0);
-        klee_thread_notify_all(remote->conn_wlist);
+        __thread_notify_all(remote->conn_wlist);
 
         _event_queue_notify(remote->conn_evt_queue);
         _event_queue_finalize(remote->conn_evt_queue);
@@ -325,7 +325,7 @@ int _close_socket(socket_t *sock) {
   if (sock->status == SOCK_STATUS_CONNECTING) {
     assert(sock->conn_wlist > 0);
 
-    klee_thread_notify_all(sock->conn_wlist);
+    __thread_notify_all(sock->conn_wlist);
     _event_queue_notify(sock->conn_evt_queue);
 
     _event_queue_finalize(sock->conn_evt_queue);
@@ -1098,7 +1098,7 @@ static int _stream_connect(socket_t *sock, const struct sockaddr *addr, socklen_
 
   // ... and we wait for a notification
   sock->__bdata.queued++;
-  __klee_thread_sleep(sock->conn_wlist);
+  __thread_sleep(sock->conn_wlist);
   sock->__bdata.queued--;
 
   if (sock->status == SOCK_STATUS_CLOSING) {
@@ -1193,7 +1193,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   assert(remote->status == SOCK_STATUS_CONNECTING);
   assert(remote->conn_wlist > 0);
 
-  klee_thread_notify_all(remote->conn_wlist);
+  __thread_notify_all(remote->conn_wlist);
   _event_queue_notify(remote->conn_evt_queue);
   remote->conn_wlist = 0;
   _event_queue_finalize(remote->conn_evt_queue);

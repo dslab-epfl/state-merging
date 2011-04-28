@@ -66,7 +66,10 @@ void klee_init_processes(void) {
 
   klee_init_threads();
 
+#ifdef HAVE_POSIX_SIGNALS
   klee_init_signals();
+#endif
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
