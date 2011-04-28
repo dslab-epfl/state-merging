@@ -30,10 +30,12 @@
  *
  */
 
-#ifdef HAVE_POSIX_SIGNALS
+#include "common.h"
 
 #include <signal.h>
 #include <stdint.h>
+
+#ifdef HAVE_POSIX_SIGNALS
 
 #ifndef SIGNALS_H_
 #define SIGNALS_H_

@@ -30,8 +30,6 @@
  *
  */
 
-#ifdef HAVE_POSIX_SIGNALS
-
 #include "multiprocess.h"
 #include "models.h"
 
@@ -47,6 +45,8 @@
 #include <signal.h>
 
 #include <klee/klee.h>
+
+#ifdef HAVE_POSIX_SIGNALS
 
 ////////////////////////////////////////////////////////////////////////////////
 // Internal routines
@@ -166,7 +166,7 @@ int get_signal_to_deliver(siginfo_t *info, struct k_sigaction *return_ka) {
     }
 
     /* We got here, it means we have to exit. */
-    exit(info->si_signo);
+    _exit(info->si_signo);
 
   }
   return signum;
