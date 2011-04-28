@@ -317,17 +317,19 @@ ul.auto-toc {
 <div class="document" id="installing-cloud9">
 <h1 class="title">Installing Cloud9</h1>
 
-<p>In order to install Cloud9, you need to perform the following steps (we assume an Ubuntu 10.10 x64 setup):</p>
+<p>In order to install Cloud9, you need to perform the steps presented in the following sections (we assume an Ubuntu 10.10 x64 setup).</p>
 <div class="section" id="building-llvm">
 <h1>Building LLVM</h1>
-<p>Cloud9 requires LLVM 2.6. You should first download the GCC front-end <a class="reference external" href="http://llvm.org/releases/2.6/llvm-gcc-4.2-2.6-x86_64-linux.tar.gz">binaries</a>, and make sure your $PATH variable points to the bin/ directory of the binaries distribution.</p>
-<p>Then download the LLVM 2.6 <a class="reference external" href="http://llvm.org/releases/2.6/llvm-2.6.tar.gz">source</a>, run <cite>./configure --enable-optimized</cite>, then <cite>make -jN</cite>, where N is the number of available cores on the machine (for speeding up the build process).</p>
+<p>Cloud9 requires LLVM 2.6. You should first download the GCC front-end <a class="reference external" href="http://llvm.org/releases/2.6/llvm-gcc-4.2-2.6-x86_64-linux.tar.gz">binaries</a>, and make sure your $PATH variable points to the bin/ directory of the binaries distribution.  For convenience, you may make this setup permanent by adding it to your <cite>~/.profile</cite> configuration file.</p>
+<p>Then download the LLVM 2.6 <a class="reference external" href="http://llvm.org/releases/2.6/llvm-2.6.tar.gz">source</a>, run <cite>./configure --enable-optimized</cite>, then <cite>make -jN</cite>, where N is the number of available cores on the machine (for speeding up the build process).  Add then the resulting Release/bin directory to your $PATH.</p>
 </div>
 <div class="section" id="building-the-klee-c-library">
 <h1>Building The Klee C Library</h1>
+<p>Cloud9 relies on a modified Klee C Library (uClibc) to provide the API implementation for the POSIX interface that doesn't need a model.  You should download our custom <a class="reference external" href="http://example.com">uClibc</a> library, then run <cite>./configure --with-llvm=&lt;Your LLVM Path&gt;</cite>.  Finally, run <cite>make</cite> and check that the lib/libc.a file is correctly generated (run <cite>llvm-nm lib/libc.a</cite> to see the LLVM symbols listing).</p>
 </div>
 <div class="section" id="building-cloud9">
 <h1>Building Cloud9</h1>
+<p>Now it's time to build the actual Cloud9 codebase. Clone the Cloud9 Git repository or download the latest release archive, and then run the configuration script: <cite>./configure --with-llvm=&lt;Your LLVM Path&gt; --with-uclibc=&lt;The uClibc Path&gt; --enable-posix-runtime --enable-optimized</cite>, then run <cite>make</cite>. You should see towards the end of the compilation process that the klee, c9-worker and c9-lb binaries are generated as a result of the compilation.</p>
 </div>
 </div>
 </body>
