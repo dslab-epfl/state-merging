@@ -24,6 +24,7 @@
 #include <syslog.h>
 
 #include "klee/Config/config.h"
+#include "common.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
