@@ -22,7 +22,6 @@ Building Cloud9
 Now it's time to build the actual Cloud9 codebase. Clone the Cloud9 Git repository or download the latest release archive, and then run the configuration script: `./configure --with-llvm=<Your LLVM Path> --with-uclibc=<The uClibc Path> --enable-posix-runtime --enable-optimized`, then run `make`. You should see towards the end of the compilation process that the klee, c9-worker and c9-lb binaries are generated as a result of the compilation.
 
 
-
 .. _binaries: http://llvm.org/releases/2.6/llvm-gcc-4.2-2.6-x86_64-linux.tar.gz
 .. _source: http://llvm.org/releases/2.6/llvm-2.6.tar.gz
-.. _uClibc: http://example.com
+.. _uClibc: https://cloud9.epfl.ch/attachments/download/108/klee-c9-uclibc.tar.gz

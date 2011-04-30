@@ -3,13 +3,13 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta name="generator" content="Docutils 0.8: http://docutils.sourceforge.net/" />
+<meta name="generator" content="Docutils 0.6: http://docutils.sourceforge.net/" />
 <title>Installing Cloud9</title>
 <style type="text/css">
 
 /*
 :Author: David Goodger (goodger@python.org)
-:Id: $Id: html4css1.css 6387 2010-08-13 12:23:41Z milde $
+:Id: $Id: html4css1.css 5951 2009-05-18 18:03:10Z milde $
 :Copyright: This stylesheet has been placed in the public domain.
 
 Default cascading style sheet for the HTML output of Docutils.
@@ -46,10 +46,6 @@ blockquote.epigraph {
 
 dl.docutils dd {
   margin-bottom: 0.5em }
-
-object[type="image/svg+xml"], object[type="application/x-shockwave-flash"] {
-  overflow: hidden;
-}
 
 /* Uncomment (and remove this text!) to get bold-faced definition list terms
 dl.docutils dt {
@@ -161,21 +157,15 @@ h2.subtitle {
 hr.docutils {
   width: 75% }
 
-img.align-left, .figure.align-left, object.align-left {
+img.align-left, .figure.align-left{
   clear: left ;
   float: left ;
   margin-right: 1em }
 
-img.align-right, .figure.align-right, object.align-right {
+img.align-right, .figure.align-right {
   clear: right ;
   float: right ;
   margin-left: 1em }
-
-img.align-center, .figure.align-center, object.align-center {
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
-}
 
 .align-left {
   text-align: left }
@@ -325,7 +315,7 @@ ul.auto-toc {
 </div>
 <div class="section" id="building-the-klee-c-library">
 <h1>Building The Klee C Library</h1>
-<p>Cloud9 relies on a modified Klee C Library (uClibc) to provide the API implementation for the POSIX interface that doesn't need a model.  You should download our custom <a class="reference external" href="http://example.com">uClibc</a> library, then run <cite>./configure --with-llvm=&lt;Your LLVM Path&gt;</cite>.  Finally, run <cite>make</cite> and check that the lib/libc.a file is correctly generated (run <cite>llvm-nm lib/libc.a</cite> to see the LLVM symbols listing).</p>
+<p>Cloud9 relies on a modified Klee C Library (uClibc) to provide the API implementation for the POSIX interface that doesn't need a model.  You should download our custom <a class="reference external" href="https://cloud9.epfl.ch/attachments/download/108/klee-c9-uclibc.tar.gz">uClibc</a> library, then run <cite>./configure --with-llvm=&lt;Your LLVM Path&gt;</cite>.  Finally, run <cite>make</cite> and check that the lib/libc.a file is correctly generated (run <cite>llvm-nm lib/libc.a</cite> to see the LLVM symbols listing).</p>
 </div>
 <div class="section" id="building-cloud9">
 <h1>Building Cloud9</h1>
