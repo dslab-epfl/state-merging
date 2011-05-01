@@ -4,7 +4,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="Docutils 0.8: http://docutils.sourceforge.net/" />
-<title>Cloud9 User Guide</title>
+<title>Testing Complex Multi-Threaded Programs</title>
 <style type="text/css">
 
 /*
@@ -314,21 +314,27 @@ ul.auto-toc {
 </style>
 </head>
 <body>
-<div class="document" id="cloud9-user-guide">
-<h1 class="title">Cloud9 User Guide</h1>
+<div class="document" id="testing-complex-multi-threaded-programs">
+<h1 class="title">Testing Complex Multi-Threaded Programs</h1>
 
-<ul class="simple">
-<li>Installation<ol class="arabic">
-<li><a class="reference external" href="Prerequisites.html">Cloud9 Prerequisites</a></li>
-<li><a class="reference external" href="Installation.html">Installing Cloud9</a></li>
-</ol>
+<p>Cloud9 can symbolically execute programs that make complex use of their operating system environment, including spawning multiple threads, forking processes, or communicating over the network.  If you are already familiar with Klee, Cloud9 also provides an enhanced version of Klee, equipped with the POSIX model necessary to run such programs.</p>
+<p>In the <cite>examples/</cite> directory, you can find programs that exercise various aspects of the POSIX environment.  In particular, <cite>examples/prod-cons</cite> contains an implementation of a distributed producer-consumer system, where multiple client producer processes connect over the network to a central consumer server.  The server spawns multiple threads to handle client connections, and also maintains a pool of threads that execute consumer routines.  Pthread-specific synchronization API is used inside the server.</p>
+<p>To run these examples or any other program, you have multiple options:</p>
+<ol class="arabic">
+<li><p class="first">Run the fully-fledged Cloud9 on a cluster of nodes (see the next section for info on how to use the provided cluster infrastructure scripts).</p>
 </li>
-<li>Getting Started<ol class="arabic">
-<li><a class="reference external" href="TestingMultithreaded.html">Testing Complex Multi-Threaded Programs</a></li>
-<li><a class="reference external" href="RunningInCluster.html">Running Cloud9 in a Cluster</a></li>
-</ol>
+<li><p class="first">Run a single Cloud9 worker in stand-alone mode (the <cite>--stand-alone</cite> flag). For instance, in order to run the examples/prod-cons/cs1.c (compiled in cs1.bc), one should run:</p>
+<pre class="literal-block">
+c9-worker --stand-alone --posix-runtime --libc=uclibc examples/prod-cons/cs1.bc
+</pre>
 </li>
-</ul>
+<li><p class="first">Run the enhanced Klee:</p>
+<pre class="literal-block">
+klee --posix-runtime --libc=uclibc examples/prod-cons/cs1.bc
+</pre>
+</li>
+</ol>
+<p>From a functional perspective, 2. and 3. are equivalent when running Cloud9 in single-node.  However, the Cloud9 worker implementation uses different data structures to store the local execution tree and uses the Cloud9 search strategy interface, which provides a different set of strategies.</p>
 </div>
 </body>
 </html>

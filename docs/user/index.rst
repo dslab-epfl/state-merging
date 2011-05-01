@@ -9,5 +9,5 @@ Cloud9 User Guide
 
 * Getting Started
 
-  1. `Testing Complex Multi-threaded Programs <TestingMultithreaded.html>`_
+  1. `Testing Complex Multi-Threaded Programs <TestingMultithreaded.html>`_
   2. `Running Cloud9 in a Cluster <RunningInCluster.html>`_
