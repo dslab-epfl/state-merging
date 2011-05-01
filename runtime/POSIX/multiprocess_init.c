@@ -34,6 +34,7 @@
 #include "signals.h"
 
 #include "models.h"
+#include "common.h"
 
 #include <string.h>
 #include <klee/klee.h>
