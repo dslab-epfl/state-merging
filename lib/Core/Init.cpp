@@ -723,7 +723,9 @@ Module* loadByteCode() {
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                ec.message().c_str());
   }
-  mainModule = getLazyBitcodeModule(BufferPtr.take(), getGlobalContext(), &ErrorMsg);
+
+  mainModule = getLazyBitcodeModule(BufferPtr.get(), getGlobalContext(), &ErrorMsg);
+
 #endif
 #endif
   if (mainModule) {

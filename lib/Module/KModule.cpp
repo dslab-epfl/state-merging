@@ -774,7 +774,7 @@ KFunction::KFunction(llvm::Function *_function,
       else
         ki->isBBHead = false;
 
-      ki->inst = it;      
+      ki->inst = it;
       ki->dest = registerMap[it];
 
       if (isa<CallInst>(it) || isa<InvokeInst>(it)) {

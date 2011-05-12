@@ -78,7 +78,6 @@ private:
 
   Worker() : _wantsUpdates(false), _hasPartitions(false), nodesRevision(1),
       totalJobs(0), lastReportTime(0), transferReq(false) {
-
   }
 public:
   virtual ~Worker() {
