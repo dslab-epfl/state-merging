@@ -1,7 +1,7 @@
 // -*- c++ -*-
 #ifndef TESTKINDS_H
 #define TESTKINDS_H
-// Generated automatically by genkinds.pl from ASTKind.kinds Sun Apr  4 19:39:09 2010.
+// Generated automatically by genkinds.pl from ASTKind.kinds Mon May 16 15:23:21 2011.
 // Do not edit
 namespace BEEV {
   typedef enum {
@@ -58,7 +58,11 @@ namespace BEEV {
     WRITE,
     ARRAY,
     BITVECTOR,
+<<<<<<< HEAD
     BOOLEAN
+=======
+    BOOLEAN,
+>>>>>>> Added the missing ASTKind.* files.
 } Kind;
 
 extern unsigned char _kind_categories[];
