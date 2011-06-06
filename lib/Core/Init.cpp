@@ -724,7 +724,7 @@ Module* loadByteCode() {
                ec.message().c_str());
   }
 
-  mainModule = getLazyBitcodeModule(BufferPtr.get(), getGlobalContext(), &ErrorMsg);
+  mainModule = getLazyBitcodeModule(BufferPtr.take(), getGlobalContext(), &ErrorMsg);
 
 #endif
 #endif
