@@ -14,7 +14,7 @@
 
 #include <vector>
 #include <set>
-#include <cstdint>
+#include <tr1/cstdint>
 #include <map>
 
 namespace klee {

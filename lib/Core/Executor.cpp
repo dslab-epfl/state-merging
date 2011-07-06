@@ -58,7 +58,11 @@
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Process.h"
+#else
+#include "llvm/Support/Process.h"
+#endif
 #include "llvm/Target/TargetData.h"
 
 #include "cloud9/instrum/InstrumentationManager.h"
@@ -143,6 +147,18 @@ namespace {
   UseIndependentSolver("use-independent-solver",
                        cl::init(true),
 		       cl::desc("Use constraint independence"));
+
+  cl::opt<bool>
+  UseParallelSolver("use-parallel-solver",
+      cl::init(false), cl::desc("Use parallel solver"));
+
+  cl::opt<unsigned>
+  ParallelSubqueriesDelay("parallel-subq-delay",
+      cl::init(100), cl::desc("The delay in millisecs before the subqueries start to be computed"));
+
+  cl::opt<bool>
+  UseHLParallelSolver("use-hl-parallel-solver",
+      cl::init(false), cl::desc("Use high-level parallel solver"));
 
   cl::opt<bool>
   EmitAllErrors("emit-all-errors",
@@ -266,6 +282,31 @@ namespace {
 		 cl::desc("fork when various schedules are possible (defaul=disabled)"),
 		 cl::init(false));
 
+  cl::opt<bool>
+  DumpPTreeOnChange("dump-ptree-on-change",
+          cl::desc("Dump PTree each time it changes"),
+          cl::init(false));
+
+  cl::opt<bool>
+  KeepMergedDuplicates("keep-merged-duplicates",
+          cl::desc("Keep execuring merged states as duplicates"));
+
+  cl::opt<bool>
+  OutputConstraints("output-constraints",
+          cl::desc("Output path constratins for each explored state"),
+          cl::init(false));
+
+  /*
+  cl::opt<bool>
+  OutputForkedStatesConstraints("output-finished-states-constraints",
+          cl::desc("Output path constratins for each finished state"),
+          cl::init(false));
+  */
+
+  cl::opt<bool>
+  DebugMergeSlowdown("debug-merge-slowdown",
+          cl::desc("Debug slow-down of merged states"),
+          cl::init(false));
 }
 
 
@@ -282,6 +323,19 @@ Solver *constructSolverChain(STPSolver *stpSolver,
                              std::string queryPCLogPath,
                              std::string stpQueryPCLogPath) {
   Solver *solver = stpSolver;
+
+  if (UseParallelSolver) {
+    assert(!UseHLParallelSolver);
+    CLOUD9_DEBUG("Using the parallel solver...");
+    solver = createParallelSolver(4, ParallelSubqueriesDelay, STPOptimizeDivides, stpSolver);
+  }
+
+  if (UseHLParallelSolver) {
+    assert(!UseParallelSolver);
+    assert(UseForkedSTP && "HLParallelSolver requires --use-forked-stp!");
+    solver = createHLParallelSolver(solver, 0);
+  }
+
 
   if (UseSTPQueryPCLog)
     solver = createPCLoggingSolver(solver, 
@@ -334,7 +388,9 @@ Executor::Executor(const InterpreterOptions &opts,
 	       ? std::min(MaxSTPTime,MaxInstructionTime)
 	       : std::max(MaxSTPTime,MaxInstructionTime)) {
 
-  STPSolver *stpSolver = new STPSolver(UseForkedSTP, STPOptimizeDivides);
+  STPSolver *stpSolver = new STPSolver(UseForkedSTP || UseParallelSolver, STPOptimizeDivides,
+      !UseParallelSolver);
+
   Solver *solver = 
     constructSolverChain(stpSolver,
                          interpreterHandler->getOutputFilename("queries.qlog"),
@@ -346,6 +402,10 @@ Executor::Executor(const InterpreterOptions &opts,
 
   memory = new MemoryManager();
 
+  if (OutputConstraints) {
+    constraintsLog = interpreterHandler->openOutputFile("constraints.log");
+    assert(constraintsLog);
+  }
 }
 
 
@@ -623,6 +683,7 @@ void Executor::branch(ExecutionState &state,
   assert(N);
 
   stats::forks += N-1;
+  stats::forksMult += (N-1) * state.multiplicity;
 
   ForkTag tag = getForkTag(state, reason);
 
@@ -636,12 +697,15 @@ void Executor::branch(ExecutionState &state,
     result.push_back(ns);
     es->ptreeNode->data = 0;
     std::pair<PTree::Node*,PTree::Node*> res = 
-      processTree->split(es->ptreeNode, ns, es, tag);
+      processTree->split(es->ptreeNode, ns, es, conditions[i], tag);
     ns->ptreeNode = res.first;
     es->ptreeNode = res.second;
 
     fireStateBranched(ns, es, 0, tag);
   }
+
+  if(DumpPTreeOnChange)
+    dumpProcessTree();
 
   // If necessary redistribute seeds to match conditions, killing
   // states if necessary due to OnlyReplaySeeds (inefficient but
@@ -740,7 +804,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
   if (!success) {
-    current.pc() = current.prevPC();
+    current.setPC(current.prevPC());
     terminateStateEarly(current, "query timed out");
     return StatePair((klee::ExecutionState*)NULL, (klee::ExecutionState*)NULL);
   }
@@ -857,6 +921,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
     ExecutionState *falseState, *trueState = &current;
 
     ++stats::forks;
+    stats::forksMult += current.multiplicity;
 
     falseState = trueState->branch();
     addedStates.insert(falseState);
@@ -900,7 +965,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
 
     current.ptreeNode->data = 0;
     std::pair<PTree::Node*, PTree::Node*> res =
-      processTree->split(current.ptreeNode, falseState, trueState, tag);
+      processTree->split(current.ptreeNode, falseState, trueState, condition, tag);
     falseState->ptreeNode = res.first;
     trueState->ptreeNode = res.second;
 
@@ -908,6 +973,9 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal,
     	fireStateBranched(trueState, falseState, 1, tag);
     else
     	fireStateBranched(falseState, trueState, 0, tag);
+
+    if(DumpPTreeOnChange)
+      dumpProcessTree();
 
     if (!isInternal) {
       if (pathWriter) {
@@ -947,7 +1015,7 @@ Executor::fork(ExecutionState &current, int reason) {
 
   lastState->ptreeNode->data = 0;
   std::pair<PTree::Node*,PTree::Node*> res =
-   processTree->split(lastState->ptreeNode, newState, lastState, tag);
+   processTree->split(lastState->ptreeNode, newState, lastState, 0, tag);
   newState->ptreeNode = res.first;
   lastState->ptreeNode = res.second;
 
@@ -962,6 +1030,7 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
     return tag;
 
   tag.functionName = current.stack().back().kf->function->getNameStr();
+  tag.instrID = current.prevPC()->info->id;
 
   if (tag.forkClass == KLEE_FORK_FAULTINJ) {
     tag.fiVulnerable = false;
@@ -972,7 +1041,7 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
       if (!it->caller)
         continue;
 
-      KCallInstruction *callInst = dynamic_cast<KCallInstruction*>((KInstruction*)it->caller);
+      KCallInstruction *callInst = dyn_cast<KCallInstruction>((KInstruction*)it->caller);
       assert(callInst);
 
       if (callInst->vulnerable) {
@@ -983,6 +1052,58 @@ ForkTag Executor::getForkTag(ExecutionState &current, int reason) {
   }
 
   return tag;
+}
+
+void Executor::addDuplicates(ExecutionState *main, ExecutionState *other) {
+  assert(!other->isDuplicate);
+  if (other->duplicates.empty()) {
+    ExecutionState *dup = other->branch(true);
+    dup->isDuplicate = true;
+    dup->ptreeNode = processTree->duplicate(other->ptreeNode, dup);
+    dup->ptreeNode->active = false;
+    main->duplicates.insert(dup);
+  } else {
+    main->duplicates.insert(other->duplicates.begin(), other->duplicates.end());
+  }
+}
+
+ExecutionState* Executor::merge(ExecutionState &current, ExecutionState &other) {
+    WallTimer timer;
+
+    ExecutionState *merged = current.merge(other, KeepMergedDuplicates);
+    if (merged) {
+        if (!UseHLParallelSolver) {
+          // Merge conditions are useless in this case
+          merged->constraints().mergeConditions.clear();
+        }
+        if (KeepMergedDuplicates) {
+            addedStates.insert(merged);
+
+            current.ptreeNode->data = NULL;
+            other.ptreeNode->data = NULL;
+            merged->ptreeNode = processTree->mergeCopy(
+                    current.ptreeNode, other.ptreeNode, merged);
+
+            addDuplicates(merged, &current);
+            addDuplicates(merged, &other);
+
+        } else {
+            other.ptreeNode->data = NULL;
+            processTree->merge(current.ptreeNode, other.ptreeNode);
+        }
+        if(DumpPTreeOnChange)
+          dumpProcessTree();
+        //terminateState(other);
+        //updateStates(0);
+
+        stats::mergesSuccess += 1;
+        stats::mergeSuccessTime += timer.check();
+        return merged;
+    }
+
+    stats::mergesFail += 1;
+    stats::mergeFailTime += timer.check();
+    return NULL;
 }
 
 void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
@@ -1170,7 +1291,7 @@ void Executor::executeGetValue(ExecutionState &state,
   }
 }
 
-void Executor::stepInstruction(ExecutionState &state) {
+void Executor::stepInstruction(ExecutionState &state, bool trackInstr) {
   if (DebugPrintInstructions) {
     printFileLine(state, state.pc());
     std::cerr << std::setw(10) << stats::instructions << " ";
@@ -1180,9 +1301,17 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
-  ++stats::instructions;
-  state.prevPC() = state.pc();
-  ++state.pc();
+  if (trackInstr) {
+      ++stats::instructions;
+
+      uint64_t instructionsMultOld = stats::instructionsMult.getValue();
+      stats::instructionsMult += state.multiplicity;
+      if (stats::instructionsMult.getValue() < instructionsMultOld) // overflow
+        stats::instructionsMultHigh+=1;
+  }
+
+  state.setPrevPC(state.pc());
+  state.setPC(state.pc().next());
 
   if (stats::instructions==StopAfterNInstructions)
     haltExecution = true;
@@ -1272,7 +1401,7 @@ void Executor::executeCall(ExecutionState &state,
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC(), kf);
-    state.pc() = kf->instructions;
+    state.setPC(kf->instructions);
         
     if (statsTracker)
       statsTracker->framePushed(state, &state.stack()[state.stack().size()-2]); //XXX TODO fix this ugly stuff
@@ -1359,7 +1488,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // XXX this lookup has to go ?
   KFunction *kf = state.stack().back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
-  state.pc() = &kf->instructions[entry];
+  state.setPC(&kf->instructions[entry]);
   if (state.pc()->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(state.pc()->inst);
     state.crtThread().incomingBBIndex = first->getBasicBlockIndex(src);
@@ -1477,8 +1606,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
-        state.pc() = kcaller;
-        ++state.pc();
+        state.setPC(kcaller);
+        state.setPC(state.pc().next());
       }
 
       if (!isVoidReturn) {
@@ -2031,12 +2160,28 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
   case Instruction::Load: {
     ref<Expr> base = eval(ki, 0, state).value;
+    if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
+      base = state.constraints().simplifyExpr(base);
+      //if (!isa<ConstantExpr>(base))
+      //  base = toUnique(state, base);
+      int vnumber = ki->operands[0];
+      if (vnumber >= 0)
+        state.stack().back().locals[vnumber].value = base;
+    }
     executeMemoryOperation(state, false, base, 0, ki);
     break;
   }
   case Instruction::Store: {
     ref<Expr> base = eval(ki, 1, state).value;
     ref<Expr> value = eval(ki, 0, state).value;
+    if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
+      base = state.constraints().simplifyExpr(base);
+      //if (!isa<ConstantExpr>(base))
+      //  base = toUnique(state, base);
+      int vnumber = ki->operands[1];
+      if (vnumber >= 0)
+        state.stack().back().locals[vnumber].value = base;
+    }
     executeMemoryOperation(state, true, base, value, 0);
     break;
   }
@@ -2430,12 +2575,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
+    WallTimer searcherTimer;
     searcher->update(current, addedStates, removedStates);
+    stats::searcherTime += searcherTimer.check();
   }
   
   states.insert(addedStates.begin(), addedStates.end());
   addedStates.clear();
   
+  bool processTreeChanged = false;
   for (std::set<ExecutionState*>::iterator
          it = removedStates.begin(), ie = removedStates.end();
        it != ie; ++it) {
@@ -2447,9 +2595,15 @@ void Executor::updateStates(ExecutionState *current) {
       seedMap.find(es);
     if (it3 != seedMap.end())
       seedMap.erase(it3);
-    processTree->remove(es->ptreeNode);
+    if(es->ptreeNode->state != PTreeNode::MERGED) {
+      es->ptreeNode->data = NULL;
+      processTree->terminate(es->ptreeNode);
+      processTreeChanged = true;
+    }
     delete es;
   }
+  if(processTreeChanged && DumpPTreeOnChange)
+    dumpProcessTree();
   removedStates.clear();
 }
 
@@ -2516,19 +2670,211 @@ void Executor::bindModuleConstants() {
 }
 
 void Executor::stepInState(ExecutionState *state) {
-	fireControlFlowEvent(state, ::cloud9::worker::STEP);
+  assert(addedStates.count(state) == 0);
+
+  std::set<ExecutionState*> duplicates;
+  duplicates.swap(state->duplicates);
+  state->multiplicityExact = std::max(duplicates.size(), 1ul);
 
 	KInstruction *ki = state->pc();
-	stepInstruction(*state);
+	stepInstruction(*state, true);
 
 	//CLOUD9_DEBUG("Executing instruction: " << ki->info->assemblyLine);
 
-	resetTimers();
+  uint64_t executionTime = 0, duplicatesExecutionTime = 0;
+  resetTimers();
 
-	executeInstruction(*state, ki);
-	state->stateTime++; // Each instruction takes one unit of time
+  if (UseQueryPCLog)
+    setPCLoggingSolverStateID(solver->solver, uint64_t(state));
+  {
+    WallTimer timer;
+    state->lastResolveResult = 0;
+    executeInstruction(*state, ki);
+    executionTime = timer.check();
 
-	processTimers(state, MaxInstructionTime);
+    stats::executionTime += executionTime;
+    stats::instructionsMultExact += duplicates.size();
+    if (KeepMergedDuplicates && duplicates.empty()) {
+      duplicatesExecutionTime += executionTime;
+      stats::duplicatesExecutionTime += executionTime;
+      stats::forksMultExact += addedStates.size();
+      ++stats::instructionsMultExact;
+    }
+  }
+  if (UseQueryPCLog)
+    setPCLoggingSolverStateID(solver->solver, uint64_t(0));
+  state->stateTime++; // Each instruction takes one unit of time
+
+  processTimers(state, MaxInstructionTime);
+
+  if (KeepMergedDuplicates && !duplicates.empty()) {
+    //klee_warning(">>> Running duplicated states.\n");
+    bool stateIsTerminated = removedStates.count(state) != 0;
+
+    std::set<ExecutionState*> savedAddedStates;
+    savedAddedStates.swap(addedStates);
+
+    std::set<ExecutionState*> savedRemovedStates;
+    savedRemovedStates.swap(removedStates);
+
+    std::set<ExecutionState*> nextStates(savedAddedStates);
+    if (!stateIsTerminated)
+      nextStates.insert(state);
+
+    uint64_t forks = stats::forks.getValue();
+    uint64_t forksMult = stats::forksMult.getValue();
+
+    foreach (ExecutionState* state, nextStates)
+      state->multiplicityExact = 0;
+
+    foreach (ExecutionState* duplicate, duplicates) {
+      // Execute the same instruction in a duplicate state
+      assert(duplicate->isDuplicate);
+      //assert(/*stateIsTerminated || */duplicate->pc() == state->prevPC());
+      // XXX
+      if (duplicate->pc() != state->prevPC())
+        continue;
+      ki = duplicate->pc();
+      duplicate->setPrevPC(duplicate->pc());
+      duplicate->setPC(duplicate->pc().next());
+      if (UseQueryPCLog)
+        setPCLoggingSolverStateID(solver->solver, uint64_t(duplicate));
+      {
+        WallTimer timer;
+        duplicate->lastResolveResult = 0;
+        executeInstruction(*duplicate, ki);
+        uint64_t time = timer.check();
+        duplicatesExecutionTime += time;
+        stats::duplicatesExecutionTime += time;
+      }
+      if (UseQueryPCLog)
+        setPCLoggingSolverStateID(solver->solver, 0);
+      duplicate->stateTime++;
+
+      //assert(stats::forks.getValue() == forks + addedStates.size());
+      //assert(stats::forksMult.getValue() == forksMult + addedStates.size());
+
+      stats::forks += forks - stats::forks.getValue();
+      stats::forksMult += forksMult - stats::forksMult.getValue();
+
+      assert(stats::forks.getValue() == forks);
+      assert(stats::forksMult.getValue() == forksMult);
+
+      stats::forksMultExact += addedStates.size();
+
+      // Sort all next states into duplicates of the main state
+      if (removedStates.count(duplicate) == 0)
+        addedStates.insert(duplicate);
+
+      foreach (ExecutionState* addedState, addedStates) {
+        assert(removedStates.count(addedState) == 0);
+        bool found = false;
+
+        if (!nextStates.empty()) {
+          foreach (ExecutionState* nextMain, nextStates) {
+            bool match = false;
+            if (nextStates.size() > 1 &&
+                nextMain->ptreeNode->parent->forkTag.forkClass == KLEE_FORK_RESOLVE) {
+              match = nextMain->lastResolveResult == addedState->lastResolveResult;
+            } else {
+              match = nextMain->pc() == addedState->pc();
+            }
+
+            if (match) {
+              //assert(!found);
+              if (found) {
+                klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
+              }
+              found = true;
+              nextMain->duplicates.insert(addedState);
+              nextMain->multiplicityExact++;
+            }
+          }
+          //assert(found);
+          if (!found) {
+            klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
+            // These will be fixed later, when states will diverge
+            foreach (ExecutionState* nextMain, nextStates) {
+              nextMain->duplicates.insert(addedState);
+              nextMain->multiplicityExact++;
+            }
+          }
+        } else {
+          // delete addedState;
+        }
+          // It might happen that the main state were terminated (e.g., in case of timeout)
+      }
+
+      addedStates.clear();
+
+      foreach (ExecutionState* removedState, removedStates) {
+        assert(removedState == duplicate || duplicates.count(removedState) == 0);
+      }
+      //  delete removedState;
+      //}
+      removedStates.clear();
+    }
+
+    /*
+    foreach (ExecutionState* nextMain, nextStates) {
+      assert(!nextMain->duplicates.empty()
+             && nextMain->multiplicityExact == nextMain->duplicates.size());
+    }
+    */
+
+    addedStates.swap(savedAddedStates);
+    removedStates.swap(savedRemovedStates);
+
+    //klee_warning("<<< Finished running duplicated states.\n");
+  }
+
+  if (KeepMergedDuplicates && DebugMergeSlowdown &&
+      executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
+    klee_warning("Merged state is slow: %g instead of %g for individual states",
+                 executionTime / 1000000., duplicatesExecutionTime / 1000000.);
+    KInstruction *ki = (KInstruction*) state->prevPC();
+    std::cerr << "  " << duplicates.size() << " duplicares, "
+        << addedStates.size() << " added states" << std::endl;
+    std::cerr << "  At " << ki->info->file << ":"
+        << ki->info->line << std::endl;
+    uint64_t size = state->stack().size();
+    for (unsigned i = 1; i <= std::min(10ul, size); ++i) {
+      if (state->stack()[size-i].caller) {
+        std::cerr << "    " << state->stack()[size-i].caller->info->file
+            << ":" << state->stack()[size-i].caller->info->line << std::endl;
+      }
+    }
+    if (size > 10)
+      std::cerr << "    ..." << std::endl;
+    std::cerr << "  Instruction:" << std::endl << "    ";
+    ki->inst->dump();
+    if (isa<BranchInst>(ki->inst) || isa<SwitchInst>(ki->inst)) {
+      std::cerr << "  Branch condition in merged state:"<< std::endl << "    ";
+      eval(ki, 0, *state).value->dump();
+      std::cerr << "  Branch conditions in duplicates:" << std::endl;
+      foreach (ExecutionState *d, duplicates) {
+        std::cerr << "    ";
+        eval(ki, 0, *d).value->dump();
+      }
+    } else if (isa<LoadInst>(ki->inst)) {
+      std::cerr << "  Load address in merged state:"<< std::endl << "    ";
+      eval(ki, 0, *state).value->dump();
+      std::cerr << "  Load address in duplicates:" << std::endl;
+      foreach (ExecutionState *d, duplicates) {
+        std::cerr << "    ";
+        eval(ki, 0, *d).value->dump();
+      }
+    } else if (isa<StoreInst>(ki->inst)) {
+      std::cerr << "  Store address in merged state:"<< std::endl << "    ";
+      eval(ki, 1, *state).value->dump();
+      std::cerr << "  Store address in duplicates:" << std::endl;
+      foreach (ExecutionState *d, duplicates) {
+        std::cerr << "    ";
+        eval(ki, 1, *d).value->dump();
+      }
+    }
+    std::cerr << std::endl;
+  }
 
 	if (MaxMemory) {
 		if ((stats::instructions & 0xFFFF) == 0) {
@@ -2571,6 +2917,8 @@ void Executor::stepInState(ExecutionState *state) {
 		}
 	}
 
+	fireControlFlowEvent(state, ::cloud9::worker::STEP);
+
 	updateStates(state);
 }
 
@@ -2596,7 +2944,7 @@ void Executor::run(ExecutionState &initialState) {
       unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
       KInstruction *ki = state.pc();
-      stepInstruction(state);
+      stepInstruction(state, true);
 
       executeInstruction(state, ki);
       processTimers(&state, MaxInstructionTime * numSeeds);
@@ -2643,8 +2991,20 @@ void Executor::run(ExecutionState &initialState) {
 
   searcher->update(0, states, std::set<ExecutionState*>());
 
-  while (!states.empty() && !haltExecution) {
+  // Tell searcher about initial current state
+  searcher->update(&initialState, std::set<ExecutionState*>(),
+                   std::set<ExecutionState*>());
+
+  //while (!states.empty() && !haltExecution) {
+  while (!searcher->empty() && !haltExecution) {
+    assert(addedStates.empty() && removedStates.empty());
+
+    WallTimer searcherTimer;
     ExecutionState &state = searcher->selectState();
+    stats::searcherTime += searcherTimer.check();
+
+    if (!addedStates.empty())
+      updateStates(0);
 
     stepInState(&state);
   }
@@ -2659,7 +3019,7 @@ void Executor::run(ExecutionState &initialState) {
            it = states.begin(), ie = states.end();
          it != ie; ++it) {
       ExecutionState &state = **it;
-      stepInstruction(state); // keep stats rolling
+      stepInstruction(state, true); // keep stats rolling
       terminateStateEarly(state, "execution halting");
     }
     updateStates(0);
@@ -2723,11 +3083,31 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
 				"replay did not consume all objects in test input.");
 	}
 
-	interpreterHandler->incPathsExplored();
+  if (state.ptreeNode->state != PTreeNode::MERGED && !state.isDuplicate) {
+    interpreterHandler->incPathsExplored();
+    ++stats::paths;
+    stats::pathsMult += state.multiplicity;
+    stats::pathsMultExact += state.multiplicityExact;
+
+    if (OutputConstraints) {
+      (*constraintsLog) << "# STATE[";
+      (*constraintsLog) << "Instructions=" << stats::instructions
+                        << ",WallTime=" << statsTracker->elapsed()
+                        << ",ExecutionTime=" << stats::executionTime / 1000000.
+                        << ",Paths=" << stats::paths
+                        << ",PathsMult=" << stats::pathsMult
+                        << ",PathsMultExact=" << stats::pathsMultExact
+                        << ",StateMultiplicity=" << uint64_t(state.multiplicity)
+                        << ",StateMultiplicityExact=" << state.multiplicityExact
+                        << "]" << std::endl;
+      ExprPPrinter::printConstraints(*constraintsLog, state.constraints());
+      (*constraintsLog) << "# END_STATE" << std::endl << std::flush;
+    }
+  }
 
 	std::set<ExecutionState*>::iterator it = addedStates.find(&state);
 	if (it == addedStates.end()) {
-	  state.pc() = state.prevPC();
+      state.setPC(state.prevPC());
 
 	  removedStates.insert(&state);
 	} else {
@@ -2737,8 +3117,15 @@ bool Executor::terminateState(ExecutionState &state, bool silenced) {
 		if (it3 != seedMap.end())
 			seedMap.erase(it3);
 		addedStates.erase(it);
-		processTree->remove(state.ptreeNode);
-		delete &state;
+
+		if(state.ptreeNode->state != PTreeNode::MERGED) {
+		  state.ptreeNode->data = NULL;
+		  processTree->terminate(state.ptreeNode);
+		  if(DumpPTreeOnChange)
+		    dumpProcessTree();
+		}
+
+    delete &state;
 	}
 
 	return true;
@@ -3397,6 +3784,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
 
   if (success) {
     const MemoryObject *mo = op.first;
+    state.lastResolveResult = mo;
 
     if (MaxSymArraySize && mo->size>=MaxSymArraySize) {
       address = toConstant(state, address, "max-sym-array-size");
@@ -3411,7 +3799,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       inBounds);
     solver->setTimeout(0);
     if (!success) {
-      state.pc() = state.prevPC();
+      state.setPC(state.prevPC());
       terminateStateEarly(state, "query timed out");
       return;
     }
@@ -3425,11 +3813,25 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 "readonly.err");
         } else {
           ObjectState *wos = state.addressSpace().getWriteable(mo, os);
+          /*
+          if (!isa<ConstantExpr>(offset)) {
+            state.addressSpace().removeMergeBlacklistItemHash(mo, wos);
+          } else {
+            state.addressSpace().removeMergeBlacklistItemHash(mo, wos,
+                                                         offset, value->getWidth()/8);
+          }
+          */
+          state.updateMemoryValue(mo, wos, offset, value);
           wos->write(offset, value);
+          state.verifyBlacklistHash();
+          /*
+          state.addressSpace().addMergeBlacklistItemHash(mo, wos,
+                                                         offset, value->getWidth()/8);
+          */
 
-	}          
+  }
       } else {
-	ref<Expr> result = os->read(offset, type);
+        ref<Expr> result = os->read(offset, type);
 
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
@@ -3458,11 +3860,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     const ObjectState *os = i->second;
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     
-    StatePair branches = fork(*unbound, inBounds, true, KLEE_FORK_INTERNAL);
+    StatePair branches = fork(*unbound, inBounds, true, KLEE_FORK_RESOLVE);
     ExecutionState *bound = branches.first;
 
     // bound can be 0 on failure or overlapped 
     if (bound) {
+      bound->lastResolveResult = mo;
       if (isWrite) {
         if (os->readOnly) {
           terminateStateOnError(*bound,
@@ -3470,7 +3873,24 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 "readonly.err");
         } else {
           ObjectState *wos = bound->addressSpace().getWriteable(mo, os);
+          /*
+          if (!isa<ConstantExpr>(mo->getOffsetExpr(address))) {
+            state.addressSpace().removeMergeBlacklistItemHash(mo, wos);
+          } else {
+            state.addressSpace().removeMergeBlacklistItemHash(mo, wos,
+                                                         mo->getOffsetExpr(address),
+                                                         value->getWidth()/8);
+          }
+          */
+          ref<Expr> offset = mo->getOffsetExpr(address);
+          state.updateMemoryValue(mo, wos, offset, value);
           wos->write(mo->getOffsetExpr(address), value);
+          state.verifyBlacklistHash();
+          /*
+          state.addressSpace().addMergeBlacklistItemHash(mo, wos,
+                                                         mo->getOffsetExpr(address),
+                                                         value->getWidth()/8);
+          */
         }
       } else {
         ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
@@ -3500,9 +3920,15 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                                    const MemoryObject *mo, bool shared) {
   // Create a new object state for the memory object (instead of a copy).
   if (!replayOut) {
+    if (OutputConstraints)
+      assert(states.size() == 1 && "Can't add new symbolics after fork!\n");
+
     static unsigned id = 0;
-    const Array *array = new Array("arr" + llvm::utostr(++id),
-                                   mo->size);
+    std::string name = "arr" + llvm::utostr(++id) + "_";
+    for (unsigned i = 0; i < mo->name.size(); ++i)
+      name += (isalnum(mo->name[i]) ? mo->name[i] : '_');
+
+    const Array *array = new Array(name, mo->size);
     ObjectState *os = bindObjectInState(state, mo, false, array);
     os->isShared = shared;
 
@@ -3685,7 +4111,7 @@ void Executor::destroyStates() {
 		for (std::set<ExecutionState*>::iterator it = states.begin(), ie =
 				states.end(); it != ie; ++it) {
 			ExecutionState &state = **it;
-			stepInstruction(state); // keep stats rolling
+			stepInstruction(state, true); // keep stats rolling
 			terminateStateEarly(state, "execution halting");
 		}
 		updateStates(0);
@@ -3711,7 +4137,7 @@ void Executor::destroyStates() {
 }
 
 void Executor::destroyState(ExecutionState *state) {
-	terminateStateEarly(*state, "cancelled");
+	terminateState(*state, true);
 }
 
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
@@ -3837,6 +4263,17 @@ void Executor::doImpliedValueConcretization(ExecutionState &state,
 
 Expr::Width Executor::getWidthForLLVMType(const llvm::Type *type) const {
   return kmodule->targetData->getTypeSizeInBits(type);
+}
+
+void Executor::dumpProcessTree()
+{
+  char name[32];
+  sprintf(name, "ptree%08d.dot", (int) stats::instructions);
+  std::ostream *os = interpreterHandler->openOutputFile(name);
+  if (os) {
+    processTree->dump(*os);
+    delete os;
+  }
 }
 
 ///

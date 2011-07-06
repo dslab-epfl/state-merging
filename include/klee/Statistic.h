@@ -11,10 +11,14 @@
 #define KLEE_STATISTIC_H
 
 #include "klee/Config/config.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 #include "llvm/Support/DataTypes.h"
 #else
 #include "llvm/System/DataTypes.h"
+#endif
+#else
+#include "llvm/Support/DataTypes.h"
 #endif
 #include <string>
 
@@ -37,10 +41,12 @@ namespace klee {
     unsigned id;
     const std::string name;
     const std::string shortName;
+    bool m_isTime;
 
   public:
     Statistic(const std::string &_name, 
-              const std::string &_shortName);
+              const std::string &_shortName,
+              bool _isTime = false);
     ~Statistic();
 
     /// getID - Get the unique statistic ID.
@@ -55,6 +61,11 @@ namespace klee {
 
     /// getValue - Get the current primary statistic value.
     uint64_t getValue() const;
+
+    void setValue(uint64_t value);
+
+    /// isTime - return true is this statistic describes time
+    bool isTime() const { return m_isTime; }
 
     /// operator uint64_t - Get the current primary statistic value.
     operator uint64_t () const { return getValue(); }

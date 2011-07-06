@@ -141,3 +141,17 @@ int pthread_attr_destroy(pthread_attr_t *attr) {
   klee_warning("pthread_attr_destroy does nothing");
   return 0;
 }
+
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void)) {
+  if (*once_control == 0) {
+    init_routine();
+
+    *once_control = 1;
+  }
+
+  return 0;
+}
+
+int pthread_equal(pthread_t thread1, pthread_t thread2) {
+  return thread1 == thread2;
+}

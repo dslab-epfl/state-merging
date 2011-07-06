@@ -74,9 +74,11 @@ static StatisticManager &getStatisticManager() {
 /* *** */
 
 Statistic::Statistic(const std::string &_name, 
-                     const std::string &_shortName) 
+                     const std::string &_shortName,
+                     bool _isTime)
   : name(_name), 
-    shortName(_shortName) {
+    shortName(_shortName),
+    m_isTime(_isTime) {
   getStatisticManager().registerStatistic(*this);
 }
 
@@ -90,4 +92,8 @@ Statistic &Statistic::operator +=(const uint64_t addend) {
 
 uint64_t Statistic::getValue() const {
   return theStatisticManager->getValue(*this);
+}
+
+void Statistic::setValue(uint64_t value) {
+  theStatisticManager->setStatistic(*this, value);
 }

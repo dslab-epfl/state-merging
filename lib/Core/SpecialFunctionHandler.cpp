@@ -28,6 +28,9 @@
 #include "llvm/Type.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/InstrTypes.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR >= 7)
+#include "llvm/LLVMContext.h"
+#endif
 
 #include <errno.h>
 #include <stdarg.h>
@@ -115,6 +118,12 @@ HandlerInfo handlerInfo[] = {
   add("klee_get_time", handleGetTime, true),
   add("klee_set_time", handleSetTime, false),
 
+  add("klee_merge_disable", handleMergeDisable, false),
+  add("klee_merge_blacklist", handleMergeBlacklist, false),
+  add("klee_merge_blacklist_clear", handleMergeBlacklistClear, false),
+
+  add("_klee_use_freq", handleUseFreq, false),
+
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
   add("valloc", handleValloc, true),
@@ -138,7 +147,11 @@ HandlerInfo handlerInfo[] = {
   add("_Znwm", handleNew, true),
   add("_ZnwmRKSt9nothrow_t", handleNew, true),
 
-  add("syscall", handleSyscall, true)
+  add("syscall", handleSyscall, true),
+
+  // loop instrumentation
+  add("_klee_loop_iter", handleLoopIter, false),
+  add("_klee_loop_exit", handleLoopExit, false),
 
 #undef addDNR
 #undef add  
@@ -291,6 +304,8 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
     if (!isa<ConstantExpr>(cur)) //XXX: Should actually concretize the value...
            return std::string("<KLEE<symchar>>");
     buf[i] = cast<ConstantExpr>(cur)->getZExtValue(8);
+    if(buf[i] == 0)
+      break;
   }
   buf[i] = 0;
   
@@ -1130,4 +1145,136 @@ void SpecialFunctionHandler::handleSyscall(ExecutionState &state,
   } else {
     executor.terminateStateOnError(state, "syscall requires a concrete syscall number", "user.err");
   }
+}
+
+void SpecialFunctionHandler::handleLoopIter(ExecutionState &state,
+                                              KInstruction *target,
+                                              std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to _klee_loop_iter");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         "argument to _klee_loop_iter is not a constant");
+
+  uint32_t loopID = (uint32_t)cast<ConstantExpr>(arguments[0])->getZExtValue();
+  std::vector<LoopExecIndex> &indexStack = state.stack().back().execIndexStack;
+
+  // This function is called from the loop header. This means that either
+  // a new loop or another iteration is just started.
+  if (loopID != indexStack.back().loopID) {
+    // New loop started, push corresponding item to the loop index stack
+    LoopExecIndex execIndex = { loopID, indexStack.back().index };
+    indexStack.push_back(execIndex);
+  }
+  indexStack.back().index = hashUpdate(indexStack.back().index, loopID);
+}
+
+void SpecialFunctionHandler::handleLoopExit(ExecutionState &state,
+                                              KInstruction *target,
+                                              std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to _klee_loop_exit");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         "argument to _klee_loop_exit is not a constant");
+
+  uint64_t loopID = cast<ConstantExpr>(arguments[0])->getZExtValue();
+  std::vector<LoopExecIndex> &indexStack = state.stack().back().execIndexStack;
+
+  // This function is called from the loop exit basic blocks. This does not
+  // mean that it is called after the loop: the block can have other
+  // incoming edges. To distinguish this we check current loop ID
+  if (loopID == indexStack.back().loopID) {
+    // Loop terminated, pop corresponding item form the loop index stack
+    assert(indexStack.size() > 1 && "Unexpected loop end");
+    indexStack.pop_back();
+  }
+}
+
+void SpecialFunctionHandler::handleMergeDisable(ExecutionState &state,
+                                                KInstruction *target,
+                                                std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==1 &&
+         "invalid number of arguments klee_merge_disable");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         "argument to klee_merge_disable is not a constant");
+
+  uint64_t disabled = cast<ConstantExpr>(arguments[0])->getZExtValue();
+  if (disabled)
+    ++state.addressSpace().mergeDisabledCount;
+  else
+    --state.addressSpace().mergeDisabledCount;
+}
+
+void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
+                                                  KInstruction *target,
+                                                  std::vector<ref<Expr> > &arguments)
+{
+  return;
+#warning XXX
+#if 0
+  assert(arguments.size()==3 &&
+         "invalid number of arguments klee_merge_blacklist");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         isa<ConstantExpr>(arguments[1]) &&
+         isa<ConstantExpr>(arguments[2]) &&
+         "arguments to klee_merge_blacklist are not a constant");
+
+  ref<ConstantExpr> address = cast<ConstantExpr>(arguments[0]);
+  uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
+
+  ObjectPair op;
+  bool ok = state.addressSpace().resolveOne(address, op);
+  assert(ok && "arguments to klee_merge_set_active are invalid");
+
+  ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
+  assert(chk->isTrue() && "arguments to klee_merge_set_active are invalid");
+
+  uint64_t offset = address->getZExtValue() - op.first->address;
+  uint64_t activate = cast<ConstantExpr>(arguments[2])->getZExtValue();
+  if (activate) {
+    for (unsigned i = 0; i < size; ++i)
+      state.addressSpace().addMergeBlacklistItem(op.first, offset+i);
+  } else {
+    for (unsigned i = 0; i < size; ++i)
+      state.addressSpace().removeMergeBlacklistItem(op.first, offset+i);
+  }
+#endif
+}
+
+void SpecialFunctionHandler::handleMergeBlacklistClear(ExecutionState &state,
+                                                  KInstruction *target,
+                                                  std::vector<ref<Expr> > &arguments)
+{
+#if 0
+  assert(arguments.size()==0 &&
+         "invalid number of arguments klee_merge_blacklist");
+  state.addressSpace().clearMergeBlacklist();
+#endif
+}
+
+void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
+                                           KInstruction *target,
+                                           std::vector<ref<Expr> > &arguments)
+{
+  assert(arguments.size()==4 &&
+         "invalid number of arguments klee_use_freq");
+
+  assert(isa<ConstantExpr>(arguments[0]) &&
+         isa<ConstantExpr>(arguments[1]) &&
+         isa<ConstantExpr>(arguments[2]) &&
+         isa<ConstantExpr>(arguments[3]) &&
+         "arguments to klee_use_freq are not a constant");
+
+  ref<ConstantExpr> address = cast<ConstantExpr>(arguments[0]);
+  uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
+
+  uint64_t useFreq = cast<ConstantExpr>(arguments[2])->getZExtValue();
+  uint64_t totalUseFreq = cast<ConstantExpr>(arguments[3])->getZExtValue();
+
+  assert(size % 8 == 0);
+  state.updateUseFrequency(target->inst, address, size/8, useFreq, totalUseFreq);
 }

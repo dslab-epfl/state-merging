@@ -15,12 +15,15 @@
 #include "klee/Expr.h"
 #include "klee/Internal/ADT/ImmutableMap.h"
 
+#include "llvm/ADT/DenseMap.h"
+
 namespace klee {
   class ExecutionState;
   class MemoryObject;
   class ObjectState;
   class TimingSolver;
   class AddressPool;
+  class StackFrame;
 
   template<class T> class ref;
 
@@ -46,7 +49,7 @@ namespace klee {
     mutable cow_domain_t *cowDomain;
 
     /// Unsupported, use copy constructor
-    AddressSpace &operator=(const AddressSpace&); 
+    AddressSpace &operator=(const AddressSpace&);
     
   public:
     /// The MemoryObject -> ObjectState map that constitutes the
@@ -57,10 +60,27 @@ namespace klee {
     ///
     /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
     MemoryMap objects;
-    
+
+    /// Hash value that uniquely identifies address space mappings
+    /// NOTE: the hash is very weak due to performance reasons
+    uint32_t hash;
+
+#if 0
+    /// A hash of a set of values that should not differ when merging states
+    MergeBlacklist mergeBlacklist;
+
+    uint32_t mergeBlacklistHash;
+#endif
+
+    int mergeDisabledCount;
+
   public:
-    AddressSpace() : cowKey(1), cowDomain(NULL) {}
-    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL), objects(b.objects)  { }
+    AddressSpace() : cowKey(1), cowDomain(NULL), hash(hashInit()),
+                     mergeDisabledCount(0) {}
+    AddressSpace(const AddressSpace &b) : cowKey(b.cowKey), cowDomain(NULL),
+                                          objects(b.objects), hash(b.hash),
+                                          mergeDisabledCount(b.mergeDisabledCount) { }
+
     ~AddressSpace() {}
 
     /// Resolve address to an ObjectPair in result.
@@ -136,6 +156,19 @@ namespace klee {
     /// \retval true The copy succeeded. 
     /// \retval false The copy failed because a read-only object was modified.
     bool copyInConcretes(AddressPool *pool);
+
+#if 0
+    /// XXXXX
+    void addMergeBlacklistItem(const MemoryObject *mo, unsigned offset);
+    void removeMergeBlacklistItem(const MemoryObject *mo, unsigned offset);
+    void clearMergeBlacklist();
+
+    void removeMergeBlacklistItemHash(const MemoryObject *mo, ObjectState *os);
+    void removeMergeBlacklistItemHash(const MemoryObject *mo, ObjectState *os,
+                                   ref<Expr> offset, unsigned size);
+    void addMergeBlacklistItemHash(const MemoryObject *mo, ObjectState *os,
+                                   ref<Expr> offset, unsigned size);
+#endif
   };
 } // End klee namespace
 

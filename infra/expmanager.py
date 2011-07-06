@@ -6,8 +6,10 @@ import subprocess
 import os.path
 import time
 import re
+import signal
 
 from common import readHosts, readCmdlines, readExp, readKleeCmd, getCoverablePath, runBashScript
+from common import bold, faint
 from datetime import datetime, timedelta
 
 from subprocess import PIPE
@@ -24,7 +26,7 @@ KLEE_PATH = "Release/bin/klee"
 class ExperimentManager:
     def __init__(self, hostsName, cmdlinesName, expName, kleeCmdName, coverableName,
                  uid=None, uidprefix="test", debugcomm=False, duration=DEFAULT_EXP_DURATION,
-                 balancetout=None):
+                 balancetout=None, strategy=None, subprocKill=True, basePort=DEFAULT_BASE_PORT):
         self.hosts = readHosts(hostsName)
         self.cmdlines = readCmdlines(cmdlinesName)
         self.exp = readExp(expName)
@@ -36,8 +38,11 @@ class ExperimentManager:
         self.starttime = None
         self.duration = duration
         self.balancetout = balancetout
+        self.strategy = strategy
+        self.subprocKill = subprocKill
+        self.basePort = basePort
 
-        self._logMsg("Using experiment name: %s" % self.uid)
+        self._logMsg("Using experiment name: %s" % bold(self.uid))
         self._logMsg("Using as localhost: %s" % self.localhost)
 
     def initHosts(self):
@@ -55,16 +60,16 @@ class ExperimentManager:
         self.starttime = datetime.now()
 
         tgcounters = { }
+
+        # Initializing port mappings
+        ports = dict((host, self.basePort) for host in self.hosts)
         
         for stageIndex, stage in enumerate(self.exp):
             self._logMsg("Running stage %d of the experiment." % (stageIndex + 1))
             time.sleep(DEFAULT_INTER_SLEEP)
 
-            # Initializing port mappings
-            ports = dict((host, DEFAULT_BASE_PORT) for host in self.hosts)
-
             processes = {}
-            
+
             for item in stage:
                 target, workercount, allocs = item[0], item[1], item[2]
                 tgcounters[(target, workercount)] = tgcounters.get((target, workercount), 0) + 1
@@ -95,18 +100,25 @@ class ExperimentManager:
                         ports[host] += 1
 
             # Waiting for everything to finish...
-            self._monitorProcs(processes, self.duration)
+            self._monitorProcs(processes, self.duration, showID=True)
             if not len(processes):
                 continue
+            
+            if self.subprocKill:
+                self._killAllProcesses(processes, "SIGINT")
+            else:
+                self._killAll("SIGINT")
 
-            self._killAll("SIGINT")
             self._monitorProcs(processes, 200)
             if len(processes) == 0:
                 continue
 
             while True:
                 # Here we risk going into an infinite loop, but it's better than aborting
-                self._killAll("SIGKILL", aggressive=True)
+                if self.subprocKill:
+                    self._killAllProcesses(processes, "SIGINT")
+                else:
+                    self._killAll("SIGKILL", aggressive=True)
                 self._monitorProcs(processes, 40)
                 if len(processes) == 0:
                     break
@@ -120,7 +132,12 @@ class ExperimentManager:
 
         self._killAllLocal(signal=signal)
 
-    def _monitorProcs(self, processes, duration, sleeptime=1):
+    def _killAllProcesses(self, processes, sig):
+        self._logMsg("Sending the %s signal to the active processes..." % sig)
+        for proc in processes.itervalues():
+            proc.send_signal(getattr(signal, sig))
+
+    def _monitorProcs(self, processes, duration, sleeptime=1, showID=False):
         targetTime = datetime.now()
         delta = timedelta(seconds=MONITOR_INCREMENT)
         totalPassed = 0
@@ -135,9 +152,13 @@ class ExperimentManager:
                 if proc.poll() is not None:
                     cleanups.append((target, workercount, workerID, tgcounter))
                     if workerID < 0:
-                        self._logMsg("The load balancer for target '%s'(%d) terminated." % (target, workercount))
+                        self._logMsg("The load balancer for target '%s'(%d) terminated.%s" % (
+                                target, workercount,
+                                (" ID: %s" % self._getExperimentID(target, workercount, tgcounter)) if showID else ""))
                     else:
-                        self._logMsg("Worker %d for target '%s'(%d) terminated." % (workerID, target, workercount))
+                        self._logMsg("Worker %d for target '%s'(%d) terminated.%s" % (
+                                workerID, target, workercount,
+                                (" ID: %s" % self._getExperimentID(target, workercount, tgcounter) if showID else "")))
 
             for item in cleanups: del processes[item]
 
@@ -152,6 +173,10 @@ class ExperimentManager:
     def _generateUID(self, uidprefix):
         today = datetime.now()
         return uidprefix + "-" + "-".join(map(lambda x: "%02d" % x, today.timetuple()[0:6]))
+
+    def _getExperimentID(self, target, workerCount, targetcounter):
+        return  "%s/%s-%d%s" % (self.uid, target, workerCount,
+                                ("-%d" % targetcounter) if targetcounter > 1 else "")
 
     def _checkSchedule(self):
         """Make sure the hosts involved in the schedule are configured."""
@@ -264,13 +289,9 @@ class ExperimentManager:
             self._logMsg("Local host initialized.")
 
     def _runLB(self, port, target, workerCount, targetcounter):
-        logdir = "%s/%s/%s-%d%s" % (
-            self.hosts[self.localhost]["expdir"], 
-            self.uid, 
-            target, 
-            workerCount,
-            ("-%d" % targetcounter) if targetcounter > 1 else ""
-            )
+        logdir = "%s/%s" % (
+            self.hosts[self.localhost]["expdir"],
+            self._getExperimentID(target, workerCount, targetcounter))
         proc = runBashScript("""
             mkdir -p %(logdir)s
             %(root)s/%(lb)s -address %(address)s -port %(port)d %(debugcomm)s %(btout)s &>%(logfile)s""" % {
@@ -289,14 +310,9 @@ class ExperimentManager:
         return proc
 
     def _runWorker(self, host, port, lbHost, lbPort, target, workerID, workerCount, targetcounter):
-        logdir = "%s/%s/%s-%d%s" % (
-            self.hosts[self.localhost]["expdir"], 
-            self.uid, 
-            target, 
-            workerCount,
-            ("-%d" % targetcounter) if targetcounter > 1 else ""
-            )
-
+        logdir = "%s/%s" % (
+            self.hosts[self.localhost]["expdir"],
+            self._getExperimentID(target, workerCount, targetcounter))
         if self.cmdlines[target].startswith("/"):
             cmdline = self.cmdlines[target]
         else:
@@ -308,8 +324,9 @@ class ExperimentManager:
             # The code below is run remotely
             mkdir -p %(expdir)s
             cd %(expdir)s
-            setarch $(arch) %(root)s/%(worker)s -c9-lb-host %(lbhost)s -c9-lb-port %(lbport)d \
-              -c9-local-host %(lhost)s -c9-local-port %(lport)d \
+            ulimit -c unlimited
+            setarch $(arch) -R %(root)s/%(worker)s -c9-lb-host %(lbhost)s -c9-lb-port %(lbport)d \
+              -c9-local-host %(lhost)s -c9-local-port %(lport)d %(jobsel)s \
               -output-dir %(outdir)s \
               %(kcmd)s %(debugcomm)s %(debugcov)s \
               --max-time %(maxtime)d --coverable-modules %(coverable)s \
@@ -317,18 +334,19 @@ class ExperimentManager:
             \nEOF""" % {
                 "user": self.hosts[host]["user"],
                 "host": host,
-                "expdir": "%s/%s/%s-%d%s" % (
-                    self.hosts[host]["expdir"], 
-                    self.uid, 
-                    target, 
-                    workerCount,
-                    ("-%d" % targetcounter) if targetcounter > 1 else ""),
+                "expdir": "%s/%s" % (
+                    self.hosts[host]["expdir"],
+                    self._getExperimentID(target, workerCount, targetcounter)),
                 "root": self.hosts[host]["root"],
                 "worker": WORKER_PATH,
                 "lbhost": lbHost,
                 "lbport": lbPort,
                 "lhost": host,
                 "lport": port,
+                "jobsel": " ".join(["-c9-job-%s" % x for x in 
+                                    (self.strategy.split(",") 
+                                     if self.strategy 
+                                     else ["random-path", "cov-opt"])]),
                 "outdir": "worker-%d" % workerID,
                 "kcmd": " ".join(self.kleeCmd),
                 "debugcomm": "--debug-lb-communication" if self.debugcomm else "",
@@ -354,4 +372,4 @@ class ExperimentManager:
                                           duration.microseconds // 1000)
         else:
             prefix = "-"*15;
-        print "[%s] %s" % (prefix, msg) 
+        print "%s %s" % (faint("[%s]" % prefix), msg) 

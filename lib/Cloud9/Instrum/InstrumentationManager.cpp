@@ -29,14 +29,12 @@ namespace instrum {
 
 class IOServices {
 public:
-  boost::asio::io_service service;
-  boost::asio::deadline_timer timer;
-
+  boost::timed_mutex terminateMutex;
   boost::mutex eventsMutex;
   boost::mutex coverageMutex;
   boost::thread instrumThread;
 public:
-  IOServices() : timer(service, boost::posix_time::seconds(InstrUpdateRate)) { }
+  IOServices() { }
 };
 
 InstrumentationManager &theInstrManager = InstrumentationManager::getManager();
@@ -47,17 +45,16 @@ void InstrumentationManager::instrumThreadControl() {
 
 	for (;;) {
 		boost::system::error_code code;
-		ioServices->timer.wait(code);
+        bool terminated = ioServices->terminateMutex.timed_lock(boost::posix_time::seconds(InstrUpdateRate));
 
-		if (terminated) {
+        if (terminated) {
 			CLOUD9_INFO("Instrumentation interrupted. Stopping.");
 			writeStatistics();
 			writeEvents();
-			writeCoverage();
+            writeCoverage();
+            ioServices->terminateMutex.unlock();
 			break;
 		}
-
-		ioServices->timer.expires_at(ioServices->timer.expires_at() + boost::posix_time::seconds(InstrUpdateRate));
 
 		writeStatistics();
 		writeEvents();
@@ -67,8 +64,9 @@ void InstrumentationManager::instrumThreadControl() {
 
 
 InstrumentationManager::InstrumentationManager() :
-		referenceTime(now()), stats(MAX_STATISTICS), covUpdated(false), terminated(false) {
+        stats(MAX_STATISTICS), covUpdated(false) {
 
+  absoluteCounter.start();
   ioServices = new IOServices();
 }
 
@@ -85,20 +83,21 @@ InstrumentationManager::~InstrumentationManager() {
 }
 
 void InstrumentationManager::start() {
-	ioServices->instrumThread = boost::thread(&InstrumentationManager::instrumThreadControl, this);
+    ioServices->terminateMutex.lock();
+    ioServices->instrumThread = boost::thread(&InstrumentationManager::instrumThreadControl, this);
 }
 
 void InstrumentationManager::stop() {
 	if (ioServices->instrumThread.joinable()) {
-		terminated = true;
-		ioServices->timer.cancel();
+        ioServices->terminateMutex.unlock();
 
 		ioServices->instrumThread.join();
 	}
 }
 
 void InstrumentationManager::writeStatistics() {
-	TimeStamp stamp = now() - referenceTime;
+        absoluteCounter.split();
+	TimeStamp stamp = absoluteCounter.getRealTime();
 
 	for (writer_set_t::iterator it = writers.begin(); it != writers.end(); it++) {
 		InstrumentationWriter *writer = *it;
@@ -131,7 +130,8 @@ void InstrumentationManager::writeCoverage() {
   covUpdated = false;
   lock.unlock();
 
-  TimeStamp stamp = now() - referenceTime;
+  absoluteCounter.split();
+  TimeStamp stamp = absoluteCounter.getRealTime();
 
   for (writer_set_t::iterator it = writers.begin(); it != writers.end(); it++) {
     InstrumentationWriter *writer = *it;
@@ -140,9 +140,24 @@ void InstrumentationManager::writeCoverage() {
   }
 }
 
-void InstrumentationManager::recordEvent(Events id, string value) {
-    boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
-    events.push_back(make_pair(now() - referenceTime, make_pair(id, value)));
+void InstrumentationManager::recordEventAttributeStr(EventClass id, EventAttribute attr, string value) {
+  boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+  pendingEvents[id][attr] = value;
+}
+
+void InstrumentationManager::clearEventAttribute(EventClass id, EventAttribute attr) {
+  boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+  pendingEvents[id].erase(attr);
+}
+
+void InstrumentationManager::recordEvent(EventClass id, bool reset) {
+  boost::lock_guard<boost::mutex> lock(ioServices->eventsMutex);
+  absoluteCounter.split();
+
+  events.push_back(make_pair(make_pair(absoluteCounter.getRealTime(), id), pendingEvents[id]));
+
+  if (reset)
+    pendingEvents.erase(id);
 }
 
 void InstrumentationManager::updateCoverage(string tag, std::pair<unsigned, unsigned> value) {
@@ -154,23 +169,19 @@ void InstrumentationManager::updateCoverage(string tag, std::pair<unsigned, unsi
 
 std::string InstrumentationManager::stampToString(TimeStamp stamp) {
 	std::ostringstream ss;
-	ss << stamp;
+	writeStamp(ss, stamp);
 	ss.flush();
 
 	return ss.str();
 }
 
-InstrumentationManager::TimeStamp InstrumentationManager::getRelativeTime(TimeStamp absoluteStamp) {
-	return absoluteStamp - referenceTime;
-}
+std::ostream &InstrumentationManager::writeStamp(std::ostream &s,
+    const TimeStamp &stamp) {
+  boost::io::ios_all_saver saver(s);
 
-std::ostream &operator<<(std::ostream &s,
-			const InstrumentationManager::TimeStamp &stamp) {
-	boost::io::ios_all_saver saver(s);
+  s << fixed << setprecision(9) << stamp;
 
-	s << stamp.seconds() << "." << setw(9) << setfill('0') << stamp.nanoseconds();
-
-	return s;
+  return s;
 }
 
 }

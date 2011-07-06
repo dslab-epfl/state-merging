@@ -11,10 +11,14 @@
 #define KLEE_KINSTRUCTION_H
 
 #include "klee/Config/config.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 #include "llvm/Support/DataTypes.h"
 #else
 #include "llvm/System/DataTypes.h"
+#endif
+#else
+#include "llvm/Support/DataTypes.h"
 #endif
 #include <vector>
 
@@ -43,6 +47,7 @@ namespace klee {
     unsigned dest;
 
     bool originallyCovered;
+    bool isBBHead;
   public:
     virtual ~KInstruction(); 
   };
@@ -62,6 +67,7 @@ namespace klee {
   struct KCallInstruction: KInstruction {
     bool vulnerable;    // Whether the result of this call is unchecked, and
                         // thus may lead to further errors
+    static bool classof(const KInstruction *) { return true; }
   };
 }
 

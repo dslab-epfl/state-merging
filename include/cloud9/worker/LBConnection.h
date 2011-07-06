@@ -9,6 +9,7 @@
 #define LBCONNECTION_H_
 
 #include "cloud9/Protocols.h"
+#include "cloud9/worker/PartitioningStrategy.h"
 
 #include <boost/asio.hpp>
 
@@ -20,6 +21,7 @@ namespace cloud9 {
 namespace worker {
 
 class JobManager;
+class PartitioningStrategy;
 
 class LBConnection {
 private:
@@ -33,7 +35,10 @@ private:
 
 	void transferJobs(std::string &destAddr, int destPort,
 			ExecutionPathSetPin paths,
-			std::vector<int> counts);
+			std::vector<int> counts,
+			part_select_t &partHints);
+
+	PartitioningStrategy *getPartitioningStrategy();
 
 	void processResponse(LBResponseMessage &response);
 
@@ -41,6 +46,7 @@ private:
 
 	void sendJobStatistics(WorkerReportMessage &message);
 	void sendCoverageUpdates(WorkerReportMessage &message);
+	void sendPartitionStatistics(WorkerReportMessage &message);
 
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);

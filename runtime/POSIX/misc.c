@@ -187,6 +187,10 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   return result;
 }
 
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  return mmap(addr, length, prot, flags, fd, offset);
+}
+
 void *mmap2(void *addr, size_t length, int prot, int flags, int fd, off_t pgoffset) {
   return mmap(addr, length, prot, flags, fd, pgoffset * getpagesize());
 }

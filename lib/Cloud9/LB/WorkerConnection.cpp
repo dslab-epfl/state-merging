@@ -85,7 +85,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
     }
 
     id = lb->registerWorker(regInfo.address(), regInfo.port(),
-        regInfo.wants_updates());
+        regInfo.wants_updates(), regInfo.has_partitions());
     worker = lb->getWorker(id);
 
     response.set_id(id);
@@ -101,7 +101,7 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
       nodes.push_back(lb->getTree()->getRoot());
 
       ExecutionPathSetPin paths = lb->getTree()->buildPathSet(nodes.begin(),
-          nodes.end());
+          nodes.end(), (std::map<LBTree::Node*,unsigned>*)NULL);
 
       serializeExecutionPathSet(paths, *pathSet);
     }
@@ -115,10 +115,13 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
     processNodeDataUpdate(message);
     processStatisticsUpdates(message);
 
+    if (worker->hasPartitions())
+      processPartitionUpdates(message);
+
     lb->analyze(id);
 
     response.set_id(id);
-    response.set_more_details(lb->requestAndResetDetails(id));
+    response.set_more_details(false);
     response.set_terminate(lb->isDone());
 
     sendJobTransfers(response);
@@ -138,25 +141,46 @@ void WorkerConnection::handleMessageReceived(std::string &msgString,
 
 void WorkerConnection::sendJobTransfers(LBResponseMessage &response) {
   worker_id_t id = response.id();
-  TransferRequest *transfer = lb->requestAndResetTransfer(id);
 
-  if (transfer) {
-    const Worker *destination = lb->getWorker(transfer->toID);
+  transfer_t globalTrans;
+  part_transfers_t partTrans;
 
-    LBResponseMessage_JobTransfer *transMsg = response.mutable_jobtransfer();
+  bool result = lb->requestAndResetTransfer(id, globalTrans,
+      partTrans);
 
-    transMsg->set_dest_address(destination->getAddress());
-    transMsg->set_dest_port(destination->getPort());
+  if (result) {
+    if (partTrans.empty()) {
+      // This is a global transfer...
+      const Worker *destination = lb->getWorker(globalTrans.first);
+      LBResponseMessage_JobTransfer *transMsg = response.add_jobtransfer();
 
-    cloud9::data::ExecutionPathSet *pathSet = transMsg->mutable_path_set();
-    serializeExecutionPathSet(transfer->paths, *pathSet);
+      transMsg->set_dest_address(destination->getAddress());
+      transMsg->set_dest_port(destination->getPort());
+      transMsg->set_count(globalTrans.second);
+    } else {
+      // Fill in the partitioning structures
+      std::map<worker_id_t, LBResponseMessage_JobTransfer*> destinations;
 
-    for (std::vector<int>::iterator it = transfer->counts.begin(); it
-        != transfer->counts.end(); it++) {
-      transMsg->add_count(*it);
+      for (part_transfers_t::iterator it = partTrans.begin();
+          it != partTrans.end(); it++) {
+        LBResponseMessage_JobTransfer *transMsg;
+
+        if (destinations.count(it->second.first) == 0) {
+          transMsg = (destinations[it->second.first] = response.add_jobtransfer());
+          const Worker *destination = lb->getWorker(it->second.first);
+          transMsg->set_dest_address(destination->getAddress());
+          transMsg->set_dest_port(destination->getPort());
+          transMsg->set_count(0);
+        } else {
+          transMsg = destinations[it->second.first];
+        }
+
+        PartitionData *pData = transMsg->add_partitions();
+        pData->set_partition(it->first);
+        pData->set_active(it->second.second);
+        pData->set_total(it->second.second); // The same as active
+      }
     }
-
-    delete transfer;
   }
 }
 
@@ -187,8 +211,7 @@ void WorkerConnection::handleMessageSent(const boost::system::error_code &error)
   }
 }
 
-bool WorkerConnection::processStatisticsUpdates(
-    const WorkerReportMessage &message) {
+bool WorkerConnection::processStatisticsUpdates(const WorkerReportMessage &message) {
   if (message.localupdates_size() == 0)
     return false;
 
@@ -213,6 +236,23 @@ bool WorkerConnection::processStatisticsUpdates(
   return true;
 }
 
+bool WorkerConnection::processPartitionUpdates(const WorkerReportMessage &message) {
+  worker_id_t id = message.id();
+
+  part_stat_t partStat;
+
+  for (int i = 0; i < message.partitionupdates_size(); i++) {
+    const PartitionData &pData = message.partitionupdates(i);
+
+    partStat.insert(std::make_pair(pData.partition(),
+        std::make_pair(pData.total(), pData.active())));
+  }
+
+  lb->updatePartitioningData(id, partStat);
+
+  return true;
+}
+
 bool WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) {
   if (!message.has_nodesetupdate())
     return false;
@@ -224,7 +264,7 @@ bool WorkerConnection::processNodeSetUpdate(const WorkerReportMessage &message) 
   std::vector<LBTree::Node*> nodes;
   ExecutionPathSetPin paths = parseExecutionPathSet(nodeSetUpdateMsg.pathset());
 
-  lb->getTree()->getNodes(LB_LAYER_DEFAULT, paths, nodes);
+  lb->getTree()->getNodes(LB_LAYER_DEFAULT, paths, nodes, (std::map<unsigned,LBTree::Node*>*)NULL);
 
   //CLOUD9_DEBUG("Received node set: " << getASCIINodeSet(nodes.begin(),
   //		nodes.end()));

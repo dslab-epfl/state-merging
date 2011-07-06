@@ -6,7 +6,8 @@ import re
 import math
 import itertools
 
-from common import readHosts, runBashScript, AverageEntry
+from common import readHosts, runBashScript, isExperimentRejected
+from common import AverageEntry
 from subprocess import PIPE
 from argparse import ArgumentParser
 
@@ -93,6 +94,9 @@ class StatsMiner:
                 workerID = int(workerID)
 
                 if wcfilter and workercount != wcfilter:
+                    entries = None
+                    continue
+                if isExperimentRejected(testdir, target, workercount, tgcount):
                     entries = None
                     continue
 

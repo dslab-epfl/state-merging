@@ -192,6 +192,9 @@ public:
 
   bool isShared; // The object is shared among addr. spaces within the same state
 
+  // Number of blacklist items assosiated with this ObjectState
+  unsigned numBlacklistRefs;
+
 public:
   /// Create a new object state for the given memory object with concrete
   /// contents. The initial contents are undefined, it is the callers

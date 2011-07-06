@@ -16,8 +16,12 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 #include "llvm/ModuleProvider.h"
+#endif
+#if !(LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 #include "llvm/LLVMContext.h"
+#endif
 #include "llvm/Module.h"
 #include "llvm/Constants.h"
 #include "llvm/Instruction.h"
@@ -31,7 +35,19 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Target/TargetSelect.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Signals.h"
+#else
+#include "llvm/Support/Signals.h"
+#include "llvm/Support/system_error.h"
+#endif
+
+// FIXME: Ugh, this is gross. But otherwise our config.h conflicts with LLVMs.
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
 
 // All the KLEE includes below
 
@@ -232,7 +248,7 @@ int main(int argc, char **argv, char **envp) {
 	if (ReplayPath.size() > 0) {
       CLOUD9_INFO("Running in replay mode. No load balancer involved.");
 
-      std::ifstream is(ReplayPath);
+      std::ifstream is(ReplayPath.c_str());
 
       if (is.fail()) {
           CLOUD9_EXIT("Could not open the replay file " << ReplayPath);

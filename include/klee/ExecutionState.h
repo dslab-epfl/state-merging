@@ -18,7 +18,11 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/TimeValue.h"
+#else
+#include "llvm/Support/TimeValue.h"
+#endif
 
 #include "klee/Threading.h"
 #include "klee/MultiProcess.h"
@@ -28,6 +32,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <list>
 
 using namespace llvm;
 
@@ -65,6 +70,39 @@ std::ostream &operator<<(std::ostream &os, const MemoryMap &mm);
 
 typedef uint64_t wlist_id_t;
 
+/*
+struct StackFrame {
+  KInstIterator caller;
+  KFunction *kf;
+  CallPathNode *callPathNode;
+
+  std::vector<const MemoryObject*> allocas;
+  Cell *locals;
+
+  /// Minimum distance to an uncovered instruction once the function
+  /// returns. This is not a good place for this but is used to
+  /// quickly compute the context sensitive minimum distance to an
+  /// uncovered instruction. This value is updated by the StatsTracker
+  /// periodically.
+  unsigned minDistToUncoveredOnReturn;
+
+  // For vararg functions: arguments not passed via parameter are
+  // stored (packed tightly) in a local (alloca) memory object. This
+  // is setup to match the way the front-end generates vaarg code (it
+  // does not pass vaarg through as expected). VACopy is lowered inside
+  // of intrinsic lowering.
+  MemoryObject *varargs;
+
+  /// A stack of execution indexes. An item at index 0 corresponds to the
+  /// non-loop function code, each next item corresponds to one loop level.
+  /// This is updated by special function handlers for loop instrumentation.
+  std::vector<LoopExecIndex> execIndexStack;
+
+  StackFrame(KInstIterator caller, uint32_t callerExecIndex, KFunction *kf);
+  StackFrame(const StackFrame &s);
+  ~StackFrame();
+};*/
+
 class ExecutionState {
 	friend class ObjectState;
 
@@ -94,9 +132,13 @@ public:
   // objects.
   unsigned depth;
 
+  // An upper bound of the number of paths merged in this one
+  uint64_t multiplicity;
+  // Exact number of paths merged in this one (requires KeepMergedDuplicates)
+  uint64_t multiplicityExact;
+
   /// Disables forking, set by user code.
   bool forkDisabled;
-
 
   mutable double queryCost;
   double weight;
@@ -124,6 +166,7 @@ public:
   //
   // FIXME: Move to a shared list structure (not critical).
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
+  uint32_t symbolicsHash;
 
   ConstraintManager globalConstraints;
 
@@ -192,11 +235,11 @@ public:
   AddressSpace &addressSpace() { return crtProcess().addressSpace; }
   const AddressSpace &addressSpace() const { return crtProcess().addressSpace; }
 
-  KInstIterator& pc() { return crtThread().pc; }
   const KInstIterator& pc() const { return crtThread().pc; }
+  void setPC(const KInstIterator& newPC);
 
-  KInstIterator& prevPC() { return crtThread().prevPC; }
   const KInstIterator& prevPC() const { return crtThread().prevPC; }
+  void setPrevPC(const KInstIterator& newPrevPC) { crtThread().prevPC = newPrevPC; }
 
   stack_ty& stack() { return crtThread().stack; }
   const stack_ty& stack() const { return crtThread().stack; }
@@ -204,6 +247,18 @@ public:
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
+
+  /* State merging */
+  uint32_t interleavedMergeIndex;
+
+  bool isPCCompatible(const ExecutionState &b) const;
+  bool areMergeBlacklistsCompatible(const ExecutionState &b) const;
+
+  /* Duplicate states management */
+  std::set<ExecutionState*> duplicates;
+  bool isDuplicate;
+
+  const MemoryObject* lastResolveResult;
 
 public:
   ExecutionState(Executor *_executor, KFunction *kf);
@@ -214,16 +269,17 @@ public:
 
   ~ExecutionState();
   
-  ExecutionState *branch();
+  ExecutionState *branch(bool copy = false);
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
-    t.stack.push_back(StackFrame(caller,kf));
+    t.stack.push_back(StackFrame(caller, t.execIndex, kf));
   }
   void pushFrame(KInstIterator caller, KFunction *kf) {
     pushFrame(crtThread(), caller, kf);
   }
 
   void popFrame(Thread &t) {
+    verifyBlacklistBeforePopFrame();
     StackFrame &sf = t.stack.back();
     for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
            ie = sf.allocas.end(); it != ie; ++it)
@@ -236,17 +292,33 @@ public:
 
   void addSymbolic(const MemoryObject *mo, const Array *array) { 
     symbolics.push_back(std::make_pair(mo, array));
+    symbolicsHash = hashUpdate(symbolicsHash, (uintptr_t) mo);
   }
   void addConstraint(ref<Expr> e) { 
     constraints().addConstraint(e);
   }
 
-  bool merge(const ExecutionState &b);
+  ExecutionState* merge(const ExecutionState &b, bool copy = false);
+  bool mergeDisabled() const;
 
   cloud9::worker::SymbolicState *getCloud9State() const { return c9State; }
   void setCloud9State(cloud9::worker::SymbolicState *state) { c9State = state; }
 
   StackTrace getStackTrace() const;
+
+  uint32_t getMergeIndex() const { return interleavedMergeIndex; }
+
+  // Merge blacklist functionality
+  void updateUseFrequency(llvm::Instruction *inst,
+                          ref<ConstantExpr> address, uint64_t size,
+                          uint64_t useFreq, uint64_t totalUseFreq);
+  void updateMemoryValue(const MemoryObject *mo, ObjectState *os,
+                         ref<Expr> offset, ref<Expr> newValue);
+
+  void verifyBlacklistMap();
+  void verifyBlacklistHash();
+  void verifyBlacklistBeforePopFrame();
+
 };
 
 }

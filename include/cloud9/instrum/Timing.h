@@ -14,6 +14,7 @@
 
 #include <ostream>
 #include <cassert>
+#include <cstring>
 
 namespace cloud9 {
 
@@ -40,7 +41,12 @@ private:
   }
 
 public:
-  Timer() { }
+  Timer() {
+    memset(&startThreadTime, 0, sizeof(startThreadTime));
+    memset(&startRealTime, 0, sizeof(startRealTime));
+    memset(&endThreadTime, 0, sizeof(endThreadTime));
+    memset(&endRealTime, 0, sizeof(endRealTime));
+  }
   ~Timer() { }
 
 #if 0
@@ -92,6 +98,10 @@ public:
     assert(res == 0);
 
     convert(endThreadTime, tp);
+  }
+
+  void split() {
+    stop();
   }
 #endif
 

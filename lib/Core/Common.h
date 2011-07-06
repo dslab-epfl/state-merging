@@ -51,6 +51,25 @@ namespace klee {
   void klee_warning_once(const void *id,
                          const char *msg, ...)
     __attribute__ ((format (printf, 2, 3)));
+
+  /* The following is GCC-specific implementation of foreach.
+     Should handle correctly all crazy C++ corner cases.
+     This is also syntatically very similar for the upcoming C++0x
+     implementation, so migration would be easy. */
+  template <typename T>
+  class _ForeachContainer {
+  public:
+      inline _ForeachContainer(const T& t) : c(t), brk(0), i(c.begin()), e(c.end()) { }
+      const T c; /* Compiler will remove the copying here */
+      int brk;
+      typename T::const_iterator i, e;
+  };
+
+  #define foreach(variable, container) \
+  for (_ForeachContainer<__typeof__(container)> _container_(container); \
+       !_container_.brk && _container_.i != _container_.e; \
+       __extension__  ({ ++_container_.brk; ++_container_.i; })) \
+      for (variable = *_container_.i;; __extension__ ({--_container_.brk; break;}))
 }
 
 #endif /* __KLEE_COMMON_H__ */

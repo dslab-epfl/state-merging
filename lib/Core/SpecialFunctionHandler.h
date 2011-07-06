@@ -126,6 +126,16 @@ namespace klee {
     HANDLER(handleValloc);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);
+
+    HANDLER(handleLoopIter);
+    HANDLER(handleLoopExit);
+
+    HANDLER(handleMergeDisable);
+    HANDLER(handleMergeBlacklist);
+    HANDLER(handleMergeBlacklistClear);
+
+    HANDLER(handleUseFreq);
+
 #undef HANDLER
   };
 } // End klee namespace

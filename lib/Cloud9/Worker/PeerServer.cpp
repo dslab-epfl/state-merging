@@ -8,6 +8,7 @@
 #include "cloud9/worker/PeerServer.h"
 #include "cloud9/worker/WorkerCommon.h"
 #include "cloud9/worker/JobManager.h"
+#include "cloud9/worker/ReconstructionJob.h"
 #include "cloud9/Protocols.h"
 #include "cloud9/Logger.h"
 
@@ -41,16 +42,27 @@ void PeerConnection::handleMessageReceived(std::string &msgString,
 		PeerTransferMessage message;
 		message.ParseFromString(msgString);
 
-		const cloud9::data::ExecutionPathSet &pathSet = message.path_set();
+		const cloud9::data::ExecutionPathSet &pathSet = message.pathset();
 
 		ExecutionPathSetPin paths = parseExecutionPathSet(pathSet);
-		std::vector<long> replayInstrs;
+		std::map<unsigned,JobReconstruction*> reconstructions;
 
-		for (int i = 0; i < message.instr_since_fork_size(); i++) {
-		  replayInstrs.push_back(message.instr_since_fork(i));
+		for (int i = 0; i < message.reconstructionjobs_size(); i++) {
+		  const cloud9::data::ReconstructionJob &recJobData = message.reconstructionjobs(i);
+		  cloud9::worker::JobReconstruction *recJob = new JobReconstruction();
+
+		  for (int j = 0; j < recJobData.tasks_size(); j++) {
+		    const cloud9::data::ReconstructionTask &recTaskData = recJobData.tasks(j);
+		    recJob->tasks.push_back(ReconstructionTask(
+		        recTaskData.ismerge(),
+		        recTaskData.offset(),
+		        recTaskData.id1(),
+		        recTaskData.id2()));
+		  }
+		  reconstructions[recJobData.id()] = recJob;
 		}
 
-		jobManager->importJobs(paths, replayInstrs);
+		jobManager->importJobs(paths, reconstructions);
 	} else {
 		CLOUD9_ERROR("Error receiving message from peer");
 	}

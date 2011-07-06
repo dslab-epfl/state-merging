@@ -67,6 +67,10 @@ namespace {
   cl::opt<bool>
   UseBumpMerge("use-bump-merge",
            cl::desc("Enable support for klee_merge() (extra experimental)"));
+
+  cl::opt<bool>
+  UseLazyMerge("use-lazy-merge", 
+           cl::desc("Enable support for lazy merging (research)"));
  
   cl::opt<bool>
   UseIterativeDeepeningTimeSearch("use-iterative-deepening-time-search",
@@ -85,6 +89,16 @@ namespace {
   BatchTime("batch-time",
             cl::desc("Amount of time to batch when using --use-batching-search"),
             cl::init(5.0));
+
+  cl::opt<unsigned>
+  UseForkCap("use-fork-cap",
+            cl::desc("Limit the maximum number of states forked at the same point that are considered at a time"),
+            cl::init(0));
+
+  cl::opt<unsigned>
+  UseHardForkCap("use-hard-fork-cap",
+            cl::desc("Hard limit on the maximum number of states forked at the same point"),
+            cl::init(0));
 }
 
 bool klee::userSearcherRequiresMD2U() {
@@ -157,14 +171,24 @@ Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
   }
 
   if (UseMerge) {
-    assert(!UseBumpMerge);
+    assert(!UseBumpMerge && !UseLazyMerge);
     searcher = new MergingSearcher(executor, searcher);
-  } else if (UseBumpMerge) {    
+  } else if (UseBumpMerge) {
+    assert(!UseMerge && !UseLazyMerge);
     searcher = new BumpMergingSearcher(executor, searcher);
+  } else if(UseLazyMerge) {
+    assert(!UseMerge && !UseBumpMerge);
+    searcher = new LazyMergingSearcher(executor, searcher);
   }
   
   if (UseIterativeDeepeningTimeSearch) {
     searcher = new IterativeDeepeningTimeSearcher(searcher);
+  }
+
+  /* XXX: think about the ordering of ForkCap and LazyMerge */
+  if (UseForkCap != 0 || UseHardForkCap != 0) {
+    searcher = new ForkCapSearcher(executor, searcher,
+                                   UseForkCap, UseHardForkCap);
   }
 
   std::ostream &os = executor.getHandler().getInfoStream();

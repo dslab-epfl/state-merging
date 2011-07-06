@@ -26,7 +26,11 @@
 #include "klee/ExecutionState.h"
 
 #include "llvm/Support/CommandLine.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Path.h"
+#else
+#include "llvm/Support/Path.h"
+#endif
 
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/instrum/LocalFileWriter.h"
@@ -42,7 +46,12 @@ namespace {
 cl::opt<std::string>
 		OutputDir("output-dir", cl::desc(
 				"Directory to write results in (defaults to klee-out-N)"),
-				cl::init(""));
+        cl::init(""));
+
+cl::opt<bool>
+        CreateOutputDir("create-output-dir", cl::desc(
+                "Create the directory specified as the output-dir option"),
+                cl::init(true));
 
 cl::opt<bool> WritePaths("write-paths", cl::desc(
 		"Write .path files for each test case"));
@@ -53,6 +62,8 @@ cl::opt<bool> WriteSymPaths("write-sym-paths", cl::desc(
 cl::opt<bool> ExitOnError("exit-on-error", cl::desc("Exit if errors occur"));
 
 cl::opt<bool> NoOutput("no-output", cl::desc("Don't generate test files"));
+
+cl::opt<bool> ReallyNoOutput("really-no-output", cl::desc("Don't generate test files even for errors"));
 
 cl::opt<bool> WriteCVCs("write-cvcs", cl::desc(
 		"Write .cvc files for each test case"));
@@ -120,18 +131,32 @@ KleeHandler::KleeHandler(int argc, char **argv) :
 	}
 
 	sys::Path p(theDir);
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 	if (!p.isAbsolute()) {
+#else
+  if (!llvm::sys::path::is_absolute(Twine(p.c_str()))) {
+#endif
 		sys::Path cwd = sys::Path::GetCurrentDirectory();
 		cwd.appendComponent(theDir);
 		p = cwd;
 	}
 	strcpy(m_outputDirectory, p.c_str());
 
-	if (mkdir(m_outputDirectory, 0775) < 0) {
-		std::cerr << "KLEE: ERROR: Unable to make output directory: \""
-				<< m_outputDirectory << "\", refusing to overwrite.\n";
-		exit(1);
-	}
+    if (OutputDir == "" || CreateOutputDir) {
+      if (mkdir(m_outputDirectory, 0775) < 0) {
+          std::cerr << "KLEE: ERROR: Unable to make output directory: \""
+                  << m_outputDirectory << "\", refusing to overwrite.\n";
+          exit(1);
+      }
+    } else {
+      DIR* dir = opendir(m_outputDirectory);
+      if (!dir) {
+          std::cerr << "KLEE: ERROR: Unable to open output directory: \""
+                  << m_outputDirectory << "\n";
+          exit(1);
+      }
+      closedir(dir);
+    }
 
 	char fname[1024];
 	snprintf(fname, sizeof(fname), "%s/warnings.txt", m_outputDirectory);
@@ -239,7 +264,7 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 		exit(1);
 	}
 
-	if (!NoOutput) {
+  if (!NoOutput || (errorMessage && !ReallyNoOutput)) {
 		std::vector<std::pair<std::string, std::vector<unsigned char> > > out;
 		bool success = m_interpreter->getSymbolicSolution(state, out);
 
@@ -376,19 +401,8 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 			}
 		}
 
-		if (state.coveredNew) {
-			cloud9::instrum::InstrumentationManager &manager =
-					cloud9::instrum::theInstrManager;
-
-			manager.recordEvent(cloud9::instrum::TestCase,
-					"[" +
-					manager.stampToString(manager.getRelativeTime(state.lastCoveredTime))
-					+ "] " +
-					getTestFilename("ktest", id));
-		} else {
-			cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TestCase,
-					getTestFilename("ktest", id));
-		}
+		cloud9::instrum::theInstrManager.recordEvent(cloud9::instrum::TestCase,
+                    getTestFilename("ktest", id));
 	}
 }
 

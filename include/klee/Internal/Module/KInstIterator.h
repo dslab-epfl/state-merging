@@ -33,10 +33,18 @@ namespace klee {
     bool operator!=(const KInstIterator &b) const {
       return !(*this == b);
     }
+    bool operator<(const KInstIterator &b) const {
+        return it < b.it;
+    }
 
     KInstIterator &operator++() {
       ++it;
       return *this;
+    }
+
+    KInstIterator next() const {
+      KInstIterator r(*this);
+      return ++r;
     }
 
     operator KInstruction*() const { return it ? *it : 0;}

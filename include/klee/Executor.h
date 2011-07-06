@@ -75,13 +75,16 @@ namespace klee {
   /// removedStates, and haltExecution, among others.
 
 class Executor : public Interpreter, public ::cloud9::worker::SymbolicEngine {
+  friend class LazyMergingSearcher;
   friend class BumpMergingSearcher;
   friend class MergingSearcher;
   friend class RandomPathSearcher;
   friend class OwningSearcher;
   friend class WeightedRandomSearcher;
+  friend class ForkCapSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
+
   friend class ObjectState;
 
 public:
@@ -173,7 +176,9 @@ private:
   bool ivcEnabled;
 
   /// The maximum time to allow for a single stp query.
-  double stpTimeout; 
+  double stpTimeout;
+
+  std::ostream* constraintsLog;
 
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   
@@ -193,7 +198,7 @@ private:
 			      unsigned offset);
   void initializeGlobals(ExecutionState &state);
 
-  void stepInstruction(ExecutionState &state);
+  void stepInstruction(ExecutionState &state, bool trackInstr);
   void updateStates(ExecutionState *current);
   void transferToBasicBlock(llvm::BasicBlock *dst, 
 			    llvm::BasicBlock *src,
@@ -292,6 +297,8 @@ private:
   StatePair fork(ExecutionState &current, ref<Expr> condition, bool isInternal, int reason);
   StatePair fork(ExecutionState &current, int reason);
   ForkTag getForkTag(ExecutionState &current, int reason);
+
+  void addDuplicates(ExecutionState *main, ExecutionState *other);
 
   /// Add the given (boolean) condition as a constraint on state. This
   /// function is a wrapper around the state's addConstraint function
@@ -432,6 +439,7 @@ private:
 
   void executeFork(ExecutionState &state, KInstruction *ki, int reason);
 
+  void dumpProcessTree();
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();
@@ -524,6 +532,10 @@ public:
 	  return kmodule;
   }
 
+  virtual ExecutionState* merge(ExecutionState &current, ExecutionState &other);
+
+  //Hack for dynamic cast in CoreStrategies, TODO Solve it as soon as possible
+  static bool classof(const SymbolicEngine* engine){ return true; }
 };
   
 } // End klee namespace

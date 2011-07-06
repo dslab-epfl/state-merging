@@ -43,6 +43,11 @@ using namespace llvm;
 namespace {
   cl::opt<bool>
   DebugLogMerge("debug-log-merge");
+
+  cl::opt<unsigned>
+  MaxStateMultiplicity("max-state-multiplicity",
+            cl::desc("Maximum number of states merged into one"),
+            cl::init(0));
 }
 
 namespace klee {
@@ -103,10 +108,10 @@ void RandomSearcher::update(ExecutionState *current,
     ExecutionState *es = *it;
     bool ok = false;
 
-    for (std::vector<ExecutionState*>::iterator it = states.begin(),
-           ie = states.end(); it != ie; ++it) {
-      if (es==*it) {
-        states.erase(it);
+    for (std::vector<ExecutionState*>::iterator it1 = states.begin(),
+           ie1 = states.end(); it1 != ie1; ++it1) {
+      if (es==*it1) {
+        states.erase(it1);
         ok = true;
         break;
       }
@@ -218,11 +223,12 @@ RandomPathSearcher::~RandomPathSearcher() {
 ExecutionState &RandomPathSearcher::selectState() {
   unsigned flips=0, bits=0;
   PTree::Node *n = executor.processTree->root;
+  assert(n->active);
   
   while (!n->data) {
-    if (!n->left) {
+    if (!n->left || !n->left->active) {
       n = n->right;
-    } else if (!n->right) {
+    } else if (!n->right || !n->right->active) {
       n = n->left;
     } else {
       if (bits==0) {
@@ -232,6 +238,7 @@ ExecutionState &RandomPathSearcher::selectState() {
       --bits;
       n = (flips&(1<<bits)) ? n->left : n->right;
     }
+    assert(n && n->active);
   }
 
   return *n->data;
@@ -282,7 +289,7 @@ entry:
       statesAtMerge.begin();
     ExecutionState *es = it->second;
     statesAtMerge.erase(it);
-    ++es->pc();
+    es->setPC(es->pc().next());
 
     baseSearcher->addState(es);
   }
@@ -299,14 +306,14 @@ entry:
       statesAtMerge.insert(std::make_pair(mp, &es));
     } else {
       ExecutionState *mergeWith = it->second;
-      if (mergeWith->merge(es)) {
+      if (executor.merge(*mergeWith, es)) {
         // hack, because we are terminating the state we need to let
         // the baseSearcher know about it again
         baseSearcher->addState(&es);
         executor.terminateState(es, true);
       } else {
         it->second = &es; // the bump
-        ++mergeWith->pc();
+        mergeWith->setPC(mergeWith->pc().next());
 
         baseSearcher->addState(mergeWith);
       }
@@ -398,7 +405,7 @@ ExecutionState &MergingSearcher::selectState() {
              ie = toMerge.end(); it != ie; ++it) {
         ExecutionState *mergeWith = *it;
         
-        if (base->merge(*mergeWith)) {
+        if (executor.merge(*base, *mergeWith)) {
           toErase.insert(mergeWith);
         }
       }
@@ -421,7 +428,7 @@ ExecutionState &MergingSearcher::selectState() {
 
       // step past merge and toss base back in pool
       statesAtMerge.erase(statesAtMerge.find(base));
-      ++base->pc();
+      base->setPC(base->pc().next());
       baseSearcher->addState(base);
     }  
   }
@@ -450,6 +457,254 @@ void MergingSearcher::update(ExecutionState *current,
   } else {
     baseSearcher->update(current, addedStates, removedStates);
   }
+}
+
+///
+
+LazyMergingSearcher::LazyMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
+  : executor(_executor),
+    baseSearcher(_baseSearcher) {
+}
+
+LazyMergingSearcher::~LazyMergingSearcher() {
+  delete baseSearcher;
+}
+
+///
+
+inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const {
+  if (state->mergeDisabled())
+    return false;
+
+  if (MaxStateMultiplicity && state->multiplicity >= MaxStateMultiplicity)
+    return false;
+
+  StatesTrace::const_iterator it = statesTrace.find(state->getMergeIndex());
+
+  if (it == statesTrace.end())
+    return false;
+
+  // This loop could have at most two iterations
+  for (StatesSet::const_iterator it1 = it->second->begin(),
+                      ie1 = it->second->end(); it1 != ie1; ++it1) {
+    if (*it1 != state)
+      return true;
+  }
+
+  return false;
+}
+
+ExecutionState &LazyMergingSearcher::selectState() {
+  ExecutionState *state = NULL, *merged = NULL;
+  while (!statesToForward.empty()) {
+    // TODO: do not fast-forward state if there are other
+    // states that could be merged with state first (i.e., select
+    // smartly what state to fast-forward first).
+#if 0
+    state = *statesToForward.begin();
+    uint32_t mergeIndex = state->getMergeIndex();
+    StatesTrace::iterator traceIt = statesTrace.find(mergeIndex);
+    unsigned candidates = (traceIt == statesTrace.end() ? 0
+                  : traceIt->second->size() - traceIt->second->count(state));
+
+    if (candidates == 0) {
+      // State can no longer be fast-forwarded
+      statesToForward.erase(state);
+      stats::fastForwardsFail += 1;
+      continue;
+    }
+
+#else
+    uint32_t mergeIndex = 0;
+    unsigned candidates = 0;
+    StatesTrace::iterator traceIt;
+
+    /* Find the state that has maximum number of potential targets to merge */
+    for (StatesSet::iterator it = statesToForward.begin(),
+                        ie = statesToForward.end(); it != ie;) {
+      unsigned _candidates = 0;
+      uint32_t _mergeIndex;
+      StatesTrace::iterator _traceIt;
+      if (!(*it)->mergeDisabled()) {
+        _mergeIndex = (*it)->getMergeIndex();
+        _traceIt = statesTrace.find(_mergeIndex);
+        _candidates = (_traceIt == statesTrace.end() ? 0
+                       : _traceIt->second->size() - _traceIt->second->count(*it));
+      }
+
+      if (_candidates == 0) {
+          // State can no longer be fast-forwarded, perhaps it branched
+          // in a different direction that it's merge target
+
+          // XXX: StatesSet does not support erase by iterator!
+          // Moreover, erasing seems to invalidate iterators.
+          statesToForward.erase(*it);
+          stats::fastForwardsFail += 1;
+
+          // Restart iteration from the begining since our iterators
+          // are invalidated by calling erase
+          it = statesToForward.begin();
+
+      } else {
+          if (_candidates > candidates) {
+            state = *it;
+            mergeIndex = _mergeIndex;
+            candidates = _candidates;
+            traceIt = _traceIt;
+          }
+          ++it;
+      }
+    }
+
+    if (state == NULL) {
+        // All states were removed from statesToForward
+        break;
+    }
+
+#endif
+
+    assert(!MaxStateMultiplicity || state->multiplicity < MaxStateMultiplicity);
+    assert(!state->mergeDisabled());
+
+    // Check wether we can already merge
+    for (StatesSet::iterator it = traceIt->second->begin(),
+                             ie = traceIt->second->end(); it != ie; ++it) {
+      ExecutionState *state1 = *it;
+      assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
+      //assert(!state1->mergeDisabled);
+
+      if (state1 != state && !state1->mergeDisabled() &&
+                state1->getMergeIndex() == mergeIndex) {
+        // State is at the same execution index as state1, let's try merging
+        merged = executor.merge(*state1, *state);
+        if (merged) {
+          // We've merged !
+
+          // Any of the merged states could be followed for fast forwards.
+          // Make traces that was pointing to state to point to state1
+          for (StatesTrace::iterator it1 = statesTrace.begin(),
+                                     ie1 = statesTrace.end(); it1 != ie1; ++it1) {
+            if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
+              it1->second->erase(state1);
+              it1->second->erase(state);
+              if (merged != state1)
+                it1->second->erase(merged);
+            } else {
+              bool erased = it1->second->erase(state);
+              if (merged != state1)
+                erased |= it1->second->erase(state1);
+              if (erased)
+                it1->second->insert(merged);
+            }
+          }
+
+          // Terminate merged state
+          statesToForward.erase(state);
+          executor.terminateState(*state, true);
+
+          if (merged != state1) {
+            if (statesToForward.erase(state1))
+              statesToForward.insert(merged);
+            executor.terminateState(*state1, true);
+          }
+
+          if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
+            statesToForward.erase(merged);
+          }
+
+          state = NULL;
+          break;
+        }
+      }
+    }
+
+    if (state) {
+      // The state was not merged right now. Let us fast-forward it.
+      return *state;
+    }
+  }
+
+  assert(state == NULL);
+
+  // At this point we might have terminated states, but the base searcher is
+  // unaware about it. We can not call it since it may crash. Instead, we
+  // simply return the last merged state.
+  if (merged)
+    return *merged;
+
+  // Nothing to fast-forward
+  // Get state from base searcher
+  state = &baseSearcher->selectState();
+
+  if (canFastForwardState(state)) {
+    statesToForward.insert(state);
+    stats::fastForwardsStart += 1;
+    return selectState(); // recursive
+  }
+
+  return *state;
+}
+
+void LazyMergingSearcher::update(ExecutionState *current,
+                             const std::set<ExecutionState*> &addedStates,
+                             const std::set<ExecutionState*> &removedStates) {
+  // At this point, the pc of current state corresponds to the instruction
+  // that is not yet executed. It will be executed when the state is selected.
+  if (current && !current->mergeDisabled() &&
+        removedStates.count(current) == 0 &&
+        (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
+    uint32_t mergeIndex = current->getMergeIndex();
+    StatesTrace::iterator it = statesTrace.find(mergeIndex);
+    if (it == statesTrace.end()) {
+        it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
+    }
+    it->second->insert(current);
+
+    // XXX for some reason the following causes a slowdown
+    /*
+    if (statesToForward.empty() && it->second->size() > 1) {
+        // We are not currently fast-forwarding, but the current
+        // state can now be fast-forwarded
+        statesToForward.insert(current);
+        stats::fastForwardsStart += 1;
+    }
+    */
+  }
+
+  // TODO: we could add every newly created state to fast-forward track,
+  // that would be more aggressive. This can be done be removing the following
+  // 'if' condition. Worth trying and evaluating.
+  if (!statesToForward.empty()) {
+    // States created during fast-forward are also candidates for fast-forward
+    // We would like to check it as soon as possible
+    for (std::set<ExecutionState*>::const_iterator it = addedStates.begin(),
+                                   ie = addedStates.end(); it != ie; ++it) {
+      if (canFastForwardState(*it)) {
+        statesToForward.insert(*it);
+        stats::fastForwardsStart += 1;
+      }
+    }
+  }
+
+  for (std::set<ExecutionState*>::const_iterator it = removedStates.begin(),
+                                 ie = removedStates.end(); it != ie; ++it) {
+    ExecutionState *state = *it;
+    statesToForward.erase(const_cast<ExecutionState*>(state));
+
+    // Terminated states are useless for merge, remove them from traces
+    for (StatesTrace::iterator it1 = statesTrace.begin(),
+                               ie1 = statesTrace.end(); it1 != ie1;) {
+      it1->second->erase(const_cast<ExecutionState*>(state));
+      if (it1->second->empty()) {
+        delete it1->second;
+        statesTrace.erase(it1++);
+      } else {
+        ++it1;
+      }
+    }
+  }
+
+  baseSearcher->update(current, addedStates, removedStates);
 }
 
 ///
@@ -572,4 +827,158 @@ void InterleavedSearcher::update(ExecutionState *current,
   for (std::vector<Searcher*>::const_iterator it = searchers.begin(),
          ie = searchers.end(); it != ie; ++it)
     (*it)->update(current, addedStates, removedStates);
+}
+
+/***/
+
+ForkCapSearcher::ForkCapSearcher(Executor &_executor,
+                                 Searcher *_baseSearcher,
+                                 unsigned long _forkCap,
+                                 unsigned long _hardForkCap)
+  : executor(_executor), baseSearcher(_baseSearcher),
+    forkCap(_forkCap), hardForkCap(_hardForkCap) {
+}
+
+ForkCapSearcher::~ForkCapSearcher() {
+  foreach (const ForkMap::value_type &forkMapItem, forkMap)
+    delete forkMapItem.second;
+
+  delete baseSearcher;
+}
+
+ExecutionState &ForkCapSearcher::selectState() {
+  assert(!baseSearcher->empty() && !statesMap.empty());
+  return baseSearcher->selectState();
+}
+
+void ForkCapSearcher::update(ExecutionState *current,
+                             const std::set<ExecutionState *> &addedStates,
+                             const std::set<ExecutionState *> &removedStates) {
+
+  std::set<ExecutionState*> newAddedStates;
+  std::set<ExecutionState*> newRemovedStates;
+
+  /* Remove the removedStates from forkMap and check for caps */
+  foreach (ExecutionState* state, removedStates) {
+    StatesMap::iterator statesMapIter = statesMap.find(state);
+    if (statesMapIter == statesMap.end()) {
+      assert(disabledStates.count(state));
+      continue;
+    }
+
+    StatesAtFork* statesAtFork = statesMapIter->second;
+    statesMap.erase(statesMapIter);
+
+    if (statesAtFork->active.erase(state)) {
+      /* The removed state was active. Check whether there are states to resume
+         in place of the removed state */
+      if (!statesAtFork->paused.empty()) {
+        /* For now we resume the state that happened to be first
+           in the set ordering. TODO: resume random state or define
+           a heuristic to determine which state to resume. */
+        ExecutionState *resumedState = *statesAtFork->paused.begin();
+        statesAtFork->paused.erase(resumedState);
+        statesAtFork->active.insert(resumedState);
+
+        /* Resumed state could be amoung states to be deleted, so check for it */
+        /* XXX: avoid digging into removedStates again */
+        if (removedStates.count(resumedState) == 0) {
+          newAddedStates.insert(resumedState);
+          executor.processTree->markActive(resumedState->ptreeNode);
+        }
+      }
+
+      /* The state was active, which means the baseSearcher knows about it */
+      newRemovedStates.insert(state);
+
+    } else {
+      /* The states was paused. Just remove it and forget. */
+      bool ok = statesAtFork->paused.erase(state);
+      assert(ok);
+    }
+  }
+
+  if (!addedStates.empty()) {
+    /* Get StatesAtFork for the current fork point */
+    KInstruction *forkPoint = current ? current->prevPC() :
+                                    (*addedStates.begin())->prevPC();
+    ForkMap::iterator forkMapIter = forkMap.find(forkPoint);
+    if (forkMapIter == forkMap.end())
+      forkMapIter = forkMap.insert(
+                std::make_pair(forkPoint, new StatesAtFork)).first;
+
+    StatesAtFork* statesAtFork = forkMapIter->second;
+
+    if (current) {
+      /* XXX: does KLEE ever removes current like this ? */
+      assert(removedStates.count(current) == 0);
+
+      StatesMap::iterator statesMapIter = statesMap.find(current);
+      assert(statesMapIter != statesMap.end());
+
+      StatesAtFork* statesAtOldFork = statesMapIter->second;
+      assert(statesAtOldFork->active.count(current));
+
+      if (statesAtOldFork != statesAtFork) {
+        /* We assume that addedStates are non-empty because the current state
+           have forked. It means it should be removed from previous forkpoint and
+           readded to a new one. */
+        /* TODO: verify this */
+
+        /* Remove current state from the previous fork point */
+        statesAtOldFork->active.erase(current);
+
+        if (!statesAtOldFork->paused.empty()) {
+          /* For now we resume the state that happened to be first
+             in the set ordering. TODO: resume random state or define
+             a heuristic to determine which state to resume. */
+          ExecutionState *resumedState = *statesAtOldFork->paused.begin();
+          statesAtOldFork->paused.erase(resumedState);
+          statesAtOldFork->active.insert(resumedState);
+          newAddedStates.insert(resumedState);
+          executor.processTree->markActive(resumedState->ptreeNode);
+        }
+
+        /* Add current state to the new fork point */
+        statesAtFork->totalForks += 1;
+        if (!hardForkCap || statesAtFork->totalForks <= hardForkCap) {
+          statesMapIter->second = statesAtFork;
+          if (statesAtFork->active.size() < forkCap) {
+            statesAtFork->active.insert(current);
+          } else {
+            statesAtFork->paused.insert(current);
+            newRemovedStates.insert(current);
+            executor.processTree->markInactive(current->ptreeNode);
+          }
+        } else {
+          statesMap.erase(statesMapIter);
+          disabledStates.insert(current);
+          newRemovedStates.insert(current);
+          executor.processTree->markInactive(current->ptreeNode);
+        }
+      }
+    }
+
+    /* Add all other states */
+    foreach (ExecutionState *state, addedStates) {
+      assert(state->prevPC() == forkPoint);
+
+      statesAtFork->totalForks += 1;
+      if (!hardForkCap || statesAtFork->totalForks <= hardForkCap) {
+        statesMap.insert(std::make_pair(state, statesAtFork));
+        if (statesAtFork->active.size() < forkCap) {
+          statesAtFork->active.insert(state);
+          newAddedStates.insert(state);
+        } else {
+          statesAtFork->paused.insert(state);
+          executor.processTree->markInactive(state->ptreeNode);
+        }
+      } else {
+        disabledStates.insert(state);
+        executor.processTree->markInactive(state->ptreeNode);
+      }
+    }
+  }
+
+  baseSearcher->update(current, newAddedStates, newRemovedStates);
 }

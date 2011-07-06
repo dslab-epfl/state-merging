@@ -4,12 +4,42 @@ Common functionality across all the Python scripts.
 
 import subprocess
 import math
+import re
+import glob
 
 _HOSTS_DIR = "./hosts"
 _CMDLINES_DIR = "./cmdlines"
 _EXP_DIR = "./exp"
 _KLEECMD_DIR = "./kleecmd"
 _COVERABLE_DIR = "./coverable"
+_REJECTED_DIR = "./rejects"
+
+_REJECTION_RE = re.compile(r"([^/]+)/([^/-]+)-(\d+)(-(\d+))?")
+
+
+def _getRejections():
+    rejections = set()
+
+    files = glob.glob("%s/*.txt" % _REJECTED_DIR)
+    for fileName in files:
+        f = open(fileName, "r")
+        rejSet = f.read().split()
+        f.close()
+
+        for rej in rejSet:
+            match = _REJECTION_RE.match(rej)
+            if not match:
+                continue
+
+            testdir, target, workercount, _, tgcount = match.groups()
+            workercount = int(workercount)
+            tgcount = int(tgcount) if tgcount else 1
+            
+            rejections.add((testdir, target, workercount, tgcount))
+
+    return rejections
+            
+_REJECTIONS = _getRejections()
 
 class AverageEntry:
     def __init__(self):
@@ -129,3 +159,14 @@ def readKleeCmd(kleeCmd):
 
     return cmds
 
+def isExperimentRejected(testdir, target, workercount, tgcount):
+    return (testdir, target, workercount, tgcount) in _REJECTIONS
+
+################################################################################
+# Rich Terminal
+
+def bold(text):
+    return "\033[1m%s\033[0m" % text
+
+def faint(text):
+    return "\033[2m%s\033[0m" % text

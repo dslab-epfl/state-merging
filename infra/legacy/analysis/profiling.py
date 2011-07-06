@@ -6,9 +6,11 @@ import c9instrum
 
 from c9instrum import Events
 from c9instrum import Statistics
+from c9instrum import EventAttributes
 
 import re
 import math
+import sys
 
 class ProfilingExperiment:
     def __init__(self):
@@ -47,7 +49,7 @@ def gen_stp_distributions(outFile, experiment):
         assert event.timeStamp >= lastTimeStamp
         
         if event.id == Events.SMT_SOLVE or event.id == Events.SAT_SOLVE:
-            timing, _ = c9instrum.parse_timer(event.value)
+            timing, _ = c9instrum.parse_timer(event)
         
         bucket = int(math.floor(math.log10(timing[0])))
         
@@ -84,15 +86,138 @@ def gen_stp_distributions(outFile, experiment):
         
     outFile.write("\n\n")
 
-def gen_multiplicity_distribution(outFile, eventEntries):
-    relevantEvents = filter(lambda event: event.id == Events.CONSTRAINT_SOLVE, eventEntries)
+def _compute_histogram(dataSet, keyFunc, valueFunc):
+    """
+    Computes a histogram data structure based on a set of event data.
+    """
 
-    for event in relevantEvents:
-        timing, appendix = c9instrum.parse_timer(event.value)
-        if not appendix: continue
-        depth, multiplicity = map(int, appendix.split(","))
-        
-        outFile.write("%d %d %.3f\n" % (depth, multiplicity, timing[1]))
+    histData = { }
+    for entry in dataSet:
+        key, value = keyFunc(entry), valueFunc(entry)
+
+        if key not in histData:
+            histData[key] = []
+
+        histData[key].append(value)
+
+    histogram = { }
+    for (key, values) in histData.iteritems():
+        avg = sum(values) / len(values)
+        stddev = math.sqrt(sum([(x - avg)*(x - avg) for x in values])/
+                           (len(values) - 1)) \
+                           if len(values) > 1 else 0
+    
+        histogram[key] = (min(values), max(values), avg, stddev)
+
+    return histogram
+
+def _write_histogram(outFile, histogram, labelFunc):
+    keys = histogram.keys()
+
+    for key in range(0, max(keys) + 1):
+        value = histogram.get(key, (0.0, 0.0, 0.0, 0.0))
+        outFile.write("%d %.3f %.3f %.3f %.3f\n" % (labelFunc(key), value[0], value[1], value[2], value[3]))
+
+
+def gen_multiplicity_distribution(outFile, eventEntries):
+    csEvents = filter(lambda event: event.id == Events.CONSTRAINT_SOLVE and 
+                      event.values.get(EventAttributes.STATE_DEPTH) and
+                      event.values.get(EventAttributes.STATE_MULTIPLICITY), eventEntries)
+    stpEvents = filter(lambda event: event.id == Events.SMT_SOLVE and
+                       event.values.get(EventAttributes.STATE_DEPTH) and
+                       event.values.get(EventAttributes.STATE_MULTIPLICITY), eventEntries)
+    satEvents = filter(lambda event: event.id == Events.SAT_SOLVE and
+                       event.values.get(EventAttributes.STATE_DEPTH) and
+                       event.values.get(EventAttributes.STATE_MULTIPLICITY), eventEntries)
+
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 0] Constraint solving events (Depth, Multiplicity, Wall Time)\n")
+    for event in csEvents:        
+        outFile.write("%d %d %.3f\n" % (
+                int(event.values.get(EventAttributes.STATE_DEPTH)),
+                int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                float(event.values.get(EventAttributes.WALL_TIME))
+                ))
+
+    outFile.write("\n\n")
+
+    stpSATEvents = filter(lambda event: event.values.get(EventAttributes.SOLVING_RESULT) == "1", stpEvents)
+    stpUNSATEvents = filter(lambda event: event.values.get(EventAttributes.SOLVING_RESULT) == "0", stpEvents)
+
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 1 & 2] STP solving events (Depth, Multiplicity, Wall Time) for SAT and UNSAT\n")
+    for eventList in (stpSATEvents, stpUNSATEvents):
+        for event in eventList:
+            outFile.write("%d %d %.3f\n" % (
+                    int(event.values.get(EventAttributes.STATE_DEPTH)),
+                    int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                    float(event.values.get(EventAttributes.WALL_TIME))
+                    ))
+
+        outFile.write("\n\n")
+        outFile.write("#"*80 + "\n")
+
+    outFile.write("# [Index 3] STP solving time vs. depth histogram\n")
+    depthHistogram = _compute_histogram(stpEvents, 
+                                        lambda event: int(event.values.get(EventAttributes.STATE_DEPTH)),
+                                        lambda event: float(event.values.get(EventAttributes.WALL_TIME))
+                                        )
+
+    _write_histogram(outFile, depthHistogram, lambda key: key)
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 4] STP solving time vs. multiplicity histogram\n")
+
+    mplicityHistogram = _compute_histogram(stpEvents,
+                                           lambda event: int(math.log(int(event.values.get(EventAttributes.STATE_MULTIPLICITY)), 2)),
+                                           lambda event: float(event.values.get(EventAttributes.WALL_TIME))
+                                           )
+
+    _write_histogram(outFile, mplicityHistogram, lambda key: 3*math.pow(2, key)/2.0)
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 5] State multiplicity vs. depth histogram\n")
+    
+    mplicityDepthHist = _compute_histogram(stpEvents,
+                                           lambda event: int(event.values.get(EventAttributes.STATE_DEPTH)),
+                                           lambda event: int(event.values.get(EventAttributes.STATE_MULTIPLICITY))
+                                           )
+    _write_histogram(outFile, mplicityDepthHist, lambda key: key)
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 6] Constraint solving time vs. multiplicity histogram\n")
+
+    csHistogram = _compute_histogram(csEvents,
+                                     lambda event: int(math.log(int(event.values.get(EventAttributes.STATE_MULTIPLICITY)), 2)),
+                                     lambda event: float(event.values.get(EventAttributes.WALL_TIME))
+                                     )
+    
+    _write_histogram(outFile, csHistogram, lambda key: 3*math.pow(2, key)/2.0)
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 7] SAT solving events (Depth, Multiplicity, Wall Time)\n");
+
+    for event in satEvents:
+        outFile.write("%d %d %.3f\n" % (
+                int(event.values.get(EventAttributes.STATE_DEPTH)),
+                int(event.values.get(EventAttributes.STATE_MULTIPLICITY)),
+                float(event.values.get(EventAttributes.WALL_TIME))
+                ))
+
+    outFile.write("\n\n")
+    outFile.write("#"*80 + "\n")
+    outFile.write("# [Index 8] SAT solving time vs. multiplicity histogram\n")
+
+    satHistogram = _compute_histogram(satEvents,
+                                      lambda event: int(math.log(int(event.values.get(EventAttributes.STATE_MULTIPLICITY)), 2)),
+                                      lambda event: float(event.values.get(EventAttributes.WALL_TIME))
+                                      )
+
+    _write_histogram(outFile, satHistogram, lambda key: 3*math.pow(2, key)/2.0)
 
 def gen_worker_profile(outFile, experiment, worker, resolution):
     timeline = experiment.wTimelines[worker-1][1]

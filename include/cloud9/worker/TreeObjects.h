@@ -9,6 +9,7 @@
 #define TREEOBJECTS_H_
 
 #include "cloud9/worker/TreeNodeInfo.h"
+#include "cloud9/worker/ReconstructionJob.h"
 #include "klee/ExecutionState.h"
 #include "klee/ForkTag.h"
 
@@ -31,6 +32,7 @@ class SymbolicState {
 private:
 	klee::ExecutionState *kleeState;
 	WorkerTree::NodePin nodePin;
+	SymbolicState *parent;
 
 	bool _active;
 
@@ -54,9 +56,10 @@ private:
 	}
 
 public:
-	SymbolicState(klee::ExecutionState *state) :
+	SymbolicState(klee::ExecutionState *state, SymbolicState *_parent) :
 		kleeState(state),
 		nodePin(WORKER_LAYER_STATES),
+		parent(_parent),
 		_active(false),
 		_instrPos(0),
 		_instrSinceFork(0),
@@ -68,9 +71,21 @@ public:
 		rebindToNode(NULL);
 	}
 
-	klee::ExecutionState *getKleeState() const { return kleeState; }
+	void replaceKleeState(klee::ExecutionState *state) {
+	  kleeState = state;
+	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
+
+	SymbolicState *getParent() const { return parent; }
+
+	klee::ExecutionState& operator*() {
+      return *kleeState;
+    }
+
+	const klee::ExecutionState& operator*() const {
+	  return *kleeState;
+    }
 };
 
 /*
@@ -81,11 +96,7 @@ class ExecutionJob {
 private:
 	WorkerTree::NodePin nodePin;
 
-	bool imported;
-	bool exported;
-	bool removing;
-
-	long replayInstr;
+	JobReconstruction *reconstruct;
 
 	klee::ForkTag forkTag;
 
@@ -102,13 +113,12 @@ private:
         }
     }
 public:
-	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), imported(false),
-		exported(false), removing(false), replayInstr(0),
+	ExecutionJob() : nodePin(WORKER_LAYER_JOBS), reconstruct(NULL),
 		forkTag(klee::KLEE_FORK_DEFAULT) {}
 
-	ExecutionJob(WorkerTree::Node *node, bool _imported) :
-		nodePin(WORKER_LAYER_JOBS), imported(_imported), exported(false),
-		removing(false), replayInstr(0), forkTag(klee::KLEE_FORK_DEFAULT) {
+	ExecutionJob(WorkerTree::Node *node) :
+		nodePin(WORKER_LAYER_JOBS), reconstruct(NULL),
+		forkTag(klee::KLEE_FORK_DEFAULT) {
 
 		rebindToNode(node);
 
@@ -116,17 +126,16 @@ public:
 	}
 
 	virtual ~ExecutionJob() {
-		//CLOUD9_DEBUG("Destroyed job at " << nodePin);
-		rebindToNode(NULL);
+	  if (reconstruct) {
+	    delete reconstruct;
+	  }
+      //CLOUD9_DEBUG("Destroyed job at " << nodePin);
+      rebindToNode(NULL);
 	}
 
 	WorkerTree::NodePin &getNode() { return nodePin; }
 
 	klee::ForkTag getForkTag() const { return forkTag; }
-
-	bool isImported() const { return imported; }
-	bool isExported() const { return exported; }
-	bool isRemoving() const { return removing; }
 };
 
 

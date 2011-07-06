@@ -13,7 +13,8 @@ namespace cloud9 {
 
 namespace worker {
 
-FIStrategy::FIStrategy(WorkerTree *_workerTree) : workerTree(_workerTree) {
+FIStrategy::FIStrategy(WorkerTree *_workerTree, JobManager *_jobManager) :
+    BasicStrategy(_jobManager), workerTree(_workerTree) {
 
 }
 

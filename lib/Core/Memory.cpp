@@ -75,11 +75,12 @@ ObjectHolder &ObjectHolder::operator=(const ObjectHolder &b) {
 
 /***/
 
+/* Commented out because it would not compile, to be solved later
 std::ostream &klee::operator<<(std::ostream &os, const MemoryObject &obj) {
 	obj.getAllocInfo(os);
 
 	return os;
-}
+}*/
 
 int MemoryObject::counter = 0;
 
@@ -107,7 +108,8 @@ ObjectState::ObjectState(const MemoryObject *mo)
     updates(0, 0),
     size(mo->size),
     readOnly(false),
-    isShared(false) {
+    isShared(false),
+    numBlacklistRefs(0) {
   if (!UseConstantArrays) {
     // FIXME: Leaked.
     static unsigned id = 0;
@@ -128,7 +130,8 @@ ObjectState::ObjectState(const MemoryObject *mo, const Array *array)
     updates(array, 0),
     size(mo->size),
     readOnly(false),
-    isShared(false) {
+    isShared(false),
+    numBlacklistRefs(0) {
   makeSymbolic();
 }
 
@@ -143,7 +146,8 @@ ObjectState::ObjectState(const ObjectState &os)
     updates(os.updates),
     size(os.size),
     readOnly(false),
-    isShared(os.isShared) {
+    isShared(os.isShared),
+    numBlacklistRefs(os.numBlacklistRefs) {
   assert(!os.readOnly && "no need to copy read only object?");
 
   if (os.knownSymbolics) {

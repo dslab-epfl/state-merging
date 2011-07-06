@@ -13,7 +13,14 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "cloud9/Logger.h"
 
+#include "llvm/ADT/DenseMap.h"
+
 #include <map>
+
+namespace llvm {
+  class Value;
+  class User;
+}
 
 namespace klee {
 
@@ -22,6 +29,7 @@ class KInstruction;
 class ExecutionState;
 class Process;
 class CallPathNode;
+class MemoryObject;
 struct Cell;
 
 typedef uint64_t thread_id_t;
@@ -29,6 +37,11 @@ typedef uint64_t process_id_t;
 typedef uint64_t wlist_id_t;
 
 typedef std::pair<thread_id_t, process_id_t> thread_uid_t;
+
+struct LoopExecIndex {
+  uint32_t loopID;
+  uint32_t index;
+};
 
 struct StackFrame {
   KInstIterator caller;
@@ -52,13 +65,29 @@ struct StackFrame {
   // of intrinsic lowering.
   MemoryObject *varargs;
 
-  StackFrame(KInstIterator caller, KFunction *kf);
+  /// A stack of execution indexes. An item at index 0 corresponds to the
+  /// non-loop function code, each next item corresponds to one loop level.
+  /// This is updated by special function handlers for loop instrumentation.
+  std::vector<LoopExecIndex> execIndexStack;
+
+  StackFrame(KInstIterator caller, uint32_t _callerExecIndex, KFunction *kf);
   StackFrame(const StackFrame &s);
 
   StackFrame& operator=(const StackFrame &sf);
   ~StackFrame();
 };
 
+struct MergeBlacklistInfo {
+  llvm::User *inst;
+  const StackFrame *frame;
+  uint64_t useFreq;
+  MergeBlacklistInfo(llvm::User *_inst,
+                     const StackFrame *_frame, uint64_t _useFreq)
+    : inst(_inst), frame(_frame), useFreq(_useFreq) {}
+};
+
+typedef std::pair<const MemoryObject*, uint64_t> MergeBlacklistIndex;
+typedef llvm::DenseMap<MergeBlacklistIndex, MergeBlacklistInfo> MergeBlacklistMap;
 
 class Thread {
   friend class Executor;
@@ -71,10 +100,20 @@ private:
 
   std::vector<StackFrame> stack;
 
+  // MergeBlacklistMap for this thread
+  MergeBlacklistMap mergeBlacklistMap;
+
+  // A hash of blacklist values for this thread
+  uint32_t mergeBlacklistHash;
+
   bool enabled;
   wlist_id_t waitingList;
 
   thread_uid_t tuid;
+
+  uint32_t execIndex;
+  uint32_t mergeIndex;
+
 public:
   Thread(thread_id_t tid, process_id_t pid, KFunction *start_function);
 

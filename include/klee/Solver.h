@@ -20,6 +20,8 @@ namespace klee {
   class SolverImpl;
 
   struct Query {
+    static const ConstraintManager emptyConstraintManager;
+
   public:
     const ConstraintManager &constraints;
     ref<Expr> expr;
@@ -33,6 +35,9 @@ namespace klee {
       return Query(constraints, _expr);
     }
 
+    /// allExpr - Return a copy with each constraint AND-ed with the expression
+    Query allExpr(const ConstraintManager &_constraints) const;
+
     /// withFalse - Return a copy of the query with a false expression.
     Query withFalse() const {
       return Query(constraints, ConstantExpr::alloc(0, Expr::Bool));
@@ -42,6 +47,8 @@ namespace klee {
     Query negateExpr() const {
       return withExpr(Expr::createIsZero(expr));
     }
+
+    Query asOneExpr() const;
   };
 
   class Solver {
@@ -159,8 +166,7 @@ namespace klee {
     /// (required for using timeouts).
     /// \param optimizeDivides - Whether constant division operations should
     /// be optimized into add/shift/multiply operations.
-    STPSolver(bool useForkedSTP, bool optimizeDivides = true);
-
+    STPSolver(bool useForkedSTP, bool optimizeDivides, bool enabledLogging);
     
     
     /// getConstraintLog - Return the constraint log for the given state in CVC
@@ -170,6 +176,25 @@ namespace klee {
     /// setTimeout - Set constraint solver timeout delay to the given value; 0
     /// is off.
     void setTimeout(double timeout);
+
+    /*
+    char *getSharedMemSegment();
+    void releaseSharedMemSegment(char *shMem);
+
+    bool getInitialValues(const Query& query,
+                          const std::vector<const Array*> &objects,
+                          std::vector< std::vector<unsigned char> > &result,
+                          bool &hasSolution);
+
+    bool getInitialValues(const Query& query,
+                          const std::vector<const Array*> &objects,
+                          std::vector< std::vector<unsigned char> > &result,
+                          bool &hasSolution,
+                          char *shMemBuffer);
+
+    void cancelPendingJobs();
+    */
+
   };
 
   /* *** */
@@ -214,6 +239,17 @@ namespace klee {
   /// createPCLoggingSolver - Create a solver which will forward all queries
   /// after writing them to the given path in .pc format.
   Solver *createPCLoggingSolver(Solver *s, std::string path);
+
+  /// setPCLoggingSolverState - Set current state for PCLoggingSolver
+  void setPCLoggingSolverStateID(Solver *s, uint64_t stateID);
+
+  /// createParallelSolver - Create a solver which will solve high-level
+  /// disjunctions in parallel.
+  Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver);
+
+  /// createHLParallelSolver - Create a solver which will solve high-level
+  /// disjunctions in parallel.
+  Solver *createHLParallelSolver(Solver *solver, unsigned threadCount = 0);
 
   /// createDummySolver - Create a dummy solver implementation which always
   /// fails.

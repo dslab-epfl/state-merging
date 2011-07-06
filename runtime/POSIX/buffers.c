@@ -177,6 +177,8 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
     return 0;
   }
 
+  klee_merge_disable(1);
+
   while (buff->size == buff->max_size) {
     buff->queued++;
     klee_thread_sleep(buff->full_wlist);
@@ -211,6 +213,8 @@ ssize_t _stream_write(stream_buffer_t *buff, const char *src, size_t count) {
   buff->size += count;
 
   __notify_event(buff, EVENT_READ);
+
+  klee_merge_disable(0);
 
   return count;
 }

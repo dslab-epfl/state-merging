@@ -12,6 +12,9 @@
 #include "cloud9/worker/TreeNodeInfo.h"
 #include "cloud9/worker/SymbolicEngine.h"
 #include "cloud9/worker/CoreStrategies.h"
+#include "cloud9/worker/ReconstructionJob.h"
+
+#include "klee/KleeHandler.h"
 
 #include <boost/thread.hpp>
 #include <list>
@@ -28,7 +31,6 @@ class Interpreter;
 class ExecutionState;
 class Searcher;
 class KModule;
-class KleeHandler;
 }
 
 namespace cloud9 {
@@ -52,6 +54,7 @@ private:
   void initStatistics();
   void initStrategy();
 
+  StateSelectionStrategy *createCoverageOptimizedStrat(StateSelectionStrategy *base);
   OracleStrategy *createOracleStrategy();
 
   void initRootState(llvm::Function *f, int argc, char **argv, char **envp);
@@ -84,7 +87,12 @@ private:
    * Job execution state
    */
   ExecutionJob *currentJob;
+  SymbolicState *currentState;
   bool replaying;
+  bool batching;
+
+  std::set<SymbolicState*> pendingDeletions;
+  std::set<WorkerTree::NodePin> zombieNodes;
 
   /*
    * Statistics
@@ -108,9 +116,6 @@ private:
 
   bool collectTraces;
 
-  void dumpStateTrace(WorkerTree::Node *node);
-  void dumpInstructionTrace(WorkerTree::Node *node);
-
   void serializeInstructionTrace(std::ostream &s, WorkerTree::Node *node);
   void parseInstructionTrace(std::istream &s, std::vector<unsigned int> &dest);
 
@@ -122,6 +127,7 @@ private:
   void fireActivateState(SymbolicState *state);
   void fireDeactivateState(SymbolicState *state);
   void fireUpdateState(SymbolicState *state, WorkerTree::Node *oldNode);
+  void fireStepState(SymbolicState *state);
   void fireAddJob(ExecutionJob *job);
   void fireRemovingJob(ExecutionJob *job);
 
@@ -142,23 +148,34 @@ private:
   }
 
   ExecutionJob* selectNextJob(boost::unique_lock<boost::mutex> &lock,
-      unsigned int timeOut);
-  ExecutionJob* selectNextJob();
+      unsigned int timeOut, bool &canBatch, uint32_t &batchDest);
+  ExecutionJob* selectNextJob(bool &canBatch, uint32_t &batchDest);
 
   static bool isJob(WorkerTree::Node *node);
   bool isExportableJob(WorkerTree::Node *node);
   bool isValidJob(WorkerTree::Node *node);
 
   void executeJob(boost::unique_lock<boost::mutex> &lock, ExecutionJob *job,
-      bool spawnNew);
+      bool canBatch, uint32_t batchDest);
   void executeJobsBatch(boost::unique_lock<boost::mutex> &lock,
-      ExecutionJob *origJob, bool spawnNew);
+      ExecutionJob *origJob, bool spawnNew, bool canBatch, uint32_t batchDest);
+
+  void requestStateDestroy(SymbolicState *state);
+  void processPendingDeletions();
 
   long stepInNode(boost::unique_lock<boost::mutex> &lock,
-      WorkerTree::Node *node, long count);
+      WorkerTree::Node *node, long count, uint32_t batchDest);
   void replayPath(boost::unique_lock<boost::mutex> &lock,
-      WorkerTree::Node *pathEnd, WorkerTree::Node *&brokenEnd);
+      WorkerTree::Node *pathEnd, unsigned long offset,
+      WorkerTree::Node *&brokenEnd);
   void cleanInvalidJobs(WorkerTree::Node *rootNode);
+
+  void getReconstructionTasks(WorkerTree::Node *node, unsigned long offset, JobReconstruction *job,
+      std::set<std::pair<WorkerTree::Node*, unsigned long> > &reconstructed);
+  JobReconstruction *getJobReconstruction(ExecutionJob *job);
+
+  void runJobReconstruction(boost::unique_lock<boost::mutex> &lock,
+      JobReconstruction* job);
 
   void processLoop(bool allowGrowth, bool blocking, unsigned int timeOut);
 
@@ -194,11 +211,22 @@ public:
     return tree;
   }
 
-  WorkerTree::Node *getCurrentNode();
+  ExecutionJob* getCurrentJob() {
+    return currentJob;
+  }
+
+  SymbolicState* getCurrentState() {
+    return currentState;
+  }
 
   JobSelectionStrategy *getStrategy() {
     return selStrategy;
   }
+
+
+  StateSelectionStrategy *createBaseStrategy();
+
+  bool mergeStates(SymbolicState* dest, SymbolicState *src);
 
   void lockJobs() {
     jobsMutex.lock();
@@ -256,9 +284,31 @@ public:
   /*
    * Job import/export methods
    */
-  void importJobs(ExecutionPathSetPin paths, std::vector<long> &replayInstrs);
+  void importJobs(ExecutionPathSetPin paths,
+      std::map<unsigned,JobReconstruction*> &reconstruct);
+
   ExecutionPathSetPin exportJobs(ExecutionPathSetPin seeds,
-      std::vector<int> &counts, std::vector<long> &replayInstrs);
+      std::vector<int> &counts,
+      std::map<unsigned,JobReconstruction*> &reconstruct);
+
+  void dumpStateTrace(WorkerTree::Node *node);
+  void dumpInstructionTrace(WorkerTree::Node *node);
+
+  template<class Decorator>
+  void dumpSymbolicTree(WorkerTree::Node *node, Decorator decorator) {
+    char fileName[256];
+    snprintf(fileName, 256, "treeDump%05d.txt", traceCounter);
+    traceCounter++;
+
+    CLOUD9_INFO("Dumping symbolic tree in file " << fileName);
+
+    std::ostream *os = kleeHandler->openOutputFile(fileName);
+    assert(os != NULL);
+
+    tree->dumpDotGraph(node, *os, decorator);
+
+    delete os;
+  }
 };
 
 }

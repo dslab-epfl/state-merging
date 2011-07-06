@@ -37,7 +37,7 @@ namespace klee {
     Executor &executor;
     std::string objectFilename;
 
-    std::ostream *statsFile, *istatsFile;
+    std::ostream *statsFile, *allStatsFile, *istatsFile;
     double startWallTime;
     
     unsigned numBranches;

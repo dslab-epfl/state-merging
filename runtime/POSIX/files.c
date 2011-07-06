@@ -68,7 +68,9 @@ static void _init_stats(disk_file_t *dfile, const struct stat *defstats) {
   /* Important since we copy this out through getdents, and readdir
      will otherwise skip this entry. For same reason need to make sure
      it fits in low bits. */
-  klee_assume((stat->st_ino & 0x7FFFFFFF) != 0);
+  //klee_assume((stat->st_ino & 0x7FFFFFFF) != 0);
+  klee_assume(((uint32_t)stat->st_ino) != 0);
+  klee_assume(((uint32_t)stat->st_ino) != 0x80000000);
 
   /* uclibc opendir uses this as its buffer size, try to keep
      reasonable. */
@@ -211,14 +213,33 @@ ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset) {
 
 ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
+    if (file->concrete_fd == 1) {
+      // Ugh
+      if (klee_is_symbolic((long)buf) && klee_is_symbolic((long)count)) {
+        CALL_UNDERLYING(write, file->concrete_fd, "(S)", 4);
+      } else {
+        char ch;
+        size_t i;
+        size_t count1 = klee_get_valuel((long) count);
+        buf = (void*) klee_get_valuel((long) buf);
+        klee_check_memory_access(buf, count1);
+
+        for (i=0; i<count1; ++i) {
+          ch = klee_get_value_i32(((const char*)buf)[i]);
+          CALL_UNDERLYING(write, file->concrete_fd, &ch, 1);
+        }
+      }
+      return count;
+    }
+
+    int res;
+
     buf = __concretize_ptr(buf);
     count = __concretize_size(count);
     /* XXX In terms of looking for bugs we really should do this check
       before concretization, at least once the routine has been fixed
       to properly work with symbolics. */
     klee_check_memory_access(buf, count);
-
-    int res;
 
     if (offset >= 0)
       res = CALL_UNDERLYING(pwrite, file->concrete_fd, buf, count, offset);
@@ -425,6 +446,20 @@ DEFINE_MODEL(int, open, const char *pathname, int flags, ...) {
 
     return fd;
   }
+}
+
+DEFINE_MODEL(int, open64, const char *pathname, int flags, ...) {
+  mode_t mode = 0;
+
+  if (flags & O_CREAT) {
+    /* get mode */
+    va_list ap;
+    va_start(ap, flags);
+    mode = va_arg(ap, mode_t);
+    va_end(ap);
+  }
+
+  return CALL_MODEL(open, pathname, flags | O_LARGEFILE, mode);
 }
 
 int _open_concrete(int concrete_fd, int flags) {

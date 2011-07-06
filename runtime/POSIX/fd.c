@@ -460,7 +460,7 @@ DEFINE_MODEL(int, close, int fd) {
     return -1;
   }
 
-  //klee_debug("Closing FD %d (pid %d)\n", fd, getpid());
+  klee_debug("Closing FD %d (pid %d)\n", fd, getpid());
 
   fd_entry_t *fde = &__fdt[fd];
 

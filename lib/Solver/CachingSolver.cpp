@@ -18,6 +18,7 @@
 #include "SolverStats.h"
 
 #include <tr1/unordered_map>
+#include <pthread.h>
 
 using namespace klee;
 
@@ -65,10 +66,11 @@ private:
   
   Solver *solver;
   cache_map cache;
+  pthread_mutex_t mutex;
 
 public:
-  CachingSolver(Solver *s) : solver(s) {}
-  ~CachingSolver() { cache.clear(); delete solver; }
+  CachingSolver(Solver *s) : solver(s) { pthread_mutex_init(&mutex, NULL); }
+  ~CachingSolver() { cache.clear(); pthread_mutex_destroy(&mutex); delete solver; }
 
   bool computeValidity(const Query&, Solver::Validity &result);
   bool computeTruth(const Query&, bool &isValid);
@@ -82,6 +84,8 @@ public:
     return solver->impl->computeInitialValues(query, objects, values, 
                                               hasSolution);
   }
+
+  void cancelPendingJobs() { solver->impl->cancelPendingJobs(); }
 };
 
 /** @returns the canonical version of the given query.  The reference
@@ -109,15 +113,19 @@ bool CachingSolver::cacheLookup(const Query& query,
   ref<Expr> canonicalQuery = canonicalizeQuery(query.expr, negationUsed);
 
   CacheEntry ce(query.constraints, canonicalQuery);
+
+  pthread_mutex_lock(&mutex);
   cache_map::iterator it = cache.find(ce);
   
   if (it != cache.end()) {
     result = (negationUsed ?
               IncompleteSolver::negatePartialValidity(it->second) :
               it->second);
+    pthread_mutex_unlock(&mutex);
     return true;
   }
   
+  pthread_mutex_unlock(&mutex);
   return false;
 }
 
@@ -130,8 +138,10 @@ void CachingSolver::cacheInsert(const Query& query,
   CacheEntry ce(query.constraints, canonicalQuery);
   IncompleteSolver::PartialValidity cachedResult = 
     (negationUsed ? IncompleteSolver::negatePartialValidity(result) : result);
-  
+
+  pthread_mutex_lock(&mutex);
   cache.insert(std::make_pair(ce, cachedResult));
+  pthread_mutex_unlock(&mutex);
 }
 
 bool CachingSolver::computeValidity(const Query& query,

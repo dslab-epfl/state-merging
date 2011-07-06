@@ -10,10 +10,14 @@
 #ifndef KLEE_PASSES_H
 #define KLEE_PASSES_H
 
+#include "klee/Config/config.h"
+
 #include "llvm/Constants.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/CallGraphSCCPass.h"
+#include "llvm/Analysis/LoopPass.h"
 #include "llvm/CodeGen/IntrinsicLowering.h"
 
 namespace llvm {
@@ -21,6 +25,7 @@ namespace llvm {
   class Instruction;
   class Module;
   class TargetData;
+  class TargetLowering;
   class Type;
 }
 
@@ -30,6 +35,10 @@ namespace klee {
   /// asm which are used by glibc into normal LLVM IR.
 class RaiseAsmPass : public llvm::ModulePass {
   static char ID;
+
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR >= 9)
+  const llvm::TargetLowering *TLI;
+#endif
 
   llvm::Function *getIntrinsic(llvm::Module &M,
                                unsigned IID,
@@ -44,7 +53,11 @@ class RaiseAsmPass : public llvm::ModulePass {
   bool runOnInstruction(llvm::Module &M, llvm::Instruction *I);
 
 public:
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 8)
   RaiseAsmPass() : llvm::ModulePass((intptr_t) &ID) {}
+#else
+  RaiseAsmPass() : llvm::ModulePass(ID) {}
+#endif
   
   virtual bool runOnModule(llvm::Module &M);
 };
@@ -61,7 +74,11 @@ class IntrinsicCleanerPass : public llvm::ModulePass {
 public:
   IntrinsicCleanerPass(const llvm::TargetData &TD,
                        bool LI=true)
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 8)
     : llvm::ModulePass((intptr_t) &ID),
+#else
+    : llvm::ModulePass(ID),
+#endif
       TargetData(TD),
       IL(new llvm::IntrinsicLowering(TD)),
       LowerIntrinsics(LI) {}
@@ -86,7 +103,11 @@ class PhiCleanerPass : public llvm::FunctionPass {
   static char ID;
 
 public:
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 8)
   PhiCleanerPass() : llvm::FunctionPass((intptr_t) &ID) {}
+#else
+  PhiCleanerPass() : llvm::FunctionPass(ID) {}
+#endif
   
   virtual bool runOnFunction(llvm::Function &f);
 };
@@ -94,7 +115,11 @@ public:
 class DivCheckPass : public llvm::ModulePass {
   static char ID;
 public:
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 8)
   DivCheckPass(): ModulePass((intptr_t) &ID) {}
+#else
+  DivCheckPass(): ModulePass(ID) {}
+#endif
   virtual bool runOnModule(llvm::Module &M);
 };
 
@@ -104,7 +129,11 @@ public:
 class LowerSwitchPass : public llvm::FunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 8)
   LowerSwitchPass() : FunctionPass((intptr_t) &ID) {} 
+#else
+  LowerSwitchPass() : FunctionPass(ID) {} 
+#endif
   
   virtual bool runOnFunction(llvm::Function &F);
   
@@ -127,6 +156,41 @@ private:
                      llvm::Value *value,
                      llvm::BasicBlock *origBlock,
                      llvm::BasicBlock *defaultBlock);
+};
+
+/// AnnotateLoopPass - Annotate all loop headers and exits with a call
+/// to a special KLEE functions. This pass does not changes the CFG.
+///
+/// NOTE: LLVM loop analysis ignores loops that have multiple entry
+///       points. Such loops will remain uninstrumented.
+class AnnotateLoopPass : public llvm::LoopPass {
+  llvm::Function *m_kleeLoopIterFunc;
+  llvm::Function *m_kleeLoopExitFunc;
+
+  int lastLoopID;
+public:
+  static char ID;
+  AnnotateLoopPass();
+
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &) const;
+  virtual bool runOnLoop(llvm::Loop *L, llvm::LPPassManager &LPM);
+};
+
+class UseFrequencyAnalyzerPass : public llvm::CallGraphSCCPass {
+  llvm::TargetData *m_targetData;
+
+  llvm::Function *m_kleeUseFreqFunc;
+  llvm::Function *m_kleeUseFreqTotalFunc;
+
+public:
+  static char ID;
+  UseFrequencyAnalyzerPass(llvm::TargetData *TD = 0);
+
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &Info) const;
+  virtual bool doInitialization(llvm::CallGraph &CG);
+  //virtual bool doInitialization(llvm::Module &M);
+  virtual bool runOnSCC(llvm::CallGraphSCC &SCC);
+  bool runOnFunction(llvm::CallGraphNode &CGNode);
 };
 
 }

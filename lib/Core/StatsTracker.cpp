@@ -35,8 +35,16 @@
 #include "llvm/Type.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/CFG.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Process.h"
+#else
+#include "llvm/Support/Process.h"
+#endif
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Path.h"
+#else
+#include "llvm/Support/Path.h"
+#endif
 
 #include "cloud9/instrum/InstrumentationManager.h"
 #include "cloud9/worker/WorkerCommon.h"
@@ -180,6 +188,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   : executor(_executor),
     objectFilename(_objectFilename),
     statsFile(0),
+    allStatsFile(0),
     istatsFile(0),
     startWallTime(util::getWallTime()),
     numBranches(0),
@@ -189,10 +198,18 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   KModule *km = executor.kmodule;
 
   sys::Path module(objectFilename);
-  if (!sys::Path(objectFilename).isAbsolute()) {
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
+	if (!sys::Path(objectFilename).isAbsolute()) {
+#else
+  if (!llvm::sys::path::is_absolute(Twine(objectFilename))) {
+#endif
     sys::Path current = sys::Path::GetCurrentDirectory();
     current.appendComponent(objectFilename);
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
     if (current.exists())
+#else
+    if (current.isValid())
+#endif
       objectFilename = current.c_str();
   }
 
@@ -250,6 +267,9 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
   if (OutputStats) {
     statsFile = executor.interpreterHandler->openOutputFile("run.stats");
     assert(statsFile && "unable to open statistics trace file");
+
+    allStatsFile = executor.interpreterHandler->openOutputFile("all.stats");
+    assert(allStatsFile && "unable to open statistics trace file");
     writeStatsHeader();
     writeStatsLine();
 
@@ -274,6 +294,8 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
 StatsTracker::~StatsTracker() {  
   if (statsFile)
     delete statsFile;
+  if (allStatsFile)
+    delete allStatsFile;
   if (istatsFile)
     delete istatsFile;
 }
@@ -416,8 +438,29 @@ void StatsTracker::writeStatsHeader() {
              << "'CexCacheTime',"
              << "'ForkTime',"
              << "'ResolveTime',"
+             << "'MergeSuccessTime',"
+             << "'MergeFailTime',"
+             << "'MergesSuccess',"
+             << "'MergesFail',"
+             << "'FastForwardStart',"
+             << "'FastForwardFail',"
              << ")\n";
   statsFile->flush();
+
+  *allStatsFile << "("
+                << "'WallTime',"
+                << "'UserTime',"
+                << "'MallocUsage',"
+                << "'NumStates',"
+                << "'NumBranches',"
+                << "'FullBranches',"
+                << "'PartialBranches'";
+
+  foreach (Statistic *stat, theStatisticManager->stats)
+    *allStatsFile <<  ",'" << stat->getName() << "'";
+
+  *allStatsFile << ")\n";
+  allStatsFile->flush();
 }
 
 double StatsTracker::elapsed() {
@@ -443,8 +486,31 @@ void StatsTracker::writeStatsLine() {
              << "," << stats::cexCacheTime / 1000000.
              << "," << stats::forkTime / 1000000.
              << "," << stats::resolveTime / 1000000.
+             << "," << stats::mergeSuccessTime / 1000000.
+             << "," << stats::mergeFailTime / 1000000.
+             << "," << stats::mergesSuccess
+             << "," << stats::mergesFail
+             << "," << stats::fastForwardsStart
+             << "," << stats::fastForwardsFail
              << ")\n";
   statsFile->flush();
+
+  *allStatsFile << "(" << elapsed()
+                << "," << util::getUserTime()
+                << "," << sys::Process::GetTotalMemoryUsage()
+                << "," << executor.states.size()
+                << "," << numBranches
+                << "," << fullBranches
+                << "," << partialBranches;
+  foreach (Statistic *stat, theStatisticManager->stats) {
+    if (stat->isTime())
+      *allStatsFile << "," << *stat / 1000000.;
+    else
+      *allStatsFile << "," << *stat;
+  }
+
+  *allStatsFile << ")\n";
+  allStatsFile->flush();
 }
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {

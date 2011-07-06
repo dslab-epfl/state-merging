@@ -12,6 +12,8 @@
 #include "Memory.h"
 #include "TimingSolver.h"
 
+#include "../Core/Common.h"
+
 #include "klee/Expr.h"
 #include "klee/TimerStatIncrementer.h"
 #include "klee/AddressPool.h"
@@ -26,7 +28,12 @@ void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner==0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
 
+  const MemoryMap::value_type *prev = objects.lookup(mo);
+  if (prev)
+    hash -= (uintptr_t) prev->first;
+
   objects = objects.replace(std::make_pair(mo, os));
+  hash += (uintptr_t) mo;
 }
 
 void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
@@ -37,6 +44,23 @@ void AddressSpace::bindSharedObject(const MemoryObject *mo, ObjectState *os) {
 }
 
 void AddressSpace::unbindObject(const MemoryObject *mo) {
+  const MemoryMap::value_type *prev = objects.lookup(mo);
+  if (prev) {
+    hash -= (uintptr_t) prev->first;
+    /*
+    removeMergeBlacklistItemHash(mo, prev->second);
+    for (MergeBlacklist::iterator it = mergeBlacklist.begin(),
+            ie = mergeBlacklist.end(); it != ie;) {
+      if (it->first == mo) {
+        mergeBlacklistHash -= uintptr_t(it->second);
+        mergeBlacklistHash -= uintptr_t(mo);
+        mergeBlacklist.erase(it++);
+      } else {
+        ++it;
+      }
+    }*/
+#warning Remove from mergeBlacklistMap
+  }
   objects = objects.remove(mo);
 }
 
@@ -104,6 +128,31 @@ bool AddressSpace::resolveOne(ExecutionState &state,
     success = resolveOne(CE, result);
     return true;
   } else {
+    if (SelectExpr *se = dyn_cast<SelectExpr>(address)) {
+      if (se->isConstantCases()) {
+        std::vector<uint64_t> cases;
+        se->getConstantCases(&cases);
+        assert(!cases.empty());
+
+        MemoryObject hack(cases[0]);
+        const MemoryMap::value_type *res = objects.lookup_previous(&hack);
+        if (res) {
+          std::vector<uint64_t>::iterator it = cases.begin(), ie = cases.end();
+          for (; it != ie; ++it) {
+            if (*it < res->first->address ||
+                *it - res->first->address >= res->first->size)
+              break;
+          }
+          if (it == ie) {
+            // All cases are within one memory object
+            result = *res;
+            success = true;
+            return true;
+          }
+        }
+      }
+    }
+
     TimerStatIncrementer timer(stats::resolveTime);
 
     // try cheap search, will succeed for any inbounds pointer
@@ -372,3 +421,63 @@ bool MemoryObjectLT::operator()(const MemoryObject *a, const MemoryObject *b) co
   return a->address < b->address;
 }
 
+#if 0
+void AddressSpace::addMergeBlacklistItem(const MemoryObject *mo, unsigned offset) {
+  bool inserted = mergeBlacklist.insert(std::make_pair(mo, offset)).second;
+  if (inserted) {
+    mergeBlacklistHash += uintptr_t(mo);
+    mergeBlacklistHash += uintptr_t(offset);
+    addMergeBlacklistItemHash(mo, const_cast<ObjectState*>(findObject(mo)),
+                              ConstantExpr::alloc(offset, 32), 1);
+  }
+}
+
+void AddressSpace::removeMergeBlacklistItem(const MemoryObject *mo, unsigned offset) {
+  MergeBlacklist::iterator it = mergeBlacklist.find(std::make_pair(mo, offset));
+  if (it != mergeBlacklist.end()) {
+    removeMergeBlacklistItemHash(mo, const_cast<ObjectState*>(findObject(mo)),
+                                 ConstantExpr::alloc(offset, 32), 1);
+    mergeBlacklistHash -= uintptr_t(offset);
+    mergeBlacklistHash -= uintptr_t(mo);
+    mergeBlacklist.erase(it);
+  }
+}
+
+void AddressSpace::clearMergeBlacklist() {
+  mergeBlacklist.clear();
+  mergeBlacklistHash = hashInit();
+}
+
+void AddressSpace::removeMergeBlacklistItemHash(const MemoryObject *mo, ObjectState *os) {
+  foreach (const MergeBlacklist::value_type &v, mergeBlacklist) {
+    if (v.first == mo) {
+      if (os->isByteConcrete(v.second))
+        mergeBlacklistHash -= uintptr_t(cast<ConstantExpr>(os->read8(v.second))->getZExtValue());
+    }
+  }
+}
+
+void AddressSpace::removeMergeBlacklistItemHash(const MemoryObject *mo, ObjectState *os,
+                              ref<Expr> offset, unsigned size) {
+  if (!isa<ConstantExpr>(offset))
+    return;
+
+  unsigned oc = cast<ConstantExpr>(offset)->getZExtValue();
+  for (unsigned i = 0; i < size; ++i) {
+    if (os->isByteConcrete(oc+i))
+      mergeBlacklistHash -= uintptr_t(cast<ConstantExpr>(os->read8(oc+i))->getZExtValue());
+  }
+}
+
+void AddressSpace::addMergeBlacklistItemHash(const MemoryObject *mo, ObjectState *os,
+                              ref<Expr> offset, unsigned size) {
+  if (!isa<ConstantExpr>(offset))
+    return;
+
+  unsigned oc = cast<ConstantExpr>(offset)->getZExtValue();
+  for (unsigned i = 0; i < size; ++i) {
+    if (os->isByteConcrete(oc+i))
+      mergeBlacklistHash += uintptr_t(cast<ConstantExpr>(os->read8(oc+i))->getZExtValue());
+  }
+}
+#endif

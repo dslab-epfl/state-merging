@@ -15,8 +15,17 @@
 #include <map>
 #include <queue>
 
+#include <llvm/ADT/SmallPtrSet.h>
+#include <llvm/ADT/DenseSet.h>
+#include <llvm/ADT/DenseMap.h>
+
+#include <inttypes.h>
+
 // FIXME: Move out of header, use llvm streams.
 #include <ostream>
+
+// FIXME: We do not want to be exposing these? :(
+#include "klee/Internal/Module/KInstIterator.h"
 
 namespace llvm {
   class BasicBlock;
@@ -201,6 +210,33 @@ namespace klee {
     }
   };
 
+  class LazyMergingSearcher : public Searcher {
+    Executor &executor;
+    Searcher *baseSearcher;
+
+    // TODO: use unordered multimap instead
+    typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
+    typedef llvm::DenseMap<uint32_t, StatesSet*> StatesTrace;
+
+    StatesTrace statesTrace;
+    StatesSet statesToForward;
+
+    bool canFastForwardState(const ExecutionState* state) const;
+
+  public:
+    LazyMergingSearcher(Executor &executor, Searcher *baseSearcher);
+    ~LazyMergingSearcher();
+
+    ExecutionState &selectState();
+    void update(ExecutionState *current,
+                const std::set<ExecutionState*> &addedStates,
+                const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty(); }
+    void printName(std::ostream &os) {
+      os << "LazyMergingSearcher\n";
+    }
+  };
+
   class BatchingSearcher : public Searcher {
     Searcher *baseSearcher;
     double timeBudget;
@@ -271,6 +307,56 @@ namespace klee {
            it != ie; ++it)
         (*it)->printName(os);
       os << "</InterleavedSearcher>\n";
+    }
+  };
+
+  class ForkCapSearcher : public Searcher {
+    Executor &executor;
+    Searcher *baseSearcher;
+
+#if 0
+    typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
+#else
+    typedef std::set<ExecutionState*> StatesSet;
+#endif
+
+    struct StatesAtFork {
+      unsigned long totalForks;
+      StatesSet active;
+      StatesSet paused;
+
+      StatesAtFork(): totalForks(0) {}
+    };
+
+#if 0
+    typedef llvm::DenseMap<KInstruction*, StatesAtFork*> ForkMap;
+    typedef llvm::DenseMap<ExecutionState*, StatesAtFork*> StatesMap;
+#else
+    typedef std::map<KInstruction*, StatesAtFork*> ForkMap;
+    typedef std::map<ExecutionState*, StatesAtFork*> StatesMap;
+#endif
+
+    ForkMap forkMap;
+    StatesMap statesMap;
+    StatesSet disabledStates;
+
+    unsigned long forkCap;
+    unsigned long hardForkCap;
+
+  public:
+    ForkCapSearcher(Executor &executor,
+                    Searcher *baseSearcher,
+                    unsigned long forkCap,
+                    unsigned long hardForkCap);
+    ~ForkCapSearcher();
+
+    ExecutionState &selectState();
+    void update(ExecutionState *current,
+                const std::set<ExecutionState*> &addedStates,
+                const std::set<ExecutionState*> &removedStates);
+    bool empty() { return baseSearcher->empty(); }
+    void printName(std::ostream &os) {
+      os << "FrokCapSearcher\n";
     }
   };
 

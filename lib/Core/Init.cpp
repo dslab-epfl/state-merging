@@ -8,7 +8,9 @@
 #include "klee/Init.h"
 
 #include "Common.h"
-#include "klee/Config/config.h"
+#include "cloud9/worker/KleeCommon.h"
+#include "cloud9/worker/WorkerCommon.h"
+#include "cloud9/Logger.h"
 #include "klee/Internal/Support/ModuleUtil.h"
 
 // FIXME: Ugh, this is gross. But otherwise our config.h conflicts with LLVMs.
@@ -19,7 +21,11 @@
 #undef PACKAGE_VERSION
 
 #include "llvm/Support/CommandLine.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Path.h"
+#else
+#include "llvm/Support/Path.h"
+#endif
 #include "llvm/Module.h"
 #include "llvm/Type.h"
 #include "llvm/InstrTypes.h"
@@ -28,12 +34,17 @@
 #if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 7)
 #include "llvm/ModuleProvider.h"
 #endif
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR >= 7)
+#include "llvm/LLVMContext.h"
+#endif
 #include "llvm/Support/MemoryBuffer.h"
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
+#include "llvm/System/Signals.h"
+#else
+#include "llvm/Support/Signals.h"
+#include "llvm/Support/system_error.h"
+#endif
 #include "llvm/Bitcode/ReaderWriter.h"
-
-#include "cloud9/worker/KleeCommon.h"
-#include "cloud9/worker/WorkerCommon.h"
-#include "cloud9/Logger.h"
 
 #include <iostream>
 #include <map>
@@ -187,6 +198,51 @@ static const char *modelledExternals[] = {
   "_Znwj",
   "_Znam",
   "_Znwm",
+
+// special functions part 2
+  "access",
+  "chdir",
+  "chmod",
+  "chown",
+  "close",
+  "fchdir",
+  "fchmod",
+  "fchown",
+  "fcntl",
+  "fstat",
+  "fstatfs",
+  "fsync",
+  "ftruncate",
+  "ioctl",
+  "klee_debug",
+  "klee_event",
+  "klee_fork",
+  "klee_get_context",
+  "klee_get_time",
+  "klee_get_valuel",
+  "klee_get_wlist",
+  "klee_process_fork",
+  "klee_process_terminate",
+  "klee_set_time",
+  "klee_thread_create",
+  "klee_thread_notify",
+  "klee_thread_preempt",
+  "klee_thread_sleep",
+  "klee_thread_terminate",
+  "lchown",
+  "lseek",
+  "lseek64",
+  "lstat",
+  "open",
+  "pread",
+  "pwrite",
+  "read",
+  "readlink",
+  "select",
+  "stat",
+  "statfs",
+  "truncate",
+  "write"
 };
 // Symbols we aren't going to warn about
 static const char *dontCareExternals[] = {
@@ -376,9 +432,16 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
 
     StringRef newName = fName.substr(strlen("__klee_model_"), fName.size());
 
-    Value *modelF = mainModule->getNamedValue(newName);
+    GlobalValue *modelF = mainModule->getNamedValue(newName);
 
     if (modelF != NULL) {
+      if (GlobalAlias *modelA = dyn_cast<GlobalAlias>(modelF)) {
+        const GlobalValue *GV = modelA->resolveAliasedGlobal(false);
+        if (!GV || GV->getType() != modelF->getType())
+          continue; // TODO: support bitcasted aliases
+        modelF = const_cast<GlobalValue*>(GV);
+      }
+
       CLOUD9_DEBUG("Patching " << fName.str());
       modelF->getType()->dump();
       f->getType()->dump();
@@ -419,6 +482,7 @@ static llvm::Module *linkWithPOSIX(llvm::Module *mainModule) {
   return mainModule;
 }
 
+#if 0
 static void __fix_linkage(llvm::Module *mainModule, std::string libcSymName, std::string libcAliasName) {
   //CLOUD9_DEBUG("Fixing linkage for " << libcSymName);
   Function *libcSym = mainModule->getFunction(libcSymName);
@@ -441,6 +505,7 @@ static void __fix_linkage(llvm::Module *mainModule, std::string libcSymName, std
 
 #define FIX_LINKAGE(module, syscall) \
   __fix_linkage(module, "__libc_" #syscall, #syscall)
+#endif
 
 static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
   Function *f;
@@ -522,9 +587,11 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule) {
   //    f = mainModule->getFunction("__fgetc_unlocked");
   //    if (f) f->setName("fgetc_unlocked");
 
+#if 0
   FIX_LINKAGE(mainModule, open);
   FIX_LINKAGE(mainModule, fcntl);
   FIX_LINKAGE(mainModule, lseek);
+#endif
 
   // XXX we need to rearchitect so this can also be used with
   // programs externally linked with uclibc.
@@ -586,6 +653,7 @@ Module* loadByteCode() {
   MP->releaseModule();
   delete MP;
 #else
+#if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
   std::string ErrorMsg;
   Module *mainModule = 0;
   MemoryBuffer *Buffer = MemoryBuffer::getFileOrSTDIN(InputFile, &ErrorMsg);
@@ -593,6 +661,18 @@ Module* loadByteCode() {
     mainModule = getLazyBitcodeModule(Buffer, getGlobalContext(), &ErrorMsg);
     if (!mainModule) delete Buffer;
   }
+#else
+  std::string ErrorMsg;
+  Module *mainModule = 0;
+  OwningPtr<MemoryBuffer> BufferPtr;
+  error_code ec=MemoryBuffer::getFileOrSTDIN(InputFile.c_str(), BufferPtr);
+  if (ec) {
+    klee_error("error loading program '%s': %s", InputFile.c_str(),
+               ec.message().c_str());
+  }
+  mainModule = getLazyBitcodeModule(BufferPtr.take(), getGlobalContext(), &ErrorMsg);
+#endif
+#endif
   if (mainModule) {
     if (mainModule->MaterializeAllPermanently(&ErrorMsg)) {
       delete mainModule;
@@ -602,7 +682,6 @@ Module* loadByteCode() {
   if (!mainModule)
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                ErrorMsg.c_str());
-#endif
 
   return mainModule;
 }
