@@ -144,50 +144,6 @@ public:
   }
 };
 
-class WorkerNodeDecorator: public DotNodeDefaultDecorator<WorkerTree::Node> {
-public:
-  WorkerNodeDecorator(WorkerTree::Node *highlight) :
-    DotNodeDefaultDecorator<WorkerTree::Node>(WORKER_LAYER_STATES, WORKER_LAYER_JOBS, highlight) {
-
-  }
-
-  void operator() (WorkerTree::Node *node, deco_t &deco, edge_deco_t &inEdges) {
-    DotNodeDefaultDecorator<WorkerTree::Node>::operator() (node, deco, inEdges);
-
-    bool zombie = !node->layerExists(WORKER_LAYER_STATES) && !node->layerExists(WORKER_LAYER_JOBS);
-
-    if (zombie) {
-      deco["color"] = "gray25";
-    }
-
-    WorkerTree::Node *parent = node->getParent();
-    if (parent) {
-      deco_t edeco;
-      edeco["label"] = node->getIndex() ? "1" : "0";
-      if (zombie) {
-        edeco["color"] = "gray25";
-      }
-      inEdges.push_back(std::make_pair(parent, edeco));
-    }
-  }
-};
-
-class LayerHighlightDecorator: public WorkerNodeDecorator {
-private:
-  int layer;
-public:
-  LayerHighlightDecorator(int _layer) :
-      WorkerNodeDecorator(NULL), layer(_layer) { }
-
-  void operator() (WorkerTree::Node *node, deco_t &deco, edge_deco_t &inEdges) {
-    WorkerNodeDecorator::operator() (node, deco, inEdges);
-
-    if (node->layerExists(layer)) {
-      deco["fillcolor"] = "red";
-    }
-  }
-};
-
 }
 
 }
