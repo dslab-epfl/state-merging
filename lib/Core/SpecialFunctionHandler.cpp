@@ -1270,11 +1270,11 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
          "arguments to klee_use_freq are not a constant");
 
   ref<ConstantExpr> address = cast<ConstantExpr>(arguments[0]);
-  uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
+  uint64_t width = cast<ConstantExpr>(arguments[1])->getZExtValue();
+  uint64_t size = Expr::getMinBytesForWidth(width);
 
   uint64_t useFreq = cast<ConstantExpr>(arguments[2])->getZExtValue();
   uint64_t totalUseFreq = cast<ConstantExpr>(arguments[3])->getZExtValue();
 
-  assert(size % 8 == 0);
   state.updateUseFrequency(target->inst, address, size/8, useFreq, totalUseFreq);
 }
