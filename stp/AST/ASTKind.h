@@ -58,11 +58,7 @@ namespace BEEV {
     WRITE,
     ARRAY,
     BITVECTOR,
-<<<<<<< HEAD
     BOOLEAN
-=======
-    BOOLEAN,
->>>>>>> Added the missing ASTKind.* files.
 } Kind;
 
 extern unsigned char _kind_categories[];
