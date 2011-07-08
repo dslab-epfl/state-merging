@@ -423,7 +423,8 @@ const Module *Executor::setModule(llvm::Module *module,
   specialFunctionHandler = new SpecialFunctionHandler(*this);
 
   specialFunctionHandler->prepare();
-  kmodule->prepare(opts, interpreterHandler);
+  kmodule->prepare(opts, interpreterHandler,
+                   userSearcherRequiresMergeAnalysis());
   specialFunctionHandler->bind();
 
   if (StatsTracker::useStatistics()) {

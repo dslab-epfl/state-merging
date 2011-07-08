@@ -933,7 +933,7 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
           raw_string_ostream ostr(str);
           ostr << "Adding new merge blacklist item: ";
           cast<User>(inst)->getOperand(0)->print(ostr);
-          printf("%s\n", ostr.str().c_str());
+          fprintf(stderr, "%s\n", ostr.str().c_str());
         }
 
         // Create new blacklist item
@@ -970,7 +970,7 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
             raw_string_ostream ostr(str);
             ostr << "Removing merge blacklist item: ";
             cast<User>(inst)->getOperand(0)->print(ostr);
-            printf("%s\n", ostr.str().c_str());
+            fprintf(stderr, "%s\n", ostr.str().c_str());
           }
 
           changed = true;

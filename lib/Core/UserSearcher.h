@@ -19,6 +19,8 @@ namespace klee {
 
   bool userSearcherRequiresBranchSequences();
 
+  bool userSearcherRequiresMergeAnalysis();
+
   Searcher *constructUserSearcher(Executor &executor, Searcher *original);
 }
 

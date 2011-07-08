@@ -116,6 +116,10 @@ bool klee::userSearcherRequiresBranchSequences() {
   return false;
 }
 
+bool klee::userSearcherRequiresMergeAnalysis() {
+  return UseLazyMerge;
+}
+
 Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
   Searcher *searcher = original;
 
