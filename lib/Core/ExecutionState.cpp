@@ -1092,15 +1092,17 @@ void ExecutionState::verifyBlacklistHash() {
 }
 
 void ExecutionState::verifyBlacklistBeforePopFrame() {
-#ifndef NDEBUG
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   const StackFrame *frame = &stack().back();
   for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                               be = mergeBlacklistMap.end(); bi != be; ++bi) {
-    assert(bi->second.frame != frame);
-    assert(bi->second.frame != NULL);
+                               be = mergeBlacklistMap.end(); bi != be;) {
+    if (bi->second.frame == frame) {
+      mergeBlacklistMap.erase(bi++);
+    } else {
+      assert(bi->second.frame != NULL);
+      ++bi;
+    }
   }
-#endif
 }
 
 /***/
