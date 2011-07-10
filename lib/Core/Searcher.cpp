@@ -753,6 +753,98 @@ void BatchingSearcher::update(ExecutionState *current,
 
 /***/
 
+CheckpointSearcher::CheckpointSearcher(Searcher *_baseSearcher) :
+  baseSearcher(_baseSearcher), activeState(NULL), addedUnchecked(),
+  addedChecked(), aggregateCount(0) {
+
+}
+
+CheckpointSearcher::~CheckpointSearcher() {
+  delete baseSearcher;
+}
+
+bool CheckpointSearcher::isCheckpoint(ExecutionState *state) {
+  Instruction *inst = state->pc()->inst;
+  return inst == &inst->getParent()->front();
+}
+
+ExecutionState &CheckpointSearcher::selectState() {
+  if ((activeState && !isCheckpoint(activeState)) || !addedUnchecked.empty()) {
+    aggregateCount++;
+
+    if (activeState)
+      return *activeState;
+    else {
+      ExecutionState *state = *(addedUnchecked.begin());
+      return *state;
+    }
+  }
+
+  if (activeState || !addedChecked.empty()) {
+    std::set<ExecutionState*> added;
+    for (StatesSet::iterator it = addedChecked.begin(); it != addedChecked.end();
+        it++)
+      added.insert(*it);
+
+    baseSearcher->update(activeState, added, std::set<ExecutionState*>());
+
+    addedChecked.clear();
+  }
+
+  //CLOUD9_DEBUG("Aggregated " << aggregateCount << "states");
+
+  aggregateCount = 1;
+
+  activeState = &baseSearcher->selectState();
+
+  return *activeState;
+}
+
+bool CheckpointSearcher::empty() {
+  if (!activeState && addedUnchecked.empty() && addedChecked.empty())
+    return baseSearcher->empty();
+
+  return false;
+}
+
+void CheckpointSearcher::update(ExecutionState *current,
+    const std::set<ExecutionState*> &addedStates,
+    const std::set<ExecutionState*> &removedStates) {
+
+  std::set<ExecutionState*> newRemoved;
+
+  if (current && isCheckpoint(current)) {
+    if (addedUnchecked.erase(current))
+      addedChecked.insert(current);
+  }
+
+  for (std::set<ExecutionState*>::iterator it = addedStates.begin();
+      it != addedStates.end(); it++) {
+    if (!isCheckpoint(*it))
+      addedUnchecked.insert(*it);
+    else
+      addedChecked.insert(*it);
+  }
+
+  for (std::set<ExecutionState*>::iterator it = removedStates.begin();
+      it != removedStates.end(); it++) {
+    if (activeState == *it)
+      activeState = NULL;
+
+    bool found = addedUnchecked.erase(*it);
+    found |= addedChecked.erase(*it);
+
+    if (!found)
+      newRemoved.insert(*it);
+  }
+
+  if (newRemoved.size() > 0) {
+    baseSearcher->update(NULL, std::set<ExecutionState*>(), newRemoved);
+  }
+}
+
+/***/
+
 IterativeDeepeningTimeSearcher::IterativeDeepeningTimeSearcher(Searcher *_baseSearcher)
   : baseSearcher(_baseSearcher),
     time(1.) {

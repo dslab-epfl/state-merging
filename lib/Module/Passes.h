@@ -223,6 +223,20 @@ public:
   bool runOnFunction(llvm::CallGraphNode &CGNode);
 };
 
+class CheckpointAnalyzer: public llvm::BasicBlockPass {
+public:
+  CheckpointAnalyzer();
+
+  virtual void getAnalysisUsage(llvm::AnalysisUsage &Info) const;
+  virtual bool runOnBasicBlock(llvm::BasicBlock &BB);
+
+  virtual ~CheckpointAnalyzer() { };
+
+  bool isCheckpoint(llvm::Instruction &Instr);
+
+  static char ID;
+};
+
 }
 
 #endif
