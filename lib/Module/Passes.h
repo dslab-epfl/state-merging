@@ -208,9 +208,7 @@ public:
 
 class UseFrequencyAnalyzerPass : public llvm::CallGraphSCCPass {
   llvm::TargetData *m_targetData;
-
   llvm::Function *m_kleeUseFreqFunc;
-  llvm::Function *m_kleeUseFreqTotalFunc;
 
 public:
   static char ID;
@@ -221,6 +219,7 @@ public:
   //virtual bool doInitialization(llvm::Module &M);
   virtual bool runOnSCC(llvm::CallGraphSCC &SCC);
   bool runOnFunction(llvm::CallGraphNode &CGNode);
+  bool runOnFunction1(llvm::CallGraphNode &CGNode);
 };
 
 }
