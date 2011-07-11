@@ -80,6 +80,10 @@ namespace {
   UseBatchingSearch("use-batching-search",
            cl::desc("Use batching searcher (keep running selected state for N instructions/time, see --batch-instructions and --batch-time"));
 
+  cl::opt<bool>
+  UseCheckpointSearch("use-checkpoint-search",
+      cl::desc("Use checkpoint searcher (continuously execute states between static checkpoints in the program)"));
+
   cl::opt<unsigned>
   BatchInstructions("batch-instructions",
                     cl::desc("Number of instructions to batch when using --use-batching-search"),
@@ -185,6 +189,10 @@ Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
     searcher = new LazyMergingSearcher(executor, searcher);
   }
   
+  if (UseCheckpointSearch) {
+    searcher = new CheckpointSearcher(searcher);
+  }
+
   if (UseIterativeDeepeningTimeSearch) {
     searcher = new IterativeDeepeningTimeSearcher(searcher);
   }

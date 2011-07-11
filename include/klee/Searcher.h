@@ -266,6 +266,35 @@ namespace klee {
     }
   };
 
+  class CheckpointSearcher: public Searcher {
+    typedef llvm::SmallPtrSet<ExecutionState*, 4> StatesSet;
+  private:
+    Searcher *baseSearcher;
+
+    ExecutionState *activeState;
+    StatesSet addedUnchecked;
+    StatesSet addedChecked;
+
+    unsigned long aggregateCount;
+    bool isCheckpoint(ExecutionState *state);
+  public:
+    CheckpointSearcher(Searcher *baseSearcher);
+    virtual ~CheckpointSearcher();
+
+    ExecutionState &selectState();
+    void update(ExecutionState *current,
+        const std::set<ExecutionState*> &addedStates,
+        const std::set<ExecutionState*> &removedStates);
+
+    bool empty();
+
+    void printName(std::ostream &os) {
+      os << "<CheckpointSearcher>\n";
+      baseSearcher->printName(os);
+      os << "</CheckpointSearcher>\n";
+    }
+  };
+
   class IterativeDeepeningTimeSearcher : public Searcher {
     Searcher *baseSearcher;
     double time, startTime;
