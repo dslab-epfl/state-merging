@@ -276,6 +276,8 @@ namespace klee {
     StatesSet addedChecked;
 
     unsigned long aggregateCount;
+    unsigned long totalUpdatesRecv;
+    unsigned long totalUpdatesSent;
     bool isCheckpoint(ExecutionState *state);
   public:
     CheckpointSearcher(Searcher *baseSearcher);

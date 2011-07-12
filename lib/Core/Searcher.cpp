@@ -48,6 +48,11 @@ namespace {
   MaxStateMultiplicity("max-state-multiplicity",
             cl::desc("Maximum number of states merged into one"),
             cl::init(0));
+
+  cl::opt<bool>
+  DebugCheckpointUpdates("debug-checkpoint-updates",
+       cl::desc("Displays the number of updates received vs. updates forwarded when states are checkpointed"),
+       cl::init(false));
 }
 
 namespace klee {
@@ -755,7 +760,8 @@ void BatchingSearcher::update(ExecutionState *current,
 
 CheckpointSearcher::CheckpointSearcher(Searcher *_baseSearcher) :
   baseSearcher(_baseSearcher), activeState(NULL), addedUnchecked(),
-  addedChecked(), aggregateCount(0) {
+  addedChecked(), aggregateCount(0), totalUpdatesRecv(0),
+  totalUpdatesSent(0) {
 
 }
 
@@ -787,6 +793,7 @@ ExecutionState &CheckpointSearcher::selectState() {
       added.insert(*it);
 
     baseSearcher->update(activeState, added, std::set<ExecutionState*>());
+    totalUpdatesSent++;
 
     addedChecked.clear();
   }
@@ -796,6 +803,8 @@ ExecutionState &CheckpointSearcher::selectState() {
   aggregateCount = 1;
 
   activeState = &baseSearcher->selectState();
+
+  assert(isCheckpoint(activeState) && "State in the underlying strategy not checkpointed");
 
   return *activeState;
 }
@@ -810,6 +819,8 @@ bool CheckpointSearcher::empty() {
 void CheckpointSearcher::update(ExecutionState *current,
     const std::set<ExecutionState*> &addedStates,
     const std::set<ExecutionState*> &removedStates) {
+
+  totalUpdatesRecv++;
 
   std::set<ExecutionState*> newRemoved;
 
@@ -840,6 +851,11 @@ void CheckpointSearcher::update(ExecutionState *current,
 
   if (newRemoved.size() > 0) {
     baseSearcher->update(NULL, std::set<ExecutionState*>(), newRemoved);
+    totalUpdatesSent++;
+  }
+
+  if (DebugCheckpointUpdates && totalUpdatesRecv % 100 == 0) {
+    CLOUD9_DEBUG("Checkpoint searcher: Updates recv - " << totalUpdatesRecv << " sent - " << totalUpdatesSent);
   }
 }
 
