@@ -348,6 +348,8 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
     uint64_t &totalUseCount =
         totalUseCountMap.insert(std::make_pair(BB, 0)).first->second;
 
+    SmallPtrSet<Value*, 32> succDiff;
+
     // Initially set useCountInfo for the current BB to be a maximum of
     // useCountInfo for all BB's successors
     for (succ_iterator succIt = succ_begin(BB),
@@ -365,15 +367,14 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
       } else if (bbUseCountInfo.getRootWithoutRetain() !=
                  succUseCountInfo.getRootWithoutRetain()) {
         // If any further successor has different info, lets combine it
-        for (UseCountInfo::iterator it = succUseCountInfo.begin(),
-                                ie = succUseCountInfo.end(); it != ie; ++it) {
-          const uint64_t *count = bbUseCountInfo.lookup(it->first);
-          if (!count || *count < it->second) {
+        foreach (UseCountInfo::value_type &p, succUseCountInfo) {
+          const uint64_t *count = bbUseCountInfo.lookup(p.first);
+          if (!count || *count < p.second) {
             bbUseCountInfo = useCountInfoFactory.add(
-                  bbUseCountInfo, it->first, it->second);
+                  bbUseCountInfo, p.first, p.second);
             if (count)
               totalUseCount -= *count;
-            totalUseCount += it->second;
+            totalUseCount += p.second;
           }
         }
       }
@@ -477,16 +478,32 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
       }
     }
 
+#if 0
     // Dump it
     std::cerr << "UseCountInfo for BB: " << BB->getParent()->getNameStr()
               << ":" << BB->getNameStr() << std::endl;
-    for (UseCountInfo::iterator it = bbUseCountInfo.begin(),
-                          ie = bbUseCountInfo.end(); it != ie; ++it) {
-      it->first->dump();
-      std::cerr << " = " << it->second << std::endl;
+    foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+      p.first->dump();
+      std::cerr << " = " << p.second << std::endl;
     }
     std::cerr << "  total = " << totalUseCount << std::endl;
+#endif
 
+  }
+
+  // Now output the annotation for the function entry block
+  UseCountInfo &useCountInfo = useCountMap.find(entryBB)->second;
+  uint64_t totalUseCount = totalUseCountMap.lookup(entryBB);
+  foreach (UseCountInfo::value_type &p, useCount) {
+    const Type* ptrValTy =
+        cast<PointerType>(p.first->getType())->getElementType();
+    Value *args[4] = { p.first,
+        getInt64Const(Ctx, m_targetData->getTypeSizeInBits(ptrValTy)),
+        getInt64Const(Ctx, p.second),
+        getInt64Const(Ctx, totalUseCount) };
+    CallInst *CI = CallInst::Create(m_kleeUseFreqFunc, args, args+4, "",
+                                    entryBB->getFirstNonPHI());
+    CGNode.addCalledFunction(CallSite(CI), kleeUseFreqCG);
   }
 
   return true;

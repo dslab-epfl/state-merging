@@ -1212,9 +1212,6 @@ void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
                                                   KInstruction *target,
                                                   std::vector<ref<Expr> > &arguments)
 {
-  return;
-#warning XXX
-#if 0
   assert(arguments.size()==3 &&
          "invalid number of arguments klee_merge_blacklist");
 
@@ -1226,6 +1223,11 @@ void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
   ref<ConstantExpr> address = cast<ConstantExpr>(arguments[0]);
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
 
+  uint64_t activate = cast<ConstantExpr>(arguments[2])->getZExtValue();
+  state.updateUseFrequency(target->inst, address, size,
+                           activate ? INT_MAX : 0, INT_MAX);
+
+#if 0
   ObjectPair op;
   bool ok = state.addressSpace().resolveOne(address, op);
   assert(ok && "arguments to klee_merge_set_active are invalid");
@@ -1276,5 +1278,5 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
   uint64_t useFreq = cast<ConstantExpr>(arguments[2])->getZExtValue();
   uint64_t totalUseFreq = cast<ConstantExpr>(arguments[3])->getZExtValue();
 
-  state.updateUseFrequency(target->inst, address, size/8, useFreq, totalUseFreq);
+  state.updateUseFrequency(target->inst, address, size, useFreq, totalUseFreq);
 }

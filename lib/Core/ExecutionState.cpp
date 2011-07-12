@@ -28,6 +28,7 @@
 #include "llvm/User.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/DenseSet.h"
 
 #include <iostream>
 #include <iomanip>
@@ -47,8 +48,14 @@ namespace {
   cl::opt<bool>
   DebugLogStateMerge("debug-log-state-merge");
 
+  cl::opt<bool>
+  DebugLogMergeBlacklist("debug-log-merge-blacklist");
+
   cl::opt<double>
-  MaxUseFreqPctForMerge("max-use-freq-pct-for-merge", cl::init(0.01));
+  MaxUseFreqPctForMerge("max-use-freq-pct-for-merge", cl::init(0.001));
+
+  cl::opt<unsigned>
+  MaxUseFreqForMerge("max-use-freq-for-merge", cl::init(10));
 }
 
 /***/
@@ -656,7 +663,7 @@ static bool areStacksCompatible(const std::vector<StackFrame> &a,
       return false;
     }
 
-#if 0
+#if 1
     // XXX: for now we refuse to merge states that has different concrete
     // values on the stack. This is wrong, but otherwise we are ending up
     // merging different iterations of the same loop
@@ -893,9 +900,11 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
 void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
                                         ref<ConstantExpr> address, uint64_t size,
                                         uint64_t useFreq, uint64_t totalUseFreq) {
+  verifyBlacklistMap();
   bool changed = false;
 
-  bool active = useFreq > totalUseFreq*MaxUseFreqPctForMerge;
+  bool active = useFreq > MaxUseFreqForMerge &&
+                useFreq > totalUseFreq*MaxUseFreqPctForMerge;
   bool isFunctionEntry =
       inst->getParent() == &inst->getParent()->getParent()->getEntryBlock();
 
@@ -928,11 +937,11 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
     if (it == mergeBlacklistMap.end()) {
       // This is a completely new item, just insert it if its active
       if (active) {
-        if (DebugLogStateMerge) {
+        if (DebugLogMergeBlacklist && !changed) {
           std::string str;
           raw_string_ostream ostr(str);
           ostr << "Adding new merge blacklist item: ";
-          cast<User>(inst)->getOperand(0)->print(ostr);
+          inst->print(ostr);
           fprintf(stderr, "%s\n", ostr.str().c_str());
         }
 
@@ -957,6 +966,7 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
       if (isFunctionEntry && useFreq == it->second.useFreq) {
         // All remaining uses are in this function
         it->second.frame = &stack().back();
+        it->second.inst = inst;
       }
 
       // The item is owned by current function
@@ -965,11 +975,11 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
           it->second.useFreq = useFreq;
         } else {
           // Remove blacklist item
-          if (DebugLogStateMerge) {
+          if (DebugLogMergeBlacklist && !changed) {
             std::string str;
             raw_string_ostream ostr(str);
             ostr << "Removing merge blacklist item: ";
-            cast<User>(inst)->getOperand(0)->print(ostr);
+            inst->print(ostr);
             fprintf(stderr, "%s\n", ostr.str().c_str());
           }
 
@@ -1008,8 +1018,8 @@ void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
   uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
 
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(offset)) {
-    ConstantExpr *CV = dyn_cast<ConstantExpr>(newValue);
-    uint64_t value = CV ? CV->getZExtValue() : 0;
+    if (newValue->getWidth() == 1)
+      newValue = ZExtExpr::create(newValue, Expr::Int8);
 
     unsigned oc = CE->getZExtValue();
     unsigned size = newValue->getWidth()/8;
@@ -1026,8 +1036,9 @@ void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
         mergeBlacklistHash -= uintptr_t(CR->getZExtValue());
 
       // Add new value if it is concrete
-      if (CV)
-        mergeBlacklistHash += uintptr_t((value >> (i*8)) & 0xFF);
+      ref<Expr> V = ExtractExpr::create(newValue, 8*i, Expr::Int8);
+      if (ConstantExpr *CV = dyn_cast<ConstantExpr>(V))
+        mergeBlacklistHash += uintptr_t(CV->getZExtValue() & 0xFF);
     }
   } else {
     // A write with symbolic address makes all bytes in array symbolic
@@ -1041,6 +1052,26 @@ void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
       ref<Expr> R = os->read8(oc);
       if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R))
         mergeBlacklistHash -= uintptr_t(CR->getZExtValue());
+    }
+  }
+}
+
+void ExecutionState::updateBlacklistBeforePopFrame() {
+  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
+  const StackFrame *frame = &stack().back();
+  for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
+                               be = mergeBlacklistMap.end(); bi != be;) {
+    if (bi->second.frame == frame) {
+#warning XXX: this should not happen
+      //const ObjectState *os = addressSpace().findObject(bi->first.first);
+      //ObjectState *wos = addressSpace().getWriteable(bi->first.first, os);
+      //wos->numBlacklistRefs -= 1;
+      //mergeBlacklistMap.erase(bi++);
+      if (stack().size() >= 2)
+        bi->second.frame = &*--(--stack().end());
+    } else {
+      assert(bi->second.frame != NULL);
+      ++bi;
     }
   }
 }
@@ -1091,17 +1122,17 @@ void ExecutionState::verifyBlacklistHash() {
 #endif
 }
 
-void ExecutionState::verifyBlacklistBeforePopFrame() {
+
+void ExecutionState::dumpBlacklist() {
+  DenseSet<Value*> insts;
+  std::cerr << "Merge blacklist:" << std::endl;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  const StackFrame *frame = &stack().back();
   for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                               be = mergeBlacklistMap.end(); bi != be;) {
-    if (bi->second.frame == frame) {
-      mergeBlacklistMap.erase(bi++);
-    } else {
-      assert(bi->second.frame != NULL);
-      ++bi;
-    }
+                               be = mergeBlacklistMap.end(); bi != be; ++bi) {
+    Value *inst = bi->second.inst;
+    if (!insts.insert(inst).second)
+      continue;
+    inst->dump();
   }
 }
 

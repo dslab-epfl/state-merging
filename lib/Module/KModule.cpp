@@ -65,7 +65,8 @@ namespace {
     
   cl::opt<bool>
   NoTruncateSourceLines("no-truncate-source-lines",
-                        cl::desc("Don't truncate long lines in the output source"));
+                        cl::desc("Don't truncate long lines in the output source"),
+                        cl::init(true));
 
   cl::opt<bool>
   OutputSource("output-source",
@@ -512,7 +513,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_iter", module);
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_exit", module);
 
-  if (requireMergeAnalysis) {
+  if (1 || requireMergeAnalysis) {
     // Run the pass that instruments loops for execution index computation and
     // use frequency analysis
     PassManager pm4;

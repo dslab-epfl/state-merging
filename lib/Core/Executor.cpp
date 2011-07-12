@@ -2678,7 +2678,37 @@ void Executor::stepInState(ExecutionState *state) {
   duplicates.swap(state->duplicates);
   state->multiplicityExact = std::max(duplicates.size(), 1ul);
 
-	KInstruction *ki = state->pc();
+  KInstruction *ki = state->pc();
+
+#if 0
+  if (ki->inst == &ki->inst->getParent()->front()) {
+    if (ki->inst->getParent() ==
+        &ki->inst->getParent()->getParent()->getEntryBlock()) {
+      std::cerr << &state << " Entering function "
+                << ki->inst->getParent()->getParent()->getNameStr()
+                << std::endl;
+    }
+    std::cerr << &state << " Executing BB "
+              << ki->inst->getParent()->getNameStr()
+              << std::endl;
+  }
+  if (isa<ReturnInst>(ki->inst)) {
+    std::cerr << &state << " Returning from function "
+              << ki->inst->getParent()->getParent()->getNameStr()
+              << std::endl;
+  }
+  if (isa<UnwindInst>(ki->inst)) {
+    std::cerr << &state << " Unwinding from function "
+              << ki->inst->getParent()->getParent()->getNameStr()
+              << std::endl;
+  }
+#endif
+#if 0
+  if (ki->info->assemblyLine == 9150) {
+    std::cerr << "9150" << std::endl;
+  }
+#endif
+
 	stepInstruction(*state, true);
 
 	//CLOUD9_DEBUG("Executing instruction: " << ki->info->assemblyLine);
@@ -2831,7 +2861,7 @@ void Executor::stepInState(ExecutionState *state) {
   }
 
   if (KeepMergedDuplicates && DebugMergeSlowdown &&
-      executionTime > 50 && executionTime > 3*duplicatesExecutionTime) {
+      executionTime > 50 && executionTime > 10*duplicatesExecutionTime) {
     klee_warning("Merged state is slow: %g instead of %g for individual states",
                  executionTime / 1000000., duplicatesExecutionTime / 1000000.);
     KInstruction *ki = (KInstruction*) state->prevPC();
@@ -3823,6 +3853,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                                          offset, value->getWidth()/8);
           }
           */
+          state.verifyBlacklistHash();
           state.updateMemoryValue(mo, wos, offset, value);
           wos->write(offset, value);
           state.verifyBlacklistHash();
@@ -3885,6 +3916,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           }
           */
           ref<Expr> offset = mo->getOffsetExpr(address);
+          state.verifyBlacklistHash();
           state.updateMemoryValue(mo, wos, offset, value);
           wos->write(mo->getOffsetExpr(address), value);
           state.verifyBlacklistHash();

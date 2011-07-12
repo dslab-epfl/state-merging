@@ -279,7 +279,7 @@ public:
   }
 
   void popFrame(Thread &t) {
-    verifyBlacklistBeforePopFrame();
+    updateBlacklistBeforePopFrame();
     StackFrame &sf = t.stack.back();
     for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
            ie = sf.allocas.end(); it != ie; ++it)
@@ -315,9 +315,11 @@ public:
   void updateMemoryValue(const MemoryObject *mo, ObjectState *os,
                          ref<Expr> offset, ref<Expr> newValue);
 
+  void updateBlacklistBeforePopFrame();
   void verifyBlacklistMap();
   void verifyBlacklistHash();
-  void verifyBlacklistBeforePopFrame();
+
+  void dumpBlacklist();
 
 };
 
