@@ -304,15 +304,37 @@ static std::vector<CallInst*> addUseCountAnnotation(
   return result;
 }
 
+static void annotateBlock(Value *ptr, uint64_t useCount, uint64_t totalUseCount,
+                          BasicBlock *BB, CallGraphNode *kleeUseFreqCG,
+                          CallGraphNode *callerCG, TargetData *TD) {
+  LLVMContext &Ctx = ptr->getContext();
+  const Type* ptrValTy = cast<PointerType>(ptr->getType())->getElementType();
+  Value *args[4] = { ptr, getInt64Const(Ctx, TD->getTypeSizeInBits(ptrValTy)),
+      getInt64Const(Ctx, useCount), getInt64Const(Ctx, totalUseCount) };
+  CallInst *CI = CallInst::Create(kleeUseFreqCG->getFunction(), args, args+4,
+                                  "", BB->getFirstNonPHI());
+  callerCG->addCalledFunction(CallSite(CI), kleeUseFreqCG);
+}
+
+static void annotateInst(Value *ptr, uint64_t useCount, uint64_t totalUseCount,
+                         Instruction *inst, CallGraphNode *kleeUseFreqCG,
+                         CallGraphNode *callerCG, TargetData *TD) {
+  LLVMContext &Ctx = ptr->getContext();
+  const Type* ptrValTy = cast<PointerType>(ptr->getType())->getElementType();
+  Value *args[4] = { ptr, getInt64Const(Ctx, TD->getTypeSizeInBits(ptrValTy)),
+      getInt64Const(Ctx, useCount), getInt64Const(Ctx, totalUseCount) };
+  CallInst *CI = CallInst::Create(kleeUseFreqCG->getFunction(), args, args+4,
+                                  "", ++BasicBlock::iterator(inst));
+  callerCG->addCalledFunction(CallSite(CI), kleeUseFreqCG);
+}
+
 bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
   Function &F = *CGNode.getFunction();
+  BasicBlock *entryBB = &F.getEntryBlock();
 
   LoopInfo &loopInfo = getAnalysis<LoopInfo>(F);
   CallGraph &callGraph = getAnalysis<CallGraph>();
   CallGraphNode *kleeUseFreqCG = callGraph[m_kleeUseFreqFunc];
-
-  LLVMContext &Ctx = F.getContext();
-  BasicBlock *entryBB = &F.getEntryBlock();
 
   // Use count after BB for all hot values
   typedef llvm::ImmutableMap<Value*, uint64_t> UseCountInfo;
@@ -348,7 +370,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
     uint64_t &totalUseCount =
         totalUseCountMap.insert(std::make_pair(BB, 0)).first->second;
 
-    SmallPtrSet<Value*, 32> succDiff;
+    bool succDiff = false;
 
     // Initially set useCountInfo for the current BB to be a maximum of
     // useCountInfo for all BB's successors
@@ -366,6 +388,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
         totalUseCount = totalUseCountMap.lookup(*succIt);
       } else if (bbUseCountInfo.getRootWithoutRetain() !=
                  succUseCountInfo.getRootWithoutRetain()) {
+        succDiff = true;
         // If any further successor has different info, lets combine it
         foreach (UseCountInfo::value_type &p, succUseCountInfo) {
           const uint64_t *count = bbUseCountInfo.lookup(p.first);
@@ -375,6 +398,28 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
             if (count)
               totalUseCount -= *count;
             totalUseCount += p.second;
+          }
+        }
+      }
+    }
+
+    // If use count differs on branch edges, we should add annotations
+    if (succDiff) {
+      for (succ_iterator succIt = succ_begin(BB),
+                         succE  = succ_end(BB); succIt != succE; ++succIt) {
+        BasicBlock *succBB = *succIt;
+        UseCountInfo &succUseCountInfo = useCountMap.find(succBB)->second;
+        uint64_t totalSuccUseCount = totalUseCountMap.lookup(succBB);
+
+        foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+          if (isBlockAlreadyAnnotated(succBB, p.first, m_kleeUseFreqFunc))
+            continue;
+
+          const uint64_t *succUseCount = succUseCountInfo.lookup(p.first);
+          if (!succUseCount || *succUseCount != p.second) {
+            annotateBlock(p.first, succUseCount ? *succUseCount : 0,
+                          totalSuccUseCount, succBB, kleeUseFreqCG,
+                          &CGNode, m_targetData);
           }
         }
       }
@@ -444,6 +489,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
           foreach (BasicBlock *aBB, blocksToAnnotate) {
             if (isBlockAlreadyAnnotated(aBB, ptr, m_kleeUseFreqFunc))
               continue;
+
             UseCountMap::iterator bbUCIt = useCountMap.find(aBB);
             if (bbUCIt == useCountMap.end())
               continue; // This is a back edge, skip it for now
@@ -451,6 +497,10 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
             const uint64_t *oldSuccUseCount = bbUCIt->second.lookup(ptr);
             uint64_t totalSuccUseCount = totalUseCountMap.lookup(aBB);
 
+            annotateBlock(ptr, oldSuccUseCount ? *oldSuccUseCount : 0,
+                  totalSuccUseCount, aBB, kleeUseFreqCG, &CGNode, m_targetData);
+
+            /*
             const Type* ptrValTy =
                 cast<PointerType>(ptr->getType())->getElementType();
             Value *args[4] = { ptr,
@@ -461,9 +511,13 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
                 CallInst::Create(m_kleeUseFreqFunc, args, args+4, "",
                                  aBB->getFirstNonPHI());
             CGNode.addCalledFunction(CallSite(CI), kleeUseFreqCG);
+            */
           }
         } else {
           // Annotate current instruction
+          annotateInst(ptr, oldUseCount, totalUseCountAfter, I,
+                       kleeUseFreqCG, &CGNode, m_targetData);
+          /*
           const Type* ptrValTy =
               cast<PointerType>(ptr->getType())->getElementType();
           Value *args[4] = { ptr,
@@ -473,6 +527,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
           CallInst *CI =
               CallInst::Create(m_kleeUseFreqFunc, args, args+4, "", rIt.base());
           CGNode.addCalledFunction(CallSite(CI), kleeUseFreqCG);
+          */
           ++rIt;
         }
       }
@@ -494,16 +549,9 @@ bool UseFrequencyAnalyzerPass::runOnFunction(llvm::CallGraphNode &CGNode) {
   // Now output the annotation for the function entry block
   UseCountInfo &useCountInfo = useCountMap.find(entryBB)->second;
   uint64_t totalUseCount = totalUseCountMap.lookup(entryBB);
-  foreach (UseCountInfo::value_type &p, useCount) {
-    const Type* ptrValTy =
-        cast<PointerType>(p.first->getType())->getElementType();
-    Value *args[4] = { p.first,
-        getInt64Const(Ctx, m_targetData->getTypeSizeInBits(ptrValTy)),
-        getInt64Const(Ctx, p.second),
-        getInt64Const(Ctx, totalUseCount) };
-    CallInst *CI = CallInst::Create(m_kleeUseFreqFunc, args, args+4, "",
-                                    entryBB->getFirstNonPHI());
-    CGNode.addCalledFunction(CallSite(CI), kleeUseFreqCG);
+  foreach (UseCountInfo::value_type &p, useCountInfo) {
+    annotateBlock(p.first, p.second, totalUseCount, entryBB,
+                  kleeUseFreqCG, &CGNode, m_targetData);
   }
 
   return true;
