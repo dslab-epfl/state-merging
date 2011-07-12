@@ -145,6 +145,8 @@ public:
 
   TreeOStream pathOS, symPathOS;
   unsigned instsSinceCovNew;
+  unsigned instsSinceFork;
+  unsigned instsTotal;
 
   bool coveredNew;
   sys::TimeValue lastCoveredTime;
