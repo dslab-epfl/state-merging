@@ -663,7 +663,7 @@ static bool areStacksCompatible(const std::vector<StackFrame> &a,
       return false;
     }
 
-#if 1
+#if 0
     // XXX: for now we refuse to merge states that has different concrete
     // values on the stack. This is wrong, but otherwise we are ending up
     // merging different iterations of the same loop
