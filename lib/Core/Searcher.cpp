@@ -499,23 +499,16 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
   if (it == statesTrace.end())
     return false;
 
-  // This loop could have at most two iterations
   for (StatePosMap::const_iterator it1 = it->second->begin(),
                       ie1 = it->second->end(); it1 != ie1; ++it1) {
     if (it1->first != state) {
       if (MaxInstrDifference) {
         if (it1->first->instsTotal - it1->second <= MaxInstrDifference)
           return true;
-        CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
-            it1->first->instsTotal << " and " << it1->second << ")");
-        /*
-        if (it1->second >= state->instsTotal && it1->second - state->instsTotal <= MaxInstrDifference)
-          return true;
-        if (it1->second < state->instsTotal && state->instsTotal - it1->second <= MaxInstrDifference)
-          return true;
-        CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
-            it1->second << " and " << state->instsTotal << ")");
-          */
+	if (DebugMaxInstrCountDelta) {
+	  CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
+		       it1->first->instsTotal << " and " << it1->second << ")");
+	}
       } else {
         return true;
       }
