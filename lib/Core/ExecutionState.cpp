@@ -39,7 +39,7 @@
 #include <sys/time.h>
 #include <sys/mman.h>
 
-#define DEBUG_MERGE_BLACKLIST_MAP
+//#define DEBUG_MERGE_BLACKLIST_MAP
 
 using namespace llvm;
 using namespace klee;
@@ -505,6 +505,9 @@ bool ExecutionState::isPCCompatible(const ExecutionState &b) const {
 }
 
 bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const {
+#if 0
+  return true;
+#else
   const ExecutionState &a = *this;
 
   for (threads_ty::const_iterator it = a.threads.begin(),
@@ -532,6 +535,11 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
     const AddressSpace &bAddressSpace =
         b.processes.find(bThread.getPid())->second.addressSpace;
 
+    if (DebugLogStateMerge) {
+      std::cerr << "Comparing " << aThread.mergeBlacklistMap.size()
+                << " merge blacklist items" << std::endl;
+    }
+
     for (MergeBlacklistMap::const_iterator mi = aThread.mergeBlacklistMap.begin(),
                   me = aThread.mergeBlacklistMap.end(); mi != me; ++mi) {
       MergeBlacklistMap::const_iterator mi1 =
@@ -545,20 +553,22 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
 
       const MemoryObject *mo = mi->first.first;
       unsigned offset = mi->first.second;
-      ref<Expr> aValue = aAddressSpace.findObject(mo)->read8(offset);
-      ref<Expr> bValue = bAddressSpace.findObject(mo)->read8(offset);
+      unsigned aValue = aAddressSpace.findObject(mo)->read8c(offset);
+      unsigned bValue = bAddressSpace.findObject(mo)->read8c(offset);
       if (aValue != bValue) {
         // XXX: try different heuristics here
-        if (isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
+        //if (isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
+        //if (aValue != unsigned(-1) || bValue != unsigned(-1))
           if (DebugLogStateMerge)
             std::cerr << "---- merge failed: mergeBlacklists contain different values\n";
           return false;
-        }
+        //}
       }
     }
   }
 
   return true;
+#endif
 }
 
 static bool areAddressSpacesCompatible(const AddressSpace &a, const AddressSpace &b,
@@ -618,6 +628,9 @@ static bool areAddressSpacesCompatible(const AddressSpace &a, const AddressSpace
 static void mergeAddressSpaces(AddressSpace &a, const AddressSpace &b,
     std::set<const MemoryObject*> &mutated,
     ref<Expr> &inA, ref<Expr> &inB, bool useInA) {
+  if (DebugLogStateMerge) {
+    std::cerr << "Comparing " << mutated.size() << " different MemoryObjects\n";
+  }
   int memDifference = 0, memObjects = 0;
   for (std::set<const MemoryObject*>::iterator it = mutated.begin(),
          ie = mutated.end(); it != ie; ++it) {
@@ -628,13 +641,21 @@ static void mergeAddressSpaces(AddressSpace &a, const AddressSpace &b,
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
+    if (DebugLogStateMerge) {
+      std::cerr << "... comparing object of size " << mo->size << "\n";
+    }
+
     memObjects += mo->size;
-    ObjectState *wos = a.getWriteable(mo, os);
+    ObjectState *wos = NULL; //a.getWriteable(mo, os);
 
     for (unsigned i=0; i<mo->size; i++) {
-      ref<Expr> av = wos->read8(i);
+      ref<Expr> av = os->read8(i);
       ref<Expr> bv = otherOS->read8(i);
       if(av != bv) {
+          if (!wos) {
+            wos = a.getWriteable(mo, os);
+            os = wos;
+          }
           memDifference += 1;
           wos->write(i, useInA ? SelectExpr::create(inA, av, bv)
                                : SelectExpr::create(inB, bv, av));
@@ -952,12 +973,14 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
 
         // Update reference count for the corresponding ObjectState
         changed = true;
+
+        /*
         ObjectState *wos = addressSpace().getWriteable(mo, op.second);
         op.second = wos;
-        wos->numBlacklistRefs += 1;
+        wos->numBlacklistRefs += 1;*/
 
         // Add new value to the values hash
-        ref<Expr> E = wos->read8(offset);
+        ref<Expr> E = op.second->read8(offset);
         if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
           mergeBlacklistHash += uintptr_t(CE->getZExtValue());
       }
@@ -984,17 +1007,20 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
           }
 
           changed = true;
+          /*
           ObjectState *wos = addressSpace().getWriteable(mo, op.second);
-          op.second = wos;
+          op.second = wos;*/
 
           // Remove value from the hash
-          ref<Expr> E = wos->read8(offset);
+          ref<Expr> E = op.second->read8(offset);
           if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
             mergeBlacklistHash -= uintptr_t(CE->getZExtValue());
 
+          /*
           // Decrement reference count for the corresponding ObjectState
           wos->numBlacklistRefs -= 1;
           assert(signed(wos->numBlacklistRefs) >= 0);
+          */
 
           // Erase item from the map
           mergeBlacklistMap.erase(it);
@@ -1011,8 +1037,8 @@ void ExecutionState::updateUseFrequency(llvm::Instruction *inst,
 
 void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
                                        ref<Expr> offset, ref<Expr> newValue) {
-  if (os->numBlacklistRefs == 0)
-    return; // This ObjectState is not involved in any blacklist item
+  //if (os->numBlacklistRefs == 0)
+  //  return; // This ObjectState is not involved in any blacklist item
 
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
@@ -1077,6 +1103,7 @@ void ExecutionState::updateBlacklistBeforePopFrame() {
 }
 
 void ExecutionState::verifyBlacklistMap() {
+#if 0
 #ifdef DEBUG_MERGE_BLACKLIST_MAP
 #warning XXX slow
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
@@ -1097,6 +1124,7 @@ void ExecutionState::verifyBlacklistMap() {
 
     assert(os->numBlacklistRefs == correctNumBlacklistRefs);
   }
+#endif
 #endif
 }
 

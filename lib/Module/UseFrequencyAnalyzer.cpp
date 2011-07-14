@@ -91,6 +91,23 @@ bool UseFrequencyAnalyzerPass::doInitialization(llvm::CallGraph &CG) {
 
 typedef DenseMap<Value*, uint64_t> HotValueDeps;
 
+static bool isIgnored(Value *hotValueDep) {
+  if (ConstantExpr *C = dyn_cast<ConstantExpr>(hotValueDep)) {
+    if (C->getOpcode() == Instruction::GetElementPtr) {
+      StringRef name = C->getOperand(0)->getName();
+      if (name == "__pdata" || name == "__net" /* || name == "_stdio_streams"*/)
+        return true;
+    }
+  } else {
+    StringRef name = hotValueDep->getName();
+    if (name == "__environ" || name == "__exit_slots" ||
+        name == "__exit_count" || name == "__exit_cleanup" ||
+        name == "__exit_function_table")
+      return true;
+  }
+  return false;
+}
+
 /// Traverse data flow dependencies of hotValue, gathering its dependencies
 /// on values read from known memory location (only global variables for now).
 /// Return a set of pointers to such memory locations.
@@ -115,7 +132,8 @@ static void gatherHotValueDeps(Value* hotValue, HotValueDeps *deps) {
     if (LoadInst *LI = dyn_cast<LoadInst>(V)) {
       Value *Ptr = LI->getPointerOperand();
       if (isa<Constant>(Ptr) /*|| isa<Argument>(Ptr)*/) {
-        deps->insert(std::make_pair(Ptr, 1));
+        if (!isIgnored(Ptr))
+          deps->insert(std::make_pair(Ptr, 1));
         continue;
       }
     }

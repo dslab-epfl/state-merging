@@ -36,6 +36,8 @@
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Expr.h"
 
+#include "llvm/Function.h"
+
 namespace klee {
 
 /* StackFrame Methods */
@@ -49,6 +51,8 @@ StackFrame::StackFrame(KInstIterator _caller, uint32_t _callerExecIndex, KFuncti
   execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
 
   locals = new Cell[kf->numRegisters];
+
+  isUserMain = _kf->function->getName() == "__user_main";
 }
 
 StackFrame::StackFrame(const StackFrame &s)
@@ -58,7 +62,8 @@ StackFrame::StackFrame(const StackFrame &s)
     allocas(s.allocas),
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
     varargs(s.varargs),
-    execIndexStack(s.execIndexStack) {
+    execIndexStack(s.execIndexStack),
+    isUserMain(s.isUserMain) {
 
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i=0; i<s.kf->numRegisters; i++)

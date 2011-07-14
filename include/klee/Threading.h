@@ -95,6 +95,8 @@ struct StackFrame {
   /// This is updated by special function handlers for loop instrumentation.
   std::vector<LoopExecIndex> execIndexStack;
 
+  bool isUserMain;
+
   StackFrame(KInstIterator caller, uint32_t _callerExecIndex, KFunction *kf);
   StackFrame(const StackFrame &s);
 

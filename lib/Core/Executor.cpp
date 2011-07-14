@@ -2880,6 +2880,8 @@ void Executor::stepInState(ExecutionState *state) {
       std::cerr << "    ..." << std::endl;
     std::cerr << "  Instruction:" << std::endl << "    ";
     ki->inst->dump();
+    std::cerr << "    at " << ki->info->file << ":" << ki->info->line
+              << " (assembly line " << ki->info->assemblyLine << ")\n";
     if (isa<BranchInst>(ki->inst) || isa<SwitchInst>(ki->inst)) {
       std::cerr << "  Branch condition in merged state:"<< std::endl << "    ";
       eval(ki, 0, *state).value->dump();

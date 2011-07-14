@@ -239,18 +239,21 @@ ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset) {
 ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
     if (file->concrete_fd == 1) {
-      // Ugh
-      if (klee_is_symbolic((long)buf) && klee_is_symbolic((long)count)) {
-        CALL_UNDERLYING(write, file->concrete_fd, "(S)", 4);
+      // Ugh... don't output symbolic values as it takes too long
+      if (klee_is_symbolic((long)buf) || klee_is_symbolic((long)count)) {
+        CALL_UNDERLYING(write, file->concrete_fd, "#", 2);
       } else {
         char ch;
         size_t i;
-        size_t count1 = klee_get_valuel((long) count);
-        buf = (void*) klee_get_valuel((long) buf);
+        size_t count1 = count; //klee_get_valuel((long) count);
+        //buf = (void*) klee_get_valuel((long) buf);
         klee_check_memory_access(buf, count1);
 
         for (i=0; i<count1; ++i) {
-          ch = klee_get_value_i32(((const char*)buf)[i]);
+          ch = ((const char*)buf)[i];
+          if (klee_is_symbolic(ch))
+            ch = '$';
+          //ch = klee_get_value_i32(((const char*)buf)[i]);
           CALL_UNDERLYING(write, file->concrete_fd, &ch, 1);
         }
       }

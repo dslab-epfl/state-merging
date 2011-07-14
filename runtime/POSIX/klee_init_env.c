@@ -116,7 +116,7 @@ void klee_process_args(int* argcPtr, char*** argvPtr) {
   int argc = *argcPtr;
   char** argv = *argvPtr;
 
-  int new_argc = 0, n_args;
+  int new_argc = 0, max_argc = 0, n_args;
   char* new_argv[1024];
   char* tmp_argv[1024];
   unsigned max_len, min_argvs, max_argvs;
@@ -138,6 +138,7 @@ void klee_process_args(int* argcPtr, char*** argvPtr) {
       __add_arg(&new_argc, new_argv, 
                 __get_sym_str(max_len, sym_arg_name),
                 1024);
+      ++max_argc;
     }
     else if (__streq(argv[k], "--sym-args") || __streq(argv[k], "-sym-args")) {
       const char *msg = 
@@ -162,6 +163,7 @@ void klee_process_args(int* argcPtr, char*** argvPtr) {
       for (i=0; i < n_args; i++) {
         __add_arg(&new_argc, new_argv, tmp_argv[i], 1024);
       }
+      max_argc += max_argvs;
     }
     else if (__streq(argv[k], "--sym-files") || __streq(argv[k], "-sym-files")) {
       k++;
@@ -172,10 +174,11 @@ void klee_process_args(int* argcPtr, char*** argvPtr) {
     else {
       /* simply copy arguments */
       __add_arg(&new_argc, new_argv, argv[k++], 1024);
+      ++max_argc;
     }
   }
 
-  final_argv = (char**) malloc((new_argc+1) * sizeof(*final_argv));
+  final_argv = (char**) malloc((max_argc+1) * sizeof(*final_argv));
   klee_mark_global(final_argv);
   memcpy(final_argv, new_argv, new_argc * sizeof(*final_argv));
   final_argv[new_argc] = 0;

@@ -108,8 +108,7 @@ ObjectState::ObjectState(const MemoryObject *mo)
     updates(0, 0),
     size(mo->size),
     readOnly(false),
-    isShared(false),
-    numBlacklistRefs(0) {
+    isShared(false) {
   if (!UseConstantArrays) {
     // FIXME: Leaked.
     static unsigned id = 0;
@@ -130,8 +129,7 @@ ObjectState::ObjectState(const MemoryObject *mo, const Array *array)
     updates(array, 0),
     size(mo->size),
     readOnly(false),
-    isShared(false),
-    numBlacklistRefs(0) {
+    isShared(false) {
   makeSymbolic();
 }
 
@@ -146,8 +144,7 @@ ObjectState::ObjectState(const ObjectState &os)
     updates(os.updates),
     size(os.size),
     readOnly(false),
-    isShared(os.isShared),
-    numBlacklistRefs(os.numBlacklistRefs) {
+    isShared(os.isShared) {
   assert(!os.readOnly && "no need to copy read only object?");
 
   if (os.knownSymbolics) {
@@ -389,6 +386,12 @@ ref<Expr> ObjectState::read8(unsigned offset) const {
     return ReadExpr::create(getUpdates(), 
                             ConstantExpr::create(offset, Expr::Int32));
   }    
+}
+
+unsigned ObjectState::read8c(unsigned offset) const {
+  if (isByteConcrete(offset))
+    return concreteStore[offset];
+  return unsigned(-1);
 }
 
 ref<Expr> ObjectState::read8(ref<Expr> offset) const {

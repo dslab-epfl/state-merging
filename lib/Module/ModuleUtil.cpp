@@ -56,7 +56,7 @@ Module *klee::linkWithLibrary(Module *module,
 Function *klee::getDirectCallTarget(const Instruction *i) {
   assert(isa<CallInst>(i) || isa<InvokeInst>(i));
 
-  Value *v = i->getOperand(0);
+  Value *v = const_cast<Value*>(cast<CallInst>(i)->getCalledValue());
   if (Function *f = dyn_cast<Function>(v)) {
     return f;
   } else if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(v)) {

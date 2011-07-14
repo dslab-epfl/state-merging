@@ -192,9 +192,6 @@ public:
 
   bool isShared; // The object is shared among addr. spaces within the same state
 
-  // Number of blacklist items assosiated with this ObjectState
-  unsigned numBlacklistRefs;
-
 public:
   /// Create a new object state for the given memory object with concrete
   /// contents. The initial contents are undefined, it is the callers
@@ -220,6 +217,10 @@ public:
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
   ref<Expr> read8(unsigned offset) const;
+
+  // Read concrete value from the array. Return unsigned(-1) if
+  // the value is symbolic
+  unsigned read8c(unsigned offset) const;
 
   // return bytes written.
   void write(unsigned offset, ref<Expr> value);
