@@ -516,6 +516,8 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
         CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
             it1->second << " and " << state->instsTotal << ")");
           */
+      } else {
+        return true;
       }
     }
   }
