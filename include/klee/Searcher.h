@@ -216,7 +216,8 @@ namespace klee {
 
     // TODO: use unordered multimap instead
     typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
-    typedef llvm::DenseMap<uint32_t, StatesSet*> StatesTrace;
+    typedef std::map<ExecutionState*, unsigned> StatePosMap;
+    typedef llvm::DenseMap<uint32_t, StatePosMap*> StatesTrace;
 
     StatesTrace statesTrace;
     StatesSet statesToForward;
@@ -276,6 +277,8 @@ namespace klee {
     StatesSet addedChecked;
 
     unsigned long aggregateCount;
+    unsigned long totalUpdatesRecv;
+    unsigned long totalUpdatesSent;
     bool isCheckpoint(ExecutionState *state);
   public:
     CheckpointSearcher(Searcher *baseSearcher);

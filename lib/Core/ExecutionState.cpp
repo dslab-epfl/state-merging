@@ -73,6 +73,8 @@ ExecutionState::ExecutionState(Executor *_executor, KFunction *kf)
     queryCost(0.), 
     weight(1),
     instsSinceCovNew(0),
+    instsSinceFork(0),
+    instsTotal(0),
     coveredNew(false),
     lastCoveredTime(sys::TimeValue::now()),
     ptreeNode(0),
@@ -341,6 +343,9 @@ ExecutionState *ExecutionState::branch(bool copy) {
   if (!copy) {
     falseState->coveredNew = false;
     falseState->coveredLines.clear();
+
+    falseState->instsSinceFork = 0;
+    instsSinceFork = 0;
   }
 
   falseState->c9State = NULL;
@@ -905,8 +910,14 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
   a.coveredNew |= b.coveredNew;
   a.multiplicity += b.multiplicity;
   a.multiplicityExact += b.multiplicityExact;
-  if(a.instsSinceCovNew > b.instsSinceCovNew)
-      a.instsSinceCovNew = b.instsSinceCovNew;
+  if (a.instsSinceCovNew > b.instsSinceCovNew)
+    a.instsSinceCovNew = b.instsSinceCovNew;
+
+  if (a.instsSinceFork < b.instsSinceFork)
+    a.instsSinceFork = b.instsSinceFork;
+  if (a.instsTotal < b.instsTotal)
+    a.instsTotal = b.instsTotal;
+
   for(std::map<const std::string*, std::set<unsigned> >::const_iterator
           it = b.coveredLines.begin(), ie = b.coveredLines.end(); it != ie; ++it) {
       a.coveredLines[it->first].insert(it->second.begin(), it->second.end());

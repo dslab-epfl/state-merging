@@ -48,6 +48,21 @@ namespace {
   MaxStateMultiplicity("max-state-multiplicity",
             cl::desc("Maximum number of states merged into one"),
             cl::init(0));
+
+  cl::opt<bool>
+  DebugCheckpointUpdates("debug-checkpoint-updates",
+       cl::desc("Displays the number of updates received vs. updates forwarded when states are checkpointed"),
+       cl::init(false));
+
+  cl::opt<bool>
+  DebugMaxInstrCountDelta("debug-maxinstr-delta",
+      cl::desc("Displays rejected forwarding opportunities due to exceeded maximum instruction count delta"),
+      cl::init(false));
+
+  cl::opt<unsigned>
+  MaxInstrDifference("max-inst-difference",
+      cl::desc("Maximum difference between instruction counters for forwarding states"),
+      cl::init(10000));
 }
 
 namespace klee {
@@ -485,10 +500,18 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
     return false;
 
   // This loop could have at most two iterations
-  for (StatesSet::const_iterator it1 = it->second->begin(),
+  for (StatePosMap::const_iterator it1 = it->second->begin(),
                       ie1 = it->second->end(); it1 != ie1; ++it1) {
-    if (*it1 != state)
-      return true;
+    if (it1->first != state) {
+      if (MaxInstrDifference) {
+        if (it1->second >= state->instsTotal && it1->second - state->instsTotal <= MaxInstrDifference)
+          return true;
+        if (it1->second < state->instsTotal && state->instsTotal - it1->second <= MaxInstrDifference)
+          return true;
+        CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
+            it1->second << " and " << state->instsTotal << ")");
+      }
+    }
   }
 
   return false;
@@ -567,9 +590,10 @@ ExecutionState &LazyMergingSearcher::selectState() {
     assert(!state->mergeDisabled());
 
     // Check wether we can already merge
-    for (StatesSet::iterator it = traceIt->second->begin(),
+    for (StatePosMap::iterator it = traceIt->second->begin(),
                              ie = traceIt->second->end(); it != ie; ++it) {
-      ExecutionState *state1 = *it;
+      ExecutionState *state1 = it->first;
+      unsigned oldInstrCount = it->second;
       assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
       //assert(!state1->mergeDisabled);
 
@@ -591,10 +615,12 @@ ExecutionState &LazyMergingSearcher::selectState() {
                 it1->second->erase(merged);
             } else {
               bool erased = it1->second->erase(state);
+
               if (merged != state1)
                 erased |= it1->second->erase(state1);
-              if (erased)
-                it1->second->insert(merged);
+              if (erased) {
+                it1->second->insert(std::make_pair(merged, oldInstrCount));
+              }
             }
           }
 
@@ -656,9 +682,9 @@ void LazyMergingSearcher::update(ExecutionState *current,
     uint32_t mergeIndex = current->getMergeIndex();
     StatesTrace::iterator it = statesTrace.find(mergeIndex);
     if (it == statesTrace.end()) {
-        it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
+        it = statesTrace.insert(std::make_pair(mergeIndex, new StatePosMap)).first;
     }
-    it->second->insert(current);
+    it->second->insert(std::make_pair(current, current->instsTotal));
 
     // XXX for some reason the following causes a slowdown
     /*
@@ -755,7 +781,8 @@ void BatchingSearcher::update(ExecutionState *current,
 
 CheckpointSearcher::CheckpointSearcher(Searcher *_baseSearcher) :
   baseSearcher(_baseSearcher), activeState(NULL), addedUnchecked(),
-  addedChecked(), aggregateCount(0) {
+  addedChecked(), aggregateCount(0), totalUpdatesRecv(0),
+  totalUpdatesSent(0) {
 
 }
 
@@ -787,6 +814,7 @@ ExecutionState &CheckpointSearcher::selectState() {
       added.insert(*it);
 
     baseSearcher->update(activeState, added, std::set<ExecutionState*>());
+    totalUpdatesSent++;
 
     addedChecked.clear();
   }
@@ -796,6 +824,8 @@ ExecutionState &CheckpointSearcher::selectState() {
   aggregateCount = 1;
 
   activeState = &baseSearcher->selectState();
+
+  assert(isCheckpoint(activeState) && "State in the underlying strategy not checkpointed");
 
   return *activeState;
 }
@@ -810,6 +840,8 @@ bool CheckpointSearcher::empty() {
 void CheckpointSearcher::update(ExecutionState *current,
     const std::set<ExecutionState*> &addedStates,
     const std::set<ExecutionState*> &removedStates) {
+
+  totalUpdatesRecv++;
 
   std::set<ExecutionState*> newRemoved;
 
@@ -840,6 +872,11 @@ void CheckpointSearcher::update(ExecutionState *current,
 
   if (newRemoved.size() > 0) {
     baseSearcher->update(NULL, std::set<ExecutionState*>(), newRemoved);
+    totalUpdatesSent++;
+  }
+
+  if (DebugCheckpointUpdates && totalUpdatesRecv % 100 == 0) {
+    CLOUD9_DEBUG("Checkpoint searcher: Updates recv - " << totalUpdatesRecv << " sent - " << totalUpdatesSent);
   }
 }
 

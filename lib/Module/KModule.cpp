@@ -513,7 +513,8 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_iter", module);
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_exit", module);
 
-  if (1 || requireMergeAnalysis) {
+#if 0
+  if (requireMergeAnalysis) {
     // Run the pass that instruments loops for execution index computation and
     // use frequency analysis
     PassManager pm4;
@@ -525,6 +526,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     pm4.add(new PhiCleanerPass()); // LoopSimplify pass may have changed PHIs
     pm4.run(*module);
   }
+#endif
 
   // Write out the .ll assembly file. We truncate long lines to work
   // around a kcachegrind parsing bug (it puts them on new lines), so

@@ -337,6 +337,8 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 
 		if (es.instsSinceCovNew)
 			++es.instsSinceCovNew;
+		++es.instsSinceFork;
+		++es.instsTotal;
 
 		if (sf.kf->trackCoverage && instructionIsCoverable(inst)) {
 			if (!theStatisticManager->getIndexedValue(
