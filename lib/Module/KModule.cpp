@@ -513,8 +513,8 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_iter", module);
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_exit", module);
 
-#if 0
-  if (requireMergeAnalysis) {
+#if 1
+  if (1 || requireMergeAnalysis) {
     // Run the pass that instruments loops for execution index computation and
     // use frequency analysis
     PassManager pm4;

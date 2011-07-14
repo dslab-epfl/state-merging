@@ -241,7 +241,7 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
     if (file->concrete_fd == 1) {
       // Ugh... don't output symbolic values as it takes too long
       if (klee_is_symbolic((long)buf) || klee_is_symbolic((long)count)) {
-        CALL_UNDERLYING(write, file->concrete_fd, "#", 2);
+        //CALL_UNDERLYING(write, file->concrete_fd, "#", 2);
       } else {
         char ch;
         size_t i;
