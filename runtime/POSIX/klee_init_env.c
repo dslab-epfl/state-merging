@@ -72,6 +72,7 @@ static char *__get_sym_str(int numChars, char *name) {
   return s;
 }
 
+/*
 static void __add_arg(int *argc, char **argv, char *arg, int argcMax) {
   if (*argc==argcMax) {
     __emit_error("too many arguments for klee_init_env");
@@ -80,6 +81,7 @@ static void __add_arg(int *argc, char **argv, char *arg, int argcMax) {
     (*argc)++;
   }
 }
+*/
 
 void klee_init_env(int argc, char **argv) {
   unsigned sym_files = 0, sym_file_len = 0;
@@ -113,57 +115,95 @@ void klee_init_env(int argc, char **argv) {
 }
 
 void klee_process_args(int* argcPtr, char*** argvPtr) {
+  const char *sym_arg_msg = "--sym-arg expects an integer argument <max-len>";
+  const char *sym_args_msg =
+      "--sym-args expects three integer arguments <min-argvs> <max-argvs> <max-len>";
+
   int argc = *argcPtr;
   char** argv = *argvPtr;
 
-  int new_argc = 0, max_argc = 0, n_args;
-  char* new_argv[1024];
-  char* tmp_argv[1024];
-  unsigned max_len, min_argvs, max_argvs;
-  char** final_argv;
-  char sym_arg_name[5] = "arg";
-  unsigned sym_arg_num = 0;
-  int k=0, i;
-
-  sym_arg_name[4] = '\0';
-
-  while (k < argc) {
+  // Get maximum number of arguments
+  int k;
+  int new_argc_max = 0;
+  for (k = 0; k < argc; ) {
     if (__streq(argv[k], "--sym-arg") || __streq(argv[k], "-sym-arg")) {
-      const char *msg = "--sym-arg expects an integer argument <max-len>";
-      if (++k == argc)        
-	__emit_error(msg);
-		
-      max_len = __str_to_int(argv[k++], msg);
-      sym_arg_name[3] = '0' + sym_arg_num++;
-      __add_arg(&new_argc, new_argv, 
-                __get_sym_str(max_len, sym_arg_name),
-                1024);
-      ++max_argc;
+
+      if (k+1 >= argc)
+        __emit_error(sym_arg_msg);
+
+      ++k;
+      ++k;
+      ++new_argc_max;
+
     }
     else if (__streq(argv[k], "--sym-args") || __streq(argv[k], "-sym-args")) {
-      const char *msg = 
-        "--sym-args expects three integer arguments <min-argvs> <max-argvs> <max-len>";
-
       if (k+3 >= argc)
-	__emit_error(msg);
-      
-      k++;
-      min_argvs = __str_to_int(argv[k++], msg);
-      max_argvs = __str_to_int(argv[k++], msg);
-      max_len = __str_to_int(argv[k++], msg);
+        __emit_error(sym_args_msg);
 
-      for (i=0; (unsigned) i < max_argvs; ++i) {
+      ++k;
+      ++k;
+      unsigned max_argvs = __str_to_int(argv[k++], sym_args_msg);
+      ++k;
+
+      new_argc_max += max_argvs;
+    }
+    else if (__streq(argv[k], "--sym-files") || __streq(argv[k], "-sym-files")) {
+      ++k;
+    }
+    else if (__streq(argv[k], "--unsafe") || __streq(argv[k], "-unsafe")) {
+      ++k;
+    }
+    else {
+      ++k;
+      ++new_argc_max;
+    }
+  }
+
+  if (new_argc_max > 1024)
+    __emit_error("too many arguments");
+
+
+  char** new_argv = (char**) malloc((new_argc_max+1) * sizeof(char*));
+  klee_mark_global(new_argv);
+  int new_argc = 0;
+
+  char sym_arg_name[5] = "arg";
+  unsigned sym_arg_num = 0;
+  sym_arg_name[4] = '\0';
+
+  for (k = 0; k < argc; ) {
+    if (__streq(argv[k], "--sym-arg") || __streq(argv[k], "-sym-arg")) {
+      ++k;
+      unsigned max_len = __str_to_int(argv[k++], sym_arg_msg);
+      sym_arg_name[3] = '0' + sym_arg_num++;
+
+      new_argv[new_argc] = __get_sym_str(max_len, sym_arg_name);
+      ++new_argc;
+    }
+    else if (__streq(argv[k], "--sym-args") || __streq(argv[k], "-sym-args")) {
+      ++k;
+      unsigned min_argvs = __str_to_int(argv[k++], sym_args_msg);
+      unsigned max_argvs = __str_to_int(argv[k++], sym_args_msg);
+      unsigned max_len = __str_to_int(argv[k++], sym_args_msg);
+
+      // Allocate a memory object to store the actual number of arg as
+      // a concrete value that could be used in a merge black list
+      volatile unsigned* n_args_i = (unsigned*) malloc(sizeof(unsigned));
+      *n_args_i = 0;
+      klee_merge_blacklist(n_args_i, sizeof(*n_args_i), 1);
+
+      // Create a symbolic value that determined n_args
+      unsigned n_args;
+      klee_make_symbolic(&n_args, sizeof(n_args), "n_args");
+      klee_assume(n_args >= min_argvs && n_args <= max_argvs);
+
+      for (; *n_args_i < n_args; ++*n_args_i) { // This will fork
         sym_arg_name[3] = '0' + sym_arg_num++;
-        tmp_argv[i] = __get_sym_str(max_len, sym_arg_name);
+        new_argv[new_argc] = __get_sym_str(max_len, sym_arg_name);
+        new_argc++; // This will always be concrete
       }
 
       //n_args = klee_range(min_argvs, max_argvs+1, "n_args");
-      klee_make_symbolic(&n_args, sizeof(n_args), "n_args");
-      klee_assume(n_args >= (int) min_argvs && n_args <= (int) max_argvs);
-      for (i=0; i < n_args; i++) {
-        __add_arg(&new_argc, new_argv, tmp_argv[i], 1024);
-      }
-      max_argc += max_argvs;
     }
     else if (__streq(argv[k], "--sym-files") || __streq(argv[k], "-sym-files")) {
       k++;
@@ -173,18 +213,21 @@ void klee_process_args(int* argcPtr, char*** argvPtr) {
     }
     else {
       /* simply copy arguments */
-      __add_arg(&new_argc, new_argv, argv[k++], 1024);
-      ++max_argc;
+      new_argv[new_argc] = argv[k++];
+      ++new_argc;
     }
   }
 
-  final_argv = (char**) malloc((max_argc+1) * sizeof(*final_argv));
-  klee_mark_global(final_argv);
-  memcpy(final_argv, new_argv, new_argc * sizeof(*final_argv));
-  final_argv[new_argc] = 0;
+  new_argv[new_argc] = 0;
+
+  if (klee_is_symbolic(new_argc))
+    __emit_error("new_argc is symbolic???");
+  for (k = 0; k < new_argc; ++k)
+    if (klee_is_symbolic((uintptr_t) new_argv[k]))
+      __emit_error("new_argv[k] is symbolic???");
 
   *argcPtr = new_argc;
-  *argvPtr = final_argv;
+  *argvPtr = new_argv;
 
   klee_event(__KLEE_EVENT_BREAKPOINT, __KLEE_BREAK_TRACE);
 }
