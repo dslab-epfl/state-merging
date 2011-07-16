@@ -1292,15 +1292,16 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
               cast<CallInst>(ptr)->getCalledFunction()->getName() == "malloc"));
 
     ref<Expr> addrExpr = executor.evalV(ku->valueIdx, state).value;
-    assert(isa<ConstantExpr>(addrExpr));
-    ConstantExpr *addrCExpr = cast<ConstantExpr>(addrExpr);
+    if (ConstantExpr *addrCExpr = dyn_cast<ConstantExpr>(addrExpr)) {
+      Expr::Width width = executor.getWidthForLLVMType(
+            cast<PointerType>(md->getOperand(1)->getType())->getElementType());
 
-    Expr::Width width = executor.getWidthForLLVMType(
-          cast<PointerType>(md->getOperand(1)->getType())->getElementType());
-
-    uint64_t size = Expr::getMinBytesForWidth(width);
-    state.updateMemoryUseFrequency(target->inst, addrCExpr, size,
-                                   ku->numUses, ku->totalNumUses);
+      uint64_t size = Expr::getMinBytesForWidth(width);
+      state.updateMemoryUseFrequency(target->inst, addrCExpr, size,
+                                     ku->numUses, ku->totalNumUses);
+    } else {
+      // XXX?
+    }
   } else {
     Value *val = md->getOperand(1);
     assert(isa<Instruction>(val) || isa<Argument>(val));
