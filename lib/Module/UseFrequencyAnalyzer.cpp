@@ -18,7 +18,7 @@
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
 
-#define MAX_DATAFLOW_DEPTH 8
+#define MAX_DATAFLOW_DEPTH 16
 #define DEFAULT_LOOP_TRIP_COUNT 10
 
 namespace llvm {
