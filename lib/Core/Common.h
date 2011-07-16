@@ -52,6 +52,7 @@ namespace klee {
                          const char *msg, ...)
     __attribute__ ((format (printf, 2, 3)));
 
+#if 0
   /* The following is GCC-specific implementation of foreach.
      Should handle correctly all crazy C++ corner cases.
      This is also syntatically very similar for the upcoming C++0x
@@ -70,6 +71,7 @@ namespace klee {
        !_container_.brk && _container_.i != _container_.e; \
        __extension__  ({ ++_container_.brk; ++_container_.i; })) \
       for (variable = *_container_.i;; __extension__ ({--_container_.brk; break;}))
+#endif
 }
 
 #endif /* __KLEE_COMMON_H__ */

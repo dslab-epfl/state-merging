@@ -219,7 +219,6 @@ public:
   //virtual bool doInitialization(llvm::Module &M);
   virtual bool runOnSCC(llvm::CallGraphSCC &SCC);
   bool runOnFunction(llvm::CallGraphNode &CGNode);
-  bool runOnFunction1(llvm::CallGraphNode &CGNode);
 };
 
 class CheckpointAnalyzer: public llvm::BasicBlockPass {

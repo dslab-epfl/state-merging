@@ -52,6 +52,9 @@
 #include <iostream>
 #include <fstream>
 
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
+
 using namespace klee;
 using namespace llvm;
 

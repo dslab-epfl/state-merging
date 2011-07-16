@@ -45,7 +45,8 @@ namespace klee {
 StackFrame::StackFrame(KInstIterator _caller, uint32_t _callerExecIndex, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0),
     minDistToUncoveredOnReturn(0), varargs(0),
-    execIndexStack(1) {
+    execIndexStack(1), localBlacklistMap(_kf->numRegisters, false),
+    localBlacklistHash(hashInit()) {
 
   execIndexStack[0].loopID = uint32_t(-1);
   execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
@@ -63,7 +64,9 @@ StackFrame::StackFrame(const StackFrame &s)
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
     varargs(s.varargs),
     execIndexStack(s.execIndexStack),
-    isUserMain(s.isUserMain) {
+    isUserMain(s.isUserMain),
+    localBlacklistMap(s.localBlacklistMap, s.kf->numRegisters),
+    localBlacklistHash(s.localBlacklistHash) {
 
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i=0; i<s.kf->numRegisters; i++)
@@ -79,6 +82,9 @@ StackFrame& StackFrame::operator=(const StackFrame &s) {
     minDistToUncoveredOnReturn = s.minDistToUncoveredOnReturn;
     varargs = s.varargs;
     execIndexStack = s.execIndexStack;
+    isUserMain = s.isUserMain;
+    localBlacklistMap = BitArray(s.localBlacklistMap, s.kf->numRegisters);
+    localBlacklistHash = s.localBlacklistHash;
 
     if (locals)
       delete []locals;

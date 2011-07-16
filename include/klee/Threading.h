@@ -35,6 +35,7 @@
 
 #include "klee/Expr.h"
 #include "klee/Internal/Module/KInstIterator.h"
+#include "klee/util/BitArray.h"
 #include "../../lib/Core/AddressSpace.h"
 #include "cloud9/Logger.h"
 
@@ -44,7 +45,7 @@
 
 namespace llvm {
   class Value;
-  class User;
+  class Instruction;
 }
 
 namespace klee {
@@ -97,6 +98,9 @@ struct StackFrame {
 
   bool isUserMain;
 
+  BitArray localBlacklistMap;
+  uint32_t localBlacklistHash;
+
   StackFrame(KInstIterator caller, uint32_t _callerExecIndex, KFunction *kf);
   StackFrame(const StackFrame &s);
 
@@ -105,10 +109,10 @@ struct StackFrame {
 };
 
 struct MergeBlacklistInfo {
-  llvm::User *inst;
+  llvm::Instruction *inst;
   const StackFrame *frame;
   uint64_t useFreq;
-  MergeBlacklistInfo(llvm::User *_inst,
+  MergeBlacklistInfo(llvm::Instruction *_inst,
                      const StackFrame *_frame, uint64_t _useFreq)
     : inst(_inst), frame(_frame), useFreq(_useFreq) {}
 };

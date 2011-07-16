@@ -42,6 +42,7 @@
 #endif
 #include "llvm/Target/TargetData.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Analysis/Verifier.h"
 
 #include <sstream>
 #include <fstream>
@@ -104,6 +105,16 @@ namespace {
   cl::opt<std::string>
   InitialCoverage("initial-coverage",
       cl::desc("A file containing initial coverage values"));
+
+  cl::opt<bool>
+  EnableUseFreq("enable-use-freq",
+      cl::desc("Enable use frequency analysis for state merging"),
+      cl::init(true));
+
+  cl::opt<bool>
+  EnableExecIndex("enable-exec-index",
+      cl::desc("Enable execution index heuristic for lazy merging"),
+      cl::init(true));
 }
 
 void KModule::readVulnerablePoints(std::istream &is) {
@@ -514,16 +525,19 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_exit", module);
 
 #if 1
-  if (1 || requireMergeAnalysis) {
+  if (1) {
     // Run the pass that instruments loops for execution index computation and
     // use frequency analysis
     PassManager pm4;
     pm4.add(createLoopRotatePass());
     pm4.add(createLoopSimplifyPass());
     pm4.add(createIndVarSimplifyPass()); // Improves trip-count computation
-    pm4.add(new UseFrequencyAnalyzerPass(targetData));
-    pm4.add(new AnnotateLoopPass());
+    if (EnableUseFreq)
+      pm4.add(new UseFrequencyAnalyzerPass(targetData));
+    if (EnableExecIndex)
+      pm4.add(new AnnotateLoopPass());
     pm4.add(new PhiCleanerPass()); // LoopSimplify pass may have changed PHIs
+    pm4.add(createVerifierPass());
     pm4.run(*module);
   }
 #endif
@@ -755,6 +769,9 @@ KFunction::KFunction(llvm::Function *_function,
       registerMap[it] = rnum++;
   }
   numRegisters = rnum;
+
+  Function *kleeUseFreqFunc =
+      _function->getParent()->getFunction("_klee_use_freq");
   
   unsigned i = 0;
   for (llvm::Function::iterator bbit = function->begin(), 
@@ -770,6 +787,12 @@ KFunction::KFunction(llvm::Function *_function,
         ki = new KGEPInstruction(); break;
       case Instruction::Call:
       case Instruction::Invoke:
+        if (CallSite cs = CallSite(it)) {
+          if (kleeUseFreqFunc && cs.getCalledFunction() == kleeUseFreqFunc) {
+            ki = new KUseFreqInstruction();
+            break;
+          }
+        }
         ki = new KCallInstruction();
         break;
       default:
@@ -793,6 +816,16 @@ KFunction::KFunction(llvm::Function *_function,
         for (unsigned j=0; j<numArgs; j++) {
           Value *v = cs.getArgument(j);
           ki->operands[j+1] = getOperandNum(v, registerMap, km, ki);
+        }
+
+        if (kleeUseFreqFunc && cs.getCalledFunction() == kleeUseFreqFunc) {
+          KUseFreqInstruction *ku = static_cast<KUseFreqInstruction*>(ki);
+          MDNode *md = ki->inst->getMetadata("uf");
+          assert(md && md->getNumOperands() == 4);
+          ku->isPointer = cast<ConstantInt>(md->getOperand(0))->getZExtValue();
+          ku->valueIdx = getOperandNum(md->getOperand(1), registerMap, km, ki);
+          ku->numUses = cast<ConstantInt>(md->getOperand(2))->getZExtValue();
+          ku->totalNumUses = cast<ConstantInt>(md->getOperand(3))->getZExtValue();
         }
       }
       else {

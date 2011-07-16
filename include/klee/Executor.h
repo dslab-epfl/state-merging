@@ -310,7 +310,8 @@ private:
   // Used for testing.
   ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e);
 
-  const Cell& eval(KInstruction *ki, unsigned index, 
+  const Cell& evalV(int vnumber, ExecutionState &state) const;
+  const Cell& eval(KInstruction *ki, unsigned index,
                    ExecutionState &state) const;
 
   Cell& getArgumentCell(ExecutionState &state,

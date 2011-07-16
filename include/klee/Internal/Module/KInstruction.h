@@ -69,6 +69,13 @@ namespace klee {
                         // thus may lead to further errors
     static bool classof(const KInstruction *) { return true; }
   };
+
+  struct KUseFreqInstruction: KCallInstruction {
+    bool isPointer;
+    int valueIdx;
+    uint64_t numUses;
+    uint64_t totalNumUses;
+  };
 }
 
 #endif

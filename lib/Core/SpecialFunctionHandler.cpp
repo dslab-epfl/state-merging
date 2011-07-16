@@ -262,7 +262,13 @@ bool SpecialFunctionHandler::writeConcreteValue(ExecutionState &state,
 
   ObjectState *os = state.addressSpace().getWriteable(op.first, op.second);
 
-  os->write(op.first->getOffsetExpr(address), ConstantExpr::create(value, width));
+  ref<Expr> offset = op.first->getOffsetExpr(address);
+  ref<ConstantExpr> valueExpr = ConstantExpr::create(value, width);
+  state.verifyBlacklistHash();
+  state.updateMemoryValue(op.first, os, offset, valueExpr);
+  os->write(offset, valueExpr);
+  //os->write(op.first->getOffsetExpr(address), ConstantExpr::create(value, width));
+  state.verifyBlacklistHash();
 
   return true;
 }
@@ -1224,8 +1230,8 @@ void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
 
   uint64_t activate = cast<ConstantExpr>(arguments[2])->getZExtValue();
-  state.updateUseFrequency(target->inst, address, size,
-                           activate ? INT_MAX : 0, INT_MAX);
+  state.updateMemoryUseFrequency(target->inst, address, size,
+                                 activate ? INT_MAX : 0, INT_MAX);
 
 #if 0
   ObjectPair op;
@@ -1262,15 +1268,48 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments)
 {
-  assert(arguments.size()==4 &&
+  /*
+  assert(arguments.size()==0 &&
          "invalid number of arguments klee_use_freq");
+         */
 
+  /*
   assert(isa<ConstantExpr>(arguments[0]) &&
          isa<ConstantExpr>(arguments[1]) &&
          isa<ConstantExpr>(arguments[2]) &&
          isa<ConstantExpr>(arguments[3]) &&
          "arguments to klee_use_freq are not a constant");
+         */
 
+  const MDNode *md = target->inst->getMetadata("uf");
+  assert(md && md->getNumOperands() == 4);
+  KUseFreqInstruction *ku = static_cast<KUseFreqInstruction*>(target);
+
+  if (ku->isPointer) {
+    Value *ptr = md->getOperand(1);
+    assert(isa<Constant>(ptr) || isa<AllocaInst>(ptr) || isa<Argument>(ptr) ||
+           (isa<CallInst>(ptr) &&
+              cast<CallInst>(ptr)->getCalledFunction()->getName() == "malloc"));
+
+    ref<Expr> addrExpr = executor.evalV(ku->valueIdx, state).value;
+    assert(isa<ConstantExpr>(addrExpr));
+    ConstantExpr *addrCExpr = cast<ConstantExpr>(addrExpr);
+
+    Expr::Width width = executor.getWidthForLLVMType(
+          cast<PointerType>(md->getOperand(1)->getType())->getElementType());
+
+    uint64_t size = Expr::getMinBytesForWidth(width);
+    state.updateMemoryUseFrequency(target->inst, addrCExpr, size,
+                                   ku->numUses, ku->totalNumUses);
+  } else {
+    Value *val = md->getOperand(1);
+    assert(isa<Instruction>(val) || isa<Argument>(val));
+
+    state.updateValUseFrequency(target->inst, ku->valueIdx,
+                                ku->numUses, ku->totalNumUses);
+  }
+
+  /*
   ref<ConstantExpr> address = cast<ConstantExpr>(arguments[0]);
   uint64_t width = cast<ConstantExpr>(arguments[1])->getZExtValue();
   uint64_t size = Expr::getMinBytesForWidth(width);
@@ -1279,4 +1318,5 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
   uint64_t totalUseFreq = cast<ConstantExpr>(arguments[3])->getZExtValue();
 
   state.updateUseFrequency(target->inst, address, size, useFreq, totalUseFreq);
+  */
 }

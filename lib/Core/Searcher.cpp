@@ -37,6 +37,9 @@
 #include <fstream>
 #include <climits>
 
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
+
 using namespace klee;
 using namespace llvm;
 

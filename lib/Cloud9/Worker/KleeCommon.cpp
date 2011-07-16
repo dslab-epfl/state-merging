@@ -57,7 +57,11 @@ std::string getKleePath() {
 
   
   sys::fs::make_absolute(newPath);
-  CLOUD9_DEBUG("Using Klee path " << std::string(newPath.str()));
+  static bool show = 1;
+  if (show) {
+    CLOUD9_DEBUG("Using Klee path " << std::string(newPath.str()));
+    show = 0;
+  }
   return newPath.str();
 }
 
@@ -79,6 +83,10 @@ std::string getUclibcPath() {
   SmallString<256> newPath(uclibcPathName);
 
   sys::fs::make_absolute(newPath);
-  CLOUD9_DEBUG("Using uClibc path " << std::string(newPath.str()));
+  static bool show = 1;
+  if (show) {
+    CLOUD9_DEBUG("Using uClibc path " << std::string(newPath.str()));
+    show = 0;
+  }
   return newPath.str();
 }

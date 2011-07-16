@@ -81,6 +81,9 @@
 #include <errno.h>
 #include <cxxabi.h>
 
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
+
 //using namespace llvm;
 using namespace klee;
 
@@ -1170,7 +1173,22 @@ ref<klee::ConstantExpr> Executor::evalConstant(Constant *c) {
   }
 }
 
-const Cell& Executor::eval(KInstruction *ki, unsigned index, 
+const Cell& Executor::evalV(int vnumber, ExecutionState &state) const {
+  assert(vnumber != -1 &&
+         "Invalid operand to eval(), not a value or constant!");
+
+  // Determine if this is a constant or not.
+  if (vnumber < 0) {
+    unsigned index = -vnumber - 2;
+    return kmodule->constantTable[index];
+  } else {
+    unsigned index = vnumber;
+    StackFrame &sf = state.stack().back();
+    return sf.locals[index];
+  }
+}
+
+const Cell& Executor::eval(KInstruction *ki, unsigned index,
                            ExecutionState &state) const {
   assert(index < ki->inst->getNumOperands());
   int vnumber = ki->operands[index];
@@ -1191,7 +1209,10 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, 
                          ref<Expr> value) {
+  state.verifyLocalBlacklistHash();
+  state.updateLocalValue(target->dest, value);
   getDestCell(state, target).value = value;
+  state.verifyLocalBlacklistHash();
 }
 
 void Executor::bindArgument(KFunction *kf, unsigned index, 
@@ -2718,6 +2739,7 @@ void Executor::stepInState(ExecutionState *state) {
 
   if (UseQueryPCLog)
     setPCLoggingSolverStateID(solver->solver, uint64_t(state));
+
   {
     WallTimer timer;
     state->lastResolveResult = 0;
@@ -2733,6 +2755,7 @@ void Executor::stepInState(ExecutionState *state) {
       ++stats::instructionsMultExact;
     }
   }
+
   if (UseQueryPCLog)
     setPCLoggingSolverStateID(solver->solver, uint64_t(0));
   state->stateTime++; // Each instruction takes one unit of time
@@ -3400,6 +3423,7 @@ void Executor::executeAlloc(ExecutionState &state,
         unsigned count = std::min(reallocFrom->size, os->size);
         for (unsigned i=0; i<count; i++)
           os->write(i, reallocFrom->read8(i));
+        state.updateBlacklistOnFree(reallocFrom->getObject());
         state.addressSpace().unbindObject(reallocFrom->getObject());
       }
     }
@@ -3508,6 +3532,7 @@ void Executor::executeFree(ExecutionState &state,
                               "free.err",
                               getAddressInfo(*it->second, address));
       } else {
+        it->second->updateBlacklistOnFree(mo);
         it->second->addressSpace().unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
