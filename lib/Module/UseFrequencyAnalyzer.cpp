@@ -258,7 +258,7 @@ static bool isBlockAlreadyAnnotated(const BasicBlock *BB, HotValue hv,
   return false;
 }
 
-static void insertAnnotation(HotValue hv, uint64_t useCount,
+static MDNode* insertAnnotation(HotValue hv, uint64_t useCount,
                     uint64_t totalUseCount, CallGraphNode *funcCG,
                     CallGraphNode *callerCG, Instruction *insertBefore) {
   LLVMContext &Ctx = insertBefore->getContext();
@@ -270,7 +270,10 @@ static void insertAnnotation(HotValue hv, uint64_t useCount,
     CallInst::Create(funcCG->getFunction(), Twine(), insertBefore);
   callerCG->addCalledFunction(CallSite(CI), funcCG);
 
-  CI->setMetadata("uf", MDNode::get(Ctx, args, 4));
+  MDNode* mdNode = MDNode::get(Ctx, args, 4);
+  CI->setMetadata("uf", mdNode);
+
+  return mdNode;
 }
 
 bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
@@ -424,10 +427,15 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 
         hv = HotValue(HVVal, I);
         if (const uint64_t *useCount = bbUseCountInfo.lookup(hv)) {
-          insertAnnotation(hv, *useCount,
+          MDNode *mdNode = insertAnnotation(hv, *useCount,
                            totalUseCount, kleeUseFreqCG, &CGNode, IA);
           if (IA == &*rIt.base())
             ++rIt;
+
+          // XXX: special case to avoid delay between the assignment of a local
+          // variable and an invokation of klee_use_freq
+          I->setMetadata("ul", mdNode);
+
           /*
           annotateInst(hv, *useCount, totalUseCount, insertAfter,
                        kleeUseFreqPtrCG, kleeUseFreqValCG, &CGNode, m_targetData);

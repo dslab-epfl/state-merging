@@ -1592,6 +1592,16 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
+
+  if (const MDNode *md = i->getMetadata("ul")) {
+    // A special case of blacklist node
+    assert(cast<ConstantInt>(md->getOperand(0))->getZExtValue() == 0);
+    assert(md->getOperand(1) == i);
+    state.updateValUseFrequency(i, ki->dest,
+                cast<ConstantInt>(md->getOperand(2))->getZExtValue(),
+                cast<ConstantInt>(md->getOperand(3))->getZExtValue());
+  }
+
   switch (i->getOpcode()) {
     // Control flow
   case Instruction::Ret: {
