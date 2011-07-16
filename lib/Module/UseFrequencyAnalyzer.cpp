@@ -167,8 +167,7 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
 
     } else if (const PHINode *PHI = dyn_cast<PHINode>(V)) {
       deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
-#warning Try uncommenting the following
-      /*
+#warning Try commenting/uncommenting the following
       if (depth >= MAX_DATAFLOW_DEPTH)
         continue;
       for (unsigned i = 0, e = PHI->getNumIncomingValues(); i != e; ++i) {
@@ -179,7 +178,6 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
           continue; // Do not go through back edges
         visitOPStack.push_back(std::make_pair(arg, depth+1));
       }
-      */
       continue;
 
     } else if (isa<Argument>(V)) {
@@ -564,6 +562,8 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
   UseCountInfo &useCountInfo = useCountMap.find(entryBB)->second;
   uint64_t totalUseCount = totalUseCountMap.lookup(entryBB);
   foreach (UseCountInfo::value_type &p, useCountInfo) {
+    if (isa<Instruction>(p.first.second))
+      continue; // XXX: this is wrong - solve by proper handling of PHI deps
     insertAnnotation(p.first, p.second, totalUseCount,
                      kleeUseFreqCG, &CGNode, entryBB->getFirstNonPHI());
     /*
