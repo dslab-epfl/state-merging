@@ -365,7 +365,12 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       for (succ_iterator succIt = succ_begin(BB),
                          succE  = succ_end(BB); succIt != succE; ++succIt) {
         BasicBlock *succBB = *succIt;
-        UseCountInfo &succUseCountInfo = useCountMap.find(succBB)->second;
+
+        UseCountMap::iterator bbUCIt = useCountMap.find(succBB);
+        if (bbUCIt == useCountMap.end())
+          continue; // This is a back edge, skip it for now
+
+        UseCountInfo &succUseCountInfo = bbUCIt->second;
         uint64_t totalSuccUseCount = totalUseCountMap.lookup(succBB);
 
         foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
