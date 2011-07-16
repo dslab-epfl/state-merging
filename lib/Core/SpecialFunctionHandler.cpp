@@ -1306,8 +1306,12 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
     Value *val = md->getOperand(1);
     assert(isa<Instruction>(val) || isa<Argument>(val));
 
-    state.updateValUseFrequency(target->inst, ku->valueIdx,
+    if (executor.getWidthForLLVMType(val->getType()) <= 64) {
+      state.updateValUseFrequency(target->inst, ku->valueIdx,
                                 ku->numUses, ku->totalNumUses);
+    } else {
+      // XXX
+    }
   }
 
   /*
