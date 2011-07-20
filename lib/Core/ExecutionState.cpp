@@ -153,20 +153,31 @@ void ExecutionState::setupMain(KFunction *kf) {
 
 void ExecutionState::setPC(const KInstIterator& newPC) {
   crtThread().pc = newPC;
-  uint32_t oldMergeIndex = crtThread().mergeIndex;
+  uint64_t oldMergeIndex = crtThread().mergeIndex;
+
+  uint64_t sIndex = hashInit();
 
   if(crtThread().stack.empty()) {
     crtThread().execIndex = hashInit();
   } else {
-    crtThread().execIndex = hashUpdate(hashUpdate(
+    crtThread().execIndex = hashUpdate(
           crtThread().stack.back().execIndexStack.back().index,
           (uintptr_t) (KInstruction*) newPC),
-        crtThread().stack.back().localBlacklistHash);
+    sIndex = hashUpdate(sIndex,
+          crtThread().stack.back().localBlacklistHash);
   }
+
+  sIndex = hashUpdate(hashUpdate(hashUpdate(sIndex, symbolicsHash),
+                                        addressSpace().hash),
+                                      crtThread().mergeBlacklistHash);
+
+  crtThread().mergeIndex = hashUpdate(crtThread().execIndex, sIndex);
+
+  /*
   crtThread().mergeIndex = hashUpdate(hashUpdate(hashUpdate(crtThread().execIndex,
                                                  symbolicsHash),
                                         addressSpace().hash),
-                                      crtThread().mergeBlacklistHash);
+                                      crtThread().mergeBlacklistHash);*/
 
   interleavedMergeIndex ^= oldMergeIndex;
   interleavedMergeIndex ^= crtThread().mergeIndex;
@@ -539,7 +550,7 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
 
     if (aThread.mergeBlacklistHash != bThread.mergeBlacklistHash) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: mergeBlacklists contain different values\n";
+        std::cerr << "---- merge failed: mergeBlacklistsHash are different values\n";
       return false;
     }
 
@@ -1004,7 +1015,7 @@ void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
   uint64_t offset = address->getZExtValue() - op.first->address;
 
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
+  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
 
   // Each item in a blacklist is marked with a call stack frame after which
   // it should disappear from the blacklist (i.e., the variable will not be
@@ -1104,7 +1115,7 @@ void ExecutionState::updateMemoryValue(KInstruction *ki,
   //  return; // This ObjectState is not involved in any blacklist item
 
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
+  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
 
   bool notify = false;
 
@@ -1173,7 +1184,7 @@ void ExecutionState::updateMemoryValue(KInstruction *ki,
 void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
   bool changed = false;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
+  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
   for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
                                be = mergeBlacklistMap.end(); bi != be;) {
     if (bi->first.first == mo) {
@@ -1211,7 +1222,7 @@ void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
 void ExecutionState::updateBlacklistBeforePopFrame() {
   bool changed = false;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
+  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
   const StackFrame *frame = &stack().back();
   for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
                                be = mergeBlacklistMap.end(); bi != be;) {
@@ -1291,7 +1302,7 @@ void ExecutionState::verifyBlacklistHash() {
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
 
   // Verify data values hash
-  uint32_t correctMergeBlacklistHash = hashInit();
+  uint64_t correctMergeBlacklistHash = hashInit();
   for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
                                be = mergeBlacklistMap.end(); bi != be; ++bi) {
     const MemoryObject *mo = bi->first.first;
@@ -1370,8 +1381,7 @@ void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx
     ref<Expr> &value = sf.locals[valueIdx].value;
     if (!value.isNull() && isa<ConstantExpr>(value)) {
       uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      sf.localBlacklistHash += uint32_t(cvalue);
-      sf.localBlacklistHash += uint32_t(cvalue >> 32);
+      sf.localBlacklistHash += cvalue;
     }
   } else {
     if (!sf.localBlacklistMap.get(valueIdx))
@@ -1389,8 +1399,7 @@ void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx
     ref<Expr> &value = sf.locals[valueIdx].value;
     if (!value.isNull() && isa<ConstantExpr>(value)) {
       uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      sf.localBlacklistHash -= uint32_t(cvalue);
-      sf.localBlacklistHash -= uint32_t(cvalue >> 32);
+      sf.localBlacklistHash -= cvalue;
     }
     sf.localBlacklistMap.unset(valueIdx);
   }
@@ -1416,15 +1425,13 @@ void ExecutionState::updateLocalValue(KInstruction *target,
   if (!value.isNull() && isa<ConstantExpr>(value)) {
     prevIsConcrete = true;
     uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-    sf.localBlacklistHash -= uint32_t(cvalue);
-    sf.localBlacklistHash -= uint32_t(cvalue >> 32);
+    sf.localBlacklistHash -= cvalue;
   }
 
   if (!newValue.isNull() && isa<ConstantExpr>(newValue)) {
     nextIsConcrete = true;
     uint64_t cvalue = cast<ConstantExpr>(newValue)->getZExtValue();
-    sf.localBlacklistHash += uint32_t(cvalue);
-    sf.localBlacklistHash += uint32_t(cvalue >> 32);
+    sf.localBlacklistHash += cvalue;
   }
 
   if (prevIsConcrete && !nextIsConcrete && DebugLogMergeBlacklistVals) {
@@ -1440,7 +1447,7 @@ void ExecutionState::verifyLocalBlacklistHash() {
 #warning XXX slow
   StackFrame &sf = stack().back();
 
-  uint32_t correctLocalBlacklistHash = hashInit();
+  uint64_t correctLocalBlacklistHash = hashInit();
 
   for (unsigned i = 0; i < sf.kf->numRegisters; ++i) {
     if (!sf.localBlacklistMap.get(i))
@@ -1449,8 +1456,7 @@ void ExecutionState::verifyLocalBlacklistHash() {
     ref<Expr> &value = sf.locals[i].value;
     if (!value.isNull() && isa<ConstantExpr>(value)) {
       uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      correctLocalBlacklistHash += uint32_t(cvalue);
-      correctLocalBlacklistHash += uint32_t(cvalue >> 32);
+      correctLocalBlacklistHash += cvalue;
     }
   }
 

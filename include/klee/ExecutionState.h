@@ -168,7 +168,7 @@ public:
   //
   // FIXME: Move to a shared list structure (not critical).
   std::vector< std::pair<const MemoryObject*, const Array*> > symbolics;
-  uint32_t symbolicsHash;
+  uint64_t symbolicsHash;
 
   ConstraintManager globalConstraints;
 
@@ -251,7 +251,7 @@ public:
   void removeFnAlias(std::string fn);
 
   /* State merging */
-  uint32_t interleavedMergeIndex;
+  uint64_t interleavedMergeIndex;
 
   bool isPCCompatible(const ExecutionState &b) const;
   bool areMergeBlacklistsCompatible(const ExecutionState &b) const;
@@ -310,7 +310,7 @@ public:
 
   StackTrace getStackTrace() const;
 
-  uint32_t getMergeIndex() const { return interleavedMergeIndex; }
+  uint64_t getMergeIndex() const { return interleavedMergeIndex; }
 
   // Merge blacklist functionality
   void updateMemoryUseFrequency(llvm::Instruction *inst,

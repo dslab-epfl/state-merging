@@ -65,8 +65,8 @@ typedef uint64_t wlist_id_t;
 typedef std::pair<thread_id_t, process_id_t> thread_uid_t;
 
 struct LoopExecIndex {
-  uint32_t loopID;
-  uint32_t index;
+  uint64_t loopID;
+  uint64_t index;
 };
 
 struct StackFrame {
@@ -99,9 +99,9 @@ struct StackFrame {
   bool isUserMain;
 
   BitArray localBlacklistMap;
-  uint32_t localBlacklistHash;
+  uint64_t localBlacklistHash;
 
-  StackFrame(KInstIterator caller, uint32_t _callerExecIndex, KFunction *kf);
+  StackFrame(KInstIterator caller, uint64_t _callerExecIndex, KFunction *kf);
   StackFrame(const StackFrame &s);
 
   StackFrame& operator=(const StackFrame &sf);
@@ -135,15 +135,15 @@ private:
   MergeBlacklistMap mergeBlacklistMap;
 
   // A hash of blacklist values for this thread
-  uint32_t mergeBlacklistHash;
+  uint64_t mergeBlacklistHash;
 
   bool enabled;
   wlist_id_t waitingList;
 
   thread_uid_t tuid;
 
-  uint32_t execIndex;
-  uint32_t mergeIndex;
+  uint64_t execIndex;
+  uint64_t mergeIndex;
 
 public:
   Thread(thread_id_t tid, process_id_t pid, KFunction *start_function);

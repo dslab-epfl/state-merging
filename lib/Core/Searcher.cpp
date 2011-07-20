@@ -529,7 +529,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
     // smartly what state to fast-forward first).
 #if 0
     state = *statesToForward.begin();
-    uint32_t mergeIndex = state->getMergeIndex();
+    uint64_t mergeIndex = state->getMergeIndex();
     StatesTrace::iterator traceIt = statesTrace.find(mergeIndex);
     unsigned candidates = (traceIt == statesTrace.end() ? 0
                   : traceIt->second->size() - traceIt->second->count(state));
@@ -542,7 +542,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
     }
 
 #else
-    uint32_t mergeIndex = 0;
+    uint64_t mergeIndex = 0;
     unsigned candidates = 0;
     StatesTrace::iterator traceIt;
 
@@ -550,7 +550,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
     for (StatesSet::iterator it = statesToForward.begin(),
                         ie = statesToForward.end(); it != ie;) {
       unsigned _candidates = 0;
-      uint32_t _mergeIndex;
+      uint64_t _mergeIndex;
       StatesTrace::iterator _traceIt;
       if (!(*it)->mergeDisabled()) {
         _mergeIndex = (*it)->getMergeIndex();
@@ -683,7 +683,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
   if (current && !current->mergeDisabled() &&
         removedStates.count(current) == 0 &&
         (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
-    uint32_t mergeIndex = current->getMergeIndex();
+    uint64_t mergeIndex = current->getMergeIndex();
     StatesTrace::iterator it = statesTrace.find(mergeIndex);
     if (it == statesTrace.end()) {
         it = statesTrace.insert(std::make_pair(mergeIndex, new StatePosMap)).first;

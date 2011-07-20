@@ -63,7 +63,7 @@ namespace klee {
 
     /// Hash value that uniquely identifies address space mappings
     /// NOTE: the hash is very weak due to performance reasons
-    uint32_t hash;
+    uint64_t hash;
 
 #if 0
     /// A hash of a set of values that should not differ when merging states

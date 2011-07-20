@@ -42,13 +42,13 @@ namespace klee {
 
 /* StackFrame Methods */
 
-StackFrame::StackFrame(KInstIterator _caller, uint32_t _callerExecIndex, KFunction *_kf)
+StackFrame::StackFrame(KInstIterator _caller, uint64_t _callerExecIndex, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0),
     minDistToUncoveredOnReturn(0), varargs(0),
     execIndexStack(1), localBlacklistMap(_kf->numRegisters, false),
     localBlacklistHash(hashInit()) {
 
-  execIndexStack[0].loopID = uint32_t(-1);
+  execIndexStack[0].loopID = uint64_t(-1);
   execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
 
   locals = new Cell[kf->numRegisters];
@@ -107,8 +107,8 @@ Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
   mergeBlacklistHash(hashInit()),
   enabled(true), waitingList(0), execIndex(hashInit()), mergeIndex(0) {
 
-  execIndex = hashUpdate(execIndex, (uint32_t)tid);
-  execIndex = hashUpdate(execIndex, (uint32_t)pid);
+  execIndex = hashUpdate(execIndex, tid);
+  execIndex = hashUpdate(execIndex, pid);
   mergeIndex = execIndex;
 
   tuid = std::make_pair(tid, pid);
