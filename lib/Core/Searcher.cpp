@@ -508,10 +508,10 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
       if (MaxInstrDifference) {
         if (it1->first->instsTotal - it1->second <= MaxInstrDifference)
           return true;
-	if (DebugMaxInstrCountDelta) {
-	  CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
-		       it1->first->instsTotal << " and " << it1->second << ")");
-	}
+        if (DebugMaxInstrCountDelta) {
+          CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
+                 it1->first->instsTotal << " and " << it1->second << ")");
+        }
       } else {
         return true;
       }
@@ -607,9 +607,65 @@ ExecutionState &LazyMergingSearcher::selectState() {
         merged = executor.merge(*state1, *state);
         if (merged) {
           // We've merged !
+          bool keepMerged = !MaxStateMultiplicity ||
+                  merged->multiplicity < MaxStateMultiplicity;
 
           // Any of the merged states could be followed for fast forwards.
           // Make traces that was pointing to state to point to state1
+
+          StatesIndexesMap::iterator si1 = statesIndexesMap.find(state1);
+          assert(si1 != statesIndexesMap.end());
+
+          StatesIndexesMap::iterator siM = (merged == state1) ? si1 :
+              statesIndexesMap.insert(std::make_pair(
+                                        merged, new StateIndexes)).first;
+
+          StatesIndexesMap::iterator si = statesIndexesMap.find(state);
+          if (si != statesIndexesMap.end()) {
+            // State "state" is deffinitely subsumed by "merged". Change all
+            // references to "state" in statesTraces to point to merge (or
+            // delete it if keepMerged is false).
+            for (StateIndexes::iterator ii = si->second->begin(),
+                                        iie = si->second->end(); ii != iie; ++ii) {
+              StatesTrace::iterator sti = statesTrace.find(*ii);
+              assert(sti != statesTrace.end());
+
+              bool erased = sti->second->erase(state);
+              assert(erased);
+
+              if (keepMerged) {
+                sti->second->insert(std::make_pair(merged, oldInstrCount));
+                siM->second->insert(*ii);
+              }
+            }
+
+            delete si->second;
+            statesIndexesMap.erase(si);
+          }
+
+          // The "state1" state may be subsumed by "merged" (depending on the
+          // command line options).
+          if (merged != state1) {
+            for (StateIndexes::iterator ii = si1->second->begin(),
+                                        iie = si1->second->end(); ii != iie; ++ii) {
+
+              StatesTrace::iterator sti = statesTrace.find(*ii);
+              assert(sti != statesTrace.end());
+
+              bool erased = sti->second->erase(state1);
+              assert(erased);
+
+              if (keepMerged) {
+                sti->second->insert(std::make_pair(merged, oldInstrCount));
+                siM->second->insert(*ii);
+              }
+            }
+
+            delete si1->second;
+            statesIndexesMap.erase(si1);
+          }
+
+          /*
           for (StatesTrace::iterator it1 = statesTrace.begin(),
                                      ie1 = statesTrace.end(); it1 != ie1; ++it1) {
             if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
@@ -626,7 +682,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
                 it1->second->insert(std::make_pair(merged, oldInstrCount));
               }
             }
-          }
+          }*/
 
           // Terminate merged state
           statesToForward.erase(state);
@@ -638,11 +694,14 @@ ExecutionState &LazyMergingSearcher::selectState() {
             executor.terminateState(*state1, true);
           }
 
-          if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
+          //if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
+          if (!keepMerged) {
             statesToForward.erase(merged);
           }
 
           state = NULL;
+
+          //verifyMaps();
           break;
         }
       }
@@ -659,8 +718,9 @@ ExecutionState &LazyMergingSearcher::selectState() {
   // At this point we might have terminated states, but the base searcher is
   // unaware about it. We can not call it since it may crash. Instead, we
   // simply return the last merged state.
-  if (merged)
+  if (merged) {
     return *merged;
+  }
 
   // Nothing to fast-forward
   // Get state from base searcher
@@ -689,6 +749,12 @@ void LazyMergingSearcher::update(ExecutionState *current,
         it = statesTrace.insert(std::make_pair(mergeIndex, new StatePosMap)).first;
     }
     it->second->insert(std::make_pair(current, current->instsTotal));
+
+    StatesIndexesMap::iterator si = statesIndexesMap.find(current);
+    if (si == statesIndexesMap.end()) {
+      si = statesIndexesMap.insert(std::make_pair(current, new StateIndexes)).first;
+    }
+    si->second->insert(mergeIndex);
 
     // XXX for some reason the following causes a slowdown
     /*
@@ -722,6 +788,22 @@ void LazyMergingSearcher::update(ExecutionState *current,
     statesToForward.erase(const_cast<ExecutionState*>(state));
 
     // Terminated states are useless for merge, remove them from traces
+    StatesIndexesMap::iterator si = statesIndexesMap.find(state);
+    if (si == statesIndexesMap.end())
+      continue;
+
+    for (StateIndexes::iterator ii = si->second->begin(),
+                                iie = si->second->end(); ii != iie; ++ii) {
+      StatesTrace::iterator it1 = statesTrace.find(*ii);
+      assert(it1 != statesTrace.end());
+      bool erased = it1->second->erase(state);
+      assert(erased);
+    }
+
+    delete si->second;
+    statesIndexesMap.erase(si);
+
+    /*
     for (StatesTrace::iterator it1 = statesTrace.begin(),
                                ie1 = statesTrace.end(); it1 != ie1;) {
       it1->second->erase(const_cast<ExecutionState*>(state));
@@ -732,9 +814,44 @@ void LazyMergingSearcher::update(ExecutionState *current,
         ++it1;
       }
     }
+    */
   }
 
   baseSearcher->update(current, addedStates, removedStates);
+}
+
+void LazyMergingSearcher::verifyMaps() {
+  for (StatesIndexesMap::iterator it = statesIndexesMap.begin(),
+                                  ie = statesIndexesMap.end(); it != ie; ++it) {
+    ExecutionState *state = it->first;
+
+    assert(it->second);
+    for (StateIndexes::iterator ii = it->second->begin(),
+                                iie = it->second->end(); ii != iie; ++ii) {
+      uint64_t idx = *ii;
+
+      StatesTrace::iterator traceIt = statesTrace.find(idx);
+      assert(traceIt != statesTrace.end());
+      assert(traceIt->second);
+      assert(traceIt->second->count(state) > 0);
+    }
+  }
+
+  for (StatesTrace::iterator it = statesTrace.begin(),
+                             ie = statesTrace.end(); it != ie; ++it) {
+    uint64_t idx = it->first;
+
+    assert(it->second);
+    for (StatePosMap::iterator pi = it->second->begin(),
+                               pe = it->second->end(); pi != pe; ++pi) {
+      ExecutionState *state = pi->first;
+
+      StatesIndexesMap::iterator idxMap = statesIndexesMap.find(state);
+      assert(idxMap != statesIndexesMap.end());
+      assert(idxMap->second);
+      assert(idxMap->second->count(idx) > 0);
+    }
+  }
 }
 
 ///

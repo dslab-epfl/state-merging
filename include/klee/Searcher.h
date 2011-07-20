@@ -219,10 +219,17 @@ namespace klee {
     typedef llvm::DenseMap<ExecutionState*, unsigned> StatePosMap;
     typedef llvm::DenseMap<uint64_t, StatePosMap*> StatesTrace;
 
+    typedef llvm::DenseSet<uint64_t> StateIndexes;
+    typedef llvm::DenseMap<ExecutionState*, StateIndexes*> StatesIndexesMap;
+
     StatesTrace statesTrace;
     StatesSet statesToForward;
 
+    StatesIndexesMap statesIndexesMap;
+
     bool canFastForwardState(const ExecutionState* state) const;
+
+    void verifyMaps();
 
   public:
     LazyMergingSearcher(Executor &executor, Searcher *baseSearcher);
