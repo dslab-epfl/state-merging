@@ -63,7 +63,7 @@ namespace klee {
         ref<Expr> address, ref<Expr> size,
         const std::string &name, resolutions_ty &resList);
 
-    bool writeConcreteValue(ExecutionState &state,
+    bool writeConcreteValue(KInstruction *target, ExecutionState &state,
         ref<Expr> address, uint64_t value, Expr::Width width);
 
     std::string readStringAtAddress(ExecutionState &state, ref<Expr> address);

@@ -259,6 +259,12 @@ static bool isBlockAlreadyAnnotated(const BasicBlock *BB, HotValue hv,
 static MDNode* insertAnnotation(HotValue hv, uint64_t useCount,
                     uint64_t totalUseCount, CallGraphNode *funcCG,
                     CallGraphNode *callerCG, Instruction *insertBefore) {
+  if (insertBefore->getParent()->getParent()->getName() == "__user_main") {
+    if (insertBefore->getParent()->getName() == "bb11") {
+      std::cerr << "bb11\n";
+    }
+  }
+
   LLVMContext &Ctx = insertBefore->getContext();
   Value *args[4] = { getI64Const(Ctx, hv.first), const_cast<Value*>(hv.second),
       getI64Const(Ctx, useCount), getI64Const(Ctx, totalUseCount) };
@@ -366,6 +372,9 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       for (succ_iterator succIt = succ_begin(BB),
                          succE  = succ_end(BB); succIt != succE; ++succIt) {
         BasicBlock *succBB = *succIt;
+
+        if (loopInfo.getLoopFor(succBB))
+          continue; // Do not annotate blocks inside loops
 
         UseCountMap::iterator bbUCIt = useCountMap.find(succBB);
         if (bbUCIt == useCountMap.end())

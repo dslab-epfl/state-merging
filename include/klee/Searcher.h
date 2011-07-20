@@ -216,7 +216,7 @@ namespace klee {
 
     // TODO: use unordered multimap instead
     typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
-    typedef std::map<ExecutionState*, unsigned> StatePosMap;
+    typedef llvm::DenseMap<ExecutionState*, unsigned> StatePosMap;
     typedef llvm::DenseMap<uint32_t, StatePosMap*> StatesTrace;
 
     StatesTrace statesTrace;

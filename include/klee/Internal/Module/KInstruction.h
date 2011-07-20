@@ -49,7 +49,8 @@ namespace klee {
     bool originallyCovered;
     bool isBBHead;
   public:
-    virtual ~KInstruction(); 
+    virtual ~KInstruction();
+    void dump() const;
   };
 
   struct KGEPInstruction : KInstruction {

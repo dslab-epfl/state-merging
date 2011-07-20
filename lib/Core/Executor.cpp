@@ -1210,7 +1210,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, 
                          ref<Expr> value) {
   state.verifyLocalBlacklistHash();
-  state.updateLocalValue(target->dest, value);
+  state.updateLocalValue(target, target->dest, value);
   getDestCell(state, target).value = value;
   state.verifyLocalBlacklistHash();
 }
@@ -1383,7 +1383,7 @@ void Executor::executeCall(ExecutionState &state,
       Expr::Width WordSize = Context::get().getPointerWidth();
       if (WordSize == Expr::Int32) {
         executeMemoryOperation(state, true, arguments[0], 
-                               sf.varargs->getBaseExpr(), 0);
+                               sf.varargs->getBaseExpr(), ki);
       } else {
         assert(WordSize == Expr::Int64 && "Unknown word size!");
 
@@ -1391,19 +1391,19 @@ void Executor::executeCall(ExecutionState &state,
         // instead of implementing it, we can do a simple hack: just
         // make a function believe that all varargs are on stack.
         executeMemoryOperation(state, true, arguments[0],
-                               ConstantExpr::create(48, 32), 0); // gp_offset
+                               ConstantExpr::create(48, 32), ki); // gp_offset
         executeMemoryOperation(state, true,
                                AddExpr::create(arguments[0], 
                                                ConstantExpr::create(4, 64)),
-                               ConstantExpr::create(304, 32), 0); // fp_offset
+                               ConstantExpr::create(304, 32), ki); // fp_offset
         executeMemoryOperation(state, true,
                                AddExpr::create(arguments[0], 
                                                ConstantExpr::create(8, 64)),
-                               sf.varargs->getBaseExpr(), 0); // overflow_arg_area
+                               sf.varargs->getBaseExpr(), ki); // overflow_arg_area
         executeMemoryOperation(state, true,
                                AddExpr::create(arguments[0], 
                                                ConstantExpr::create(16, 64)),
-                               ConstantExpr::create(0, 64), 0); // reg_save_area
+                               ConstantExpr::create(0, 64), ki); // reg_save_area
       }
       break;
     }
@@ -2219,7 +2219,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (vnumber >= 0)
         state.stack().back().locals[vnumber].value = base;
     }
-    executeMemoryOperation(state, true, base, value, 0);
+    executeMemoryOperation(state, true, base, value, ki);
     break;
   }
 
@@ -2915,10 +2915,13 @@ void Executor::stepInState(ExecutionState *state) {
     }
     if (size > 10)
       std::cerr << "    ..." << std::endl;
+    ki->dump();
+    /*
     std::cerr << "  Instruction:" << std::endl << "    ";
     ki->inst->dump();
     std::cerr << "    at " << ki->info->file << ":" << ki->info->line
               << " (assembly line " << ki->info->assemblyLine << ")\n";
+              */
     if (isa<BranchInst>(ki->inst) || isa<SwitchInst>(ki->inst)) {
       std::cerr << "  Branch condition in merged state:"<< std::endl << "    ";
       eval(ki, 0, *state).value->dump();
@@ -3895,7 +3898,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           }
           */
           state.verifyBlacklistHash();
-          state.updateMemoryValue(mo, wos, offset, value);
+          state.updateMemoryValue(target, mo, wos, offset, value);
           wos->write(offset, value);
           state.verifyBlacklistHash();
           /*
@@ -3958,7 +3961,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           */
           ref<Expr> offset = mo->getOffsetExpr(address);
           state.verifyBlacklistHash();
-          state.updateMemoryValue(mo, wos, offset, value);
+          state.updateMemoryValue(target, mo, wos, offset, value);
           wos->write(mo->getOffsetExpr(address), value);
           state.verifyBlacklistHash();
           /*

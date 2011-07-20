@@ -251,7 +251,8 @@ void SpecialFunctionHandler::processMemoryLocation(ExecutionState &state,
   }
 }
 
-bool SpecialFunctionHandler::writeConcreteValue(ExecutionState &state,
+bool SpecialFunctionHandler::writeConcreteValue(KInstruction *target,
+        ExecutionState &state,
         ref<Expr> address, uint64_t value, Expr::Width width) {
   ObjectPair op;
 
@@ -265,7 +266,7 @@ bool SpecialFunctionHandler::writeConcreteValue(ExecutionState &state,
   ref<Expr> offset = op.first->getOffsetExpr(address);
   ref<ConstantExpr> valueExpr = ConstantExpr::create(value, width);
   state.verifyBlacklistHash();
-  state.updateMemoryValue(op.first, os, offset, valueExpr);
+  state.updateMemoryValue(target, op.first, os, offset, valueExpr);
   os->write(offset, valueExpr);
   //os->write(op.first->getOffsetExpr(address), ConstantExpr::create(value, width));
   state.verifyBlacklistHash();
@@ -795,13 +796,13 @@ void SpecialFunctionHandler::handleGetContext(ExecutionState &state,
   }
 
   if (!tidAddr->isZero()) {
-    if (!writeConcreteValue(state, tidAddr, state.crtThread().getTid(),
+    if (!writeConcreteValue(target, state, tidAddr, state.crtThread().getTid(),
         executor.getWidthForLLVMType(Type::getInt64Ty(getGlobalContext()))))
       return;
   }
 
   if (!pidAddr->isZero()) {
-    if (!writeConcreteValue(state, pidAddr, state.crtProcess().pid,
+    if (!writeConcreteValue(target, state, pidAddr, state.crtProcess().pid,
         executor.getWidthForLLVMType(Type::getInt32Ty(getGlobalContext()))))
       return;
   }

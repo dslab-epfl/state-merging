@@ -8,6 +8,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
+#include "llvm/Instruction.h"
+#include <iostream>
 
 using namespace llvm;
 using namespace klee;
@@ -16,4 +19,11 @@ using namespace klee;
 
 KInstruction::~KInstruction() {
   delete[] operands;
+}
+
+void KInstruction::dump() const {
+  std::cerr << "Instruction:" << std::endl << "    ";
+  inst->dump();
+  std::cerr << "    at " << info->file << ":" << info->line
+            << " (assembly line " << info->assemblyLine << ")\n";
 }

@@ -239,6 +239,7 @@ ssize_t _read_file(file_t *file, void *buf, size_t count, off_t offset) {
 ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
   if (_file_is_concrete(file)) {
     if (file->concrete_fd == 1) {
+#if 0
       // Ugh... don't output symbolic values as it takes too long
       if (klee_is_symbolic((long)buf) || klee_is_symbolic((long)count)) {
         //CALL_UNDERLYING(write, file->concrete_fd, "#", 2);
@@ -257,6 +258,7 @@ ssize_t _write_file(file_t *file, const void *buf, size_t count, off_t offset) {
           CALL_UNDERLYING(write, file->concrete_fd, &ch, 1);
         }
       }
+#endif
       return count;
     }
 

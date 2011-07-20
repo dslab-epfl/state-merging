@@ -317,7 +317,8 @@ public:
                                ref<ConstantExpr> address, uint64_t size,
                                uint64_t useFreq, uint64_t totalUseFreq);
 
-  void updateMemoryValue(const MemoryObject *mo, ObjectState *os,
+  void updateMemoryValue(KInstruction *ki,
+                         const MemoryObject *mo, ObjectState *os,
                          ref<Expr> offset, ref<Expr> newValue);
 
   void updateBlacklistOnFree(const MemoryObject* mo);
@@ -329,7 +330,7 @@ public:
 
   void updateValUseFrequency(llvm::Instruction *inst, int valueIdx,
                              uint64_t useFreq, uint64_t totalUseFreq);
-  void updateLocalValue(int valueIdx, ref<Expr>& newValue);
+  void updateLocalValue(KInstruction *target, int valueIdx, ref<Expr>& newValue);
   void verifyLocalBlacklistHash();
 
 };

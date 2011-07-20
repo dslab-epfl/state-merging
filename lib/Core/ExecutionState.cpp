@@ -55,6 +55,9 @@ namespace {
   cl::opt<bool>
   DebugLogMergeBlacklist("debug-log-merge-blacklist");
 
+  cl::opt<bool>
+  DebugLogMergeBlacklistVals("debug-log-merge-blacklist-vals");
+
   cl::opt<double>
   MaxUseFreqPctForMerge("max-use-freq-pct-for-merge", cl::init(0.001));
 
@@ -1094,13 +1097,16 @@ void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
   }
 }
 
-void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
+void ExecutionState::updateMemoryValue(KInstruction *ki,
+                                       const MemoryObject *mo, ObjectState *os,
                                        ref<Expr> offset, ref<Expr> newValue) {
   //if (os->numBlacklistRefs == 0)
   //  return; // This ObjectState is not involved in any blacklist item
 
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint32_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
+
+  bool notify = false;
 
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(offset)) {
     if (newValue->getWidth() == 1)
@@ -1115,15 +1121,26 @@ void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
                 mergeBlacklistMap.end())
         continue;
 
+      bool prevIsConcrete = false;
+      bool nextIsConcrete = false;
+
       // Remove old value if it was concrete
       ref<Expr> R = os->read8(oc);
-      if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R))
+      if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R)) {
+        prevIsConcrete = true;
         mergeBlacklistHash -= uintptr_t(CR->getZExtValue());
+      }
 
       // Add new value if it is concrete
       ref<Expr> V = ExtractExpr::create(newValue, 8*i, Expr::Int8);
-      if (ConstantExpr *CV = dyn_cast<ConstantExpr>(V))
+      if (ConstantExpr *CV = dyn_cast<ConstantExpr>(V)) {
+        nextIsConcrete = true;
         mergeBlacklistHash += uintptr_t(CV->getZExtValue() & 0xFF);
+      }
+
+      if (prevIsConcrete && !nextIsConcrete) {
+        notify = true;
+      }
     }
   } else {
     // A write with symbolic address makes all bytes in array symbolic
@@ -1135,9 +1152,21 @@ void ExecutionState::updateMemoryValue(const MemoryObject *mo, ObjectState *os,
 
       // Remove old value if it was concrete
       ref<Expr> R = os->read8(oc);
-      if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R))
+      if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R)) {
         mergeBlacklistHash -= uintptr_t(CR->getZExtValue());
+      } else {
+        notify = true;
+      }
     }
+  }
+
+  if (notify && DebugLogMergeBlacklistVals) {
+    std::cerr << "*** Wrote symbolic value to blacklisted memory: ";
+    mo->allocSite->dump();
+    std::cerr << "  offset: "; offset->dump();
+    if (ki)
+      std::cerr << "  at:\n  "; ki->dump();
+    std::cerr << "  New value: "; newValue->dump();
   }
 }
 
@@ -1369,7 +1398,8 @@ void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx
   verifyLocalBlacklistHash();
 }
 
-void ExecutionState::updateLocalValue(int valueIdx, ref<Expr> &newValue) {
+void ExecutionState::updateLocalValue(KInstruction *target,
+                                      int valueIdx, ref<Expr> &newValue) {
   if (valueIdx < 0)
     return;
 
@@ -1379,17 +1409,29 @@ void ExecutionState::updateLocalValue(int valueIdx, ref<Expr> &newValue) {
   if (!sf.localBlacklistMap.get(valueIdx))
     return;
 
+  bool prevIsConcrete = false;
+  bool nextIsConcrete = false;
+
   ref<Expr> &value = sf.locals[valueIdx].value;
   if (!value.isNull() && isa<ConstantExpr>(value)) {
+    prevIsConcrete = true;
     uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
     sf.localBlacklistHash -= uint32_t(cvalue);
     sf.localBlacklistHash -= uint32_t(cvalue >> 32);
   }
 
   if (!newValue.isNull() && isa<ConstantExpr>(newValue)) {
+    nextIsConcrete = true;
     uint64_t cvalue = cast<ConstantExpr>(newValue)->getZExtValue();
     sf.localBlacklistHash += uint32_t(cvalue);
     sf.localBlacklistHash += uint32_t(cvalue >> 32);
+  }
+
+  if (prevIsConcrete && !nextIsConcrete && DebugLogMergeBlacklistVals) {
+    std::cerr << "*** Wrote symbolic value to blacklisted local:\n  ";
+    if (target)
+      target->dump();
+    std::cerr << " New value: "; newValue->dump();
   }
 }
 
