@@ -98,6 +98,12 @@ bool UseFrequencyAnalyzerPass::doInitialization(llvm::CallGraph &CG) {
 
 static bool isIgnored(const Value *hotValueDep) {
   if (const ConstantExpr *C = dyn_cast<ConstantExpr>(hotValueDep)) {
+    if (C->getOpcode() == Instruction::BitCast) {
+      hotValueDep = C->getOperand(0);
+    }
+  }
+
+  if (const ConstantExpr *C = dyn_cast<ConstantExpr>(hotValueDep)) {
     if (C->getOpcode() == Instruction::GetElementPtr) {
       StringRef name = C->getOperand(0)->getName();
       if (name == "__pdata" || name == "__net" || name == "__fs"
@@ -109,7 +115,9 @@ static bool isIgnored(const Value *hotValueDep) {
     if (name == "__environ" || name == "__exit_slots" ||
         name == "__exit_count" || name == "__exit_cleanup" ||
         name == "__exit_function_table" ||
-        name == "stdout" || name == "stderr" || name == "__ctype_b")
+        name == "stdout" || name == "stderr" || name == "__ctype_b" ||
+        name == "__ctype_toupper" || name == "__ctype_tolower" ||
+        name == "__rtld_fini" || name == "__app_fini")
       return true;
   }
   return false;

@@ -42,6 +42,7 @@
 #endif
 #include "llvm/Target/TargetData.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Analysis/Verifier.h"
 
 #include <sstream>
@@ -114,6 +115,11 @@ namespace {
   cl::opt<bool>
   EnableExecIndex("enable-exec-index",
       cl::desc("Enable execution index heuristic for lazy merging"),
+      cl::init(true));
+
+  cl::opt<bool>
+  ForceInline("force-inline",
+      cl::desc("Enable inlining, even if other optimizations are disabled"),
       cl::init(true));
 }
 
@@ -523,6 +529,14 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
       std::vector<const Type*>(1, Type::getInt32Ty(getGlobalContext())), false);
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_iter", module);
   Function::Create(fty, Function::ExternalLinkage, "_klee_loop_exit", module);
+
+  if (ForceInline) {
+    PassManager pm3_;
+    pm3_.add(createFunctionInliningPass());
+    pm3_.add(createPromoteMemoryToRegisterPass());
+    pm3_.add(createInstructionSimplifierPass());
+    pm3_.run(*module);
+  }
 
 #if 1
   if (1) {
