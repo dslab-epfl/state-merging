@@ -757,7 +757,7 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
       if (itA->localBlacklistMap.get(i)) {
         const ref<Expr> &av = itA->locals[i].value;
         const ref<Expr> &bv = itB->locals[i].value;
-        if (av != bv) {
+        if (!av.isNull() && !bv.isNull() && av != bv) {
           if (DebugLogStateMerge)
             std::cerr << "---- merge failed: local merge blacklists "
                       << "have different values\n";
