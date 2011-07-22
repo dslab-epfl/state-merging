@@ -927,7 +927,15 @@ CheckpointSearcher::~CheckpointSearcher() {
 
 bool CheckpointSearcher::isCheckpoint(ExecutionState *state) {
   Instruction *inst = state->pc()->inst;
-  return inst == &inst->getParent()->front();
+
+  BasicBlock *bb = inst->getParent();
+  DenseMap<BasicBlock*, Instruction*>::iterator it = m_firstInstMap.find(bb);
+  if (it == m_firstInstMap.end()) {
+    it = m_firstInstMap.insert(std::make_pair(bb, bb->getFirstNonPHI())).first;
+  }
+
+  //return inst == &inst->getParent()->front();
+  return inst == it->second;
 }
 
 ExecutionState &CheckpointSearcher::selectState() {

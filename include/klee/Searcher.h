@@ -287,6 +287,9 @@ namespace klee {
     unsigned long totalUpdatesRecv;
     unsigned long totalUpdatesSent;
     bool isCheckpoint(ExecutionState *state);
+
+    llvm::DenseMap<llvm::BasicBlock*, llvm::Instruction*> m_firstInstMap;
+
   public:
     CheckpointSearcher(Searcher *baseSearcher);
     virtual ~CheckpointSearcher();

@@ -747,6 +747,9 @@ static bool areStacksCompatible(const std::vector<StackFrame> &a,
 
 static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
     const std::vector<StackFrame> &b) {
+
+  unsigned numItems = 0;
+
   std::vector<StackFrame>::const_iterator itA = a.begin();
   std::vector<StackFrame>::const_iterator itB = b.begin();
   std::vector<StackFrame>::const_iterator itAE = a.end();
@@ -755,7 +758,15 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
     // XXX vaargs?
     assert(itA->caller==itB->caller && itA->kf==itB->kf);
 
+    if (itA->localBlacklistHash != itB->localBlacklistHash) {
+      if (DebugLogStateMerge)
+        std::cerr << "---- merge failed: local merge blacklist hashs are different\n";
+      return false;
+    }
+
     for (unsigned i=0; i<itA->kf->numRegisters; i++) {
+      ++numItems;
+
       if (itA->localBlacklistMap.get(i) != itB->localBlacklistMap.get(i)) {
         if (DebugLogStateMerge)
           std::cerr << "---- merge failed: local merge blacklists are different\n";
@@ -764,11 +775,31 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
 
       if (itA->localBlacklistMap.get(i)) {
         const ref<Expr> &av = itA->locals[i].value;
+
+        bool isNumA = !av.isNull() && isa<ConstantExpr>(av);
+        uint64_t valA = isNumA ? cast<ConstantExpr>(av)->getZExtValue() : ~0ULL;
+
         const ref<Expr> &bv = itB->locals[i].value;
-        if (!av.isNull() && !bv.isNull() && av != bv) {
-          if (DebugLogStateMerge)
+        bool isNumB = !bv.isNull() && isa<ConstantExpr>(bv);
+        uint64_t valB = isNumB ? cast<ConstantExpr>(bv)->getZExtValue() : ~0ULL;
+
+        if (isNumA != isNumB || valA != valB) {
+          if (DebugLogStateMerge) {
             std::cerr << "---- merge failed: local merge blacklists "
                       << "have different values\n";
+            std::cerr << "    Av: ";
+            if (av.isNull())
+              std::cerr << "NULL\n";
+            else
+              av->dump();
+
+            std::cerr << "    Bv: ";
+            if (bv.isNull())
+              std::cerr << "NULL\n";
+            else
+              bv->dump();
+          }
+
           return false;
         }
       }
@@ -779,6 +810,9 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
   }
 
   assert(itA==itAE && itB==itBE);
+
+  if (DebugLogStateMerge)
+    std::cerr << "Compared " << numItems << " local merge blacklist items\n";
 
   return true;
 }
@@ -1366,6 +1400,48 @@ void ExecutionState::dumpBlacklist() {
   }
 }
 
+uint64_t _rotl(uint64_t value, unsigned shift) {
+    if ((shift &= 63) == 0)
+      return value;
+    return (value << shift) | (value >> (64 - shift));
+}
+
+uint64_t _rotr(uint64_t value, unsigned shift) {
+    if ((shift &= 63) == 0)
+      return value;
+    return (value >> shift) | (value << (64 - shift));
+}
+
+uint64_t _add_to_hash(uint64_t hash, uint64_t value, unsigned idx) {
+  value = _rotl(value, idx);
+
+  hash += uint8_t(value);
+  hash += uint8_t(value>>8);
+  hash += uint8_t(value>>16);
+  hash += uint8_t(value>>24);
+
+  hash += uint8_t(value>>32);
+  hash += uint8_t(value>>40);
+  hash += uint8_t(value>>48);
+  hash += uint8_t(value>>56);
+  return hash;
+}
+
+uint64_t _sub_from_hash(uint64_t hash, uint64_t value, unsigned idx) {
+  value = _rotl(value, idx);
+
+  hash -= uint8_t(value);
+  hash -= uint8_t(value>>8);
+  hash -= uint8_t(value>>16);
+  hash -= uint8_t(value>>24);
+
+  hash -= uint8_t(value>>32);
+  hash -= uint8_t(value>>40);
+  hash -= uint8_t(value>>48);
+  hash -= uint8_t(value>>56);
+  return hash;
+}
+
 void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx,
                                        uint64_t useFreq, uint64_t totalUseFreq) {
   StackFrame &sf = stack().back();
@@ -1388,10 +1464,13 @@ void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx
     }
 
     sf.localBlacklistMap.set(valueIdx);
+    sf.localBlacklistHash += valueIdx;
+
     ref<Expr> &value = sf.locals[valueIdx].value;
     if (!value.isNull() && isa<ConstantExpr>(value)) {
       uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      sf.localBlacklistHash += cvalue;
+      sf.localBlacklistHash = _add_to_hash(sf.localBlacklistHash,
+                                           cvalue, valueIdx);
     }
   } else {
     if (!sf.localBlacklistMap.get(valueIdx))
@@ -1409,8 +1488,11 @@ void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx
     ref<Expr> &value = sf.locals[valueIdx].value;
     if (!value.isNull() && isa<ConstantExpr>(value)) {
       uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      sf.localBlacklistHash -= cvalue;
+      sf.localBlacklistHash = _sub_from_hash(sf.localBlacklistHash,
+                                             cvalue, valueIdx);
     }
+
+    sf.localBlacklistHash -= valueIdx;
     sf.localBlacklistMap.unset(valueIdx);
   }
 
@@ -1435,13 +1517,15 @@ void ExecutionState::updateLocalValue(KInstruction *target,
   if (!value.isNull() && isa<ConstantExpr>(value)) {
     prevIsConcrete = true;
     uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-    sf.localBlacklistHash -= cvalue;
+    sf.localBlacklistHash = _sub_from_hash(sf.localBlacklistHash,
+                                           cvalue, valueIdx);
   }
 
   if (!newValue.isNull() && isa<ConstantExpr>(newValue)) {
     nextIsConcrete = true;
     uint64_t cvalue = cast<ConstantExpr>(newValue)->getZExtValue();
-    sf.localBlacklistHash += cvalue;
+    sf.localBlacklistHash = _add_to_hash(sf.localBlacklistHash,
+                                         cvalue, valueIdx);
   }
 
   if (prevIsConcrete && !nextIsConcrete && DebugLogMergeBlacklistVals) {
@@ -1455,22 +1539,26 @@ void ExecutionState::updateLocalValue(KInstruction *target,
 void ExecutionState::verifyLocalBlacklistHash() {
 #ifdef DEBUG_MERGE_BLACKLIST_MAP
 #warning XXX slow
-  StackFrame &sf = stack().back();
 
-  uint64_t correctLocalBlacklistHash = hashInit();
+  foreach (StackFrame &sf, stack()) {
+    uint64_t correctLocalBlacklistHash = hashInit();
 
-  for (unsigned i = 0; i < sf.kf->numRegisters; ++i) {
-    if (!sf.localBlacklistMap.get(i))
-      continue;
+    for (unsigned i = 0; i < sf.kf->numRegisters; ++i) {
+      if (!sf.localBlacklistMap.get(i))
+        continue;
 
-    ref<Expr> &value = sf.locals[i].value;
-    if (!value.isNull() && isa<ConstantExpr>(value)) {
-      uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      correctLocalBlacklistHash += cvalue;
+      correctLocalBlacklistHash += i;
+
+      ref<Expr> &value = sf.locals[i].value;
+      if (!value.isNull() && isa<ConstantExpr>(value)) {
+        uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
+        correctLocalBlacklistHash = _add_to_hash(correctLocalBlacklistHash,
+                                                 cvalue, i);
+      }
     }
-  }
 
-  assert(sf.localBlacklistHash == correctLocalBlacklistHash);
+    assert(sf.localBlacklistHash == correctLocalBlacklistHash);
+  }
 #endif
 }
 
