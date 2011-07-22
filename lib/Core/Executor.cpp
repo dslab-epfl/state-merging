@@ -2922,7 +2922,8 @@ void Executor::stepInState(ExecutionState *state) {
     std::cerr << "    at " << ki->info->file << ":" << ki->info->line
               << " (assembly line " << ki->info->assemblyLine << ")\n";
               */
-    if (isa<BranchInst>(ki->inst) || isa<SwitchInst>(ki->inst)) {
+    if ((isa<BranchInst>(ki->inst) && cast<BranchInst>(ki->inst)->isConditional())
+            || isa<SwitchInst>(ki->inst)) {
       std::cerr << "  Branch condition in merged state:"<< std::endl << "    ";
       eval(ki, 0, *state).value->dump();
       std::cerr << "  Branch conditions in duplicates:" << std::endl;

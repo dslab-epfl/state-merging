@@ -18,7 +18,7 @@
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
 
-#define MAX_DATAFLOW_DEPTH 16
+#define MAX_DATAFLOW_DEPTH 24
 #define DEFAULT_LOOP_TRIP_COUNT 10
 
 namespace llvm {
@@ -182,8 +182,8 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
         Value *arg = PHI->getIncomingValue(i);
         if (isa<Constant>(arg))
           continue;
-        if (visitedBBs.count(PHI->getIncomingBlock(i)) != 0)
-          continue; // Do not go through back edges
+        //if (visitedBBs.count(PHI->getIncomingBlock(i)) != 0)
+        //  continue; // Do not go through back edges
         visitOPStack.push_back(std::make_pair(arg, depth+1));
       }
       continue;
@@ -267,12 +267,6 @@ static bool isBlockAlreadyAnnotated(const BasicBlock *BB, HotValue hv,
 static MDNode* insertAnnotation(HotValue hv, uint64_t useCount,
                     uint64_t totalUseCount, CallGraphNode *funcCG,
                     CallGraphNode *callerCG, Instruction *insertBefore) {
-  if (insertBefore->getParent()->getParent()->getName() == "__user_main") {
-    if (insertBefore->getParent()->getName() == "bb11") {
-      std::cerr << "bb11\n";
-    }
-  }
-
   LLVMContext &Ctx = insertBefore->getContext();
   Value *args[4] = { getI64Const(Ctx, hv.first), const_cast<Value*>(hv.second),
       getI64Const(Ctx, useCount), getI64Const(Ctx, totalUseCount) };
@@ -317,10 +311,10 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
   VisitedBBs visitedBBs;
 
   // Post-order traversal
-  for (po_ext_iterator<BasicBlock*, VisitedBBs> poIt =
-                                    po_ext_begin(entryBB, visitedBBs),
-             poE  = po_ext_end(entryBB, visitedBBs); poIt != poE; ++poIt) {
+  for (po_iterator<BasicBlock*> poIt = po_begin(entryBB),
+                                poE  = po_end(entryBB); poIt != poE; ++poIt) {
     BasicBlock *BB = *poIt;
+    visitedBBs.insert(BB);
 
     const Loop *bbLoop = loopInfo.getLoopFor(BB);
     const Loop *topLevelLoop = 0;
@@ -411,21 +405,19 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       }
     }
 
+    llvm::SmallPtrSet<const Instruction*, 32> visitedBBInsts;
+
     // Go through BB instructions in reverse order, updating useCountInfo
     for (BasicBlock::InstListType::reverse_iterator
             rIt = BB->getInstList().rbegin(), rE = BB->getInstList().rend();
             rIt != rE; ++rIt) {
       Instruction *I = &*rIt;
+      visitedBBInsts.insert(I);
 
       {
         Instruction *IA = rIt.base();
         if (isa<PHINode>(IA))
           IA = BB->getFirstNonPHI();
-        /*
-        BasicBlock::iterator insertAfter(I);
-        if (isa<PHINode>(I))
-          while (isa<PHINode>(llvm::next(insertAfter))) ++insertAfter;
-          */
 
         HotValue hv(HVPtr, I);
         if (const uint64_t *useCount = bbUseCountInfo.lookup(hv)) {
@@ -511,6 +503,30 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 
         bbUseCountInfo = useCountInfoFactory.add(
               bbUseCountInfo, hv, oldUseCount + numUses);
+
+        if (const Instruction *hvI = dyn_cast<Instruction>(hv.second)) {
+          if (visitedBBs.count(hvI->getParent()) > 0) {
+            if (hvI->getParent() != BB || visitedBBInsts.count(hvI) > 0) {
+              // If hvI was already visited...
+              // This means we are in a loop. We still need to annotate it.
+
+              assert(I != hvI);
+
+              Instruction *IA = const_cast<Instruction*>(hvI);
+              if (isa<PHINode>(IA))
+                IA = IA->getParent()->getFirstNonPHI();
+
+              MDNode *mdNode =
+                  insertAnnotation(hv, oldUseCount + numUses, totalUseCountAfter,
+                                   kleeUseFreqCG, &CGNode, IA);
+              if (IA == &*rIt.base())
+                ++rIt;
+
+              if (hv.first == HVVal)
+                const_cast<Instruction*>(hvI)->setMetadata("ul", mdNode);
+            }
+          }
+        }
 
         if (bbLoop || I == BB->getTerminator()) {
           SmallPtrSet<BasicBlock*, 8> blocksToAnnotate;

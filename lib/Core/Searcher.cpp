@@ -607,18 +607,32 @@ ExecutionState &LazyMergingSearcher::selectState() {
         merged = executor.merge(*state1, *state);
         if (merged) {
           // We've merged !
-          bool keepMerged = !MaxStateMultiplicity ||
+          bool keepMergedInTrace = !MaxStateMultiplicity ||
                   merged->multiplicity < MaxStateMultiplicity;
 
           // Any of the merged states could be followed for fast forwards.
           // Make traces that was pointing to state to point to state1
 
+          StatesIndexesMap::iterator si1, siM;
+          if (merged != state1) {
+            std::pair<StatesIndexesMap::iterator, bool> r =
+                statesIndexesMap.insert(std::make_pair(merged, new StateIndexes));
+            assert(r.second);
+            siM = r.first;
+            si1 = statesIndexesMap.find(state1);
+          } else {
+            siM = statesIndexesMap.find(state1);
+            si1 = siM;
+          }
+
+          /*
           StatesIndexesMap::iterator si1 = statesIndexesMap.find(state1);
           assert(si1 != statesIndexesMap.end());
 
           StatesIndexesMap::iterator siM = (merged == state1) ? si1 :
               statesIndexesMap.insert(std::make_pair(
                                         merged, new StateIndexes)).first;
+          */
 
           StatesIndexesMap::iterator si = statesIndexesMap.find(state);
           if (si != statesIndexesMap.end()) {
@@ -633,7 +647,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
               bool erased = sti->second->erase(state);
               assert(erased);
 
-              if (keepMerged) {
+              if (keepMergedInTrace) {
                 sti->second->insert(std::make_pair(merged, oldInstrCount));
                 siM->second->insert(*ii);
               }
@@ -655,7 +669,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
               bool erased = sti->second->erase(state1);
               assert(erased);
 
-              if (keepMerged) {
+              if (keepMergedInTrace) {
                 sti->second->insert(std::make_pair(merged, oldInstrCount));
                 siM->second->insert(*ii);
               }
@@ -695,7 +709,7 @@ ExecutionState &LazyMergingSearcher::selectState() {
           }
 
           //if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
-          if (!keepMerged) {
+          if (!keepMergedInTrace) {
             statesToForward.erase(merged);
           }
 

@@ -27,6 +27,7 @@
 #include "llvm/Function.h"
 #include "llvm/User.h"
 #include "llvm/Metadata.h"
+#include "llvm/Instructions.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/DenseSet.h"
@@ -512,6 +513,13 @@ bool ExecutionState::isPCCompatible(const ExecutionState &b) const {
     if (it->second.pc != otherIt->second.pc) {
       if (DebugLogStateMerge)
         std::cerr << "---- merge failed: program counters are different\n";
+      return false;
+    }
+
+    if (isa<PHINode>(it->second.pc->inst) &&
+          it->second.incomingBBIndex != otherIt->second.incomingBBIndex) {
+      if (DebugLogStateMerge)
+        std::cerr << "---- merge failed: incoming BB indexes are different\n";
       return false;
     }
   }
@@ -1342,15 +1350,17 @@ void ExecutionState::dumpBlacklist() {
     std::cerr << "    Local merge blacklist:" << std::endl;
     int valueIdx = 0;
     foreach (const Argument &arg, sf.kf->function->getArgumentList()) {
-      if (sf.localBlacklistMap.get(valueIdx++)) {
-        std::cerr << "      "; arg.dump();
+      if (sf.localBlacklistMap.get(valueIdx)) {
+        std::cerr << "      " << valueIdx << ": "; arg.dump();
       }
+      ++valueIdx;
     }
     foreach (const BasicBlock &BB, *sf.kf->function) {
       foreach (const Instruction &I, BB) {
-        if (sf.localBlacklistMap.get(valueIdx++)) {
-          std::cerr << "      "; I.dump();
+        if (sf.localBlacklistMap.get(valueIdx)) {
+          std::cerr << "      " << valueIdx << ": "; I.dump();
         }
+        ++valueIdx;
       }
     }
   }
