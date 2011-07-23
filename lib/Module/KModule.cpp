@@ -535,6 +535,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     pm3_.add(createFunctionInliningPass());
     pm3_.add(createPromoteMemoryToRegisterPass());
     pm3_.add(createInstructionSimplifierPass());
+    pm3_.add(new IntrinsicCleanerPass(*targetData));
     pm3_.run(*module);
   }
 
