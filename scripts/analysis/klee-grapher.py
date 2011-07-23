@@ -252,6 +252,43 @@ def update_experiments(exps=None):
     for exp in exps:
         exp.update()
 
+def compute_diffsym(exps=None):
+    if exps is None:
+        exps = el
+
+    r = {}
+
+    for exp in exps:
+        if exp.is_done:
+            ns = exp.name.split('-')
+            exp.tool_name = ns[0]
+            exp.sym_name = ns[2]
+            exp.sym_num = int(ns[2])
+            exp.use_lazy_merge = exp.opts.get('use_lazy_merge', '0') == '1'
+
+            r.setdefault(exp.tool_name, dict()) \
+                .setdefault(exp.sym_name, dict())[exp.use_lazy_merge] = exp
+
+    for tool_name in r.keys():
+        rl = []
+        for sym_name, d in r[tool_name].iteritems():
+            if False in d:
+                sym_num = d[False].sym_num
+                ef = d[False].stats.ExecutionTime[-1]
+            else:
+                ef = None
+            if True in d:
+                sym_num = d[True].sym_num
+                et = d[True].stats.ExecutionTime[-1]
+            else:
+                et = None
+
+            rl.append((sym_num, sym_name, ef, et))
+        rl.sort()
+        r[tool_name] = rl
+
+    return r
+
 if __name__ == '__main__':
     
     if len(sys.argv) < 2:
@@ -260,11 +297,17 @@ if __name__ == '__main__':
 
     el = []
     es = []
-    for n, klee_dir in enumerate(sys.argv[1:]):
-         el.append(Experiment(klee_dir))
+
+    n = 0
+    for klee_dir in sys.argv[1:]:
+         e = Experiment(klee_dir)
+         if not hasattr(e, 'stats'):
+             continue
+         el.append(e)
          es.append(el[n].stats)
          globals()['el' + str(n)] = el[n]
          globals()['es' + str(n)] = el[n].stats
+         n = n + 1
 
 
 #    from IPython.Shell import IPShellEmbed
