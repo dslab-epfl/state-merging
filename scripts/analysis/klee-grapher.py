@@ -262,32 +262,42 @@ def compute_diffsym(exps=None):
         if exp.is_done:
             ns = exp.name.split('-')
             exp.tool_name = ns[0]
+            exp.exp_tag = ns[1]
             exp.sym_name = ns[2]
-            exp.sym_num = int(ns[2])
+            exp.sym_num = int(ns[3])
             exp.use_lazy_merge = exp.opts.get('use_lazy_merge', '0') == '1'
+            exp.use_nl = exp.opts.get('force_inline', '1') == '0'
 
             r.setdefault(exp.tool_name, dict()) \
-                .setdefault(exp.sym_name, dict())[exp.use_lazy_merge] = exp
+                .setdefault(exp.sym_name, dict())[exp.exp_tag] = exp
 
     for tool_name in r.keys():
         rl = []
         for sym_name, d in r[tool_name].iteritems():
-            if False in d:
-                sym_num = d[False].sym_num
-                ef = d[False].stats.ExecutionTime[-1]
-            else:
-                ef = None
-            if True in d:
-                sym_num = d[True].sym_num
-                et = d[True].stats.ExecutionTime[-1]
-            else:
-                et = None
+            exec_time = {}
+            for tag in ('vanilla', 'lazy_merge', 'lazy_merge_nl'):
+                if tag in d:
+                    sym_num = d[tag].sym_num
+                    exec_time[tag] = d[tag].stats.ExecutionTime[-1]
+                else:
+                    exec_time[tag] = 3600
 
-            rl.append((sym_num, sym_name, ef, et))
+            rl.append((sym_num, sym_name, exec_time['vanilla'], exec_time['lazy_merge'], exec_time['lazy_merge_nl'],
+                                    exec_time['vanilla'] / min(exec_time['lazy_merge'], exec_time['lazy_merge_nl'])))
         rl.sort()
         r[tool_name] = rl
 
     return r
+
+def print_diffsym(r):
+    for tool, rl in r.iteritems():
+        print tool + ':'
+        for x in rl:
+            print '  %2d (%10s) %8.2f %8.2f %8.2f ' % x[:-1],
+            if x[3] != 3600 or x[4] != 3600:
+                print '%8.2f' % x[5]
+            else:
+                print
 
 if __name__ == '__main__':
     
