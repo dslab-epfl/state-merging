@@ -85,11 +85,14 @@ class Experiment(object):
         try:
             self.info_file = open(info_file_fname, 'r')
         except IOError:
-            sys.errlog.write('Can not open %s\n' % info_file_fname)
+            self.errlog.write('Can not open %s\n' % info_file_fname)
             self.info_file = None
             return
 
         self.cmdline = self.info_file.readline()
+
+        # XXX
+        self.cmdline=self.cmdline.replace('--output-dir ', '--output-dir=')
 
         self.opts = ClassDict()
         for opt in self.cmdline.split(' ')[1:]:
