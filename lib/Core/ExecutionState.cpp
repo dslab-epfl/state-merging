@@ -1047,7 +1047,8 @@ void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
   // Resolve and check address
   ObjectPair op;
   bool ok = addressSpace().resolveOne(address, op);
-  assert(ok && "arguments to klee_use_freq are invalid");
+  if (!ok)
+    return; // XXX!
 
   const MemoryObject* mo = op.first;
 
