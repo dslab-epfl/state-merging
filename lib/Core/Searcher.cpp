@@ -65,7 +65,7 @@ namespace {
   cl::opt<unsigned>
   MaxInstrDifference("max-inst-difference",
       cl::desc("Maximum difference between instruction counters for forwarding states"),
-      cl::init(0));
+      cl::init(1000));
 }
 
 namespace klee {
@@ -479,9 +479,25 @@ void MergingSearcher::update(ExecutionState *current,
 
 ///
 
+struct LazyMergingSearcher::StateIndexes {
+  unsigned begin;
+  unsigned end;
+  uint64_t *indexes;
+
+  StateIndexes(unsigned maxSize): begin(0), end(0) {
+    indexes = new uint64_t[maxSize];
+  }
+  ~StateIndexes() {
+    delete indexes;
+  }
+};
+
 LazyMergingSearcher::LazyMergingSearcher(Executor &_executor, Searcher *_baseSearcher) 
   : executor(_executor),
-    baseSearcher(_baseSearcher) {
+    baseSearcher(_baseSearcher),
+    // One item is never used, one other is to convert difference to item count
+    stateIndexesSize(MaxInstrDifference+2)
+{
 }
 
 LazyMergingSearcher::~LazyMergingSearcher() {
@@ -489,6 +505,196 @@ LazyMergingSearcher::~LazyMergingSearcher() {
 }
 
 ///
+
+inline void LazyMergingSearcher::verifyMaps() {
+#if 0
+  // Every item in statesTrace should also be in stateIndexesMap
+  for (StatesTrace::iterator it = statesTrace.begin(),
+                             ie = statesTrace.end(); it != ie; ++it) {
+    uint64_t idx = it->first;
+    assert(it->second);
+
+    for (StatesSet::iterator pi = it->second->begin(),
+                             pe = it->second->end(); pi != pe; ++pi) {
+      ExecutionState *state = *pi;
+      StatesIndexesMap::iterator sIt = statesIndexesMap.find(state);
+      assert(sIt != statesIndexesMap.end());
+      assert(sIt->second);
+      StateIndexes* si = sIt->second;
+      unsigned i;
+      for (i = si->begin; i != si->end; i = (i+1) % stateIndexesSize) {
+        if (si->indexes[i] == idx)
+          break;
+      }
+      assert (i != si->end);
+    }
+  }
+#if 0
+  for (StatesIndexesMap::iterator it = statesIndexesMap.begin(),
+                                  ie = statesIndexesMap.end(); it != ie; ++it) {
+    ExecutionState *state = it->first;
+
+    assert(it->second);
+    for (StateIndexes::iterator ii = it->second->begin(),
+                                iie = it->second->end(); ii != iie; ++ii) {
+      uint64_t idx = *ii;
+
+      StatesTrace::iterator traceIt = statesTrace.find(idx);
+      assert(traceIt != statesTrace.end());
+      assert(traceIt->second);
+      assert(traceIt->second->count(state) > 0);
+    }
+  }
+
+  for (StatesTrace::iterator it = statesTrace.begin(),
+                             ie = statesTrace.end(); it != ie; ++it) {
+    uint64_t idx = it->first;
+
+    assert(it->second);
+    for (StatePosMap::iterator pi = it->second->begin(),
+                               pe = it->second->end(); pi != pe; ++pi) {
+      ExecutionState *state = pi->first;
+
+      StatesIndexesMap::iterator idxMap = statesIndexesMap.find(state);
+      assert(idxMap != statesIndexesMap.end());
+      assert(idxMap->second);
+      assert(idxMap->second->count(idx) > 0);
+    }
+  }
+#endif
+#endif
+}
+
+
+inline void LazyMergingSearcher::addItemToTraces(ExecutionState *state,
+                                                 uint64_t mergeIndex) {
+  verifyMaps();
+
+  // Add item to per-state traces collection
+  StatesIndexesMap::iterator sIt = statesIndexesMap.find(state);
+  if (sIt == statesIndexesMap.end()) {
+    sIt = statesIndexesMap.insert(std::make_pair(state,
+                                new StateIndexes(stateIndexesSize))).first;
+  }
+
+  StateIndexes *si = sIt->second;
+  unsigned nextEnd = (si->end + 1) % unsigned(stateIndexesSize);
+
+  // If per-state traces collection had more items than the maximum,
+  // remove the oldest item from the traces.
+  if (nextEnd == si->begin) {
+    StatesTrace::iterator it1 = statesTrace.find(si->indexes[si->begin]);
+    if (it1 != statesTrace.end()) {
+      it1->second->erase(state);
+      if (it1->second->empty()) {
+        delete it1->second;
+        statesTrace.erase(it1);
+      }
+    }
+
+    si->begin = (si->begin + 1) % unsigned(stateIndexesSize);
+  }
+
+  si->indexes[si->end] = mergeIndex;
+  si->end = nextEnd;
+
+  // Add item to the main traces map
+  StatesTrace::iterator it = statesTrace.find(mergeIndex);
+  if (it == statesTrace.end()) {
+      it = statesTrace.insert(std::make_pair(mergeIndex, new StatesSet)).first;
+  }
+  it->second->insert(state);
+
+  verifyMaps();
+}
+
+inline void LazyMergingSearcher::removeStateFromTraces(ExecutionState *state) {
+  verifyMaps();
+
+  StatesIndexesMap::iterator sIt = statesIndexesMap.find(state);
+  if (sIt == statesIndexesMap.end())
+    return;
+
+  StateIndexes* si = sIt->second;
+  for (unsigned i = si->begin; i != si->end; i = (i+1) % stateIndexesSize) {
+    StatesTrace::iterator it = statesTrace.find(si->indexes[i]);
+    if (it != statesTrace.end())
+      it->second->erase(state);
+  }
+
+  delete si;
+  statesIndexesMap.erase(sIt);
+
+  verifyMaps();
+}
+
+inline void LazyMergingSearcher::mergeStateTraces(ExecutionState *merged,
+                                                  ExecutionState *other) {
+  verifyMaps();
+
+  StatesIndexesMap::iterator mIt = statesIndexesMap.find(merged);
+  if (mIt == statesIndexesMap.end()) {
+    mIt = statesIndexesMap.insert(std::make_pair(merged,
+                                new StateIndexes(stateIndexesSize))).first;
+  }
+
+  StatesIndexesMap::iterator oIt = statesIndexesMap.find(other);
+  if (oIt == statesIndexesMap.end() || oIt->second->begin == oIt->second->end)
+    return;
+
+  StateIndexes* mi = mIt->second;
+  StateIndexes* oi = oIt->second;
+  if (mi->begin == mi->end) {
+    // Fast path: merged state is empty - just copy other state trace into it
+    for (unsigned i = oi->begin; i != oi->end; i = (i+1) % stateIndexesSize) {
+      uint64_t idx = oi->indexes[i];
+      mi->indexes[i] = idx;
+      StatesTrace::iterator it = statesTrace.find(idx);
+      if (it == statesTrace.end()) {
+          it = statesTrace.insert(std::make_pair(idx, new StatesSet)).first;
+      }
+      it->second->insert(merged);
+    }
+    mi->begin = oi->begin;
+    mi->end = oi->end;
+
+  } else {
+    uint64_t *buf = new uint64_t[stateIndexesSize];
+
+    unsigned s = stateIndexesSize - 2, mc = mi->end, oc = oi->end;
+    for (; s != unsigned(-1) && (mc != mi->begin || oc != oi->begin); --s) {
+      if (mc != mi->begin && ((s&1) || oc == oi->begin)) {
+        mc = mc ? mc - 1 : stateIndexesSize - 1;
+        buf[s] = mi->indexes[mc];
+      } else {
+        oc = oc ? oc - 1 : stateIndexesSize - 1;
+        buf[s] = oi->indexes[oc];
+
+        StatesTrace::iterator it = statesTrace.find(buf[s]);
+        if (it == statesTrace.end()) {
+            it = statesTrace.insert(std::make_pair(buf[s], new StatesSet)).first;
+        }
+        it->second->insert(merged);
+      }
+    }
+
+    while (mc != mi->begin) {
+      mc = mc ? mc - 1 : stateIndexesSize - 1;
+      StatesTrace::iterator it = statesTrace.find(mi->indexes[mc]);
+      if (it != statesTrace.end()) {
+        it->second->erase(merged);
+        statesTrace.erase(it);
+      }
+    }
+
+    delete[] mi->indexes;
+    mi->indexes = buf;
+    mi->begin = s+1;
+    mi->end = stateIndexesSize - 1;
+  }
+
+  verifyMaps();
+}
 
 inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state) const {
   if (state->mergeDisabled())
@@ -502,20 +708,10 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
   if (it == statesTrace.end())
     return false;
 
-  for (StatePosMap::const_iterator it1 = it->second->begin(),
+  for (StatesSet::const_iterator it1 = it->second->begin(),
                       ie1 = it->second->end(); it1 != ie1; ++it1) {
-    if (it1->first != state) {
-      if (MaxInstrDifference) {
-        if (it1->first->instsTotal - it1->second <= MaxInstrDifference)
-          return true;
-        if (DebugMaxInstrCountDelta) {
-          CLOUD9_DEBUG("Forward opportunity declined due to large instruction count difference (" <<
-                 it1->first->instsTotal << " and " << it1->second << ")");
-        }
-      } else {
-        return true;
-      }
-    }
+    if (*it1 != state)
+      return true;
   }
 
   return false;
@@ -524,6 +720,8 @@ inline bool LazyMergingSearcher::canFastForwardState(const ExecutionState* state
 ExecutionState &LazyMergingSearcher::selectState() {
   ExecutionState *state = NULL, *merged = NULL;
   while (!statesToForward.empty()) {
+    assert(state == NULL);
+
     // TODO: do not fast-forward state if there are other
     // states that could be merged with state first (i.e., select
     // smartly what state to fast-forward first).
@@ -594,10 +792,10 @@ ExecutionState &LazyMergingSearcher::selectState() {
     assert(!state->mergeDisabled());
 
     // Check wether we can already merge
-    for (StatePosMap::iterator it = traceIt->second->begin(),
+    for (StatesSet::iterator it = traceIt->second->begin(),
                              ie = traceIt->second->end(); it != ie; ++it) {
-      ExecutionState *state1 = it->first;
-      unsigned oldInstrCount = it->second;
+      ExecutionState *state1 = *it;
+      //unsigned oldInstrCount = it->second;
       assert(!MaxStateMultiplicity || state1->multiplicity < MaxStateMultiplicity);
       //assert(!state1->mergeDisabled);
 
@@ -607,115 +805,38 @@ ExecutionState &LazyMergingSearcher::selectState() {
         merged = executor.merge(*state1, *state);
         if (merged) {
           // We've merged !
+
           bool keepMergedInTrace = !MaxStateMultiplicity ||
                   merged->multiplicity < MaxStateMultiplicity;
 
-          // Any of the merged states could be followed for fast forwards.
-          // Make traces that was pointing to state to point to state1
-
-          StatesIndexesMap::iterator si1, siM;
-          if (merged != state1) {
-            std::pair<StatesIndexesMap::iterator, bool> r =
-                statesIndexesMap.insert(std::make_pair(merged, new StateIndexes));
-            assert(r.second);
-            siM = r.first;
-            si1 = statesIndexesMap.find(state1);
+          // Update the traces
+          if (keepMergedInTrace) {
+            mergeStateTraces(merged, state);
+            removeStateFromTraces(state);
+            if (merged != state1) {
+              mergeStateTraces(merged, state1);
+              removeStateFromTraces(state1);
+            }
           } else {
-            siM = statesIndexesMap.find(state1);
-            si1 = siM;
+            removeStateFromTraces(state);
+            removeStateFromTraces(state1);
           }
-
-          /*
-          StatesIndexesMap::iterator si1 = statesIndexesMap.find(state1);
-          assert(si1 != statesIndexesMap.end());
-
-          StatesIndexesMap::iterator siM = (merged == state1) ? si1 :
-              statesIndexesMap.insert(std::make_pair(
-                                        merged, new StateIndexes)).first;
-          */
-
-          StatesIndexesMap::iterator si = statesIndexesMap.find(state);
-          if (si != statesIndexesMap.end()) {
-            // State "state" is deffinitely subsumed by "merged". Change all
-            // references to "state" in statesTraces to point to merge (or
-            // delete it if keepMerged is false).
-            for (StateIndexes::iterator ii = si->second->begin(),
-                                        iie = si->second->end(); ii != iie; ++ii) {
-              StatesTrace::iterator sti = statesTrace.find(*ii);
-              assert(sti != statesTrace.end());
-
-              bool erased = sti->second->erase(state);
-              assert(erased);
-
-              if (keepMergedInTrace) {
-                sti->second->insert(std::make_pair(merged, oldInstrCount));
-                siM->second->insert(*ii);
-              }
-            }
-
-            delete si->second;
-            statesIndexesMap.erase(si);
-          }
-
-          // The "state1" state may be subsumed by "merged" (depending on the
-          // command line options).
-          if (merged != state1) {
-            for (StateIndexes::iterator ii = si1->second->begin(),
-                                        iie = si1->second->end(); ii != iie; ++ii) {
-
-              StatesTrace::iterator sti = statesTrace.find(*ii);
-              assert(sti != statesTrace.end());
-
-              bool erased = sti->second->erase(state1);
-              assert(erased);
-
-              if (keepMergedInTrace) {
-                sti->second->insert(std::make_pair(merged, oldInstrCount));
-                siM->second->insert(*ii);
-              }
-            }
-
-            delete si1->second;
-            statesIndexesMap.erase(si1);
-          }
-
-          /*
-          for (StatesTrace::iterator it1 = statesTrace.begin(),
-                                     ie1 = statesTrace.end(); it1 != ie1; ++it1) {
-            if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
-              it1->second->erase(state1);
-              it1->second->erase(state);
-              if (merged != state1)
-                it1->second->erase(merged);
-            } else {
-              bool erased = it1->second->erase(state);
-
-              if (merged != state1)
-                erased |= it1->second->erase(state1);
-              if (erased) {
-                it1->second->insert(std::make_pair(merged, oldInstrCount));
-              }
-            }
-          }*/
 
           // Terminate merged state
           statesToForward.erase(state);
           executor.terminateState(*state, true);
 
+          // Filter statesToForward
           if (merged != state1) {
-            if (statesToForward.erase(state1))
+            if (statesToForward.erase(state1) && keepMergedInTrace)
               statesToForward.insert(merged);
             executor.terminateState(*state1, true);
-          }
-
-          //if (MaxStateMultiplicity && merged->multiplicity >= MaxStateMultiplicity) {
-          if (!keepMergedInTrace) {
+          } else if (!keepMergedInTrace) {
             statesToForward.erase(merged);
           }
 
           state = NULL;
 
-          //verifyMaps();
           break;
         }
       }
@@ -757,19 +878,10 @@ void LazyMergingSearcher::update(ExecutionState *current,
   if (current && !current->mergeDisabled() &&
         removedStates.count(current) == 0 &&
         (!MaxStateMultiplicity || current->multiplicity < MaxStateMultiplicity)) {
-    uint64_t mergeIndex = current->getMergeIndex();
-    StatesTrace::iterator it = statesTrace.find(mergeIndex);
-    if (it == statesTrace.end()) {
-        it = statesTrace.insert(std::make_pair(mergeIndex, new StatePosMap)).first;
-    }
-    it->second->insert(std::make_pair(current, current->instsTotal));
 
-    StatesIndexesMap::iterator si = statesIndexesMap.find(current);
-    if (si == statesIndexesMap.end()) {
-      si = statesIndexesMap.insert(std::make_pair(current, new StateIndexes)).first;
-    }
-    si->second->insert(mergeIndex);
+    addItemToTraces(current, current->getMergeIndex());
 
+#warning Play with the following!
     // XXX for some reason the following causes a slowdown
     /*
     if (statesToForward.empty() && it->second->size() > 1) {
@@ -781,6 +893,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
     */
   }
 
+#warning Play with the following!
   // TODO: we could add every newly created state to fast-forward track,
   // that would be more aggressive. This can be done be removing the following
   // 'if' condition. Worth trying and evaluating.
@@ -799,73 +912,11 @@ void LazyMergingSearcher::update(ExecutionState *current,
   for (std::set<ExecutionState*>::const_iterator it = removedStates.begin(),
                                  ie = removedStates.end(); it != ie; ++it) {
     ExecutionState *state = *it;
-    statesToForward.erase(const_cast<ExecutionState*>(state));
-
-    // Terminated states are useless for merge, remove them from traces
-    StatesIndexesMap::iterator si = statesIndexesMap.find(state);
-    if (si == statesIndexesMap.end())
-      continue;
-
-    for (StateIndexes::iterator ii = si->second->begin(),
-                                iie = si->second->end(); ii != iie; ++ii) {
-      StatesTrace::iterator it1 = statesTrace.find(*ii);
-      assert(it1 != statesTrace.end());
-      bool erased = it1->second->erase(state);
-      assert(erased);
-    }
-
-    delete si->second;
-    statesIndexesMap.erase(si);
-
-    /*
-    for (StatesTrace::iterator it1 = statesTrace.begin(),
-                               ie1 = statesTrace.end(); it1 != ie1;) {
-      it1->second->erase(const_cast<ExecutionState*>(state));
-      if (it1->second->empty()) {
-        delete it1->second;
-        statesTrace.erase(it1++);
-      } else {
-        ++it1;
-      }
-    }
-    */
+    statesToForward.erase(state);
+    removeStateFromTraces(state);
   }
 
   baseSearcher->update(current, addedStates, removedStates);
-}
-
-void LazyMergingSearcher::verifyMaps() {
-  for (StatesIndexesMap::iterator it = statesIndexesMap.begin(),
-                                  ie = statesIndexesMap.end(); it != ie; ++it) {
-    ExecutionState *state = it->first;
-
-    assert(it->second);
-    for (StateIndexes::iterator ii = it->second->begin(),
-                                iie = it->second->end(); ii != iie; ++ii) {
-      uint64_t idx = *ii;
-
-      StatesTrace::iterator traceIt = statesTrace.find(idx);
-      assert(traceIt != statesTrace.end());
-      assert(traceIt->second);
-      assert(traceIt->second->count(state) > 0);
-    }
-  }
-
-  for (StatesTrace::iterator it = statesTrace.begin(),
-                             ie = statesTrace.end(); it != ie; ++it) {
-    uint64_t idx = it->first;
-
-    assert(it->second);
-    for (StatePosMap::iterator pi = it->second->begin(),
-                               pe = it->second->end(); pi != pe; ++pi) {
-      ExecutionState *state = pi->first;
-
-      StatesIndexesMap::iterator idxMap = statesIndexesMap.find(state);
-      assert(idxMap != statesIndexesMap.end());
-      assert(idxMap->second);
-      assert(idxMap->second->count(idx) > 0);
-    }
-  }
 }
 
 ///
@@ -969,6 +1020,7 @@ ExecutionState &CheckpointSearcher::selectState() {
   activeState = &baseSearcher->selectState();
 
   assert(isCheckpoint(activeState) && "State in the underlying strategy not checkpointed");
+  //addedChecked.insert(activeState);
 
   return *activeState;
 }

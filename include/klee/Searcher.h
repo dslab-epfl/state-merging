@@ -216,16 +216,21 @@ namespace klee {
 
     // TODO: use unordered multimap instead
     typedef llvm::SmallPtrSet<ExecutionState*, 8> StatesSet;
-    typedef llvm::DenseMap<ExecutionState*, unsigned> StatePosMap;
-    typedef llvm::DenseMap<uint64_t, StatePosMap*> StatesTrace;
+    typedef llvm::DenseMap<uint64_t, StatesSet*> StatesTrace;
 
-    typedef llvm::DenseSet<uint64_t> StateIndexes;
+    //typedef llvm::DenseSet<uint64_t> StateIndexes;
+    struct StateIndexes;
     typedef llvm::DenseMap<ExecutionState*, StateIndexes*> StatesIndexesMap;
 
     StatesTrace statesTrace;
     StatesSet statesToForward;
 
     StatesIndexesMap statesIndexesMap;
+    unsigned stateIndexesSize;
+
+    void addItemToTraces(ExecutionState* state, uint64_t mergeIndex);
+    void removeStateFromTraces(ExecutionState* state);
+    void mergeStateTraces(ExecutionState* merged, ExecutionState* other);
 
     bool canFastForwardState(const ExecutionState* state) const;
 
