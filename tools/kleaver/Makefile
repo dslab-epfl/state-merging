@@ -29,3 +29,5 @@ LIBS += -lboost_thread-mt -lboost_system-mt
 ifeq ($(ENABLE_EXT_STP),1)
   LIBS += -lstp
 endif
+
+LIBS += -lrt

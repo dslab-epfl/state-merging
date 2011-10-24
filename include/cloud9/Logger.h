@@ -67,7 +67,7 @@ namespace cloud9 {
 
 class Logger {
 private:
-	static Logger logger;
+        static Logger *logger;
 
 	std::string logPrefix;
 	std::string errorPrefix;

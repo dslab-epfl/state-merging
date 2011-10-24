@@ -49,7 +49,7 @@ endif
 
 CXX.Flags += -DKLEE_DIR=\"$(PROJ_OBJ_ROOT)\"
 
-LD.Flags += -lrt
+#LD.Flags += -lrt
 
 %.pb.cc %.pb.h: %.proto
 	$(PROTOC) --proto_path=$$(dirname $<) --cpp_out=./ $<

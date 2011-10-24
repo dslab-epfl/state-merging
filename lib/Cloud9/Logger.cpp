@@ -52,11 +52,7 @@ using namespace llvm;
 
 namespace cloud9 {
 
-#ifdef CLOUD9_HAVE_ADVANCED_LOGGING
-	Logger Logger::logger = Log4CXXLogger();
-#else
-	Logger Logger::logger = SimpleLogger();
-#endif
+        Logger* Logger::logger = 0;
 
 static std::string GetStackTrace(int startingFrom = 0, int maxDepth = 4) {
 	static void* StackTrace[256];
@@ -98,7 +94,8 @@ static std::string GetStackTrace(int startingFrom = 0, int maxDepth = 4) {
 }
 
 void Logger::updateTimeStamp() {
-	llvm::sys::TimeValue elapsed = llvm::sys::TimeValue::now() - startTime;
+        llvm::sys::TimeValue now = llvm::sys::TimeValue::now();
+        llvm::sys::TimeValue elapsed = now - startTime;
 	char buff[16];
 
 	snprintf(buff, 16, "[%05ld.%03d] ", elapsed.seconds(), elapsed.milliseconds());
@@ -107,7 +104,14 @@ void Logger::updateTimeStamp() {
 }
 
 Logger &Logger::getLogger() {
-	return Logger::logger;
+    if (!logger) {
+#ifdef CLOUD9_HAVE_ADVANCED_LOGGING
+        logger = new Log4CXXLogger();
+#else
+        logger = new SimpleLogger();
+#endif
+    }
+        return *logger;
 }
 
 std::string Logger::getStackTrace() {

@@ -611,8 +611,9 @@ void Executor::initializeGlobals(ExecutionState &state) {
       if (size) {
         void *addr;
         if (i->getName() == "__dso_handle") {
-          extern void *__dso_handle __attribute__ ((__weak__));
-          addr = &__dso_handle; // wtf ?
+          continue; // XXX
+          //extern void *__dso_handle __attribute__ ((__weak__));
+          //addr = &__dso_handle; // wtf ?
         } else {
           addr = externalDispatcher->resolveSymbol(i->getNameStr());
         }
