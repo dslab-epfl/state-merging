@@ -209,6 +209,7 @@ public:
 class UseFrequencyAnalyzerPass : public llvm::CallGraphSCCPass {
   llvm::TargetData *m_targetData;
   llvm::Function *m_kleeUseFreqFunc;
+  llvm::Function *m_kleeTotalUseFreqFunc;
 
 public:
   static char ID;

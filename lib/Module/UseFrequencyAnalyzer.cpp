@@ -10,16 +10,23 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/ImmutableMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/DataFlow.h"
 #include "llvm/Support/CFG.h"
+#include "llvm/Support/CommandLine.h"
 
 #include <iostream>
 
 #include <boost/foreach.hpp>
 #define foreach BOOST_FOREACH
 
+#warning XXX: try making the following much larger
 #define MAX_DATAFLOW_DEPTH 24
+
 #define DEFAULT_LOOP_TRIP_COUNT 10
+
+#define BWIDTH 256
+#define USE_QC_MAX
 
 namespace llvm {
   void initializeUseFrequencyAnalyzerPassPass(PassRegistry&);
@@ -28,12 +35,20 @@ namespace llvm {
 using namespace llvm;
 using namespace klee;
 
-static Constant* getI64Const(LLVMContext &Ctx, uint64_t value) {
-  return ConstantInt::get(Type::getInt64Ty(Ctx), value);
+namespace {
+  cl::opt<double>
+  QcAddThreshold("qc-add-threshold", cl::init(0.00001));
+
+  cl::opt<uint64_t>
+  QcAddAbsThreshold("qc-add-abs-threshold", cl::init(0));
+
+  cl::opt<bool>
+  QcAnnotateAll("qc-annotate-all", cl::init(false));
 }
 
 UseFrequencyAnalyzerPass::UseFrequencyAnalyzerPass(TargetData *TD)
-      : CallGraphSCCPass(ID), m_targetData(TD), m_kleeUseFreqFunc(0) {
+      : CallGraphSCCPass(ID), m_targetData(TD),
+        m_kleeUseFreqFunc(0), m_kleeTotalUseFreqFunc(0) {
   initializeUseFrequencyAnalyzerPassPass(*PassRegistry::getPassRegistry());
 }
 
@@ -75,12 +90,26 @@ bool UseFrequencyAnalyzerPass::doInitialization(llvm::CallGraph &CG) {
   assert(m_targetData);
 
   bool changed = false;
-  std::pair<Function*, bool> res1 = insertFunctionDecl(M, "_klee_use_freq",
-                            FunctionType::get(Type::getVoidTy(Ctx), true));
-  m_kleeUseFreqFunc = res1.first;
-  if (res1.second) {
-    CG.getOrInsertFunction(m_kleeUseFreqFunc);
-    changed = true;
+  {
+    std::pair<Function*, bool> res =
+        insertFunctionDecl(M, "_klee_use_freq_dbg",
+                           FunctionType::get(Type::getVoidTy(Ctx), true));
+    m_kleeUseFreqFunc = res.first;
+    if (res.second) {
+      CG.getOrInsertFunction(m_kleeUseFreqFunc);
+      changed = true;
+    }
+  }
+
+  {
+    std::pair<Function*, bool> res =
+        insertFunctionDecl(M, "_klee_total_use_freq_dbg",
+                           FunctionType::get(Type::getVoidTy(Ctx), true));
+    m_kleeTotalUseFreqFunc = res.first;
+    if (res.second) {
+      CG.getOrInsertFunction(m_kleeTotalUseFreqFunc);
+      changed = true;
+    }
   }
 
   /*
@@ -124,17 +153,38 @@ static bool isIgnored(const Value *hotValueDep) {
 }
 
 enum HotValueKind { HVVal, HVPtr };
-typedef std::pair<unsigned, const Value*> HotValue;
+typedef PointerIntPair<const llvm::Value*, 1, HotValueKind> HotValueBaseTy;
+
+class HotValue: public HotValueBaseTy {
+public:
+  HotValue(HotValueKind K, const llvm::Value *V): PointerIntPair(V, K) {}
+
+  const llvm::Value *getValue() const { return getPointer(); }
+  HotValueKind getKind() const { return getInt(); }
+
+  bool isVal() const { return getInt() == HVVal; }
+  bool isPtr() const { return getInt() == HVPtr; }
+
+  // An easy way to support DenseMap
+  HotValue(const HotValueBaseTy& P): PointerIntPair(P) {}
+  operator HotValueBaseTy () {
+    return HotValueBaseTy::getFromOpaqueValue(getOpaqueValue());
+  }
+
+};
 
 namespace llvm {
   template<> struct FoldingSetTrait<HotValue> {
     static inline void Profile(const HotValue hv, FoldingSetNodeID& ID) {
-      ID.AddInteger(hv.first); ID.AddPointer(hv.second);
+      ID.AddPointer(hv.getOpaqueValue());
     }
+  };
+  template<> struct DenseMapInfo<HotValue>:
+    public DenseMapInfo<PointerIntPair<const llvm::Value*, 1, HotValueKind> > {
   };
 }
 
-typedef DenseMap<HotValue, uint64_t> HotValueDeps;
+typedef DenseMap<HotValue, APInt> HotValueDeps;
 typedef llvm::SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
 
 /// Traverse data flow dependencies of hotValue, gathering its dependencies
@@ -142,8 +192,8 @@ typedef llvm::SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
 /// Return a set of pointers to such memory locations.
 static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
                                const VisitedBBs &visitedBBs,
-                               uint64_t numUsesMult = 1) {
-  if (isa<Constant>(hotValueUse))
+                               APInt numUsesMult = APInt(BWIDTH, 1)) {
+  if (isa<Constant>(hotValueUse) || isa<MDNode>(hotValueUse))
     return; // We are not interested in constants
 
   // Traverse the data flow for the value, limiting the depth
@@ -167,10 +217,16 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
           deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
       } else if (isa<AllocaInst>(Ptr) || isa<Argument>(Ptr)) {
         deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
-      } /*else if (const CallInst *CI = dyn_cast<CallInst>(Ptr)) {
+      }
+#warning XXX: why is this commented out ?
+      /*else if (const CallInst *CI = dyn_cast<CallInst>(Ptr)) {
         if (CI->getCalledFunction()->getName() == "malloc")
           deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
       }*/
+      continue;
+
+    } else if (isa<Argument>(V)) {
+      deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
       continue;
 
     } else if (const PHINode *PHI = dyn_cast<PHINode>(V)) {
@@ -180,7 +236,7 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
         continue;
       for (unsigned i = 0, e = PHI->getNumIncomingValues(); i != e; ++i) {
         Value *arg = PHI->getIncomingValue(i);
-        if (isa<Constant>(arg))
+        if (isa<Constant>(arg) || isa<MDNode>(arg))
           continue;
         //if (visitedBBs.count(PHI->getIncomingBlock(i)) != 0)
         //  continue; // Do not go through back edges
@@ -188,19 +244,18 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
       }
       continue;
 
-    } else if (isa<Argument>(V)) {
-      deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
-      continue;
-
     } else if (const Instruction *U = dyn_cast<Instruction>(V)) {
       if (depth >= MAX_DATAFLOW_DEPTH)
         continue;
+
+      // We do not put intermidiate values into the hot value set, however,
+      // we track all their dependencies instead.
 
       // Explore operands of V
       for (User::const_op_iterator it = U->op_begin(),
            ie = U->op_end(); it != ie; ++it) {
         const Value *OP = *it;
-        if (isa<Constant>(OP)) // No constants please
+        if (isa<Constant>(OP) || isa<MDNode>(OP)) // No constants please
           continue;
         visitOPStack.push_back(std::make_pair(OP, depth+1));
       }
@@ -208,9 +263,9 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
   }
 }
 
-static void gatherCallSiteDeps(const CallSite CS, HotValueDeps *deps,
-                               const VisitedBBs &visitedBBs,
-                               const Function *kleeUseFreqFunc) {
+static void gatherCallSiteDeps(const CallSite CS,
+                               APInt *totalUses, HotValueDeps *deps,
+                               const VisitedBBs &visitedBBs) {
   const Function *F = CS.getCalledFunction();
   if (!F) {
     const ConstantExpr *CE = dyn_cast<ConstantExpr>(CS.getCalledValue());
@@ -224,6 +279,40 @@ static void gatherCallSiteDeps(const CallSite CS, HotValueDeps *deps,
   if (F->isDeclaration())
     return;
 
+  const MDNode *MD = F->getEntryBlock().begin()->getMetadata("qc");
+  if (!MD)
+    return; // XXX
+
+  assert(MD && MD->getNumOperands() > 0);
+
+  *totalUses = cast<ConstantInt>(MD->getOperand(0))->getValue();
+
+  for (unsigned i = 1; i < MD->getNumOperands(); ++i) {
+    const MDNode *HMD = cast<const MDNode>(MD->getOperand(i));
+    HotValue HV = HotValue(
+          HotValueKind(cast<ConstantInt>(HMD->getOperand(0))->getZExtValue()),
+          HMD->getOperand(1));
+    APInt numUses = cast<ConstantInt>(HMD->getOperand(2))->getValue();
+
+    if (HV.isVal()) {
+      if (const Argument* A = dyn_cast<Argument>(HV.getValue())) {
+        Value *V = CS.getArgument(A->getArgNo());
+        gatherHotValueDeps(V, deps, visitedBBs, numUses);
+      } else {
+#warning XXX
+        //assert(0);
+      }
+    } else {
+      if (isa<Constant>(HV.getValue())) {
+        deps->insert(std::make_pair(HV, numUses));
+      } else {
+#warning XXX
+        //assert(0);
+      }
+    }
+  }
+
+#if 0
   foreach (const Instruction &I, F->getEntryBlock()) {
     const CallInst *CI = dyn_cast<CallInst>(&I);
     if (!CI || CI->getCalledFunction() != kleeUseFreqFunc)
@@ -243,9 +332,10 @@ static void gatherCallSiteDeps(const CallSite CS, HotValueDeps *deps,
       assert(0);
     }
   }
-
+#endif
 }
 
+#if 0
 /// Check if a given basic block already contains annotation for HotValue.
 static bool isBlockAlreadyAnnotated(const BasicBlock *BB, HotValue hv,
                                     const Function *kleeUseFreqFunc) {
@@ -281,7 +371,282 @@ static MDNode* insertAnnotation(HotValue hv, uint64_t useCount,
 
   return mdNode;
 }
+#endif
 
+typedef llvm::ImmutableMap<HotValue, APInt> UseCountInfo;
+
+static bool _annotationComparator(Value *l, Value *r) {
+  return cast<ConstantInt>(cast<MDNode>(l)->getOperand(2))->getValue().ugt(
+            cast<ConstantInt>(cast<MDNode>(r)->getOperand(2))->getValue());
+}
+
+static void addAnnotationQC(Instruction *I, APInt totalUseCount,
+                            const UseCountInfo& useCountInfo,
+                            const char* mdName = "qc") {
+  LLVMContext &Ctx = I->getContext();
+  assert(I->getMetadata("qc") == NULL);
+  llvm::SmallVector<Value*, 32> Args;
+  Args.push_back(ConstantInt::get(Ctx, totalUseCount));
+
+  foreach (UseCountInfo::value_type &p, useCountInfo) {
+    Value *NArgs[3] = { ConstantInt::get(Ctx, APInt(1, p.first.getKind())),
+                        const_cast<Value*>(p.first.getValue()),
+                        ConstantInt::get(Ctx, p.second) };
+    Args.push_back(MDNode::get(Ctx, NArgs, 3));
+  }
+
+  std::sort(Args.begin()+1, Args.end(), _annotationComparator);
+
+  I->setMetadata(mdName, MDNode::get(Ctx, Args));
+}
+
+#if 1
+bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
+  Function &F = *CGNode.getFunction();
+  BasicBlock *entryBB = &F.getEntryBlock();
+  LoopInfo &loopInfo = getAnalysis<LoopInfo>(F);
+
+  DominatorTree &DT = getAnalysis<DominatorTree>(F);
+
+  // Use count after BB for all hot values
+  UseCountInfo::Factory useCountInfoFactory;
+
+  // For every BB in a function we store an upper estimate of how many times
+  // each hot value is used after the first instruction in that BB
+  typedef llvm::DenseMap<const BasicBlock*, UseCountInfo> UseCountMap;
+  UseCountMap useCountMap;
+
+  // Total use count after the first instruction in each BB
+  typedef llvm::DenseMap<const BasicBlock*, APInt> TotalUseCountMap;
+  TotalUseCountMap totalUseCountMap;
+
+  // Visited blocks (to track backedges)
+  VisitedBBs visitedBBs;
+
+  // Post-order traversal
+  for (po_iterator<BasicBlock*> poIt = po_begin(entryBB),
+                                poE  = po_end(entryBB); poIt != poE; ++poIt) {
+    BasicBlock *BB = *poIt;
+    visitedBBs.insert(BB);
+
+    // Compute estimated number of executions if BB is a part of a loop
+    APInt bbExecCount(BWIDTH, 1);
+
+    const Loop *topLevelLoop = 0;
+    const Loop *bbLoop = loopInfo.getLoopFor(BB);
+    for (const Loop *L = bbLoop; L; topLevelLoop = L, L = L->getParentLoop()) {
+      unsigned tripCount = L->getSmallConstantTripCount();
+      if (!tripCount)
+        tripCount = DEFAULT_LOOP_TRIP_COUNT;
+      bbExecCount *= APInt(BWIDTH, tripCount);
+    }
+
+    // Initially set useCountInfo for the current BB to be a maximum of
+    // useCountInfo for all BB's successors
+    UseCountInfo &bbUseCountInfo = useCountMap.insert(
+          std::make_pair(BB, useCountInfoFactory.getEmptyMap())).first->second;
+    APInt &bbTotalUseCount = totalUseCountMap.insert(
+          std::make_pair(BB, APInt(BWIDTH, 0))).first->second;
+
+    for (succ_iterator succIt = succ_begin(BB),
+                       succE  = succ_end(BB); succIt != succE; ++succIt) {
+
+      UseCountMap::iterator succUseCountIt = useCountMap.find(*succIt);
+      if (succUseCountIt == useCountMap.end())
+        continue; // This is a back edge, skip it for now
+
+      UseCountInfo &succUseCountInfo = succUseCountIt->second;
+      if (bbUseCountInfo.isEmpty()) {
+        // Copy initial info from the first successor
+        bbUseCountInfo = succUseCountInfo;
+      } else {
+        foreach (UseCountInfo::value_type &p, succUseCountInfo) {
+          const APInt *count = bbUseCountInfo.lookup(p.first);
+#ifdef USE_QC_MAX
+          if (!count || count->ult(p.second))
+            bbUseCountInfo = useCountInfoFactory.add(
+                  bbUseCountInfo, p.first, p.second);
+#else
+          bbUseCountInfo = useCountInfoFactory.add(
+                bbUseCountInfo, p.first,
+                p.second + (count ? *count : APInt(BWIDTH, 0)));
+#endif
+        }
+      }
+
+      const APInt succTotalUseCount = totalUseCountMap.lookup(*succIt);
+#ifdef USE_QC_MAX
+      if (bbTotalUseCount.ult(succTotalUseCount))
+        bbTotalUseCount = succTotalUseCount;
+#else
+      bbTotalUseCount += succTotalUseCount;
+#endif
+    }
+
+    if (!bbLoop) {
+      // Filter out local vars that are defined strinctly after BB
+      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        if (const Instruction *I = dyn_cast<Instruction>(p.first.getValue())) {
+          if (I->getParent() != BB && DT.dominates(BB, I->getParent()))
+            bbUseCountInfo = useCountInfoFactory.remove(bbUseCountInfo, p.first);
+        }
+      }
+    }
+
+    // Go through BB instructions in reverse order, updating useCountInfo
+    for (BasicBlock::InstListType::reverse_iterator
+            rIt = BB->getInstList().rbegin(), rE = BB->getInstList().rend();
+            rIt != rE; ++rIt) {
+      Instruction *I = &*rIt;
+
+      // NOTE: we don't do any path-sensitive analysis, moreover we don't
+      // track values in registers. To avoid to much false negatives, we
+      // intentionally do not track stores that may overwrite hot values
+
+      HotValueDeps hotValueDeps;
+      APInt instTotalUseCount(BWIDTH, 0);
+
+      // Check whether a symbolic operand to the current instruction may
+      // force KLEE to call the solver...
+      if (CallSite CS = CallSite(I)) {
+        gatherCallSiteDeps(CS, &instTotalUseCount, &hotValueDeps, visitedBBs);
+      } else {
+        Value *V = 0;
+
+        if (BranchInst *BI = dyn_cast<BranchInst>(I)) {
+          if (BI->isConditional()) {
+            V = BI->getCondition();
+          }
+        } else if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+          V = LI->getPointerOperand();
+        } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+          V = SI->getPointerOperand();
+        } else if (IndirectBrInst *BI = dyn_cast<IndirectBrInst>(I)) {
+          V = BI->getAddress();
+        } else if (SwitchInst *SI = dyn_cast<SwitchInst>(I)) {
+          V = SI->getCondition();
+        }
+
+        if (V && !isa<Constant>(V)) {
+          gatherHotValueDeps(V, &hotValueDeps, visitedBBs);
+          instTotalUseCount = 1;
+        }
+      }
+
+      foreach (HotValueDeps::value_type &p, hotValueDeps) {
+        const APInt *count = bbUseCountInfo.lookup(p.first);
+        bbUseCountInfo = useCountInfoFactory.add(
+              bbUseCountInfo, p.first,
+              p.second * bbExecCount + (count ? *count : APInt(BWIDTH, 0)));
+      }
+      bbTotalUseCount += instTotalUseCount * bbExecCount;
+
+#if 0
+      // Annotate instruction if it modifies use count and is not in a loop
+      if (instTotalUseCount && !bbLoop && I != BB->begin()) {
+#error: this is totally wrong. What is important is UC after the instruction!
+        addAnnotation(I, bbTotalUseCount, bbUseCountInfo);
+      }
+#endif
+    } // end of instructions traversal
+
+#if 0
+    // Annotate the block if it is not in a loop, or is a header of a loop
+    if (!topLevelLoop || topLevelLoop->getHeader() == BB) {
+      // Compute V^{h,add} set
+      double addThreshold = bbTotalUseCount.roundToDouble() * QcAddThreshold;
+      UseCountInfo Vh = useCountInfoFactory.getEmptyMap();
+      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        if (p.second.roundToDouble() > addThreshold)
+          Vh = useCountInfoFactory.add(Vh, p.first, p.second);
+      }
+
+      if (!Vh.isEmpty())
+        addAnnotationQC(BB->begin(), bbTotalUseCount, Vh, "vh");
+    }
+#endif
+
+    if (BB == &F.getEntryBlock() ||
+        (QcAnnotateAll && (!topLevelLoop || topLevelLoop->getHeader() == BB))) {
+      addAnnotationQC(BB->begin(), bbTotalUseCount, bbUseCountInfo);
+    }
+  } // end of BB traversal
+
+#if 0
+  // Go through blocks again and add annotations where appropriate
+  for (po_iterator<BasicBlock*> poIt = po_begin(entryBB),
+                                poE  = po_end(entryBB); poIt != poE; ++poIt) {
+    BasicBlock *BB = *poIt;
+
+    // Do not annotate blocks in loops, except the headers
+    Loop *L = loopInfo.getLoopFor(BB);
+    if (L) {
+      while (L->getParentLoop()) L = L->getParentLoop();
+      if (L->getHeader() != BB)
+        continue;
+    }
+
+    // Gather a set of predecessors. If a predecessor is in a loop, we replace
+    // it with the header of corresponding top-level loop, as this is the last
+    // block that contained annotations
+
+
+    APInt bbTotalUseCount = totalUseCountMap.find(BB)->second;
+    const UseCountInfo &bbUseCountInfo = useCountMap.find(BB)->second;
+
+    // Annotate all blocks that have no predecessors
+    if (pred_begin(BB) == pred_end(BB)) {
+      addAnnotationQC(BB->begin(), bbTotalUseCount, bbUseCountInfo);
+      continue;
+    }
+
+    // Check whether the block should be annotated
+    bool diffTotalUseCount = false;
+    UseCountInfo diffUseCount = useCountInfoFactory.getEmptyMap();
+
+    for (pred_iterator predIt = pred_begin(BB), predE = pred_end(BB);
+                       predIt != predE; ++predIt) {
+      BasicBlock *predBB = *predIt;
+      UseCountMap::iterator predUseCountIt = useCountMap.find(predBB);
+      if (predUseCountIt == useCountMap.end())
+        continue; // XXX?
+      const UseCountInfo &predUseCountInfo = predUseCountIt->second;
+
+      // Check whether predUseCount has items that differ,
+      // or are not in bbUseCount at all
+      foreach (UseCountInfo::value_type &p, predUseCountInfo) {
+        const APInt *count = bbUseCountInfo.lookup(p.first);
+        if (!count || *count != p.second)
+          diffUseCount = useCountInfoFactory.add(diffUseCount,
+                                    p.first, count ? *count : APInt(BWIDTH, 0));
+      }
+
+      // Check whether bbUseCount has items that are not in predUseCount
+      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        const APInt *predCount = predUseCountInfo.lookup(p.first);
+        if (!predCount)
+          diffUseCount = useCountInfoFactory.add(diffUseCount,
+                                                 p.first, p.second);
+      }
+
+      // Check whether totalUseCount differs
+      if (!diffTotalUseCount &&
+          totalUseCountMap.find(BB)->second != bbTotalUseCount)
+        diffTotalUseCount = true;
+    }
+
+    // Annotate if necessary
+    if (diffTotalUseCount || !diffUseCount.isEmpty()) {
+      //addAnnotationQC(BB, bbTotalUseCount, diffUseCount);
+      addAnnotationQC(BB->begin(), bbTotalUseCount, bbUseCountInfo);
+    }
+  }
+#endif
+
+  return true;
+}
+
+#else
 bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
   Function &F = *CGNode.getFunction();
   BasicBlock *entryBB = &F.getEntryBlock();
@@ -376,6 +741,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         BasicBlock *succBB = *succIt;
 
         if (loopInfo.getLoopFor(succBB))
+#warning What if we decrepemnt use count here or in the header ?
           continue; // Do not annotate blocks inside loops
 
         UseCountMap::iterator bbUCIt = useCountMap.find(succBB);
@@ -419,6 +785,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         if (isa<PHINode>(IA))
           IA = BB->getFirstNonPHI();
 
+        // If I allocates a pointer that is a hotvalue
         HotValue hv(HVPtr, I);
         if (const uint64_t *useCount = bbUseCountInfo.lookup(hv)) {
           insertAnnotation(hv, *useCount,
@@ -432,6 +799,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
           bbUseCountInfo = useCountInfoFactory.remove(bbUseCountInfo, hv);
         }
 
+        // If I defines the hotvalue
         hv = HotValue(HVVal, I);
         if (const uint64_t *useCount = bbUseCountInfo.lookup(hv)) {
           MDNode *mdNode = insertAnnotation(hv, *useCount,
@@ -607,6 +975,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 
   return true;
 }
+#endif
 
 void UseFrequencyAnalyzerPass::getAnalysisUsage(AnalysisUsage &Info) const {
   Info.addRequired<CallGraph>();
