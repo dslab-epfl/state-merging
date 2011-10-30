@@ -401,18 +401,29 @@ static void addAnnotationQC(Instruction *I, APInt totalUseCount,
 }
 
 #if 1
+/* Compute query count information for a function described by CGNode,
+   annotate the function accordingly. */
 bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
   Function &F = *CGNode.getFunction();
   BasicBlock *entryBB = &F.getEntryBlock();
-  LoopInfo &loopInfo = getAnalysis<LoopInfo>(F);
 
+  // Split entryBB to have an empty entry block (so that it would contain
+  // only function-level annotations)
+#warning Does this work correctly with LoopInfo and DominatorTree ?
+  entryBB->splitBasicBlock(entryBB->begin());
+
+  LoopInfo &loopInfo = getAnalysis<LoopInfo>(F);
   DominatorTree &DT = getAnalysis<DominatorTree>(F);
 
   // Use count after BB for all hot values
   UseCountInfo::Factory useCountInfoFactory;
 
   // For every BB in a function we store an upper estimate of how many times
-  // each hot value is used after the first instruction in that BB
+  // each hot value is used after the first instruction in that BB.
+  // Each basic block that is not in a loop is annotated according to this map.
+  // For BBs where particular use count becomes zero, we add zero-valued
+  // item to this map to put as an annotation later on. For BBs in loops,
+  // we add such zero-valued item at the loop exits.
   typedef llvm::DenseMap<const BasicBlock*, UseCountInfo> UseCountMap;
   UseCountMap useCountMap;
 
@@ -459,11 +470,18 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       if (bbUseCountInfo.isEmpty()) {
         // Copy initial info from the first successor
         bbUseCountInfo = succUseCountInfo;
+
+        // Do not propagete zero-valued items
+        foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+          if (!p.second)
+            bbUseCountInfo = useCountInfoFactory.remove(bbUseCountInfo,
+                                                        p.first);
+        }
       } else {
         foreach (UseCountInfo::value_type &p, succUseCountInfo) {
           const APInt *count = bbUseCountInfo.lookup(p.first);
 #ifdef USE_QC_MAX
-          if (!count || count->ult(p.second))
+          if ((!count || count->ult(p.second)) && !!p.second)
             bbUseCountInfo = useCountInfoFactory.add(
                   bbUseCountInfo, p.first, p.second);
 #else
@@ -550,6 +568,31 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 #endif
     } // end of instructions traversal
 
+    // Add zero-valued items for variables defined in this block
+    SmallVector<BasicBlock*, 16> succBBs;
+    if (!topLevelLoop) {
+      // Quadratic algorithm, but successors are usually only a few
+      for (succ_iterator it = succ_begin(BB), ie = succ_end(BB); it!=ie; ++it) {
+        if (std::find(succBBs.begin(), succBBs.end(), *it) == succBBs.end())
+          succBBs.push_back(*it);
+      }
+    } else if (BB == topLevelLoop->getHeader()) {
+      topLevelLoop->getUniqueExitBlocks(succBBs);
+    }
+
+    foreach (BasicBlock *succBB, succBBs) {
+      UseCountMap::iterator succUseCountIt = useCountMap.find(succBB);
+      if (succUseCountIt == useCountMap.end())
+        continue; // backedge?
+      UseCountInfo &succUseCountInfo = succUseCountIt->second;
+      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        const APInt *succCount = succUseCountInfo.lookup(p.first);
+        if (!succCount)
+          succUseCountInfo = useCountInfoFactory.add(succUseCountInfo,
+                                                     p.first, APInt(BWIDTH, 0));
+      }
+    }
+
 #if 0
     // Annotate the block if it is not in a loop, or is a header of a loop
     if (!topLevelLoop || topLevelLoop->getHeader() == BB) {
@@ -566,11 +609,35 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     }
 #endif
 
+#if 0
     if (BB == &F.getEntryBlock() ||
         (QcAnnotateAll && (!topLevelLoop || topLevelLoop->getHeader() == BB))) {
       addAnnotationQC(BB->begin(), bbTotalUseCount, bbUseCountInfo);
     }
+#endif
   } // end of BB traversal
+
+  // Go through blocks again and add annotations where appropriate
+  for (Function::iterator fIt = F.begin(), fE = F.end(); fIt != fE; ++fIt) {
+    BasicBlock *BB = fIt;
+
+    UseCountMap::iterator bbUseCountIt = useCountMap.find(BB);
+    if (bbUseCountIt == useCountMap.end())
+      continue; // Unreachable block ?
+
+    const UseCountInfo &bbUseCountInfo = bbUseCountIt->second;
+    APInt bbTotalUseCount = totalUseCountMap.find(BB)->second;
+
+    // Do not annotate blocks in loops, except the top-level headers
+    Loop *L = loopInfo.getLoopFor(BB);
+    if (L) {
+      while (L->getParentLoop()) L = L->getParentLoop(); // Get top-level loop
+      if (L->getHeader() != BB)
+        continue;
+    }
+
+    addAnnotationQC(BB->begin(), bbTotalUseCount, bbUseCountInfo);
+  }
 
 #if 0
   // Go through blocks again and add annotations where appropriate
