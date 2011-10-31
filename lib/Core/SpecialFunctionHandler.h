@@ -135,6 +135,7 @@ namespace klee {
     HANDLER(handleMergeBlacklistClear);
 
     HANDLER(handleUseFreq);
+    HANDLER(handleRendezVous);
 
 #undef HANDLER
   };

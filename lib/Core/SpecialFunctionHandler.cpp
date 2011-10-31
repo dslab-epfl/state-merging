@@ -123,6 +123,7 @@ HandlerInfo handlerInfo[] = {
   add("klee_merge_blacklist_clear", handleMergeBlacklistClear, false),
 
   add("_klee_use_freq", handleUseFreq, false),
+  add("_klee_rendez_vous", handleRendezVous, false),
 
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -1172,6 +1173,11 @@ void SpecialFunctionHandler::handleLoopIter(ExecutionState &state,
     // New loop started, push corresponding item to the loop index stack
     LoopExecIndex execIndex = { loopID, indexStack.back().index };
     indexStack.push_back(execIndex);
+    state.crtThread().topoIndex.push_back(TopoFrame(uint64_t(-1), 0));
+    //CLOUD9_DEBUG("Loop enter: " << state);
+  } else {
+    state.crtThread().topoIndex.back().count++;
+    //CLOUD9_DEBUG("Loop iteration: " << state);
   }
   indexStack.back().index = hashUpdate(indexStack.back().index, loopID);
 }
@@ -1195,6 +1201,8 @@ void SpecialFunctionHandler::handleLoopExit(ExecutionState &state,
     // Loop terminated, pop corresponding item form the loop index stack
     assert(indexStack.size() > 1 && "Unexpected loop end");
     indexStack.pop_back();
+    state.crtThread().topoIndex.pop_back();
+    //CLOUD9_DEBUG("Loop exit: " << state);
   }
 }
 
@@ -1325,4 +1333,19 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
 
   state.updateUseFrequency(target->inst, address, size, useFreq, totalUseFreq);
   */
+}
+
+void SpecialFunctionHandler::handleRendezVous(ExecutionState &state,
+                                           KInstruction *target,
+                                           std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1
+      && "invalid number of arguments to _klee_rendez_vous");
+
+  assert(isa<ConstantExpr>(arguments[0])
+      && "argument to _klee_rendez_vous is not a constant");
+
+  uint64_t bbID = cast<ConstantExpr>(arguments[0])->getZExtValue();
+
+  state.crtThread().topoIndex.back().bbID = bbID;
+  //CLOUD9_DEBUG("Rendez-vous hit: " << state);
 }

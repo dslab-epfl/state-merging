@@ -27,6 +27,7 @@ namespace llvm {
   class TargetData;
   class TargetLowering;
   class Type;
+  class Region;
 }
 
 namespace klee {
@@ -233,6 +234,23 @@ public:
   bool isCheckpoint(llvm::Instruction &Instr);
 
   static char ID;
+};
+
+class RendezVousPointPass: public llvm::FunctionPass {
+private:
+  llvm::Function *m_kleeRendezVousFunc;
+
+  unsigned bbID;
+
+  void traverseBB(llvm::BasicBlock *bb,
+      std::map<llvm::BasicBlock*, unsigned> &status);
+public:
+  static char ID;
+
+  RendezVousPointPass();
+
+  virtual bool doInitialization(llvm::Module &M);
+  virtual bool runOnFunction(llvm::Function &F);
 };
 
 }

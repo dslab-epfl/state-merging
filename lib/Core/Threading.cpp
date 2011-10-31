@@ -115,6 +115,7 @@ Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
 
   if (kf) {
     stack.push_back(StackFrame(0, execIndex, kf));
+    topoIndex.push_back(TopoFrame(uint64_t(-1), 0));
 
     pc = kf->instructions;
     prevPC = pc;

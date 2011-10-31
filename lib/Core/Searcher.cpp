@@ -62,6 +62,11 @@ namespace {
       cl::desc("Displays rejected forwarding opportunities due to exceeded maximum instruction count delta"),
       cl::init(false));
 
+  cl::opt<bool>
+  DebugStaticMerging("debug-static-merging",
+      cl::desc("Displays state changes in the static merging algorithm (verbose!)"),
+      cl::init(false));
+
   cl::opt<unsigned>
   MaxInstrDifference("max-inst-difference",
       cl::desc("Maximum difference between instruction counters for forwarding states"),
@@ -474,6 +479,165 @@ void MergingSearcher::update(ExecutionState *current,
     baseSearcher->update(current, addedStates, alt);
   } else {
     baseSearcher->update(current, addedStates, removedStates);
+  }
+}
+
+///
+
+bool TopoIndexLess::operator ()(const TopoIndex &a, const TopoIndex &b) {
+  TopoIndex::const_iterator itA = a.begin(), endA = a.end();
+  TopoIndex::const_iterator itB = b.begin(), endB = b.end();
+
+  while (itA != endA && itB != endB) {
+    if (itA->count != itB->count)
+      return (itA->count < itB->count);
+
+    if (itA->bbID != itB->bbID)
+      return (itA->bbID > itB->bbID);
+
+    ++itA; ++itB;
+  }
+
+  return itB != endB;
+}
+
+StaticMergingSearcher::StaticMergingSearcher(Executor &_executor)
+  : executor(_executor) {
+
+  rendezVousFunction = executor.getModule()->module->getFunction("_klee_rendez_vous");
+  assert(rendezVousFunction && "module improperly initialized");
+}
+
+StaticMergingSearcher::~StaticMergingSearcher() {
+  // Do nothing
+}
+
+bool StaticMergingSearcher::isAtRendezVous(ExecutionState *state) {
+  // Check for initial condition
+  if (state->prevPC()->inst == state->pc()->inst)
+    return false;
+
+  Instruction *i = state->prevPC()->inst;
+  if (i->getOpcode() == Instruction::Call) {
+    CallSite cs(cast<CallInst>(i));
+
+    return rendezVousFunction == cs.getCalledFunction();
+  }
+
+  return false;
+}
+
+ExecutionState &StaticMergingSearcher::selectState() {
+  if (!freeStates.empty()) {
+    if (DebugStaticMerging)
+      CLOUD9_DEBUG("Selected state for execution: " << *(*freeStates.begin()));
+    // XXX: Use a selection strategy?
+    return *(*freeStates.begin());
+  }
+
+  TopoBucketsMap::iterator it = topoBuckets.begin();
+
+  // Attempt to merge all states
+  // First: Group all states according to the merge index
+  MergeIndexGroupsMap stateGroups;
+  for (SmallStatesSet::iterator sIt = it->second.begin(),
+      sIe = it->second.end(); sIt != sIe; sIt++) {
+    ExecutionState *state = *sIt;
+    if (state->mergeDisabled()) {
+      if (DebugStaticMerging)
+        CLOUD9_DEBUG("State released due to merge disabled: " << *state);
+      freeStates.insert(state);
+      continue;
+    }
+
+    stateGroups[state->getMergeIndex()].insert(state);
+  }
+
+  // Second: Merge all states within each group
+  for (MergeIndexGroupsMap::iterator mIt = stateGroups.begin(),
+      mIe = stateGroups.end(); mIt != mIe; mIt++) {
+    if (mIe->second.size() == 1) {
+      if (DebugStaticMerging)
+        CLOUD9_DEBUG("State released as only one in merge group: " << *(*(mIe->second.begin())));
+      freeStates.insert(*(mIe->second.begin()));
+      continue;
+    }
+
+    ExecutionState *snowBall = *(mIt->second.begin());
+    for (SmallStatesSet::iterator sIt = ++(mIt->second.begin()),
+        sIe = mIt->second.end(); sIt != sIe; sIt++) {
+      ExecutionState *state = *sIt;
+      ExecutionState *merged = executor.merge(*snowBall, *state);
+      if (merged) {
+        terminatedStates.insert(state);
+        executor.terminateState(*state, true);
+        if (merged != snowBall) {
+          terminatedStates.insert(snowBall);
+          executor.terminateState(*snowBall, true);
+          snowBall = merged;
+        }
+      } else {
+        freeStates.insert(state);
+        if (DebugStaticMerging)
+          CLOUD9_DEBUG("State released as could not merge: " << *state);
+      }
+    }
+    freeStates.insert(snowBall);
+    if (DebugStaticMerging)
+      CLOUD9_DEBUG("State released as snowball: " << *snowBall);
+  }
+
+    // Finally, wipe the bucket
+  topoBuckets.erase(it);
+
+  assert(!freeStates.empty() && "no non-empty buckets found");
+  if (DebugStaticMerging)
+    CLOUD9_DEBUG("Selected state for execution: " << *(*freeStates.begin()));
+  return *(*freeStates.begin());
+}
+
+void StaticMergingSearcher::update(ExecutionState *current,
+	    const std::set<ExecutionState*> &addedStates,
+	    const std::set<ExecutionState*> &removedStates) {
+  if (current) {
+    // Check to see if it is on a rendez-vous point
+    if (isAtRendezVous(current)) {
+      // Capture this guy into its corresponding bucket
+      unsigned success = freeStates.erase(current);
+      assert(success && "captive state found free");
+
+      topoBuckets[current->getTopoIndex()].insert(current);
+
+      if (DebugStaticMerging)
+        CLOUD9_DEBUG("State captive: " << *current);
+    }
+  }
+
+  for (std::set<ExecutionState*>::const_iterator it = addedStates.begin(),
+      ie = addedStates.end(); it != ie; it++) {
+    ExecutionState *state = *it;
+    assert(!isAtRendezVous(state) && "state added while at rendez-vous point");
+    freeStates.insert(state);
+    if (DebugStaticMerging)
+    CLOUD9_DEBUG("New state added as free: " << *state);
+  }
+  
+  for (std::set<ExecutionState*>::const_iterator it = removedStates.begin(),
+      ie = removedStates.end(); it != ie; it++) {
+    ExecutionState *state = *it;
+    if (!freeStates.erase(state)) {
+      // Find the state in the buckets map
+      TopoBucketsMap::iterator it = topoBuckets.find(state->getTopoIndex());
+      if (it == topoBuckets.end()) {
+        unsigned success = terminatedStates.erase(state);
+        assert(success && "removed state was not being tracked");
+      } else {
+        unsigned success = it->second.erase(state);
+        assert(success && "removed state was not being tracked");
+        if (it->second.empty())
+          topoBuckets.erase(it);
+      }
+    }
   }
 }
 

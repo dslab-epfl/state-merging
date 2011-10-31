@@ -551,6 +551,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
       pm4.add(new UseFrequencyAnalyzerPass(targetData));
     if (EnableExecIndex)
       pm4.add(new AnnotateLoopPass());
+    pm4.add(new RendezVousPointPass());
     pm4.add(new PhiCleanerPass()); // LoopSimplify pass may have changed PHIs
     pm4.add(createVerifierPass());
     pm4.run(*module);

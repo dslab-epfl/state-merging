@@ -14,6 +14,7 @@
 #include <set>
 #include <map>
 #include <queue>
+#include <functional>
 
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/ADT/DenseSet.h>
@@ -26,6 +27,7 @@
 
 // FIXME: We do not want to be exposing these? :(
 #include "klee/Internal/Module/KInstIterator.h"
+#include "klee/Threading.h"
 
 namespace llvm {
   class BasicBlock;
@@ -207,6 +209,42 @@ namespace klee {
     bool empty() { return baseSearcher->empty() && statesAtMerge.empty(); }
     void printName(std::ostream &os) {
       os << "BumpMergingSearcher\n";
+    }
+  };
+
+  struct TopoIndexLess : public std::binary_function<TopoIndex, TopoIndex, bool> {
+    bool operator() (const TopoIndex &a, const TopoIndex &b);
+  };
+
+  class StaticMergingSearcher: public Searcher {
+  private:
+    typedef std::set<ExecutionState*> SmallStatesSet;
+    typedef std::set<ExecutionState*> StatesSet;
+
+    typedef std::map<TopoIndex, SmallStatesSet, TopoIndexLess> TopoBucketsMap;
+    typedef StatesSet FreeStatesSet;
+    typedef std::map<uint64_t, SmallStatesSet > MergeIndexGroupsMap;
+
+    TopoBucketsMap topoBuckets;
+    FreeStatesSet freeStates;
+    SmallStatesSet terminatedStates;
+
+    Executor &executor;
+    llvm::Function *rendezVousFunction;
+
+    bool isAtRendezVous(ExecutionState *state);
+  public:
+    StaticMergingSearcher(Executor &executor);
+    ~StaticMergingSearcher();
+
+    ExecutionState &selectState();
+    void update(ExecutionState *current,
+		const std::set<ExecutionState*> &addedStates,
+		const std::set<ExecutionState*> &removedStates);
+    bool empty() { return topoBuckets.empty() && freeStates.empty(); }
+
+    void printName(std::ostream &os) {
+      os << "StaticMergingSearcher\n";
     }
   };
 

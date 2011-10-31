@@ -20,6 +20,13 @@ using namespace llvm;
 using namespace klee;
 
 namespace {
+  enum MergingType {
+    Manual,
+    Bump,
+    Lazy,
+    Static
+  };
+
   cl::opt<bool>
   UseRandomSearch("use-random-search");
 
@@ -60,18 +67,14 @@ namespace {
                         clEnumValN(WeightedRandomSearcher::CoveringNew, "covnew", "use min dist to uncovered + coveringNew flag"),
                         clEnumValEnd));
   
-  cl::opt<bool>
-  UseMerge("use-merge",
-           cl::desc("Enable support for klee_merge() (experimental)"));
- 
-  cl::opt<bool>
-  UseBumpMerge("use-bump-merge",
-           cl::desc("Enable support for klee_merge() (extra experimental)"));
+  cl::opt<MergingType>
+  UseMerge("use-merge", cl::desc("Enable support for state merging"),
+      cl::values(clEnumValN(Manual, "manual", "klee_merge() (experimental)"),
+                 clEnumValN(Bump, "bump", "klee_merge() (extra experimental)"),
+                 clEnumValN(Lazy, "lazy", "lazy merging (research)"),
+                 clEnumValN(Static, "static", "static merging (plain ol')"),
+                 clEnumValEnd));
 
-  cl::opt<bool>
-  UseLazyMerge("use-lazy-merge", 
-           cl::desc("Enable support for lazy merging (research)"));
- 
   cl::opt<bool>
   UseIterativeDeepeningTimeSearch("use-iterative-deepening-time-search",
                                     cl::desc("(experimental)"));
@@ -121,7 +124,7 @@ bool klee::userSearcherRequiresBranchSequences() {
 }
 
 bool klee::userSearcherRequiresMergeAnalysis() {
-  return UseLazyMerge;
+  return UseMerge && (UseMerge == Lazy);
 }
 
 Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
@@ -179,14 +182,23 @@ Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
   }
 
   if (UseMerge) {
-    assert(!UseBumpMerge && !UseLazyMerge);
-    searcher = new MergingSearcher(executor, searcher);
-  } else if (UseBumpMerge) {
-    assert(!UseMerge && !UseLazyMerge);
-    searcher = new BumpMergingSearcher(executor, searcher);
-  } else if(UseLazyMerge) {
-    assert(!UseMerge && !UseBumpMerge);
-    searcher = new LazyMergingSearcher(executor, searcher);
+    switch (UseMerge) {
+    case Manual:
+      searcher = new MergingSearcher(executor, searcher);
+      break;
+    case Bump:
+      searcher = new BumpMergingSearcher(executor, searcher);
+      break;
+    case Lazy:
+      searcher = new LazyMergingSearcher(executor, searcher);
+      break;
+    case Static:
+      searcher = new StaticMergingSearcher(executor);
+      break;
+    default:
+      // No merging
+      break;
+    }
   }
   
   if (UseCheckpointSearch) {

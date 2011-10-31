@@ -61,6 +61,7 @@ namespace klee {
 
 namespace c9 {
 std::ostream &printStateStack(std::ostream &os, const ExecutionState &state);
+std::ostream &printStateTopoIndex(std::ostream &os, const ExecutionState &state);
 std::ostream &printStateConstraints(std::ostream &os, const ExecutionState &state);
 std::ostream &printStateMemorySummary(std::ostream &os, const ExecutionState &state);
 }
@@ -275,6 +276,7 @@ public:
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
     t.stack.push_back(StackFrame(caller, t.mergeIndex, kf));
+    t.topoIndex.push_back(TopoFrame(uint64_t(-1), 0));
   }
   void pushFrame(KInstIterator caller, KFunction *kf) {
     pushFrame(crtThread(), caller, kf);
@@ -289,6 +291,7 @@ public:
     }
     updateBlacklistBeforePopFrame();
     t.stack.pop_back();
+    t.topoIndex.pop_back();
   }
   void popFrame() {
     popFrame(crtThread());
@@ -311,6 +314,7 @@ public:
   StackTrace getStackTrace() const;
 
   uint64_t getMergeIndex() const { return interleavedMergeIndex; }
+  const TopoIndex& getTopoIndex() const { return crtThread().topoIndex; }
 
   // Merge blacklist functionality
   void updateMemoryUseFrequency(llvm::Instruction *inst,
