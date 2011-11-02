@@ -170,7 +170,7 @@ void ExecutionState::setPC(const KInstIterator& newPC) {
 
   sIndex = hashUpdate(hashUpdate(hashUpdate(sIndex, symbolicsHash),
                                         addressSpace().hash),
-                                      crtThread().mergeBlacklistHash);
+                                crtThread().qceMemoryTrackHash.getHashValue());
 
   crtThread().mergeIndex = hashUpdate(crtThread().execIndex, sIndex);
 
@@ -341,8 +341,9 @@ void ExecutionState::notifyAll(wlist_id_t wlist) {
 ExecutionState::~ExecutionState() {
   for (threads_ty::iterator it = threads.begin(); it != threads.end(); it++) {
     Thread &t = it->second;
-    t.mergeBlacklistMap.clear();
-    t.mergeBlacklistHash = hashInit();
+#warning QCEXXX
+    //t.mergeBlacklistMap.clear();
+    //t.mergeBlacklistHash = hashInit();
     while (!t.stack.empty())
       popFrame(t);
   }
@@ -550,15 +551,15 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
     const Thread &aThread = it->second;
     const Thread &bThread = it1->second;
 
-    if (aThread.mergeBlacklistMap.size() != bThread.mergeBlacklistMap.size()) {
+    if (aThread.qceMemoryTrackMap.size() != bThread.qceMemoryTrackMap.size()) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: mergeBlacklists are different\n";
+        std::cerr << "---- merge failed: QCE memory tracks are different\n";
       return false;
     }
 
-    if (aThread.mergeBlacklistHash != bThread.mergeBlacklistHash) {
+    if (aThread.qceMemoryTrackHash != bThread.qceMemoryTrackHash) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: mergeBlacklistsHash are different values\n";
+        std::cerr << "---- merge failed: QCE memory hashes are different\n";
       return false;
     }
 
@@ -568,18 +569,18 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
         b.processes.find(bThread.getPid())->second.addressSpace;
 
     if (DebugLogStateMerge) {
-      std::cerr << "Comparing " << aThread.mergeBlacklistMap.size()
-                << " merge blacklist items" << std::endl;
+      std::cerr << "Comparing " << aThread.qceMemoryTrackMap.size()
+                << " QCE tracked items" << std::endl;
     }
 
-    for (MergeBlacklistMap::const_iterator mi = aThread.mergeBlacklistMap.begin(),
-                  me = aThread.mergeBlacklistMap.end(); mi != me; ++mi) {
-      MergeBlacklistMap::const_iterator mi1 =
-          bThread.mergeBlacklistMap.find(mi->first);
+    for (QCEMemoryTrackMap::const_iterator mi = aThread.qceMemoryTrackMap.begin(),
+                  me = aThread.qceMemoryTrackMap.end(); mi != me; ++mi) {
+      QCEMemoryTrackMap::const_iterator mi1 =
+          bThread.qceMemoryTrackMap.find(mi->first);
 
-      if (mi1 == bThread.mergeBlacklistMap.end()) {
+      if (mi1 == bThread.qceMemoryTrackMap.end()) {
         if (DebugLogStateMerge)
-          std::cerr << "---- merge failed: mergeBlacklists are different\n";
+          std::cerr << "---- merge failed: QCE memory tracks are different\n";
         return false;
       }
 
@@ -588,11 +589,12 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
       unsigned aValue = aAddressSpace.findObject(mo)->read8c(offset);
       unsigned bValue = bAddressSpace.findObject(mo)->read8c(offset);
       if (aValue != bValue) {
+#warning XXX?
         // XXX: try different heuristics here
         //if (isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
         //if (aValue != unsigned(-1) || bValue != unsigned(-1))
           if (DebugLogStateMerge)
-            std::cerr << "---- merge failed: mergeBlacklists contain different values\n";
+            std::cerr << "---- merge failed: QCE memory tracks contain different values\n";
           return false;
         //}
       }
@@ -1034,45 +1036,30 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
 }
 
 void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
-                                  ref<ConstantExpr> address, uint64_t size,
-                                  uint64_t useFreq, uint64_t totalUseFreq) {
+                               ref<ConstantExpr> address, uint64_t size,
+                               uint64_t useFreq, uint64_t totalUseFreq) {
+#if 0
   verifyBlacklistMap();
   bool changed = false;
 
-  bool active = useFreq > MaxUseFreqForMerge &&
-                double(useFreq) > double(totalUseFreq)*MaxUseFreqPctForMerge;
-  bool isFunctionEntry =
-      inst->getParent() == &inst->getParent()->getParent()->getEntryBlock();
-
-  // Resolve and check address
-  ObjectPair op;
-  bool ok = addressSpace().resolveOne(address, op);
-  if (!ok)
-    return; // XXX!
-
-  const MemoryObject* mo = op.first;
-
-  ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
-  assert(chk->isTrue() && "arguments to klee_use_freq are invalid");
-
-  uint64_t offset = address->getZExtValue() - op.first->address;
 
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
 
-  // Each item in a blacklist is marked with a call stack frame after which
-  // it should disappear from the blacklist (i.e., the variable will not be
-  // used after returning from that frame). All updates to the item issued
-  // from below such frame are ignored in all cases but one: when the update
-  // is issued from the header BB of the function and a declared use frequency
-  // matches the use frequency from the parent, we assume that this call is the
-  // last to use the item. Hence, we reset the mark of the item to the current
-  // stack frame.
   for (; size; --size, ++offset) {
     MergeBlacklistMap::iterator it =
             mergeBlacklistMap.find(std::make_pair(mo, offset));
+    if (inVhAdd) {
+      if (it != mergeBlacklistMap.end()) {
+        assert(it->second != hotValue);
+        klee_warning("!!! XXX: blacklist item already exist. Aliasing?\n");
+        continue;
+      }
+
+    }
+
     if (it == mergeBlacklistMap.end()) {
-      // This is a completely new item, just insert it if its active
+      // This is indeed a new item
       if (active) {
         if (DebugLogMergeBlacklist && !changed) {
           std::string str;
@@ -1149,11 +1136,13 @@ void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
     verifyBlacklistMap();
     verifyBlacklistHash();
   }
+#endif
 }
 
 void ExecutionState::updateMemoryValue(KInstruction *ki,
                                        const MemoryObject *mo, ObjectState *os,
                                        ref<Expr> offset, ref<Expr> newValue) {
+#if 0
   //if (os->numBlacklistRefs == 0)
   //  return; // This ObjectState is not involved in any blacklist item
 
@@ -1222,9 +1211,11 @@ void ExecutionState::updateMemoryValue(KInstruction *ki,
       std::cerr << "  at:\n  "; ki->dump();
     std::cerr << "  New value: "; newValue->dump();
   }
+#endif
 }
 
 void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
+#if 0
   bool changed = false;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
@@ -1260,9 +1251,11 @@ void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
     verifyBlacklistMap();
     verifyBlacklistHash();
   }
+#endif
 }
 
 void ExecutionState::updateBlacklistBeforePopFrame() {
+#if 0
   bool changed = false;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
@@ -1311,6 +1304,7 @@ void ExecutionState::updateBlacklistBeforePopFrame() {
     verifyBlacklistMap();
     verifyBlacklistHash();
   }
+#endif
 }
 
 void ExecutionState::verifyBlacklistMap() {
@@ -1363,6 +1357,7 @@ void ExecutionState::verifyBlacklistHash() {
 
 
 void ExecutionState::dumpBlacklist() {
+#if 0
   DenseSet<Value*> insts;
 
   foreach (const StackFrame &sf, stack()) {
@@ -1399,6 +1394,7 @@ void ExecutionState::dumpBlacklist() {
       }
     }
   }
+#endif
 }
 
 uint64_t _rotl(uint64_t value, unsigned shift) {

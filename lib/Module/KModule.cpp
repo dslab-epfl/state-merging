@@ -44,6 +44,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Analysis/Verifier.h"
+#include "llvm/ADT/APInt.h"
 
 #include <sstream>
 #include <fstream>
@@ -833,6 +834,7 @@ KFunction::KFunction(llvm::Function *_function,
           ki->operands[j+1] = getOperandNum(v, registerMap, km, ki);
         }
 
+#if 0
         if (kleeUseFreqFunc && cs.getCalledFunction() == kleeUseFreqFunc) {
           KUseFreqInstruction *ku = static_cast<KUseFreqInstruction*>(ki);
           MDNode *md = ki->inst->getMetadata("uf");
@@ -842,6 +844,7 @@ KFunction::KFunction(llvm::Function *_function,
           ku->numUses = cast<ConstantInt>(md->getOperand(2))->getZExtValue();
           ku->totalNumUses = cast<ConstantInt>(md->getOperand(3))->getZExtValue();
         }
+#endif
       }
       else {
         unsigned numOperands = it->getNumOperands(); 
@@ -862,6 +865,26 @@ KFunction::KFunction(llvm::Function *_function,
             ki->operands[j] = -(km->getConstantID(c, ki) + 2);
           }
         }
+      }
+
+      if (const MDNode *MD = it->getMetadata("qce")) {
+        ki->qceInfo = new KQCEInfo;
+        ki->qceInfo->total =
+            cast<ConstantInt>(MD->getOperand(0))->getValue().roundToDouble();
+        for (unsigned i = 1; i < MD->getNumOperands(); ++i) {
+          const MDNode *MDo = cast<const MDNode>(MD->getOperand(i));
+          ki->qceInfo->vars.push_back(KQCEInfoItem());
+          KQCEInfoItem &item = ki->qceInfo->vars.back();
+          item.hotValue = HotValue(
+            HotValueKind(cast<ConstantInt>(MDo->getOperand(0))->getZExtValue()),
+            MDo->getOperand(1));
+          item.qce =
+            cast<ConstantInt>(MDo->getOperand(2))->getValue().roundToDouble();
+          item.vnumber =
+            getOperandNum(item.hotValue.getValue(), registerMap, km, ki);
+        }
+      } else {
+        ki->qceInfo = 0;
       }
 
       instructions[i++] = ki;

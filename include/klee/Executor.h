@@ -183,12 +183,22 @@ private:
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   
   void executeInstruction(ExecutionState &state, KInstruction *ki);
+  void instructionExecuted(ExecutionState &state);
 
   void printFileLine(ExecutionState &state, KInstruction *ki);
 
   void run(ExecutionState &initialState);
 
-  // Given a concrete object in our [klee's] address space, add it to 
+  // QCE tracking function
+  void updateQceMapBeforeCall(ExecutionState &state);
+  void updateQceMapOnFramePush(ExecutionState &state);
+  void updateQceMapOnFramePop(ExecutionState &state);
+
+  bool modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
+                               int vnumber, bool inVhAdd,
+                               KInstruction *ki = NULL, bool framePop = false);
+
+  // Given a concrete object in our [klee's] address space, add it to
   // objects checked code can reference.
   MemoryObject *addExternalObject(ExecutionState &state, void *addr, 
                                   unsigned size, bool isReadOnly);

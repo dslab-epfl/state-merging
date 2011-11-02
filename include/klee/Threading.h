@@ -35,11 +35,14 @@
 
 #include "klee/Expr.h"
 #include "klee/Internal/Module/KInstIterator.h"
+#include "klee/Internal/Module/QCE.h"
 #include "klee/util/BitArray.h"
+#include "klee/util/SimpleIncHash.h"
 #include "../../lib/Core/AddressSpace.h"
 #include "cloud9/Logger.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 
 #include <map>
 
@@ -56,6 +59,7 @@ class ExecutionState;
 class Process;
 class CallPathNode;
 class MemoryObject;
+struct StackFrame;
 struct Cell;
 
 typedef uint64_t thread_id_t;
@@ -68,6 +72,21 @@ struct LoopExecIndex {
   uint64_t loopID;
   uint64_t index;
 };
+
+struct QCEFrameInfo {
+  StackFrame *stackFrame;
+  int   vnumber;
+  bool   inVhAdd;
+
+  float qce;
+  float qceBase;
+
+  QCEFrameInfo(StackFrame* _stackFrame = NULL, int _vnumber = 0)
+    : stackFrame(_stackFrame), vnumber(_vnumber), inVhAdd(false),
+      qce(0), qceBase(0) {}
+};
+
+typedef llvm::DenseMap<HotValue, QCEFrameInfo> QCEMap;
 
 struct StackFrame {
   KInstIterator caller;
@@ -98,27 +117,23 @@ struct StackFrame {
 
   bool isUserMain;
 
+  float qceTotal;
+  float qceTotalBase;
+  QCEMap qceMap;
+
   BitArray localBlacklistMap;
   uint64_t localBlacklistHash;
 
-  StackFrame(KInstIterator caller, uint64_t _callerExecIndex, KFunction *kf);
+  StackFrame(KInstIterator caller, uint64_t _callerExecIndex,
+             KFunction *kf, StackFrame *parentFrame);
   StackFrame(const StackFrame &s);
 
   StackFrame& operator=(const StackFrame &sf);
   ~StackFrame();
 };
 
-struct MergeBlacklistInfo {
-  llvm::Instruction *inst;
-  const StackFrame *frame;
-  uint64_t useFreq;
-  MergeBlacklistInfo(llvm::Instruction *_inst,
-                     const StackFrame *_frame, uint64_t _useFreq)
-    : inst(_inst), frame(_frame), useFreq(_useFreq) {}
-};
-
-typedef std::pair<const MemoryObject*, uint64_t> MergeBlacklistIndex;
-typedef llvm::DenseMap<MergeBlacklistIndex, MergeBlacklistInfo> MergeBlacklistMap;
+typedef std::pair<const MemoryObject*, uint64_t> QCEMemoryTrackIndex;
+typedef llvm::DenseMap<QCEMemoryTrackIndex, HotValue> QCEMemoryTrackMap;
 
 class Thread {
   friend class Executor;
@@ -131,11 +146,9 @@ private:
 
   std::vector<StackFrame> stack;
 
-  // MergeBlacklistMap for this thread
-  MergeBlacklistMap mergeBlacklistMap;
-
-  // A hash of blacklist values for this thread
-  uint64_t mergeBlacklistHash;
+  // QCE bookkeeping
+  QCEMemoryTrackMap qceMemoryTrackMap;
+  SimpleIncHash qceMemoryTrackHash;
 
   bool enabled;
   wlist_id_t waitingList;

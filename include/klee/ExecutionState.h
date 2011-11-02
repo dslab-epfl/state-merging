@@ -274,7 +274,8 @@ public:
   ExecutionState *branch(bool copy = false);
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
-    t.stack.push_back(StackFrame(caller, t.mergeIndex, kf));
+    t.stack.push_back(StackFrame(caller, t.mergeIndex, kf,
+                                 !t.stack.empty() ? &t.stack.back() : NULL));
   }
   void pushFrame(KInstIterator caller, KFunction *kf) {
     pushFrame(crtThread(), caller, kf);

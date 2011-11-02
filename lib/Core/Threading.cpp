@@ -42,10 +42,15 @@ namespace klee {
 
 /* StackFrame Methods */
 
-StackFrame::StackFrame(KInstIterator _caller, uint64_t _callerExecIndex, KFunction *_kf)
+StackFrame::StackFrame(KInstIterator _caller, uint64_t _callerExecIndex, KFunction *_kf,
+                       StackFrame *parentFrame)
   : caller(_caller), kf(_kf), callPathNode(0),
     minDistToUncoveredOnReturn(0), varargs(0),
-    execIndexStack(1), localBlacklistMap(_kf->numRegisters, false),
+    execIndexStack(1),
+    qceTotal(parentFrame ? parentFrame->qceTotal : 0),
+    qceTotalBase(parentFrame ? parentFrame->qceTotalBase : 0),
+    qceMap(parentFrame ? parentFrame->qceMap : QCEMap()),
+    localBlacklistMap(_kf->numRegisters, false),
     localBlacklistHash(hashInit()) {
 
   execIndexStack[0].loopID = uint64_t(-1);
@@ -65,6 +70,9 @@ StackFrame::StackFrame(const StackFrame &s)
     varargs(s.varargs),
     execIndexStack(s.execIndexStack),
     isUserMain(s.isUserMain),
+    qceTotal(s.qceTotal),
+    qceTotalBase(s.qceTotalBase),
+    qceMap(s.qceMap),
     localBlacklistMap(s.localBlacklistMap, s.kf->numRegisters),
     localBlacklistHash(s.localBlacklistHash) {
 
@@ -83,6 +91,9 @@ StackFrame& StackFrame::operator=(const StackFrame &s) {
     varargs = s.varargs;
     execIndexStack = s.execIndexStack;
     isUserMain = s.isUserMain;
+    qceTotal = s.qceTotal;
+    qceTotalBase = s.qceTotalBase;
+    qceMap = s.qceMap;
     localBlacklistMap = BitArray(s.localBlacklistMap, s.kf->numRegisters);
     localBlacklistHash = s.localBlacklistHash;
 
@@ -104,7 +115,6 @@ StackFrame::~StackFrame() {
 /* Thread class methods */
 
 Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
-  mergeBlacklistHash(hashInit()),
   enabled(true), waitingList(0), execIndex(hashInit()), mergeIndex(0) {
 
   execIndex = hashUpdate(execIndex, tid);
@@ -114,7 +124,7 @@ Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
   tuid = std::make_pair(tid, pid);
 
   if (kf) {
-    stack.push_back(StackFrame(0, execIndex, kf));
+    stack.push_back(StackFrame(0, execIndex, kf, NULL));
 
     pc = kf->instructions;
     prevPC = pc;

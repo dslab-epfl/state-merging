@@ -15,6 +15,8 @@
 #include "llvm/Support/CFG.h"
 #include "llvm/Support/CommandLine.h"
 
+#include "klee/Internal/Module/QCE.h"
+
 #include <iostream>
 
 #include <boost/foreach.hpp>
@@ -25,7 +27,6 @@
 
 #define DEFAULT_LOOP_TRIP_COUNT 10
 
-#define BWIDTH 256
 #define USE_QC_MAX
 
 namespace llvm {
@@ -34,17 +35,6 @@ namespace llvm {
 
 using namespace llvm;
 using namespace klee;
-
-namespace {
-  cl::opt<double>
-  QcAddThreshold("qc-add-threshold", cl::init(0.00001));
-
-  cl::opt<uint64_t>
-  QcAddAbsThreshold("qc-add-abs-threshold", cl::init(0));
-
-  cl::opt<bool>
-  QcAnnotateAll("qc-annotate-all", cl::init(false));
-}
 
 UseFrequencyAnalyzerPass::UseFrequencyAnalyzerPass(TargetData *TD)
       : CallGraphSCCPass(ID), m_targetData(TD),
@@ -152,66 +142,34 @@ static bool isIgnored(const Value *hotValueDep) {
   return false;
 }
 
-enum HotValueKind { HVVal, HVPtr };
-typedef PointerIntPair<const llvm::Value*, 1, HotValueKind> HotValueBaseTy;
-
-class HotValue: public HotValueBaseTy {
-public:
-  HotValue(HotValueKind K, const llvm::Value *V): PointerIntPair(V, K) {}
-
-  const llvm::Value *getValue() const { return getPointer(); }
-  HotValueKind getKind() const { return getInt(); }
-
-  bool isVal() const { return getInt() == HVVal; }
-  bool isPtr() const { return getInt() == HVPtr; }
-
-  // An easy way to support DenseMap
-  HotValue(const HotValueBaseTy& P): PointerIntPair(P) {}
-  operator HotValueBaseTy () {
-    return HotValueBaseTy::getFromOpaqueValue(getOpaqueValue());
-  }
-
-};
-
-namespace llvm {
-  template<> struct FoldingSetTrait<HotValue> {
-    static inline void Profile(const HotValue hv, FoldingSetNodeID& ID) {
-      ID.AddPointer(hv.getOpaqueValue());
-    }
-  };
-  template<> struct DenseMapInfo<HotValue>:
-    public DenseMapInfo<PointerIntPair<const llvm::Value*, 1, HotValueKind> > {
-  };
-}
-
 typedef DenseMap<HotValue, APInt> HotValueDeps;
 typedef llvm::SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
 
 /// Traverse data flow dependencies of hotValue, gathering its dependencies
 /// on values read from known memory location (only global variables for now).
 /// Return a set of pointers to such memory locations.
-static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
+static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
                                const VisitedBBs &visitedBBs,
-                               APInt numUsesMult = APInt(BWIDTH, 1)) {
+                               APInt numUsesMult = APInt(QCE_BWIDTH, 1)) {
   if (isa<Constant>(hotValueUse) || isa<MDNode>(hotValueUse))
     return; // We are not interested in constants
 
   // Traverse the data flow for the value, limiting the depth
-  DenseSet<const Value*> visitedOPs;
-  SmallVector<std::pair<const Value*, unsigned>, 16>
+  DenseSet<Value*> visitedOPs;
+  SmallVector<std::pair<Value*, unsigned>, 16>
       visitOPStack(1, std::make_pair(hotValueUse, 0));
 
   // Limited-depth data flow traversal
   while (!visitOPStack.empty()) {
-    const Value *V = visitOPStack.back().first;
+    Value *V = visitOPStack.back().first;
     unsigned depth = visitOPStack.back().second;
     visitOPStack.pop_back();
 
     if (!visitedOPs.insert(V).second)
       continue;
 
-    if (const LoadInst *LI = dyn_cast<LoadInst>(V)) {
-      const Value *Ptr = LI->getPointerOperand();
+    if (LoadInst *LI = dyn_cast<LoadInst>(V)) {
+      Value *Ptr = LI->getPointerOperand();
       if (isa<Constant>(Ptr)) {
         if (!isIgnored(Ptr))
           deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
@@ -229,11 +187,13 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
       deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
       continue;
 
-    } else if (const PHINode *PHI = dyn_cast<PHINode>(V)) {
+    } else if (PHINode *PHI = dyn_cast<PHINode>(V)) {
       deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
 #warning Try commenting/uncommenting the following
+#if MAX_DATAFLOW_DEPTH > 0
       if (depth >= MAX_DATAFLOW_DEPTH)
         continue;
+#endif
       for (unsigned i = 0, e = PHI->getNumIncomingValues(); i != e; ++i) {
         Value *arg = PHI->getIncomingValue(i);
         if (isa<Constant>(arg) || isa<MDNode>(arg))
@@ -244,17 +204,19 @@ static void gatherHotValueDeps(const Value* hotValueUse, HotValueDeps *deps,
       }
       continue;
 
-    } else if (const Instruction *U = dyn_cast<Instruction>(V)) {
+    } else if (Instruction *U = dyn_cast<Instruction>(V)) {
+#if MAX_DATAFLOW_DEPTH > 0
       if (depth >= MAX_DATAFLOW_DEPTH)
         continue;
+#endif
 
       // We do not put intermidiate values into the hot value set, however,
       // we track all their dependencies instead.
 
       // Explore operands of V
-      for (User::const_op_iterator it = U->op_begin(),
+      for (User::op_iterator it = U->op_begin(),
            ie = U->op_end(); it != ie; ++it) {
-        const Value *OP = *it;
+        Value *OP = *it;
         if (isa<Constant>(OP) || isa<MDNode>(OP)) // No constants please
           continue;
         visitOPStack.push_back(std::make_pair(OP, depth+1));
@@ -279,7 +241,7 @@ static void gatherCallSiteDeps(const CallSite CS,
   if (F->isDeclaration())
     return;
 
-  const MDNode *MD = F->getEntryBlock().begin()->getMetadata("qc");
+  const MDNode *MD = F->getEntryBlock().begin()->getMetadata("qce");
   if (!MD)
     return; // XXX
 
@@ -382,9 +344,9 @@ static bool _annotationComparator(Value *l, Value *r) {
 
 static void addAnnotationQC(Instruction *I, APInt totalUseCount,
                             const UseCountInfo& useCountInfo,
-                            const char* mdName = "qc") {
+                            const char* mdName = "qce") {
   LLVMContext &Ctx = I->getContext();
-  assert(I->getMetadata("qc") == NULL);
+  assert(I->getMetadata("qce") == NULL);
   llvm::SmallVector<Value*, 32> Args;
   Args.push_back(ConstantInt::get(Ctx, totalUseCount));
 
@@ -441,7 +403,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     visitedBBs.insert(BB);
 
     // Compute estimated number of executions if BB is a part of a loop
-    APInt bbExecCount(BWIDTH, 1);
+    APInt bbExecCount(QCE_BWIDTH, 1);
 
     const Loop *topLevelLoop = 0;
     const Loop *bbLoop = loopInfo.getLoopFor(BB);
@@ -449,7 +411,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       unsigned tripCount = L->getSmallConstantTripCount();
       if (!tripCount)
         tripCount = DEFAULT_LOOP_TRIP_COUNT;
-      bbExecCount *= APInt(BWIDTH, tripCount);
+      bbExecCount *= APInt(QCE_BWIDTH, tripCount);
     }
 
     // Initially set useCountInfo for the current BB to be a maximum of
@@ -457,7 +419,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     UseCountInfo &bbUseCountInfo = useCountMap.insert(
           std::make_pair(BB, useCountInfoFactory.getEmptyMap())).first->second;
     APInt &bbTotalUseCount = totalUseCountMap.insert(
-          std::make_pair(BB, APInt(BWIDTH, 0))).first->second;
+          std::make_pair(BB, APInt(QCE_BWIDTH, 0))).first->second;
 
     for (succ_iterator succIt = succ_begin(BB),
                        succE  = succ_end(BB); succIt != succE; ++succIt) {
@@ -487,7 +449,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 #else
           bbUseCountInfo = useCountInfoFactory.add(
                 bbUseCountInfo, p.first,
-                p.second + (count ? *count : APInt(BWIDTH, 0)));
+                p.second + (count ? *count : APInt(QCE_BWIDTH, 0)));
 #endif
         }
       }
@@ -517,12 +479,21 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
             rIt != rE; ++rIt) {
       Instruction *I = &*rIt;
 
+      assert(!(isa<AllocaInst>(I) && bbLoop));
+      assert(!isa<InvokeInst>(I) && "Invoke instruction is not supported!");
+
+      // XXX: hack: annotate call instructions with the state after the call
+      if (isa<CallInst>(I) && !bbLoop) {
+        addAnnotationQC(llvm::next(BasicBlock::iterator(I)),
+                        bbTotalUseCount, bbUseCountInfo);
+      }
+
       // NOTE: we don't do any path-sensitive analysis, moreover we don't
       // track values in registers. To avoid to much false negatives, we
       // intentionally do not track stores that may overwrite hot values
 
       HotValueDeps hotValueDeps;
-      APInt instTotalUseCount(BWIDTH, 0);
+      APInt instTotalUseCount(QCE_BWIDTH, 0);
 
       // Check whether a symbolic operand to the current instruction may
       // force KLEE to call the solver...
@@ -555,7 +526,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         const APInt *count = bbUseCountInfo.lookup(p.first);
         bbUseCountInfo = useCountInfoFactory.add(
               bbUseCountInfo, p.first,
-              p.second * bbExecCount + (count ? *count : APInt(BWIDTH, 0)));
+              p.second * bbExecCount + (count ? *count : APInt(QCE_BWIDTH, 0)));
       }
       bbTotalUseCount += instTotalUseCount * bbExecCount;
 
@@ -589,7 +560,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         const APInt *succCount = succUseCountInfo.lookup(p.first);
         if (!succCount)
           succUseCountInfo = useCountInfoFactory.add(succUseCountInfo,
-                                                     p.first, APInt(BWIDTH, 0));
+                                                     p.first, APInt(QCE_BWIDTH, 0));
       }
     }
 
@@ -597,7 +568,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     // Annotate the block if it is not in a loop, or is a header of a loop
     if (!topLevelLoop || topLevelLoop->getHeader() == BB) {
       // Compute V^{h,add} set
-      double addThreshold = bbTotalUseCount.roundToDouble() * QcAddThreshold;
+      double addThreshold = bbTotalUseCount.roundToDouble() * QceAddThreshold;
       UseCountInfo Vh = useCountInfoFactory.getEmptyMap();
       foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
         if (p.second.roundToDouble() > addThreshold)
@@ -611,7 +582,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 
 #if 0
     if (BB == &F.getEntryBlock() ||
-        (QcAnnotateAll && (!topLevelLoop || topLevelLoop->getHeader() == BB))) {
+        (QceAnnotateAll && (!topLevelLoop || topLevelLoop->getHeader() == BB))) {
       addAnnotationQC(BB->begin(), bbTotalUseCount, bbUseCountInfo);
     }
 #endif
@@ -685,7 +656,7 @@ bool UseFrequencyAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         const APInt *count = bbUseCountInfo.lookup(p.first);
         if (!count || *count != p.second)
           diffUseCount = useCountInfoFactory.add(diffUseCount,
-                                    p.first, count ? *count : APInt(BWIDTH, 0));
+                                    p.first, count ? *count : APInt(QCE_BWIDTH, 0));
       }
 
       // Check whether bbUseCount has items that are not in predUseCount

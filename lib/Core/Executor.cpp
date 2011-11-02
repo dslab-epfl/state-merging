@@ -310,6 +310,15 @@ namespace {
   DebugMergeSlowdown("debug-merge-slowdown",
           cl::desc("Debug slow-down of merged states"),
           cl::init(false));
+
+  cl::opt<float>
+  QceThreshold("qce-threshold", cl::init(0.00001));
+
+  cl::opt<uint64_t>
+  QceAbsThreshold("qce-abs-threshold", cl::init(0));
+
+  cl::opt<bool>
+  DebugQceMaps("debug-qce-maps", cl::init(false));
 }
 
 
@@ -1434,6 +1443,8 @@ void Executor::executeCall(ExecutionState &state,
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC(), kf);
     state.setPC(kf->instructions);
+
+    updateQceMapOnFramePush(state);
         
     if (statsTracker)
       statsTracker->framePushed(state, &state.stack()[state.stack().size()-2]); //XXX TODO fix this ugly stuff
@@ -1594,6 +1605,7 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
 
+#if 0
   if (const MDNode *md = i->getMetadata("ul")) {
     // A special case of blacklist node
     assert(cast<ConstantInt>(md->getOperand(0))->getZExtValue() == 0);
@@ -1606,6 +1618,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // XXX
     }
   }
+#endif
 
   switch (i->getOpcode()) {
     // Control flow
@@ -1644,6 +1657,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         executeCall(state, NULL, f, arguments);
       }
     } else {
+      updateQceMapOnFramePop(state);
       state.popFrame();
 
       if (statsTracker)
@@ -1691,6 +1705,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::Unwind: {
     for (;;) {
       KInstruction *kcaller = state.stack().back().caller;
+      updateQceMapOnFramePop(state);
       state.popFrame();
 
       if (statsTracker)
@@ -1845,6 +1860,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
   case Instruction::Invoke:
   case Instruction::Call: {
+    updateQceMapBeforeCall(state);
+
     CallSite cs(i);
 
     unsigned numArgs = cs.arg_size();
@@ -2611,6 +2628,238 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
 }
 
+bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
+                                       int vnumber, bool inVhAdd,
+                                       KInstruction *ki, bool framePop) {
+  // Try to get address
+  const Cell& cell = evalV(vnumber, state);
+  if (cell.value.isNull()) {
+    return false; // Not allocated yet
+  }
+
+  ref<ConstantExpr> address = cast<ConstantExpr>(cell.value);
+
+  if (address.isNull()) {
+    klee_warning("!!! wtf, qce tracked address is symbolic ?\n");
+    return false; // XXX: tracked address is symbolic ?
+  }
+
+  // Resolve and check address
+  ObjectPair op;
+  bool ok = state.addressSpace().resolveOne(address, op);
+  if (!ok) {
+    klee_warning("!!! XXX: can not resolve qce track item address!\n");
+    return false; // XXX!
+  }
+
+  const MemoryObject* mo = op.first;
+
+  Expr::Width width = getWidthForLLVMType(
+        cast<PointerType>(hotValue.getValue()->getType())->getElementType());
+  uint64_t size = Expr::getMinBytesForWidth(width);
+
+  ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
+  assert(chk->isTrue() && "Invalid qce track item?");
+
+  uint64_t offset = address->getZExtValue() - op.first->address;
+
+  if (DebugQceMaps) {
+    std::string str;
+    raw_string_ostream ostr(str);
+
+    if (inVhAdd)
+      ostr << "Adding new ";
+    else
+      ostr << "Removing ";
+
+    ostr << "memory track item: * ";
+    if (Instruction *I = dyn_cast<Instruction>(hotValue.getValue())) {
+      Instruction *tmp = I->clone();
+      if (I->hasName())
+        tmp->setName(I->getName());
+      tmp->setMetadata("qce", NULL);
+      tmp->print(ostr);
+      delete tmp;
+      ostr << " (at " << I->getParent()->getParent()->getName() << ")";
+    } else if (Argument *A = dyn_cast<Argument>(hotValue.getValue())) {
+      A->print(ostr);
+      ostr << " (at " << A->getParent()->getName() << ")";
+    } else {
+      hotValue.getValue()->print(ostr);
+    }
+    if (framePop) {
+      ostr << " on frame pop";
+    } else if (ki) {
+      ostr << "\n     at instruction: ";
+      Instruction *tmp = ki->inst->clone();
+      if (ki->inst->hasName())
+        tmp->setName(ki->inst->getName());
+      tmp->setMetadata("qce", NULL);
+      tmp->print(ostr);
+      delete tmp;
+      ostr << " (at " << ki->inst->getParent()->getParent()->getName() << ")\n";
+      ostr << "     at " << ki->info->file << ":" << ki->info->line
+           << " (assembly line " << ki->info->assemblyLine << ")";
+    }
+    fprintf(stderr, "\n%s\n", ostr.str().c_str());
+  }
+
+  QCEMemoryTrackMap &qceMemoryTrackMap = state.crtThread().qceMemoryTrackMap;
+  SimpleIncHash &qceMemoryTrackHash = state.crtThread().qceMemoryTrackHash;
+
+  if (inVhAdd) {
+    for (; size; --size, ++offset) {
+      std::pair<QCEMemoryTrackMap::iterator, bool> res =
+          qceMemoryTrackMap.insert(
+            std::make_pair(QCEMemoryTrackIndex(mo, offset), hotValue));
+      if (!res.second) {
+        assert(res.first->second != hotValue);
+        klee_warning("*** XXX: qce memory track item already exist. Aliasing?\n");
+        continue;
+      }
+
+      ref<Expr> E = op.second->read8(offset);
+      if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
+        qceMemoryTrackHash.addValueAt(CE->getAPValue(), mo, offset);
+    }
+  } else {
+    for (; size; --size, ++offset) {
+      QCEMemoryTrackMap::iterator it = qceMemoryTrackMap.find(
+            QCEMemoryTrackIndex(mo, offset));
+      if (it == qceMemoryTrackMap.end()) {
+        klee_warning("*** XXX: qce memory track item not found. Aliasing?\n");
+        continue;
+      }
+
+      ref<Expr> E = op.second->read8(offset);
+      if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
+        qceMemoryTrackHash.removeValueAt(CE->getAPValue(), mo, offset);
+
+      qceMemoryTrackMap.erase(it);
+    }
+  }
+
+  return true;
+}
+
+/** This function is executed before any CallInst. It updates qceMaps to the
+    state that it would have after the called function returns, except that
+    it does not change inVhAdd values. QC estimations inside the called function
+    are based on the estimations computed here: QC equals QC inside the
+    function, plus QC in the caller just after the function returns */
+void Executor::updateQceMapBeforeCall(ExecutionState &state) {
+  KInstruction *ki = state.pc();
+  if (KQCEInfo *info = ki->qceInfo) {
+    /* Update query count estimation information */
+
+    StackFrame &sf = state.stack().back();
+    sf.qceTotal = sf.qceTotalBase + info->total;
+    float threshold = sf.qceTotal * QceThreshold;
+
+#warning Here we should walk ALL qceMap items!!!
+
+    foreach (KQCEInfoItem &item, info->vars) {
+      // Update QCE estimation
+      QCEMap::iterator qceMapIt = sf.qceMap.insert(
+          std::make_pair(item.hotValue, QCEFrameInfo(&sf, item.vnumber))).first;
+
+      QCEFrameInfo &frame = qceMapIt->second;
+      frame.qce = frame.qceBase + item.qce;
+    }
+  }
+}
+
+/** This function is called just after a new frame is pushed to the stack. It
+    updates qceTotalBase and qceBase values (setting them to QCE estimation in
+    the caller just after the function return) to speedup future computations */
+void Executor::updateQceMapOnFramePush(ExecutionState &state) {
+#warning XXX: first we need to update qceMap in the caller to the state after the call!
+  StackFrame &sf = state.stack().back();
+  sf.qceTotalBase = sf.qceTotal;
+  foreach (QCEMap::value_type &p, sf.qceMap) {
+    p.second.qceBase = p.second.qce;
+  }
+}
+
+/** This function is called just before a frame is popped from the stack. It
+    propagates inVhAdd information to the caller, and removes qce track items
+    that are local to this function (i.e., not present in the caller). */
+void Executor::updateQceMapOnFramePop(ExecutionState &state) {
+  unsigned stackSize = state.stack().size();
+  if (stackSize < 2)
+    return; // We are popping the last frame
+
+  StackFrame &sf = state.stack().back();
+  StackFrame &tSf = state.stack()[stackSize - 2];
+
+  foreach (QCEMap::value_type &p, sf.qceMap) {
+    QCEMap::iterator t = tSf.qceMap.find(p.first);
+    if (t != tSf.qceMap.end()) {
+      // Propagate current status to the parent
+      t->second.inVhAdd = p.second.inVhAdd;
+    } else if (p.second.inVhAdd) {
+      // Remove the track item
+      assert(p.second.stackFrame == &sf);
+      if (p.first.isPtr()) {
+        bool ok =
+            modifyQceMemoryTrackMap(state, p.first, p.second.vnumber, false,
+                                    NULL, true);
+        if (!ok) {
+          klee_warning("*** XXX: can not remove qce memory track item on frame pop\n");
+        }
+      } else {
+#warning Handle locals
+      }
+    }
+  }
+}
+
+/** This function is called after each instruction execution to update QCE
+    information to the current state, adding/removing qce track items as
+    necessary */
+void Executor::instructionExecuted(ExecutionState &state) {
+  KInstruction *ki = state.pc();
+  if (KQCEInfo *info = ki->qceInfo) {
+    /* Update query count estimation information */
+
+    StackFrame &sf = state.stack().back();
+    sf.qceTotal = sf.qceTotalBase + info->total;
+    float threshold = sf.qceTotal * QceThreshold;
+
+#warning Here we should walk ALL qceMap items!!!
+
+    foreach (KQCEInfoItem &item, info->vars) {
+      // Update QCE estimation
+      QCEMap::iterator qceMapIt = sf.qceMap.insert(
+          std::make_pair(item.hotValue, QCEFrameInfo(&sf, item.vnumber))).first;
+
+      QCEFrameInfo &frame = qceMapIt->second;
+      frame.qce = frame.qceBase + item.qce;
+
+      // Now check whether to add the item to Vh
+      bool inVhAdd = frame.qce > threshold &&
+                     frame.qce > QceAbsThreshold;
+      if (inVhAdd != frame.inVhAdd) {
+        if (item.hotValue.isPtr()) {
+          bool ok = modifyQceMemoryTrackMap(state, item.hotValue,
+                                            item.vnumber, inVhAdd, ki);
+          if (ok) {
+            frame.inVhAdd = inVhAdd;
+          } else {
+            assert(!frame.inVhAdd);
+          }
+        } else {
+        }
+      }
+
+      // Remove items with zero QCE
+      if (frame.qce < 0.5 && !frame.inVhAdd) {
+        sf.qceMap.erase(qceMapIt);
+      }
+    }
+  }
+}
+
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
     WallTimer searcherTimer;
@@ -2755,6 +3004,8 @@ void Executor::stepInState(ExecutionState *state) {
   if (UseQueryPCLog)
     setPCLoggingSolverStateID(solver->solver, uint64_t(state));
 
+  assert(addedStates.size() == 0);
+
   {
     WallTimer timer;
     state->lastResolveResult = 0;
@@ -2770,6 +3021,12 @@ void Executor::stepInState(ExecutionState *state) {
       ++stats::instructionsMultExact;
     }
   }
+
+  if (removedStates.count(state) == 0)
+    instructionExecuted(*state);
+
+  foreach (ExecutionState* addedState, addedStates)
+    instructionExecuted(*addedState);
 
   if (UseQueryPCLog)
     setPCLoggingSolverStateID(solver->solver, uint64_t(0));
@@ -2835,6 +3092,9 @@ void Executor::stepInState(ExecutionState *state) {
       // Sort all next states into duplicates of the main state
       if (removedStates.count(duplicate) == 0)
         addedStates.insert(duplicate);
+
+      foreach (ExecutionState* addedState, addedStates)
+        instructionExecuted(*addedState);
 
       foreach (ExecutionState* addedState, addedStates) {
         assert(removedStates.count(addedState) == 0);
