@@ -285,10 +285,10 @@ public:
     StackFrame &sf = t.stack.back();
     for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
            ie = sf.allocas.end(); it != ie; ++it) {
-      updateBlacklistOnFree(*it);
+      //updateBlacklistOnFree(*it);
       processes.find(t.getPid())->second.addressSpace.unbindObject(*it);
     }
-    updateBlacklistBeforePopFrame();
+    //updateBlacklistBeforePopFrame();
     t.stack.pop_back();
   }
   void popFrame() {
@@ -318,6 +318,7 @@ public:
                                ref<ConstantExpr> address, uint64_t size,
                                uint64_t useFreq, uint64_t totalUseFreq);
 
+  /*
   void updateMemoryValue(KInstruction *ki,
                          const MemoryObject *mo, ObjectState *os,
                          ref<Expr> offset, ref<Expr> newValue);
@@ -328,6 +329,7 @@ public:
   void verifyBlacklistHash();
 
   void dumpBlacklist();
+  */
 
   void updateValUseFrequency(llvm::Instruction *inst, int valueIdx,
                              uint64_t useFreq, uint64_t totalUseFreq);

@@ -1139,10 +1139,10 @@ void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
 #endif
 }
 
+#if 0
 void ExecutionState::updateMemoryValue(KInstruction *ki,
                                        const MemoryObject *mo, ObjectState *os,
                                        ref<Expr> offset, ref<Expr> newValue) {
-#if 0
   //if (os->numBlacklistRefs == 0)
   //  return; // This ObjectState is not involved in any blacklist item
 
@@ -1211,11 +1211,11 @@ void ExecutionState::updateMemoryValue(KInstruction *ki,
       std::cerr << "  at:\n  "; ki->dump();
     std::cerr << "  New value: "; newValue->dump();
   }
-#endif
 }
+#endif
 
-void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
 #if 0
+void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
   bool changed = false;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
@@ -1251,11 +1251,11 @@ void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
     verifyBlacklistMap();
     verifyBlacklistHash();
   }
-#endif
 }
+#endif
 
-void ExecutionState::updateBlacklistBeforePopFrame() {
 #if 0
+void ExecutionState::updateBlacklistBeforePopFrame() {
   bool changed = false;
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
   uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
@@ -1304,11 +1304,11 @@ void ExecutionState::updateBlacklistBeforePopFrame() {
     verifyBlacklistMap();
     verifyBlacklistHash();
   }
-#endif
 }
+#endif
 
-void ExecutionState::verifyBlacklistMap() {
 #if 0
+void ExecutionState::verifyBlacklistMap() {
 #ifdef DEBUG_MERGE_BLACKLIST_MAP
 #warning XXX slow
   MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
@@ -1330,9 +1330,10 @@ void ExecutionState::verifyBlacklistMap() {
     assert(os->numBlacklistRefs == correctNumBlacklistRefs);
   }
 #endif
-#endif
 }
+#endif
 
+#if 0
 void ExecutionState::verifyBlacklistHash() {
 #ifdef DEBUG_MERGE_BLACKLIST_MAP
 #warning XXX slow
@@ -1354,10 +1355,11 @@ void ExecutionState::verifyBlacklistHash() {
   assert(crtThread().mergeBlacklistHash == correctMergeBlacklistHash);
 #endif
 }
+#endif
 
 
-void ExecutionState::dumpBlacklist() {
 #if 0
+void ExecutionState::dumpBlacklist() {
   DenseSet<Value*> insts;
 
   foreach (const StackFrame &sf, stack()) {
@@ -1394,8 +1396,8 @@ void ExecutionState::dumpBlacklist() {
       }
     }
   }
-#endif
 }
+#endif
 
 uint64_t _rotl(uint64_t value, unsigned shift) {
     if ((shift &= 63) == 0)

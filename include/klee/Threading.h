@@ -43,6 +43,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 #include <map>
 
@@ -59,7 +60,6 @@ class ExecutionState;
 class Process;
 class CallPathNode;
 class MemoryObject;
-struct StackFrame;
 struct Cell;
 
 typedef uint64_t thread_id_t;
@@ -74,14 +74,14 @@ struct LoopExecIndex {
 };
 
 struct QCEFrameInfo {
-  StackFrame *stackFrame;
-  int   vnumber;
+  int    stackFrame;
+  int    vnumber;
   bool   inVhAdd;
 
   float qce;
   float qceBase;
 
-  QCEFrameInfo(StackFrame* _stackFrame = NULL, int _vnumber = 0)
+  QCEFrameInfo(int _stackFrame = NULL, int _vnumber = 0)
     : stackFrame(_stackFrame), vnumber(_vnumber), inVhAdd(false),
       qce(0), qceBase(0) {}
 };
@@ -133,7 +133,9 @@ struct StackFrame {
 };
 
 typedef std::pair<const MemoryObject*, uint64_t> QCEMemoryTrackIndex;
-typedef llvm::DenseMap<QCEMemoryTrackIndex, HotValue> QCEMemoryTrackMap;
+typedef llvm::SmallPtrSet<HotValue, 1> QCEMemoryTrackSet;
+typedef llvm::DenseMap<QCEMemoryTrackIndex, QCEMemoryTrackSet>
+                  QCEMemoryTrackMap;
 
 class Thread {
   friend class Executor;

@@ -8,6 +8,10 @@
 
 #define QCE_BWIDTH 128
 
+namespace llvm {
+  class raw_ostream;
+}
+
 namespace klee {
 
 enum HotValueKind { HVVal, HVPtr };
@@ -29,6 +33,9 @@ public:
   operator HotValueBaseTy () {
     return HotValueBaseTy::getFromOpaqueValue(getOpaqueValue());
   }
+
+  void print(llvm::raw_ostream& ostr) const;
+  void dump() const;
 };
 
 } // namespace klee
@@ -39,9 +46,10 @@ namespace llvm {
       ID.AddPointer(hv.getOpaqueValue());
     }
   };
+  template<> struct PointerLikeTypeTraits<klee::HotValue>:
+    public PointerLikeTypeTraits<klee::HotValueBaseTy> {};
   template<> struct DenseMapInfo<klee::HotValue>:
-    public DenseMapInfo<PointerIntPair<llvm::Value*, 1, klee::HotValueKind> > {
-  };
+    public DenseMapInfo<klee::HotValueBaseTy> {};
 } // namespace llvm
 
 #endif // KLEE_QCE_H

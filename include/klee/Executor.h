@@ -190,13 +190,23 @@ private:
   void run(ExecutionState &initialState);
 
   // QCE tracking function
+  void dumpQceMap(ExecutionState &state);
+  void verifyQceMap(ExecutionState &state);
   void updateQceMapBeforeCall(ExecutionState &state);
   void updateQceMapOnFramePush(ExecutionState &state);
   void updateQceMapOnFramePop(ExecutionState &state);
+  void updateQceMapOnFree(ExecutionState &state,
+                          const MemoryObject *mo, KInstruction *ki = NULL);
 
   bool modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
                                int vnumber, bool inVhAdd,
-                               KInstruction *ki = NULL, bool framePop = false);
+                               const char *reason = NULL,
+                               KInstruction *ki = NULL);
+
+  void updateQceMemoryValue(ExecutionState &state,
+                            const MemoryObject *mo, ObjectState *os,
+                            ref<Expr> offset, ref<Expr> newValue,
+                            KInstruction *ki = NULL);
 
   // Given a concrete object in our [klee's] address space, add it to
   // objects checked code can reference.
