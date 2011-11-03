@@ -87,6 +87,24 @@ static bool isIgnored(const Value *hotValueDep) {
   return false;
 }
 
+static HotValue getPointerHotValue(Value* Ptr) {
+  assert(Ptr->getType()->isPointerTy());
+  if (Constant *C = dyn_cast<Constant>(Ptr)) {
+    if (!C->isNullValue() && !isIgnored(Ptr))
+      return HotValue(HVPtr, Ptr);
+      //deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
+  } else if (isa<AllocaInst>(Ptr) || isa<Argument>(Ptr)) {
+    return HotValue(HVPtr, Ptr);
+    //deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
+  }
+#warning XXX: why is this commented out ?
+  /*else if (const CallInst *CI = dyn_cast<CallInst>(Ptr)) {
+    if (CI->getCalledFunction()->getName() == "malloc")
+      deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
+  }*/
+  return HotValue(HVVal, NULL);
+}
+
 /// Traverse data flow dependencies of hotValue, gathering its dependencies
 /// on values read from known memory location (only global variables for now).
 /// Return a set of pointers to such memory locations.
@@ -111,18 +129,9 @@ static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
       continue;
 
     if (LoadInst *LI = dyn_cast<LoadInst>(V)) {
-      Value *Ptr = LI->getPointerOperand();
-      if (isa<Constant>(Ptr)) {
-        if (!isIgnored(Ptr))
-          deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
-      } else if (isa<AllocaInst>(Ptr) || isa<Argument>(Ptr)) {
-        deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
-      }
-#warning XXX: why is this commented out ?
-      /*else if (const CallInst *CI = dyn_cast<CallInst>(Ptr)) {
-        if (CI->getCalledFunction()->getName() == "malloc")
-          deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
-      }*/
+      HotValue hotValue = getPointerHotValue(LI->getPointerOperand());
+      if (hotValue.getValue())
+        deps->insert(std::make_pair(hotValue, numUsesMult));
       continue;
 
     } else if (isa<Argument>(V)) {
@@ -207,11 +216,17 @@ static void gatherCallSiteDeps(const CallSite CS,
         //assert(0);
       }
     } else {
-      if (isa<Constant>(HV.getValue())) {
+      if (const Argument* A = dyn_cast<Argument>(HV.getValue())) {
+        Value *V = CS.getArgument(A->getArgNo());
+        if (V->getType()->isPointerTy()) {
+          HotValue hV = getPointerHotValue(V);
+          if (hV.getValue())
+            deps->insert(std::make_pair(hV, numUses));
+        } else {
+#warning Handle bitcasts
+        }
+      } else if (isa<Constant>(HV.getValue())) {
         deps->insert(std::make_pair(HV, numUses));
-      } else {
-#warning XXX
-        //assert(0);
       }
     }
   }
