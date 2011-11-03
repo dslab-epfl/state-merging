@@ -1,7 +1,7 @@
-#!/usr/bin/ipython -pylab
+#!/usr/bin/python
 
 import sys
-from data import Experiment
+from data import Experiment, ClassDict
 from itertools import izip
 from scipy import *
 from scipy import optimize
@@ -21,7 +21,7 @@ def eplot(*args, **kwargs):
             del kwargs[k]
 
     if opts['update']:
-        update_experiments()
+        update_experiments(opts['exps'])
 
     func = plot
     if opts['logx']:
@@ -45,82 +45,64 @@ def eplot(*args, **kwargs):
     legend(loc='lower right')
 
 def plot_cov_time(update=True, exps=None):
+    """ Plot GloballyCoveredInstructions versus ExecutionTime graph for given exps """
     if exps is None:
         exps = el
 
     clf()
     eplot('GloballyCoveredInstructions', update=update, exps=exps)
 
-def compute_instructions_top(el):
-    el.a['InstructionsTop'] = el.a.InstructionsMult + el.a.InstructionsMultHigh * float(2**64)
-    el.stats['InstructionsTop'] = list(el.a.InstructionsTop)
-
 def compute_instructions_approx_1(el, eldup, cuttime=50, upcuttime=None, deg=1):
-    compute_instructions_top(el)
-    compute_instructions_top(eldup)
-    
-    cut_el = where(el.a.ExecutionTime > cuttime)[0][0]
-    cut_eldup = where(eldup.a.ExecutionTime > cuttime)[0][0]
+    cut_el = where(el.stats.ExecutionTime > cuttime)[0][0]
+    cut_eldup = where(eldup.stats.ExecutionTime > cuttime)[0][0]
 
-    el.pfit = polyfit(eldup.a.ExecutionTime[cut_eldup:],
-            eldup.a.InstructionsTop[cut_eldup:] /
-                eldup.a.InstructionsMultExact[cut_eldup:],
+    el.pfit = polyfit(eldup.stats.ExecutionTime[cut_eldup:],
+            eldup.stats.InstructionsMultApprox[cut_eldup:] /
+                eldup.stats.InstructionsMultExact[cut_eldup:],
             deg)
 
-    el.pratio = polyval(el.pfit, el.a.ExecutionTime)
-    el.pratio = where(el.a.ExecutionTime < cuttime, el.pratio, el.pratio[cut_el])
+    el.pratio = polyval(el.pfit, el.stats.ExecutionTime)
+    el.pratio = where(el.stats.ExecutionTime < cuttime, el.pratio, el.pratio[cut_el])
     if upcuttime is not None:
-        upcut_el = where(el.a.ExecutionTime > upcuttime)[0][0]
-        el.pratio = where(el.a.ExecutionTime < upcuttime, el.pratio, el.pratio[upcut_el])
+        upcut_el = where(el.stats.ExecutionTime > upcuttime)[0][0]
+        el.pratio = where(el.stats.ExecutionTime < upcuttime, el.pratio, el.pratio[upcut_el])
 
-    el.a['InstructionsApprox'] = el.a.InstructionsTop / el.pratio
-    el.stats['InstructionsApprox'] = list(el.a.InstructionsApprox)
+    el.stats['InstructionsApprox'] = el.stats.InstructionsMultApprox / el.pratio
 
-    #eldup.a['InstructionsApprox'] = eldup.a.InstructionsTop / el.pratio
-    #eldup.stats['InstructionsApprox'] = list(eldup.a.InstructionsApprox)
+    #eldup.stats['InstructionsApprox'] = eldup.stats.InstructionsMultApprox / el.pratio
 
 def compute_instructions_approx(el, eldup, deg=1):
-    compute_instructions_top(el)
-    compute_instructions_top(eldup)
-    
-    el.pfit = polyfit(eldup.a.InstructionsTop,
-                      eldup.a.InstructionsMultExact,
+    el.pfit = polyfit(eldup.stats.InstructionsMultApprox,
+                      eldup.stats.InstructionsMultExact,
                       deg)
 
-    el.a['InstructionsApprox'] = polyval(el.pfit, el.a.InstructionsTop)
-    el.stats['InstructionsApprox'] = list(el.a.InstructionsApprox)
+    el.stats['InstructionsApprox'] = polyval(el.pfit, el.stats.InstructionsMultApprox)
 
-    eldup.a['InstructionsApprox'] = polyval(el.pfit, eldup.a.InstructionsTop)
-    eldup.stats['InstructionsApprox'] = list(eldup.a.InstructionsApprox)
+    eldup.stats['InstructionsApprox'] = polyval(el.pfit, eldup.stats.InstructionsMultApprox)
 
 def compute_instructions_approx_2(el, eldup):
-    compute_instructions_top(el)
-    compute_instructions_top(eldup)
-
     fitfunc = lambda p, x: p[0]*log(p[1]*x+1)
     errfunc = lambda p, x, y: fitfunc(p, x) - y
 
     p0 = [1500000, 0.00000001] # XXX
 
     p1, ok = optimize.leastsq(errfunc, p0[:],
-            args=(eldup.a.InstructionsTop, eldup.a.InstructionsMultExact))
+            args=(eldup.stats.InstructionsMultApprox, eldup.stats.InstructionsMultExact))
 
     if not ok:
         print 'WARNING: fitting unsuccessful'
 
-    eldup.a['InstructionsApprox'] = fitfunc(p1, eldup.a.InstructionsTop)
-    eldup.stats['InstructionsApprox'] = list(eldup.a.InstructionsApprox)
+    eldup.stats['InstructionsApprox'] = fitfunc(p1, eldup.stats.InstructionsMultApprox)
 
-    el.a['InstructionsApprox'] = fitfunc(p1, el.a.InstructionsTop)
-    el.stats['InstructionsApprox'] = list(el.a.InstructionsApprox)
+    el.stats['InstructionsApprox'] = fitfunc(p1, el.stats.InstructionsMultApprox)
 
 def compute_corrected_time(el, eldup):
-    maxpaths = eldup.a.InstructionsMult[-1]
-    idx = where(el.a.InstructionsMult > maxpaths)[0][0]
-    eldup.a['ExecutionTimeCorr'] = \
-        eldup.a.ExecutionTime * ( \
-            el.a.ExecutionTime[idx] / eldup.a.ExecutionTime[-1])
-    eldup.stats['ExecutionTimeCorr'] = list(eldup.a.ExecutionTimeCorr)
+    maxpaths = eldup.stats.InstructionsMult[-1]
+    idx = where(el.stats.InstructionsMult > maxpaths)[0][0]
+    eldup.stats['ExecutionTimeCorr'] = \
+        eldup.stats.ExecutionTime * ( \
+            el.stats.ExecutionTime[idx] / eldup.stats.ExecutionTime[-1])
+    eldup.stats['ExecutionTimeCorr'] = list(eldup.stats.ExecutionTimeCorr)
 
 def plot_pc_time(el, eldup, elv, compute=True):
     if compute:
@@ -169,30 +151,30 @@ def output_files_all(exps=None, compute=True, order=None):
     for tool,v in elist:
         # Approx
         fapprox.write('time %s-sidekick\n' % tool)
-        for t,p in izip(v[0].a.ExecutionTime, v[0].a.InstructionsApprox):
+        for t,p in izip(v[0].stats.ExecutionTime, v[0].stats.InstructionsApprox):
             fapprox.write('%f %f\n' % (t, p))
         fapprox.write('\n\n')
 
         fapprox.write('time %s-klee\n' % tool)
-        for t,p in izip(v[2].a.ExecutionTime, v[2].a.Instructions):
+        for t,p in izip(v[2].stats.ExecutionTime, v[2].stats.Instructions):
             fapprox.write('%f %f\n' % (t, p))
         fapprox.write('\n\n')
 
         # Exact
         fexact.write('time %s-sidekick-approx %s-sidekick-exact\n' % (tool, tool))
-        for t,p1,p2 in izip(v[1].a.ExecutionTime, v[1].a.InstructionsApprox, v[1].a.InstructionsMultExact):
+        for t,p1,p2 in izip(v[1].stats.ExecutionTime, v[1].stats.InstructionsApprox, v[1].stats.InstructionsMultExact):
             fexact.write('%f %f %f\n' % (t, p1, p2))
         fexact.write('\n\n')
 
         fexact.write('time %s-klee\n' % tool)
-        for t,p in izip(v[2].a.ExecutionTime, v[2].a.Instructions):
+        for t,p in izip(v[2].stats.ExecutionTime, v[2].stats.Instructions):
             fexact.write('%f %f\n' % (t, p))
         fexact.write('\n\n')
 
         # Mult-vs-exact
         fmult.write('%s-inst-mult %s-inst-exact %s-inst-estimate\n')
-        for t,p,e in izip(v[1].a.InstructionsTop, v[1].a.InstructionsMultExact,
-                          v[1].a.InstructionsApprox):
+        for t,p,e in izip(v[1].stats.InstructionsMultApprox, v[1].stats.InstructionsMultExact,
+                          v[1].stats.InstructionsApprox):
             fmult.write('%f %f %f\n' % (t, p, e))
         fmult.write('\n\n')
 
@@ -207,41 +189,41 @@ def output_files(el, eldup, elv, name, compute=True):
     f = open('paths-vs-klee-%s.txt' % name, 'w')
 
     f.write('Time Sidekick-Approx\n')
-    for t,p in izip(el.a.ExecutionTime, el.a.InstructionsApprox):
+    for t,p in izip(el.stats.ExecutionTime, el.stats.InstructionsApprox):
         f.write('%f %f\n' % (t, p))
 
     f.write('\n\n')
     f.write('Time KLEE\n')
-    for t,p in izip(elv.a.ExecutionTime, elv.a.Instructions):
+    for t,p in izip(elv.stats.ExecutionTime, elv.stats.Instructions):
         f.write('%f %f\n' % (t, p))
 
     f.close()
 
     f = open('paths-vs-klee-exact-%s.txt' % name, 'w')
     f.write('Time Sidekick-Exact\n')
-    for t,p in izip(eldup.a.ExecutionTime, eldup.a.InstructionsMultExact):
+    for t,p in izip(eldup.stats.ExecutionTime, eldup.stats.InstructionsMultExact):
         f.write('%f %f\n' % (t, p))
 
     f.write('\n\n')
     f.write('Time Sidekick-Approx\n')
-    for t,p in izip(eldup.a.ExecutionTime, eldup.a.InstructionsApprox):
+    for t,p in izip(eldup.stats.ExecutionTime, eldup.stats.InstructionsApprox):
         f.write('%f %f\n' % (t, p))
 
     try:
-        maxtime_idx = where(elv.a.ExecutionTime > 2*eldup.a.ExecutionTime[-1])[0][0]
+        maxtime_idx = where(elv.stats.ExecutionTime > 2*eldup.stats.ExecutionTime[-1])[0][0]
     except IndexError:
         maxtime_idx = -1
 
     f.write('\n\n')
     f.write('Time KLEE\n')
-    for t,p in izip(elv.a.ExecutionTime[:maxtime_idx], elv.a.Instructions[:maxtime_idx]):
+    for t,p in izip(elv.stats.ExecutionTime[:maxtime_idx], elv.stats.Instructions[:maxtime_idx]):
         f.write('%f %f\n' % (t, p))
     f.close()
 
     f = open('paths-multiplicity-%s.txt' % name, 'w')
     f.write('MultInstructions ExactInstructions ApproxInstructions\n')
-    for t,p,e in izip(eldup.a.InstructionsMult, eldup.a.InstructionsMultExact,
-                      eldup.a.InstructionsApprox):
+    for t,p,e in izip(eldup.stats.InstructionsMult, eldup.stats.InstructionsMultExact,
+                      eldup.stats.InstructionsApprox):
         f.write('%f %f %f\n' % (t,p,e))
     f.close()
 
@@ -252,7 +234,7 @@ def update_experiments(exps=None):
     for exp in exps:
         exp.update()
 
-def compute_diffsym(exps=None):
+def _compute_diffsym(exps=None):
     if exps is None:
         exps = el
 
@@ -275,51 +257,192 @@ def compute_diffsym(exps=None):
         rl = []
         for sym_name, d in r[tool_name].iteritems():
             exec_time = {}
-            for tag in ('vanilla', 'lazy_merge', 'lazy_merge_nl'):
+            vanilla_is_done = False
+            lsm_is_done = False
+            for tag in ('vanilla', 'lazy_merge', 'lazy_merge_nl', 'lazy_merge_t', 'lazy_merge_nl_t'):
                 if tag in d:
                     sym_num = d[tag].sym_num
                     exec_time[tag] = d[tag].stats.ExecutionTime[-1]
+                    #exec_time[tag] = d[tag].stats.UserTime[-1]
+                    if d[tag].is_done:
+                        if tag == 'vanilla':
+                            vanilla_is_done = True
+                        else:
+                            lsm_is_done = True
                 else:
-                    exec_time[tag] = 3600
+                    exec_time[tag] = 3600*2
 
-            rl.append((sym_num, sym_name, exec_time['vanilla'], exec_time['lazy_merge'], exec_time['lazy_merge_nl'],
-                                    exec_time['vanilla'] / min(exec_time['lazy_merge'], exec_time['lazy_merge_nl'])))
+            if not lsm_is_done:
+                continue
+
+            l = [sym_num, sym_name, exec_time['vanilla'], exec_time['lazy_merge'], exec_time['lazy_merge_nl'],
+                    exec_time['lazy_merge_t'], exec_time['lazy_merge_nl_t']]
+            m = min(l[3:])
+            l.append(m)
+            l.append(exec_time['vanilla'] / m)
+            rl.append(l)
+            #rl.append((sym_num, sym_name, exec_time['vanilla'], exec_time['lazy_merge'], exec_time['lazy_merge_nl'],
+            #                        exec_time['vanilla'] / min(exec_time['lazy_merge'], exec_time['lazy_merge_nl'])))
+
         rl.sort()
         r[tool_name] = rl
 
     return r
 
+def compute_diffsym0(exps=None):
+    r = _compute_diffsym(exps)
+    for k in r.keys():
+        for i in xrange(len(r[k])):
+            l = r[k][i]
+            r[k][i] = l[:3] + l[-2:]
+    return r
+
+def categorize_exps(exps=None):
+    if exps is None:
+        exps = el
+
+    ex = ClassDict()
+    for e in exps:
+        exI = ex
+        name_parts = e.name.split('-')
+
+        # XXX
+        if len(name_parts) > 3:
+            name_parts = [name_parts[0], 'n'+name_parts[3], name_parts[1]]
+
+        for part in name_parts[:-1]:
+            if exI.has_key(part):
+                if not isinstance(exI[part], ClassDict):
+                    exInew = ClassDict()
+                    exInew[None] = exI[part]
+                    exI[part] = exInew
+            else:
+                exI[part] = ClassDict()
+            exI = exI[part]
+
+        part = name_parts[-1]
+        if exI.has_key(part):
+            assert isinstance(exI[part], ClassDict())
+            exI[part][None] = e
+        else:
+            exI[part] = e
+
+    return ex
+
+def compute_diffsym(exps=None):
+    if exps is None:
+        exps = el
+
+    result = {}
+    exps = categorize_exps(exps)
+    for tool, tool_exps in exps.iteritems():
+        for exp_n, exp in tool_exps.iteritems():
+            lm_finished = klee_finished = False
+            lm_time = klee_time = 7200.0 # XXX
+
+            if exp.has_key('lazy_merge'):
+                lm_finished = exp.lazy_merge.is_done
+                lm_time = exp.lazy_merge.stats.ExecutionTime[-1]
+
+            if exp.has_key('lazy_merge_nl'):
+                lm_finished = lm_finished or exp.lazy_merge_nl.is_done
+                lm_time = min((lm_time, exp.lazy_merge_nl.stats.ExecutionTime[-1]))
+
+            if exp.has_key('vanilla'):
+                klee_finished = exp.vanilla.is_done
+                # We are re-running vanilla experiments right now... hack to skip non-finished re-runs
+                if klee_finished or exp.vanilla.stats.ExecutionTime[-1] > 7200:
+                    klee_time = exp.vanilla.stats.ExecutionTime[-1]
+
+            if lm_finished:
+                result.setdefault(tool, list()).append([
+                    int(exp_n[1:]), exp_n, klee_time, lm_time, klee_time / lm_time, klee_finished])
+
+            # Some interesting cases:
+            if klee_finished and not lm_finished:
+                print "klee_finished and not lm_finished:", tool, exp_n
+
+    for k in result.keys():
+        result[k].sort(cmp=lambda x, y: cmp(x[0], y[0]))
+
+    return result
+
 def print_diffsym(r):
     for tool, rl in r.iteritems():
         print tool + ':'
         for x in rl:
-            print '  %2d (%10s) %8.2f %8.2f %8.2f ' % x[:-1],
-            if x[3] != 3600 or x[4] != 3600:
-                print '%8.2f' % x[5]
+            print '  %2d (%10s) %8.2f %8.2f' % \
+                    (x[0], x[1], x[2], x[3]),
+            if x[3] != 3600*2:
+                if x[2] == 3600*2:
+                    print ' >%8.2f' % x[4]
+                else:
+                    print ' %8.2f' % x[4]
+            else:
+                print
+
+def _print_diffsym(r):
+    for tool, rl in r.iteritems():
+        print tool + ':'
+        for x in rl:
+            print '  %2d (%10s) %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f' % tuple(x[:-1]),
+            if x[-2] != 3600*2:
+                if x[2] == 3600*2:
+                    print ' >%8.2f' % x[-1]
+                else:
+                    print ' %8.2f' % x[-1]
             else:
                 print
 
 if __name__ == '__main__':
-    
-    if len(sys.argv) < 2:
-        sys.stderr.write("Usage: %s klee-out-1 klee-out-2 ...\n" % sys.argv[0])
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description='KLEE data analyzer')
+    #parser.add_argument('-i', '--interactive', action='store_true', help='Run in interactive mode')
+    parser.add_argument('--incomplete', action='store_true', help='Include incomplete experiments')
+    parser.add_argument('--timeout', type=int, default=0,
+                        help='Timeout in seconds after which an experiment is considered completed')
+    parser.add_argument('--diffsym', action='store_true', help='Compute and store diffsym results')
+    parser.add_argument('experiments', nargs='+', help='Experiments to analyze')
 
-    el = []
-    es = []
+    args = parser.parse_args()
+
+    el = []             # A list of all experiments
+    ex = ClassDict()    # A tree of all experiments sorted by dash-separated parts in the names
 
     n = 0
-    for klee_dir in sys.argv[1:]:
-         e = Experiment(klee_dir)
-         if not hasattr(e, 'stats'):
-             continue
-         el.append(e)
-         es.append(el[n].stats)
-         globals()['el' + str(n)] = el[n]
-         globals()['es' + str(n)] = el[n].stats
-         n = n + 1
+    for klee_dir in args.experiments:
+        e = Experiment(klee_dir)
 
+        if not e.is_loaded:
+            print 'Cannot load experiment: ' + klee_dir
+            continue
+
+        if not args.incomplete:
+            if not e.is_done:
+                if not args.timeout or e.stats.WallTime[-1] < args.timeout:
+                    print 'Experiment is incomplete: ' + klee_dir
+                    continue
+
+        el.append(e)
+        globals()['el' + str(n)] = el[n]
+        n = n + 1
+
+    print 'Loaded %d experiments' % (n,)
+
+    ex = categorize_exps(el)
+
+    if args.diffsym:
+        print 'Computing diffsym data...'
+        r = compute_diffsym()
+        import pickle
+        pickle.dump(r, open('diffsym.pickle', 'w'))
+        print_diffsym(r)
+
+    #if not args.interactive:
+    #    sys.exit(0)
 
 #    from IPython.Shell import IPShellEmbed
 #    ipshell = IPShellEmbed()
 #    ipshell()
+
+

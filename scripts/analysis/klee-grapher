@@ -1,0 +1,10 @@
+#!/bin/bash
+
+if [ "$1" = "-i" ]
+then
+    shift
+    ipython -pylab -- $(which klee-grapher.py) "$@"
+else
+    klee-grapher.py "$@"
+fi
+
