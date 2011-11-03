@@ -109,8 +109,8 @@ namespace {
       cl::desc("A file containing initial coverage values"));
 
   cl::opt<bool>
-  EnableUseFreq("enable-use-freq",
-      cl::desc("Enable use frequency analysis for state merging"),
+  EnableQCE("enable-qce",
+      cl::desc("Enable QCE analysis for state merging"),
       cl::init(true));
 
   cl::opt<bool>
@@ -550,8 +550,8 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     pm4.add(createIndVarSimplifyPass()); // Improves trip-count computation
     if (EnableExecIndex)
       pm4.add(new AnnotateLoopPass());
-    if (EnableUseFreq)
-      pm4.add(new UseFrequencyAnalyzerPass(targetData));
+    if (EnableQCE)
+      pm4.add(new QCEAnalyzerPass());
     pm4.add(new PhiCleanerPass()); // LoopSimplify pass may have changed PHIs
     pm4.add(createVerifierPass());
     pm4.run(*module);

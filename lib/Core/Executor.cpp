@@ -2684,8 +2684,8 @@ void Executor::dumpQceMap(ExecutionState &state) {
   dbgs() << "\n";
 }
 
+#ifdef VERIFY_QCE_MAP
 void Executor::verifyQceMap(ExecutionState &state) {
-#if 0
   unsigned stackSize = state.stack().size();
   StackFrame &sf = state.stack().back();
 
@@ -2771,8 +2771,8 @@ void Executor::verifyQceMap(ExecutionState &state) {
     assert(lHash == sf.qceLocalsTrackHash);
   }
 
-#endif
 }
+#endif
 
 bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
                                        int vnumber, bool inVhAdd,

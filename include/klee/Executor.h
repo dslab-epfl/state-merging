@@ -31,6 +31,8 @@
 #include <map>
 #include <set>
 
+//#define VERIFY_QCE_MAPS
+
 struct KTest;
 
 namespace llvm {
@@ -190,7 +192,12 @@ private:
 
   // QCE tracking function
   void dumpQceMap(ExecutionState &state);
+
+#ifdef VERIFY_QCE_MAPS
   void verifyQceMap(ExecutionState &state);
+#else
+  void verifyQceMap(ExecutionState &state) {}
+#endif
 
   void updateQceMapOnExec(ExecutionState &state);
   void updateQceMapBeforeCall(ExecutionState &state);
