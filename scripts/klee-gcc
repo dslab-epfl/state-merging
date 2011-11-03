@@ -94,6 +94,12 @@ def main():
             linkArgs.append('-r')
             continue
 
+        if a == '-lrt':
+            continue
+
+        if a == '-lcrypt':
+            continue
+
 	if a.endswith(".c") or a.endswith(".cpp") or a.endswith(".cc") or a.endswith(".CC"):
 	    continue    	
 	   	
