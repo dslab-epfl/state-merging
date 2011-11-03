@@ -58,19 +58,14 @@ namespace {
        cl::init(false));
 
   cl::opt<bool>
-  DebugMaxInstrCountDelta("debug-maxinstr-delta",
-      cl::desc("Displays rejected forwarding opportunities due to exceeded maximum instruction count delta"),
-      cl::init(false));
-
-  cl::opt<bool>
   DebugStaticMerging("debug-static-merging",
       cl::desc("Displays state changes in the static merging algorithm (verbose!)"),
       cl::init(false));
 
   cl::opt<unsigned>
-  MaxInstrDifference("max-inst-difference",
+  LsmTraceLength("lsm-trace-length",
       cl::desc("Maximum difference between instruction counters for forwarding states"),
-      cl::init(1000));
+      cl::init(10000));
 }
 
 namespace klee {
@@ -660,7 +655,7 @@ LazyMergingSearcher::LazyMergingSearcher(Executor &_executor, Searcher *_baseSea
   : executor(_executor),
     baseSearcher(_baseSearcher),
     // One item is never used, one other is to convert difference to item count
-    stateIndexesSize(MaxInstrDifference+2)
+    stateIndexesSize(LsmTraceLength+2)
 {
 }
 
