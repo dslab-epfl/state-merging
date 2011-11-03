@@ -469,6 +469,9 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   // avoid creating stale uses.
 
   const llvm::Type *i8Ty = Type::getInt8Ty(getGlobalContext());
+  const llvm::Type *i16Ty = Type::getInt16Ty(getGlobalContext());
+  const llvm::Type *i32Ty = Type::getInt32Ty(getGlobalContext());
+  const llvm::Type *i64Ty = Type::getInt64Ty(getGlobalContext());
   forceImport(module, "memcpy", PointerType::getUnqual(i8Ty),
               PointerType::getUnqual(i8Ty),
               PointerType::getUnqual(i8Ty),
@@ -481,6 +484,13 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
               PointerType::getUnqual(i8Ty),
               Type::getInt32Ty(getGlobalContext()),
               targetData->getIntPtrType(getGlobalContext()), (Type*) 0);
+
+  forceImport(module, "uadds", i32Ty, i16Ty, i16Ty, (Type*) 0);
+  forceImport(module, "uadd",  i64Ty, i32Ty, i32Ty, (Type*) 0);
+
+  const llvm::Type *i64PairTy = StructType::get(getGlobalContext(),
+                                                i64Ty, i64Ty, (Type*) 0);
+  forceImport(module, "uaddl", i64PairTy, i64Ty, i64Ty, (Type*) 0);
 
   // FIXME: Missing force import for various math functions.
 
