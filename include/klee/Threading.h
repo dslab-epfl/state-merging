@@ -74,9 +74,9 @@ struct LoopExecIndex {
 };
 
 struct QCEFrameInfo {
-  int    stackFrame;
-  int    vnumber;
-  bool   inVhAdd;
+  unsigned stackFrame;
+  int      vnumber;
+  bool     inVhAdd;
 
   float qce;
   float qceBase;
@@ -87,6 +87,8 @@ struct QCEFrameInfo {
 };
 
 typedef llvm::DenseMap<HotValue, QCEFrameInfo> QCEMap;
+
+#define QCE_LOCALS_MAGIC_VALUE 0xde1fa442ff3e32abL
 
 struct StackFrame {
   KInstIterator caller;
@@ -121,8 +123,8 @@ struct StackFrame {
   float qceTotalBase;
   QCEMap qceMap;
 
-  BitArray localBlacklistMap;
-  uint64_t localBlacklistHash;
+  BitArray      qceLocalsTrackMap;
+  SimpleIncHash qceLocalsTrackHash;
 
   StackFrame(KInstIterator caller, uint64_t _callerExecIndex,
              KFunction *kf, StackFrame *parentFrame);

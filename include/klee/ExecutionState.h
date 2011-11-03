@@ -329,12 +329,12 @@ public:
   void verifyBlacklistHash();
 
   void dumpBlacklist();
-  */
 
   void updateValUseFrequency(llvm::Instruction *inst, int valueIdx,
                              uint64_t useFreq, uint64_t totalUseFreq);
   void updateLocalValue(KInstruction *target, int valueIdx, ref<Expr>& newValue);
   void verifyLocalBlacklistHash();
+  */
 
 };
 

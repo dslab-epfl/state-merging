@@ -183,7 +183,6 @@ private:
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   
   void executeInstruction(ExecutionState &state, KInstruction *ki);
-  void instructionExecuted(ExecutionState &state);
 
   void printFileLine(ExecutionState &state, KInstruction *ki);
 
@@ -192,6 +191,8 @@ private:
   // QCE tracking function
   void dumpQceMap(ExecutionState &state);
   void verifyQceMap(ExecutionState &state);
+
+  void updateQceMapOnExec(ExecutionState &state);
   void updateQceMapBeforeCall(ExecutionState &state);
   void updateQceMapOnFramePush(ExecutionState &state);
   void updateQceMapOnFramePop(ExecutionState &state);
@@ -206,6 +207,15 @@ private:
   void updateQceMemoryValue(ExecutionState &state,
                             const MemoryObject *mo, ObjectState *os,
                             ref<Expr> offset, ref<Expr> newValue,
+                            KInstruction *ki = NULL);
+
+  bool modifyQceLocalsTrackMap(ExecutionState &state, HotValue hotValue,
+                               StackFrame &sf, int vnumber, bool inVhAdd,
+                               const char *reason = NULL,
+                               KInstruction *ki = NULL);
+
+  void updateQceLocalsValue(ExecutionState &state,
+                            int vnumber, ref<Expr> &newValue,
                             KInstruction *ki = NULL);
 
   // Given a concrete object in our [klee's] address space, add it to

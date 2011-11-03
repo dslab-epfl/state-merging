@@ -165,7 +165,7 @@ void ExecutionState::setPC(const KInstIterator& newPC) {
           crtThread().stack.back().execIndexStack.back().index,
           (uintptr_t) (KInstruction*) newPC),
     sIndex = hashUpdate(sIndex,
-          crtThread().stack.back().localBlacklistHash);
+          crtThread().stack.back().qceLocalsTrackHash.getHashValue());
   }
 
   sIndex = hashUpdate(hashUpdate(hashUpdate(sIndex, symbolicsHash),
@@ -760,22 +760,22 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
     // XXX vaargs?
     assert(itA->caller==itB->caller && itA->kf==itB->kf);
 
-    if (itA->localBlacklistHash != itB->localBlacklistHash) {
+    if (itA->qceLocalsTrackHash != itB->qceLocalsTrackHash) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: local merge blacklist hashs are different\n";
+        std::cerr << "---- merge failed: qce local track hashs are different\n";
       return false;
     }
 
     for (unsigned i=0; i<itA->kf->numRegisters; i++) {
       ++numItems;
 
-      if (itA->localBlacklistMap.get(i) != itB->localBlacklistMap.get(i)) {
+      if (itA->qceLocalsTrackMap.get(i) != itB->qceLocalsTrackMap.get(i)) {
         if (DebugLogStateMerge)
-          std::cerr << "---- merge failed: local merge blacklists are different\n";
+          std::cerr << "---- merge failed: qce local track maps are different\n";
         return false;
       }
 
-      if (itA->localBlacklistMap.get(i)) {
+      if (itA->qceLocalsTrackMap.get(i)) {
         const ref<Expr> &av = itA->locals[i].value;
 
         bool isNumA = !av.isNull() && isa<ConstantExpr>(av);
@@ -787,7 +787,7 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
 
         if (isNumA != isNumB || valA != valB) {
           if (DebugLogStateMerge) {
-            std::cerr << "---- merge failed: local merge blacklists "
+            std::cerr << "---- merge failed: qce local track variables "
                       << "have different values\n";
             std::cerr << "    Av: ";
             if (av.isNull())
@@ -1399,6 +1399,7 @@ void ExecutionState::dumpBlacklist() {
 }
 #endif
 
+#if 0
 uint64_t _rotl(uint64_t value, unsigned shift) {
     if ((shift &= 63) == 0)
       return value;
@@ -1560,6 +1561,7 @@ void ExecutionState::verifyLocalBlacklistHash() {
   }
 #endif
 }
+#endif
 
 /***/
 

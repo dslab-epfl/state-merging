@@ -50,8 +50,7 @@ StackFrame::StackFrame(KInstIterator _caller, uint64_t _callerExecIndex, KFuncti
     qceTotal(parentFrame ? parentFrame->qceTotal : 0),
     qceTotalBase(parentFrame ? parentFrame->qceTotalBase : 0),
     qceMap(parentFrame ? parentFrame->qceMap : QCEMap()),
-    localBlacklistMap(_kf->numRegisters, false),
-    localBlacklistHash(hashInit()) {
+    qceLocalsTrackMap(_kf->numRegisters, false) {
 
   execIndexStack[0].loopID = uint64_t(-1);
   execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
@@ -73,8 +72,8 @@ StackFrame::StackFrame(const StackFrame &s)
     qceTotal(s.qceTotal),
     qceTotalBase(s.qceTotalBase),
     qceMap(s.qceMap),
-    localBlacklistMap(s.localBlacklistMap, s.kf->numRegisters),
-    localBlacklistHash(s.localBlacklistHash) {
+    qceLocalsTrackMap(s.qceLocalsTrackMap, s.kf->numRegisters),
+    qceLocalsTrackHash(s.qceLocalsTrackHash) {
 
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i=0; i<s.kf->numRegisters; i++)
@@ -94,8 +93,8 @@ StackFrame& StackFrame::operator=(const StackFrame &s) {
     qceTotal = s.qceTotal;
     qceTotalBase = s.qceTotalBase;
     qceMap = s.qceMap;
-    localBlacklistMap = BitArray(s.localBlacklistMap, s.kf->numRegisters);
-    localBlacklistHash = s.localBlacklistHash;
+    qceLocalsTrackMap = BitArray(s.qceLocalsTrackMap, s.kf->numRegisters);
+    qceLocalsTrackHash = s.qceLocalsTrackHash;
 
     if (locals)
       delete []locals;
