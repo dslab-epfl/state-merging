@@ -19,8 +19,8 @@ typedef llvm::PointerIntPair<llvm::Value*, 1, HotValueKind> HotValueBaseTy;
 
 class HotValue: public HotValueBaseTy {
 public:
-  HotValue(): PointerIntPair(NULL, HVVal) {}
-  HotValue(HotValueKind K, llvm::Value *V): PointerIntPair(V, K) {}
+  HotValue(): HotValueBaseTy(NULL, HVVal) {}
+  HotValue(HotValueKind K, llvm::Value *V): HotValueBaseTy(V, K) {}
 
   llvm::Value *getValue() const { return getPointer(); }
   HotValueKind getKind() const { return getInt(); }
@@ -29,7 +29,7 @@ public:
   bool isPtr() const { return getInt() == HVPtr; }
 
   // An easy way to support DenseMap
-  HotValue(const HotValueBaseTy& P): PointerIntPair(P) {}
+  HotValue(const HotValueBaseTy& P): HotValueBaseTy(P) {}
   operator HotValueBaseTy () {
     return HotValueBaseTy::getFromOpaqueValue(getOpaqueValue());
   }
