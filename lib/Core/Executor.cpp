@@ -2784,7 +2784,7 @@ bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
     return false; // Not allocated yet
   }
 
-  ref<ConstantExpr> address = cast<ConstantExpr>(cell.value);
+  ref<ConstantExpr> address = dyn_cast<ConstantExpr>(cell.value);
 
   if (address.isNull()) {
     klee_warning("!!! XXX, qce tracked address is symbolic ?\n");
