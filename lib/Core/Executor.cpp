@@ -58,6 +58,7 @@
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
 #if (LLVM_VERSION_MAJOR == 2 && LLVM_VERSION_MINOR < 9)
 #include "llvm/System/Process.h"
 #else
@@ -310,8 +311,16 @@ namespace {
   DebugMergeSlowdown("debug-merge-slowdown",
           cl::desc("Debug slow-down of merged states"),
           cl::init(false));
-}
 
+  cl::opt<float>
+  QceThreshold("qce-threshold", cl::init(1e-8));
+
+  cl::opt<float>
+  QceAbsThreshold("qce-abs-threshold", cl::init(0));
+
+  cl::opt<bool>
+  DebugQceMaps("debug-qce-maps", cl::init(false));
+}
 
 static void *theMMap = 0;
 static unsigned theMMapSize = 0;
@@ -1210,10 +1219,10 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, 
                          ref<Expr> value) {
-  state.verifyLocalBlacklistHash();
-  state.updateLocalValue(target, target->dest, value);
+  verifyQceMap(state);
+  updateQceLocalsValue(state, target->dest, value, target);
   getDestCell(state, target).value = value;
-  state.verifyLocalBlacklistHash();
+  verifyQceMap(state);
 }
 
 void Executor::bindArgument(KFunction *kf, unsigned index, 
@@ -1434,6 +1443,8 @@ void Executor::executeCall(ExecutionState &state,
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC(), kf);
     state.setPC(kf->instructions);
+
+    updateQceMapOnFramePush(state);
         
     if (statsTracker)
       statsTracker->framePushed(state, &state.stack()[state.stack().size()-2]); //XXX TODO fix this ugly stuff
@@ -1594,6 +1605,7 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
 
+#if 0
   if (const MDNode *md = i->getMetadata("ul")) {
     // A special case of blacklist node
     assert(cast<ConstantInt>(md->getOperand(0))->getZExtValue() == 0);
@@ -1606,6 +1618,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // XXX
     }
   }
+#endif
 
   switch (i->getOpcode()) {
     // Control flow
@@ -1644,6 +1657,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         executeCall(state, NULL, f, arguments);
       }
     } else {
+      updateQceMapOnFramePop(state);
       state.popFrame();
 
       if (statsTracker)
@@ -1691,6 +1705,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::Unwind: {
     for (;;) {
       KInstruction *kcaller = state.stack().back().caller;
+      updateQceMapOnFramePop(state);
       state.popFrame();
 
       if (statsTracker)
@@ -1845,6 +1860,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
   case Instruction::Invoke:
   case Instruction::Call: {
+    updateQceMapBeforeCall(state);
+
     CallSite cs(i);
 
     unsigned numArgs = cs.arg_size();
@@ -2611,6 +2628,653 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
 }
 
+bool _qceListComparator(const QCEMap::value_type &a,
+                       const QCEMap::value_type &b) {
+  return a.second.qce > b.second.qce;
+}
+
+bool _qceHotValueComparator(HotValue a, HotValue b) {
+  if (a.getValue()->hasName() && b.getValue()->hasName())
+    return strcmp(a.getValue()->getNameStr().c_str(),
+                  b.getValue()->getNameStr().c_str()) < 0;
+  else if (a.getValue()->hasName())
+    return true;
+  else if (b.getValue()->hasName())
+    return false;
+  else
+    return a.getValue() < b.getValue();
+}
+
+void Executor::dumpQceMap(ExecutionState &state) {
+  dbgs() << "Total QCE: " << state.stack().back().qceTotal << "\n";
+  dbgs() << "qceMap map:\n";
+
+  StackFrame &sf = state.stack().back();
+  std::vector<QCEMap::value_type> qceList(sf.qceMap.begin(), sf.qceMap.end());
+  std::sort(qceList.begin(), qceList.end(), _qceListComparator);
+
+  foreach (QCEMap::value_type &p, qceList) {
+    dbgs() << "  " << (p.second.inVhAdd ? "+" : "-")
+           << " (" << p.second.qce << ") "
+           << " vn=" << p.second.vnumber << " ";
+    p.first.dump();
+  }
+
+  dbgs() << "qceMemoryTrackMap:\n";
+
+  std::set<HotValue, bool (*)(HotValue, HotValue)>
+      qceMemoryTrackSet(_qceHotValueComparator);
+  foreach (QCEMemoryTrackMap::value_type &p,
+           state.crtThread().qceMemoryTrackMap) {
+    foreach (HotValue hv, p.second)
+      qceMemoryTrackSet.insert(hv);
+  }
+
+  foreach (HotValue hotValue, qceMemoryTrackSet) {
+    dbgs() << "  ";
+    hotValue.dump();
+  }
+
+  dbgs() << "qceLocalsTrackMap:\n    ";
+  for (unsigned i = 0, e = sf.kf->numRegisters; i != e; ++i) {
+    if (sf.qceLocalsTrackMap.get(i)) {
+      dbgs() << i << " ";
+    }
+  }
+  dbgs() << "\n";
+}
+
+#ifdef VERIFY_QCE_MAP
+void Executor::verifyQceMap(ExecutionState &state) {
+  unsigned stackSize = state.stack().size();
+  StackFrame &sf = state.stack().back();
+
+  DenseSet<HotValue> activeHotValues1;
+  DenseSet<HotValue> activeHotValues2;
+
+  BitArray qceLocals(sf.qceLocalsTrackMap, sf.kf->numRegisters);
+
+  foreach (QCEMap::value_type &p, sf.qceMap) {
+    if (p.second.inVhAdd) {
+      if (p.first.isPtr()) {
+        activeHotValues1.insert(p.first);
+      } else {
+        assert(p.second.stackFrame < stackSize);
+        if (p.second.stackFrame == stackSize - 1) {
+          assert(p.second.vnumber >= 0 &&
+                 p.second.vnumber < int(sf.kf->numRegisters));
+          if (!qceLocals.get(p.second.vnumber)) {
+            dumpQceMap(state);
+            assert(qceLocals.get(p.second.vnumber));
+          }
+          qceLocals.unset(p.second.vnumber);
+        }
+      }
+    }
+  }
+
+  SimpleIncHash hash;
+  foreach (QCEMemoryTrackMap::value_type &p,
+           state.crtThread().qceMemoryTrackMap) {
+    assert(!p.second.empty());
+
+    foreach (HotValue hv, p.second)
+      activeHotValues2.insert(hv);
+
+    const MemoryObject *mo = p.first.first;
+    const ObjectState *os = state.addressSpace().findObject(mo);
+    assert(os != NULL);
+
+    unsigned value = os->read8c(p.first.second);
+    hash.addValueAt(APInt(32, value), mo, p.first.second);
+  }
+
+  foreach (const HotValue &hv, activeHotValues1) {
+    DenseSet<HotValue>::iterator it = activeHotValues2.find(hv);
+    if (it == activeHotValues2.end()) {
+      dumpQceMap(state);
+      assert(it != activeHotValues2.end());
+    }
+    activeHotValues2.erase(it);
+  }
+
+  if (activeHotValues2.size() != 0) {
+    dumpQceMap(state);
+    assert(activeHotValues2.size() == 0);
+  }
+
+  if (hash != state.crtThread().qceMemoryTrackHash) {
+    dumpQceMap(state);
+    assert(hash == state.crtThread().qceMemoryTrackHash);
+  }
+
+  /* We verify only top-level locals */
+  SimpleIncHash lHash;
+  for (unsigned i = 0; i < sf.kf->numRegisters; ++i) {
+    if (qceLocals.get(i)) {
+      dumpQceMap(state);
+      assert(!qceLocals.get(i));
+    }
+
+    if (sf.qceLocalsTrackMap.get(i)) {
+      ref<Expr> &value = sf.locals[i].value;
+      if (!value.isNull() && isa<ConstantExpr>(value)) {
+        lHash.addValueAt(cast<ConstantExpr>(value)->getAPValue(), i);
+      } else {
+        lHash.addValueAt(APInt(64, QCE_LOCALS_MAGIC_VALUE), i);
+      }
+    }
+  }
+
+  if (lHash != sf.qceLocalsTrackHash) {
+    dumpQceMap(state);
+    assert(lHash == sf.qceLocalsTrackHash);
+  }
+
+}
+#endif
+
+bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
+                                       int vnumber, bool inVhAdd,
+                                       const char* reason,
+                                       KInstruction *ki) {
+  // Try to get address
+  const Cell& cell = evalV(vnumber, state);
+  if (cell.value.isNull()) {
+    return false; // Not allocated yet
+  }
+
+  ref<ConstantExpr> address = cast<ConstantExpr>(cell.value);
+
+  if (address.isNull()) {
+    klee_warning("!!! XXX, qce tracked address is symbolic ?\n");
+    return false; // XXX: tracked address is symbolic ?
+  }
+
+  // Resolve and check address
+  ObjectPair op;
+  bool ok = state.addressSpace().resolveOne(address, op);
+  if (!ok) {
+    klee_warning("!!! XXX: can not resolve qce track item address!\n");
+    return false; // XXX!
+  }
+
+  const MemoryObject* mo = op.first;
+
+  Expr::Width width = getWidthForLLVMType(
+        cast<PointerType>(hotValue.getValue()->getType())->getElementType());
+  uint64_t size = Expr::getMinBytesForWidth(width);
+
+  ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
+  assert(chk->isTrue() && "Invalid qce track item?");
+
+  uint64_t offset = address->getZExtValue() - op.first->address;
+
+  if (DebugQceMaps) {
+    std::string str;
+    raw_string_ostream ostr(str);
+
+    if (inVhAdd)
+      ostr << "Adding new ";
+    else
+      ostr << "Removing ";
+
+    ostr << "qce memory track item: ";
+    hotValue.print(ostr);
+
+    if (reason)
+      ostr << " " << reason;
+
+    if (ki) {
+      ostr << "\n     at instruction: ";
+      Instruction *tmp = ki->inst->clone();
+      if (ki->inst->hasName())
+        tmp->setName(ki->inst->getName());
+      tmp->setMetadata("qce", NULL);
+      tmp->print(ostr);
+      delete tmp;
+      ostr << " (at " << ki->inst->getParent()->getParent()->getName() << ")\n";
+      ostr << "     at " << ki->info->file << ":" << ki->info->line
+           << " (assembly line " << ki->info->assemblyLine << ")";
+    }
+    fprintf(stderr, "\n%s\n", ostr.str().c_str());
+  }
+
+  QCEMemoryTrackMap &qceMemoryTrackMap = state.crtThread().qceMemoryTrackMap;
+  SimpleIncHash &qceMemoryTrackHash = state.crtThread().qceMemoryTrackHash;
+
+  if (inVhAdd) {
+    for (; size; --size, ++offset) {
+      QCEMemoryTrackSet &set = qceMemoryTrackMap.insert(
+            std::make_pair(QCEMemoryTrackIndex(mo, offset),
+                           QCEMemoryTrackSet())).first->second;
+      bool inserted = set.insert(hotValue);
+      if (!inserted) {
+        //assert(res.first->second != hotValue);
+        //klee_warning("*** XXX: qce memory track item already exist. Aliasing?\n");
+        continue;
+      }
+
+      unsigned value = op.second->read8c(offset);
+      qceMemoryTrackHash.addValueAt(APInt(32, value), mo, offset);
+    }
+  } else {
+    for (; size; --size, ++offset) {
+      QCEMemoryTrackMap::iterator it = qceMemoryTrackMap.find(
+            QCEMemoryTrackIndex(mo, offset));
+      if (it == qceMemoryTrackMap.end()) {
+        dumpQceMap(state);
+        assert(false && "*** XXX: qce memory track item not found");
+        continue;
+      }
+
+      bool erased = it->second.erase(hotValue);
+      if (!erased) {
+        dumpQceMap(state);
+        assert(false && "*** XXX: qce memory track item not found");
+        continue;
+      }
+
+      if (it->second.empty())
+        qceMemoryTrackMap.erase(it);
+
+      unsigned value = op.second->read8c(offset);
+      qceMemoryTrackHash.removeValueAt(APInt(32, value), mo, offset);
+    }
+  }
+
+  return true;
+}
+
+/** This function is executed before any CallInst. It updates qceMaps to the
+    state that it would have after the called function returns, except that
+    it does not change inVhAdd values. QC estimations inside the called function
+    are based on the estimations computed here: QC equals QC inside the
+    function, plus QC in the caller just after the function returns */
+void Executor::updateQceMapBeforeCall(ExecutionState &state) {
+  verifyQceMap(state);
+
+  KInstruction *ki = state.pc();
+  if (KQCEInfo *info = ki->qceInfo) {
+    /* Update query count estimation information */
+
+    StackFrame &sf = state.stack().back();
+    sf.qceTotal = sf.qceTotalBase + info->total;
+
+#warning Here we should walk ALL qceMap items!!!
+
+    foreach (KQCEInfoItem &item, info->vars) {
+      // Update QCE estimation
+      QCEMap::iterator qceMapIt = sf.qceMap.insert(
+          std::make_pair(item.hotValue,
+                QCEFrameInfo(state.stack().size()-1, item.vnumber))).first;
+
+      QCEFrameInfo &frame = qceMapIt->second;
+      frame.qce = frame.qceBase + item.qce;
+    }
+  }
+
+  verifyQceMap(state);
+}
+
+/** This function is called just after a new frame is pushed to the stack. It
+    updates qceTotalBase and qceBase values (setting them to QCE estimation in
+    the caller just after the function return) to speedup future computations */
+void Executor::updateQceMapOnFramePush(ExecutionState &state) {
+  verifyQceMap(state);
+
+#warning XXX: first we need to update qceMap in the caller to the state after the call!
+  StackFrame &sf = state.stack().back();
+  sf.qceTotalBase = sf.qceTotal;
+  foreach (QCEMap::value_type &p, sf.qceMap) {
+    p.second.qceBase = p.second.qce;
+  }
+
+  verifyQceMap(state);
+}
+
+/** This function is called just before a frame is popped from the stack. It
+    propagates inVhAdd information to the caller, and removes qce track items
+    that are local to this function (i.e., not present in the caller). */
+void Executor::updateQceMapOnFramePop(ExecutionState &state) {
+  verifyQceMap(state);
+
+  unsigned stackSize = state.stack().size();
+  StackFrame &sf = state.stack().back();
+  StackFrame *tSf = stackSize >= 2 ? &state.stack()[stackSize - 2] : NULL;
+
+  foreach (QCEMap::value_type &p, sf.qceMap) {
+    QCEMap::iterator t = tSf ? tSf->qceMap.find(p.first) : QCEMap::iterator();
+    if (tSf && t != tSf->qceMap.end()) {
+      // Propagate current status to the parent
+      t->second.inVhAdd = p.second.inVhAdd;
+    } else {
+      // Remove the track item
+      assert(p.second.stackFrame == stackSize-1);
+      if (p.second.inVhAdd) {
+        bool ok;
+        if (p.first.isPtr()) {
+          ok = modifyQceMemoryTrackMap(state, p.first, p.second.vnumber, false,
+                                       " on frame pop");
+        } else {
+          ok = modifyQceLocalsTrackMap(state, p.first, sf, p.second.vnumber,
+                                       false, " on frame pop");
+        }
+        if (ok) {
+          p.second.inVhAdd = false;
+        } else {
+          klee_warning("*** XXX: can not remove qce memory track item on frame pop\n");
+          assert(false);
+        }
+      }
+    }
+  }
+
+  verifyQceMap(state);
+
+  if (stackSize == 1) {
+    // This was the last frame. Do the final check.
+    assert(state.crtThread().qceMemoryTrackHash == SimpleIncHash());
+  }
+}
+
+void Executor::updateQceMapOnFree(ExecutionState &state, const MemoryObject *mo,
+                                  KInstruction*) {
+  verifyQceMap(state);
+
+  bool changed = false;
+  DenseSet<HotValue> removedValues;
+
+  QCEMemoryTrackMap &qceMemoryTrackMap = state.crtThread().qceMemoryTrackMap;
+  SimpleIncHash &qceMemoryTrackHash = state.crtThread().qceMemoryTrackHash;
+
+  const ObjectState *os = state.addressSpace().findObject(mo);
+  assert(os && "qce memory track item was freed before disabling it");
+
+  for (QCEMemoryTrackMap::iterator bi = qceMemoryTrackMap.begin(),
+                                   be = qceMemoryTrackMap.end(); bi != be;) {
+    if (bi->first.first != mo) {
+      ++bi;
+      continue;
+    }
+
+    foreach (HotValue hotValue, bi->second) {
+      QCEMap::iterator qceMapIt = state.stack().back().qceMap.find(hotValue);
+      assert(qceMapIt != state.stack().back().qceMap.end());
+
+      // Remove blacklist item
+      if (DebugQceMaps) {
+        if (removedValues.count(hotValue) == 0) {
+          assert(qceMapIt->second.inVhAdd);
+
+          std::string str;
+          raw_string_ostream ostr(str);
+          ostr << "Removing qce memory track item: ";
+          hotValue.print(ostr);
+          ostr << " on free";
+          fprintf(stderr, "%s\n", ostr.str().c_str());
+          removedValues.insert(hotValue);
+        }
+      }
+
+      qceMapIt->second.inVhAdd = false;
+      changed = true;
+    }
+
+    // Remove value from the hash
+    unsigned value = os->read8c(bi->first.second);
+    qceMemoryTrackHash.removeValueAt(APInt(32, value), mo, bi->first.second);
+
+    qceMemoryTrackMap.erase(bi++);
+  }
+
+  if (changed) {
+    verifyQceMap(state);
+  }
+}
+
+bool Executor::modifyQceLocalsTrackMap(ExecutionState &state, HotValue hotValue,
+                                       StackFrame &sf, int vnumber,
+                                       bool inVhAdd,
+                                       const char* reason,
+                                       KInstruction *ki) {
+  assert(vnumber >= 0 && vnumber < int(sf.kf->numRegisters));
+
+  if (DebugQceMaps) {
+    std::string str;
+    raw_string_ostream ostr(str);
+
+    if (inVhAdd)
+      ostr << "Adding new ";
+    else
+      ostr << "Removing ";
+
+    ostr << "qce locals track item: ";
+    hotValue.print(ostr);
+
+    if (reason)
+      ostr << " " << reason;
+
+    if (ki) {
+      ostr << "\n     at instruction: ";
+      Instruction *tmp = ki->inst->clone();
+      if (ki->inst->hasName())
+        tmp->setName(ki->inst->getName());
+      tmp->setMetadata("qce", NULL);
+      tmp->print(ostr);
+      delete tmp;
+      ostr << " (at " << ki->inst->getParent()->getParent()->getName() << ")\n";
+      ostr << "     at " << ki->info->file << ":" << ki->info->line
+           << " (assembly line " << ki->info->assemblyLine << ")";
+    }
+    fprintf(stderr, "\n%s\n", ostr.str().c_str());
+  }
+
+  if (inVhAdd) {
+    assert(!sf.qceLocalsTrackMap.get(vnumber));
+
+    sf.qceLocalsTrackMap.set(vnumber);
+
+    ref<Expr> &value = sf.locals[vnumber].value;
+    if (!value.isNull() && isa<ConstantExpr>(value)) {
+      sf.qceLocalsTrackHash.addValueAt(
+            cast<ConstantExpr>(value)->getAPValue(), vnumber);
+    } else {
+      sf.qceLocalsTrackHash.addValueAt(
+            APInt(64, QCE_LOCALS_MAGIC_VALUE), vnumber);
+    }
+  } else {
+    assert(sf.qceLocalsTrackMap.get(vnumber));
+
+    ref<Expr> &value = sf.locals[vnumber].value;
+    if (!value.isNull() && isa<ConstantExpr>(value)) {
+      sf.qceLocalsTrackHash.removeValueAt(
+            cast<ConstantExpr>(value)->getAPValue(), vnumber);
+    } else {
+      sf.qceLocalsTrackHash.removeValueAt(
+            APInt(64, QCE_LOCALS_MAGIC_VALUE), vnumber);
+    }
+
+    sf.qceLocalsTrackMap.unset(vnumber);
+  }
+
+  return true;
+}
+
+/** This function is called after each instruction execution to update QCE
+    information to the current state, adding/removing qce track items as
+    necessary */
+void Executor::updateQceMapOnExec(ExecutionState &state) {
+  KInstruction *ki = state.pc();
+  if (KQCEInfo *info = ki->qceInfo) {
+    verifyQceMap(state);
+
+    bool changed = false;
+    /* Update query count estimation information */
+
+    unsigned stackSize = state.stack().size();
+    StackFrame &sf = state.stack().back();
+    sf.qceTotal = sf.qceTotalBase + info->total;
+    float threshold = sf.qceTotal * QceThreshold;
+
+#warning Here we should walk ALL qceMap items!!!
+
+    foreach (KQCEInfoItem &item, info->vars) {
+      // Update QCE estimation
+      QCEMap::iterator qceMapIt = sf.qceMap.insert(
+          std::make_pair(item.hotValue,
+                    QCEFrameInfo(state.stack().size()-1, item.vnumber))).first;
+
+      QCEFrameInfo &frame = qceMapIt->second;
+      frame.qce = frame.qceBase + item.qce;
+
+      // Now check whether to add the item to Vh
+      bool inVhAdd = frame.qce > threshold &&
+                     frame.qce > QceAbsThreshold;
+      if (inVhAdd != frame.inVhAdd) {
+        bool ok;
+        if (item.hotValue.isPtr()) {
+          ok = modifyQceMemoryTrackMap(state, item.hotValue,
+                                       item.vnumber, inVhAdd, NULL, ki);
+        } else {
+          assert(frame.stackFrame < stackSize);
+          ok = modifyQceLocalsTrackMap(state, item.hotValue,
+                                       state.stack()[frame.stackFrame],
+                                       item.vnumber, inVhAdd, NULL, ki);
+        }
+        if (ok) {
+          frame.inVhAdd = inVhAdd;
+          changed = true;
+        } else {
+          assert(!frame.inVhAdd); // XXX?
+        }
+      }
+
+      // Remove items with zero QCE
+      if (frame.qce < 0.5 && !frame.inVhAdd) {
+        sf.qceMap.erase(qceMapIt);
+      }
+    }
+
+    if (changed)
+      verifyQceMap(state);
+  }
+}
+
+void Executor::updateQceMemoryValue(ExecutionState &state,
+                                    const MemoryObject *mo, ObjectState *os,
+                                    ref<Expr> offset, ref<Expr> newValue,
+                                    KInstruction *ki) {
+  //if (os->numBlacklistRefs == 0)
+  //  return; // This ObjectState is not involved in any blacklist item
+
+  QCEMemoryTrackMap &qceMemoryTrackMap = state.crtThread().qceMemoryTrackMap;
+  SimpleIncHash &qceMemoryTrackHash = state.crtThread().qceMemoryTrackHash;
+
+  //bool notify = false;
+
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(offset)) {
+    if (newValue->getWidth() == 1)
+      newValue = ZExtExpr::create(newValue, Expr::Int8);
+
+    unsigned oc = CE->getZExtValue();
+    unsigned size = newValue->getWidth()/8;
+
+    for (unsigned i = 0; i < size; ++i, ++oc) {
+      // Do not update bytes that are not in blacklist
+      if (qceMemoryTrackMap.find(std::make_pair(mo, oc)) ==
+                qceMemoryTrackMap.end())
+        continue;
+
+      // Remove the old value
+      unsigned prevValueC = os->read8c(oc);
+      qceMemoryTrackHash.removeValueAt(APInt(32, prevValueC), mo, oc);
+
+      // Add the new value
+      unsigned newValueC = unsigned(-1);
+      ref<Expr> V = ExtractExpr::create(newValue, 8*i, Expr::Int8);
+      if (ConstantExpr *CV = dyn_cast<ConstantExpr>(V))
+        newValueC = CV->getZExtValue() & 0xFF;
+
+      qceMemoryTrackHash.addValueAt(APInt(32, newValueC), mo, oc);
+
+      //if (prevValueC != unsigned(-1) && !nextValueC == unsigned(-1))
+      //  notify = true;
+    }
+  } else {
+    // A write with symbolic address makes all bytes in array symbolic
+    for (unsigned oc = 0; oc < os->size; ++oc) {
+      // Do not update bytes that are not in blacklist
+      if (qceMemoryTrackMap.find(std::make_pair(mo, oc)) ==
+                qceMemoryTrackMap.end())
+        continue;
+
+      // Remove the old value
+      unsigned prevValueC = os->read8c(oc);
+      qceMemoryTrackHash.removeValueAt(APInt(32, prevValueC), mo, oc);
+
+      // Add the new value (symbolic)
+      qceMemoryTrackHash.addValueAt(APInt(32, unsigned(-1)), mo, oc);
+
+      //if (prevValueC != unsigned(-1))
+      //  notify = true;
+    }
+  }
+
+  /*
+  if (notify && DebugLogMergeBlacklistVals) {
+    std::cerr << "*** Wrote symbolic value to blacklisted memory: ";
+    mo->allocSite->dump();
+    std::cerr << "  offset: "; offset->dump();
+    if (ki)
+      std::cerr << "  at:\n  "; ki->dump();
+    std::cerr << "  New value: "; newValue->dump();
+  }
+  */
+}
+
+void Executor::updateQceLocalsValue(ExecutionState &state,
+                                    int vnumber, ref<Expr> &newValue,
+                                    KInstruction *ki) {
+  if (vnumber < 0)
+    return;
+
+  StackFrame &sf = state.stack().back();
+  assert(unsigned(vnumber) < sf.kf->numRegisters);
+
+  if (!sf.qceLocalsTrackMap.get(vnumber))
+    return;
+
+  //bool prevIsConcrete = false;
+  //bool nextIsConcrete = false;
+
+  ref<Expr> &value = sf.locals[vnumber].value;
+  if (!value.isNull() && isa<ConstantExpr>(value)) {
+    sf.qceLocalsTrackHash.removeValueAt(
+          cast<ConstantExpr>(value)->getAPValue(), vnumber);
+  } else {
+    sf.qceLocalsTrackHash.removeValueAt(
+          APInt(64, QCE_LOCALS_MAGIC_VALUE), vnumber);
+  }
+
+  if (!newValue.isNull() && isa<ConstantExpr>(newValue)) {
+    sf.qceLocalsTrackHash.addValueAt(
+          cast<ConstantExpr>(newValue)->getAPValue(), vnumber);
+  } else {
+    sf.qceLocalsTrackHash.addValueAt(
+          APInt(64, QCE_LOCALS_MAGIC_VALUE), vnumber);
+  }
+
+  /*
+  if (prevIsConcrete && !nextIsConcrete && DebugLogMergeBlacklistVals) {
+    std::cerr << "*** Wrote symbolic value to blacklisted local:\n  ";
+    if (target)
+      target->dump();
+    std::cerr << " New value: "; newValue->dump();
+  }
+  */
+}
+
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
     WallTimer searcherTimer;
@@ -2755,6 +3419,8 @@ void Executor::stepInState(ExecutionState *state) {
   if (UseQueryPCLog)
     setPCLoggingSolverStateID(solver->solver, uint64_t(state));
 
+  assert(addedStates.size() == 0);
+
   {
     WallTimer timer;
     state->lastResolveResult = 0;
@@ -2770,6 +3436,12 @@ void Executor::stepInState(ExecutionState *state) {
       ++stats::instructionsMultExact;
     }
   }
+
+  if (removedStates.count(state) == 0)
+    updateQceMapOnExec(*state);
+
+  foreach (ExecutionState* addedState, addedStates)
+    updateQceMapOnExec(*addedState);
 
   if (UseQueryPCLog)
     setPCLoggingSolverStateID(solver->solver, uint64_t(0));
@@ -2835,6 +3507,9 @@ void Executor::stepInState(ExecutionState *state) {
       // Sort all next states into duplicates of the main state
       if (removedStates.count(duplicate) == 0)
         addedStates.insert(duplicate);
+
+      foreach (ExecutionState* addedState, addedStates)
+        updateQceMapOnExec(*addedState);
 
       foreach (ExecutionState* addedState, addedStates) {
         assert(removedStates.count(addedState) == 0);
@@ -3442,7 +4117,7 @@ void Executor::executeAlloc(ExecutionState &state,
         unsigned count = std::min(reallocFrom->size, os->size);
         for (unsigned i=0; i<count; i++)
           os->write(i, reallocFrom->read8(i));
-        state.updateBlacklistOnFree(reallocFrom->getObject());
+        updateQceMapOnFree(state, reallocFrom->getObject(), target);
         state.addressSpace().unbindObject(reallocFrom->getObject());
       }
     }
@@ -3551,7 +4226,7 @@ void Executor::executeFree(ExecutionState &state,
                               "free.err",
                               getAddressInfo(*it->second, address));
       } else {
-        it->second->updateBlacklistOnFree(mo);
+        updateQceMapOnFree(*it->second, mo, target);
         it->second->addressSpace().unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
@@ -3899,16 +4574,16 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                                          offset, value->getWidth()/8);
           }
           */
-          state.verifyBlacklistHash();
-          state.updateMemoryValue(target, mo, wos, offset, value);
+          verifyQceMap(state);
+          updateQceMemoryValue(state, mo, wos, offset, value, target);
           wos->write(offset, value);
-          state.verifyBlacklistHash();
+          verifyQceMap(state);
           /*
           state.addressSpace().addMergeBlacklistItemHash(mo, wos,
                                                          offset, value->getWidth()/8);
           */
 
-  }
+        }
       } else {
         ref<Expr> result = os->read(offset, type);
 
@@ -3962,10 +4637,10 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           }
           */
           ref<Expr> offset = mo->getOffsetExpr(address);
-          state.verifyBlacklistHash();
-          state.updateMemoryValue(target, mo, wos, offset, value);
+          verifyQceMap(state);
+          updateQceMemoryValue(state, mo, wos, offset, value, target);
           wos->write(mo->getOffsetExpr(address), value);
-          state.verifyBlacklistHash();
+          verifyQceMap(state);
           /*
           state.addressSpace().addMergeBlacklistItemHash(mo, wos,
                                                          mo->getOffsetExpr(address),

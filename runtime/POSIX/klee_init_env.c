@@ -195,7 +195,8 @@ void klee_process_args(int* argcPtr, char*** argvPtr) {
       // Create a symbolic value that determined n_args
       unsigned n_args;
       klee_make_symbolic(&n_args, sizeof(n_args), "n_args");
-      klee_assume(n_args >= min_argvs && n_args <= max_argvs);
+      klee_assume(n_args >= min_argvs);
+      klee_assume(n_args <= max_argvs);
 
       for (; *n_args_i < n_args; ++*n_args_i) { // This will fork
         sym_arg_name[3] = '0' + sym_arg_num++;

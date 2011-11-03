@@ -10,6 +10,8 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "llvm/Instruction.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
 #include <iostream>
 
 using namespace llvm;
@@ -19,11 +21,17 @@ using namespace klee;
 
 KInstruction::~KInstruction() {
   delete[] operands;
+  if (qceInfo)
+    delete qceInfo;
+}
+
+void KInstruction::print(llvm::raw_ostream &ostr) const {
+  ostr << "Instruction:\n    ";
+  inst->print(ostr); ostr << "\n";
+  ostr << "    at " << info->file << ":" << info->line
+       << " (assembly line " << info->assemblyLine << ")";
 }
 
 void KInstruction::dump() const {
-  std::cerr << "Instruction:" << std::endl << "    ";
-  inst->dump();
-  std::cerr << "    at " << info->file << ":" << info->line
-            << " (assembly line " << info->assemblyLine << ")\n";
+  print(dbgs()); dbgs() << '\n';
 }

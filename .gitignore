@@ -25,7 +25,6 @@ test/testrun.sum
 klee-last
 klee-out-*
 
-core
 vgcore.*
 
 *.dot

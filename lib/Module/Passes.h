@@ -207,17 +207,12 @@ public:
   virtual bool runOnLoop(llvm::Loop *L, llvm::LPPassManager &LPM);
 };
 
-class UseFrequencyAnalyzerPass : public llvm::CallGraphSCCPass {
-  llvm::TargetData *m_targetData;
-  llvm::Function *m_kleeUseFreqFunc;
-
+class QCEAnalyzerPass : public llvm::CallGraphSCCPass {
 public:
   static char ID;
-  UseFrequencyAnalyzerPass(llvm::TargetData *TD = 0);
+  QCEAnalyzerPass(llvm::TargetData *TD = 0);
 
   virtual void getAnalysisUsage(llvm::AnalysisUsage &Info) const;
-  virtual bool doInitialization(llvm::CallGraph &CG);
-  //virtual bool doInitialization(llvm::Module &M);
   virtual bool runOnSCC(llvm::CallGraphSCC &SCC);
   bool runOnFunction(llvm::CallGraphNode &CGNode);
 };

@@ -31,6 +31,8 @@
 #include <map>
 #include <set>
 
+//#define VERIFY_QCE_MAPS
+
 struct KTest;
 
 namespace llvm {
@@ -189,7 +191,42 @@ private:
 
   void run(ExecutionState &initialState);
 
-  // Given a concrete object in our [klee's] address space, add it to 
+  // QCE tracking function
+  void dumpQceMap(ExecutionState &state);
+
+#ifdef VERIFY_QCE_MAPS
+  void verifyQceMap(ExecutionState &state);
+#else
+  void verifyQceMap(ExecutionState &state) {}
+#endif
+
+  void updateQceMapOnExec(ExecutionState &state);
+  void updateQceMapBeforeCall(ExecutionState &state);
+  void updateQceMapOnFramePush(ExecutionState &state);
+  void updateQceMapOnFramePop(ExecutionState &state);
+  void updateQceMapOnFree(ExecutionState &state,
+                          const MemoryObject *mo, KInstruction *ki = NULL);
+
+  bool modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
+                               int vnumber, bool inVhAdd,
+                               const char *reason = NULL,
+                               KInstruction *ki = NULL);
+
+  void updateQceMemoryValue(ExecutionState &state,
+                            const MemoryObject *mo, ObjectState *os,
+                            ref<Expr> offset, ref<Expr> newValue,
+                            KInstruction *ki = NULL);
+
+  bool modifyQceLocalsTrackMap(ExecutionState &state, HotValue hotValue,
+                               StackFrame &sf, int vnumber, bool inVhAdd,
+                               const char *reason = NULL,
+                               KInstruction *ki = NULL);
+
+  void updateQceLocalsValue(ExecutionState &state,
+                            int vnumber, ref<Expr> &newValue,
+                            KInstruction *ki = NULL);
+
+  // Given a concrete object in our [klee's] address space, add it to
   // objects checked code can reference.
   MemoryObject *addExternalObject(ExecutionState &state, void *addr, 
                                   unsigned size, bool isReadOnly);

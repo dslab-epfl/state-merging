@@ -52,18 +52,6 @@ using namespace klee;
 namespace { 
   cl::opt<bool>
   DebugLogStateMerge("debug-log-state-merge");
-
-  cl::opt<bool>
-  DebugLogMergeBlacklist("debug-log-merge-blacklist");
-
-  cl::opt<bool>
-  DebugLogMergeBlacklistVals("debug-log-merge-blacklist-vals");
-
-  cl::opt<double>
-  MaxUseFreqPctForMerge("max-use-freq-pct-for-merge", cl::init(0.001));
-
-  cl::opt<unsigned>
-  MaxUseFreqForMerge("max-use-freq-for-merge", cl::init(10));
 }
 
 /***/
@@ -165,12 +153,12 @@ void ExecutionState::setPC(const KInstIterator& newPC) {
           crtThread().stack.back().execIndexStack.back().index,
           (uintptr_t) (KInstruction*) newPC),
     sIndex = hashUpdate(sIndex,
-          crtThread().stack.back().localBlacklistHash);
+          crtThread().stack.back().qceLocalsTrackHash.getHashValue());
   }
 
   sIndex = hashUpdate(hashUpdate(hashUpdate(sIndex, symbolicsHash),
                                         addressSpace().hash),
-                                      crtThread().mergeBlacklistHash);
+                                crtThread().qceMemoryTrackHash.getHashValue());
 
   crtThread().mergeIndex = hashUpdate(crtThread().execIndex, sIndex);
 
@@ -341,8 +329,7 @@ void ExecutionState::notifyAll(wlist_id_t wlist) {
 ExecutionState::~ExecutionState() {
   for (threads_ty::iterator it = threads.begin(); it != threads.end(); it++) {
     Thread &t = it->second;
-    t.mergeBlacklistMap.clear();
-    t.mergeBlacklistHash = hashInit();
+#warning What to do with QCE data structures here ?
     while (!t.stack.empty())
       popFrame(t);
   }
@@ -551,7 +538,7 @@ bool ExecutionState::isPCCompatible(const ExecutionState &b) const {
   return true;
 }
 
-bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const {
+bool ExecutionState::areQCEMemoryTrackMapsCompatible(const ExecutionState &b) const {
 #if 0
   return true;
 #else
@@ -565,15 +552,15 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
     const Thread &aThread = it->second;
     const Thread &bThread = it1->second;
 
-    if (aThread.mergeBlacklistMap.size() != bThread.mergeBlacklistMap.size()) {
+    if (aThread.qceMemoryTrackMap.size() != bThread.qceMemoryTrackMap.size()) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: mergeBlacklists are different\n";
+        std::cerr << "---- merge failed: QCE memory tracks are different\n";
       return false;
     }
 
-    if (aThread.mergeBlacklistHash != bThread.mergeBlacklistHash) {
+    if (aThread.qceMemoryTrackHash != bThread.qceMemoryTrackHash) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: mergeBlacklistsHash are different values\n";
+        std::cerr << "---- merge failed: QCE memory hashes are different\n";
       return false;
     }
 
@@ -583,18 +570,18 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
         b.processes.find(bThread.getPid())->second.addressSpace;
 
     if (DebugLogStateMerge) {
-      std::cerr << "Comparing " << aThread.mergeBlacklistMap.size()
-                << " merge blacklist items" << std::endl;
+      std::cerr << "Comparing " << aThread.qceMemoryTrackMap.size()
+                << " QCE tracked items" << std::endl;
     }
 
-    for (MergeBlacklistMap::const_iterator mi = aThread.mergeBlacklistMap.begin(),
-                  me = aThread.mergeBlacklistMap.end(); mi != me; ++mi) {
-      MergeBlacklistMap::const_iterator mi1 =
-          bThread.mergeBlacklistMap.find(mi->first);
+    for (QCEMemoryTrackMap::const_iterator mi = aThread.qceMemoryTrackMap.begin(),
+                  me = aThread.qceMemoryTrackMap.end(); mi != me; ++mi) {
+      QCEMemoryTrackMap::const_iterator mi1 =
+          bThread.qceMemoryTrackMap.find(mi->first);
 
-      if (mi1 == bThread.mergeBlacklistMap.end()) {
+      if (mi1 == bThread.qceMemoryTrackMap.end()) {
         if (DebugLogStateMerge)
-          std::cerr << "---- merge failed: mergeBlacklists are different\n";
+          std::cerr << "---- merge failed: QCE memory tracks are different\n";
         return false;
       }
 
@@ -603,11 +590,12 @@ bool ExecutionState::areMergeBlacklistsCompatible(const ExecutionState &b) const
       unsigned aValue = aAddressSpace.findObject(mo)->read8c(offset);
       unsigned bValue = bAddressSpace.findObject(mo)->read8c(offset);
       if (aValue != bValue) {
+#warning XXX?
         // XXX: try different heuristics here
         //if (isa<ConstantExpr>(aValue) || isa<ConstantExpr>(bValue)) {
         //if (aValue != unsigned(-1) || bValue != unsigned(-1))
           if (DebugLogStateMerge)
-            std::cerr << "---- merge failed: mergeBlacklists contain different values\n";
+            std::cerr << "---- merge failed: QCE memory tracks contain different values\n";
           return false;
         //}
       }
@@ -760,7 +748,7 @@ static bool areStacksCompatible(const std::vector<StackFrame> &a,
   return true;
 }
 
-static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
+static bool areQCELocalsTrackMapsCompatible(const std::vector<StackFrame> &a,
     const std::vector<StackFrame> &b) {
 
   unsigned numItems = 0;
@@ -773,22 +761,22 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
     // XXX vaargs?
     assert(itA->caller==itB->caller && itA->kf==itB->kf);
 
-    if (itA->localBlacklistHash != itB->localBlacklistHash) {
+    if (itA->qceLocalsTrackHash != itB->qceLocalsTrackHash) {
       if (DebugLogStateMerge)
-        std::cerr << "---- merge failed: local merge blacklist hashs are different\n";
+        std::cerr << "---- merge failed: qce local track hashs are different\n";
       return false;
     }
 
     for (unsigned i=0; i<itA->kf->numRegisters; i++) {
       ++numItems;
 
-      if (itA->localBlacklistMap.get(i) != itB->localBlacklistMap.get(i)) {
+      if (itA->qceLocalsTrackMap.get(i) != itB->qceLocalsTrackMap.get(i)) {
         if (DebugLogStateMerge)
-          std::cerr << "---- merge failed: local merge blacklists are different\n";
+          std::cerr << "---- merge failed: qce local track maps are different\n";
         return false;
       }
 
-      if (itA->localBlacklistMap.get(i)) {
+      if (itA->qceLocalsTrackMap.get(i)) {
         const ref<Expr> &av = itA->locals[i].value;
 
         bool isNumA = !av.isNull() && isa<ConstantExpr>(av);
@@ -800,7 +788,7 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
 
         if (isNumA != isNumB || valA != valB) {
           if (DebugLogStateMerge) {
-            std::cerr << "---- merge failed: local merge blacklists "
+            std::cerr << "---- merge failed: qce local track variables "
                       << "have different values\n";
             std::cerr << "    Av: ";
             if (av.isNull())
@@ -827,7 +815,7 @@ static bool areLocalMergeBlacklistsCompatible(const std::vector<StackFrame> &a,
   assert(itA==itAE && itB==itBE);
 
   if (DebugLogStateMerge)
-    std::cerr << "Compared " << numItems << " local merge blacklist items\n";
+    std::cerr << "Compared " << numItems << " qce local track maps items\n";
 
   return true;
 }
@@ -894,8 +882,8 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
     return NULL;
   }
 
-  // Check merge blacklists
-  if (!areMergeBlacklistsCompatible(b))
+  // Check qce track maps
+  if (!areQCEMemoryTrackMapsCompatible(b))
     return NULL;
 
   // We cannot merge if addresses would resolve differently in the
@@ -929,8 +917,8 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
       return NULL;
     }
 
-    if (!areLocalMergeBlacklistsCompatible(it->second.stack,
-                                           otherIt->second.stack)) {
+    if (!areQCELocalsTrackMapsCompatible(it->second.stack,
+                                         otherIt->second.stack)) {
       return NULL;
     }
   }
@@ -1046,536 +1034,6 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
     std::cerr << "---- merged successfully\n";
 
   return &a;
-}
-
-void ExecutionState::updateMemoryUseFrequency(llvm::Instruction *inst,
-                                  ref<ConstantExpr> address, uint64_t size,
-                                  uint64_t useFreq, uint64_t totalUseFreq) {
-  verifyBlacklistMap();
-  bool changed = false;
-
-  bool active = useFreq > MaxUseFreqForMerge &&
-                double(useFreq) > double(totalUseFreq)*MaxUseFreqPctForMerge;
-  bool isFunctionEntry =
-      inst->getParent() == &inst->getParent()->getParent()->getEntryBlock();
-
-  // Resolve and check address
-  ObjectPair op;
-  bool ok = addressSpace().resolveOne(address, op);
-  if (!ok)
-    return; // XXX!
-
-  const MemoryObject* mo = op.first;
-
-  ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
-  assert(chk->isTrue() && "arguments to klee_use_freq are invalid");
-
-  uint64_t offset = address->getZExtValue() - op.first->address;
-
-  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
-
-  // Each item in a blacklist is marked with a call stack frame after which
-  // it should disappear from the blacklist (i.e., the variable will not be
-  // used after returning from that frame). All updates to the item issued
-  // from below such frame are ignored in all cases but one: when the update
-  // is issued from the header BB of the function and a declared use frequency
-  // matches the use frequency from the parent, we assume that this call is the
-  // last to use the item. Hence, we reset the mark of the item to the current
-  // stack frame.
-  for (; size; --size, ++offset) {
-    MergeBlacklistMap::iterator it =
-            mergeBlacklistMap.find(std::make_pair(mo, offset));
-    if (it == mergeBlacklistMap.end()) {
-      // This is a completely new item, just insert it if its active
-      if (active) {
-        if (DebugLogMergeBlacklist && !changed) {
-          std::string str;
-          raw_string_ostream ostr(str);
-          ostr << "Adding new merge blacklist item: * ";
-          inst->getMetadata("uf")->print(ostr);
-          fprintf(stderr, "%s\n", ostr.str().c_str());
-        }
-
-        // Create new blacklist item
-        mergeBlacklistMap.insert(std::make_pair(
-                        std::make_pair(mo, offset),
-                        MergeBlacklistInfo(inst, &stack().back(), useFreq)));
-
-        // Update reference count for the corresponding ObjectState
-        changed = true;
-
-        /*
-        ObjectState *wos = addressSpace().getWriteable(mo, op.second);
-        op.second = wos;
-        wos->numBlacklistRefs += 1;*/
-
-        // Add new value to the values hash
-        ref<Expr> E = op.second->read8(offset);
-        if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
-          mergeBlacklistHash += uintptr_t(CE->getZExtValue());
-      }
-    } else {
-      // Item already existed. First, check for transfer
-      if (isFunctionEntry && useFreq == it->second.useFreq) {
-        // All remaining uses are in this function
-        it->second.frame = &stack().back();
-        it->second.inst = inst;
-      }
-
-      // The item is owned by current function
-      if (it->second.frame == &stack().back()) {
-        if (active) {
-          it->second.useFreq = useFreq;
-        } else {
-          // Remove blacklist item
-          if (DebugLogMergeBlacklist && !changed) {
-            std::string str;
-            raw_string_ostream ostr(str);
-            ostr << "Removing merge blacklist item: * ";
-            inst->getMetadata("uf")->print(ostr);
-            fprintf(stderr, "%s\n", ostr.str().c_str());
-          }
-
-          changed = true;
-          /*
-          ObjectState *wos = addressSpace().getWriteable(mo, op.second);
-          op.second = wos;*/
-
-          // Remove value from the hash
-          ref<Expr> E = op.second->read8(offset);
-          if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
-            mergeBlacklistHash -= uintptr_t(CE->getZExtValue());
-
-          /*
-          // Decrement reference count for the corresponding ObjectState
-          wos->numBlacklistRefs -= 1;
-          assert(signed(wos->numBlacklistRefs) >= 0);
-          */
-
-          // Erase item from the map
-          mergeBlacklistMap.erase(it);
-        }
-      }
-    }
-  }
-
-  if (changed) {
-    verifyBlacklistMap();
-    verifyBlacklistHash();
-  }
-}
-
-void ExecutionState::updateMemoryValue(KInstruction *ki,
-                                       const MemoryObject *mo, ObjectState *os,
-                                       ref<Expr> offset, ref<Expr> newValue) {
-  //if (os->numBlacklistRefs == 0)
-  //  return; // This ObjectState is not involved in any blacklist item
-
-  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
-
-  bool notify = false;
-
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(offset)) {
-    if (newValue->getWidth() == 1)
-      newValue = ZExtExpr::create(newValue, Expr::Int8);
-
-    unsigned oc = CE->getZExtValue();
-    unsigned size = newValue->getWidth()/8;
-
-    for (unsigned i = 0; i < size; ++i, ++oc) {
-      // Do not update bytes that are not in blacklist
-      if (mergeBlacklistMap.find(std::make_pair(mo, oc)) ==
-                mergeBlacklistMap.end())
-        continue;
-
-      bool prevIsConcrete = false;
-      bool nextIsConcrete = false;
-
-      // Remove old value if it was concrete
-      ref<Expr> R = os->read8(oc);
-      if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R)) {
-        prevIsConcrete = true;
-        mergeBlacklistHash -= uintptr_t(CR->getZExtValue());
-      }
-
-      // Add new value if it is concrete
-      ref<Expr> V = ExtractExpr::create(newValue, 8*i, Expr::Int8);
-      if (ConstantExpr *CV = dyn_cast<ConstantExpr>(V)) {
-        nextIsConcrete = true;
-        mergeBlacklistHash += uintptr_t(CV->getZExtValue() & 0xFF);
-      }
-
-      if (prevIsConcrete && !nextIsConcrete) {
-        notify = true;
-      }
-    }
-  } else {
-    // A write with symbolic address makes all bytes in array symbolic
-    for (unsigned oc = 0; oc < os->size; ++oc) {
-      // Do not update bytes that are not in blacklist
-      if (mergeBlacklistMap.find(std::make_pair(mo, oc)) ==
-                mergeBlacklistMap.end())
-        continue;
-
-      // Remove old value if it was concrete
-      ref<Expr> R = os->read8(oc);
-      if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R)) {
-        mergeBlacklistHash -= uintptr_t(CR->getZExtValue());
-      } else {
-        notify = true;
-      }
-    }
-  }
-
-  if (notify && DebugLogMergeBlacklistVals) {
-    std::cerr << "*** Wrote symbolic value to blacklisted memory: ";
-    mo->allocSite->dump();
-    std::cerr << "  offset: "; offset->dump();
-    if (ki)
-      std::cerr << "  at:\n  "; ki->dump();
-    std::cerr << "  New value: "; newValue->dump();
-  }
-}
-
-void ExecutionState::updateBlacklistOnFree(const MemoryObject* mo) {
-  bool changed = false;
-  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
-  for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                               be = mergeBlacklistMap.end(); bi != be;) {
-    if (bi->first.first == mo) {
-      // Remove blacklist item
-      if (DebugLogMergeBlacklist && !changed) {
-        std::string str;
-        raw_string_ostream ostr(str);
-        ostr << "Removing merge blacklist item: * ";
-        bi->second.inst->getMetadata("uf")->print(ostr);
-        fprintf(stderr, "%s\n", ostr.str().c_str());
-      }
-
-      changed = true;
-
-      const ObjectState *os = addressSpace().findObject(mo);
-      assert(os && "merge blacklist item was freed before disabling it");
-
-      // Remove value from the hash
-      ref<Expr> E = os->read8(bi->first.second);
-      if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
-        mergeBlacklistHash -= uintptr_t(CE->getZExtValue());
-
-      mergeBlacklistMap.erase(bi++);
-    } else {
-      ++bi;
-    }
-  }
-
-  if (changed) {
-    verifyBlacklistMap();
-    verifyBlacklistHash();
-  }
-}
-
-void ExecutionState::updateBlacklistBeforePopFrame() {
-  bool changed = false;
-  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-  uint64_t &mergeBlacklistHash = crtThread().mergeBlacklistHash;
-  const StackFrame *frame = &stack().back();
-  for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                               be = mergeBlacklistMap.end(); bi != be;) {
-    if (bi->second.frame == frame) {
-#warning XXX: this should not happen
-      // Remove blacklist item
-      if (DebugLogMergeBlacklist) {
-        std::string str;
-        raw_string_ostream ostr(str);
-        ostr << "Removing merge blacklist item: * ";
-        bi->second.inst->getMetadata("uf")->print(ostr);
-        fprintf(stderr, "%s\n", ostr.str().c_str());
-      }
-
-      changed = true;
-
-      const ObjectState *os = addressSpace().findObject(bi->first.first);
-      assert(os && "merge blacklist item was freed before disabling it");
-
-      // Remove value from the hash
-      ref<Expr> E = os->read8(bi->first.second);
-      if (ConstantExpr* CE = dyn_cast<ConstantExpr>(E))
-        mergeBlacklistHash -= uintptr_t(CE->getZExtValue());
-
-      // Erase item from the map
-      mergeBlacklistMap.erase(bi++);
-
-#if 0
-      //const ObjectState *os = addressSpace().findObject(bi->first.first);
-      //ObjectState *wos = addressSpace().getWriteable(bi->first.first, os);
-      //wos->numBlacklistRefs -= 1;
-      //mergeBlacklistMap.erase(bi++);
-      if (stack().size() >= 2)
-        bi->second.frame = &*--(--stack().end());
-#endif
-    } else {
-      assert(bi->second.frame != NULL);
-      ++bi;
-    }
-  }
-
-  if (changed) {
-    verifyBlacklistMap();
-    verifyBlacklistHash();
-  }
-}
-
-void ExecutionState::verifyBlacklistMap() {
-#if 0
-#ifdef DEBUG_MERGE_BLACKLIST_MAP
-#warning XXX slow
-  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-
-  // Verify ObjectState's numBlacklistRefs
-  for (MemoryMap::iterator it = addressSpace().objects.begin(),
-                           ie = addressSpace().objects.end(); it != ie; ++it) {
-    const MemoryObject *mo = it->first;
-    ObjectState *os = it->second;
-
-    // Compute correct numBlacklistRefs for this MemoryObject
-    unsigned correctNumBlacklistRefs = 0;
-    for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                               be = mergeBlacklistMap.end(); bi != be; ++bi) {
-      if (bi->first.first == mo)
-        correctNumBlacklistRefs += 1;
-    }
-
-    assert(os->numBlacklistRefs == correctNumBlacklistRefs);
-  }
-#endif
-#endif
-}
-
-void ExecutionState::verifyBlacklistHash() {
-#ifdef DEBUG_MERGE_BLACKLIST_MAP
-#warning XXX slow
-  MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-
-  // Verify data values hash
-  uint64_t correctMergeBlacklistHash = hashInit();
-  for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                               be = mergeBlacklistMap.end(); bi != be; ++bi) {
-    const MemoryObject *mo = bi->first.first;
-    unsigned offset = bi->first.second;
-
-    const ObjectState *os = addressSpace().findObject(mo); assert(os);
-    ref<Expr> R = os->read8(offset);
-    if (ConstantExpr *CR = dyn_cast<ConstantExpr>(R))
-      correctMergeBlacklistHash += uintptr_t(CR->getZExtValue());
-  }
-
-  assert(crtThread().mergeBlacklistHash == correctMergeBlacklistHash);
-#endif
-}
-
-
-void ExecutionState::dumpBlacklist() {
-  DenseSet<Value*> insts;
-
-  foreach (const StackFrame &sf, stack()) {
-    std::cerr << "  Function = " << sf.kf->function->getNameStr() << "\n";
-
-    std::cerr << "    Merge blacklist:" << std::endl;
-    MergeBlacklistMap &mergeBlacklistMap = crtThread().mergeBlacklistMap;
-    for (MergeBlacklistMap::iterator bi = mergeBlacklistMap.begin(),
-                                 be = mergeBlacklistMap.end(); bi != be; ++bi) {
-      if (bi->second.frame != &sf)
-        continue;
-
-      Value *inst = bi->second.inst;
-      if (!insts.insert(inst).second)
-        continue;
-
-      std::cerr << "      "; inst->dump();
-    }
-
-    std::cerr << "    Local merge blacklist:" << std::endl;
-    int valueIdx = 0;
-    foreach (const Argument &arg, sf.kf->function->getArgumentList()) {
-      if (sf.localBlacklistMap.get(valueIdx)) {
-        std::cerr << "      " << valueIdx << ": "; arg.dump();
-      }
-      ++valueIdx;
-    }
-    foreach (const BasicBlock &BB, *sf.kf->function) {
-      foreach (const Instruction &I, BB) {
-        if (sf.localBlacklistMap.get(valueIdx)) {
-          std::cerr << "      " << valueIdx << ": "; I.dump();
-        }
-        ++valueIdx;
-      }
-    }
-  }
-}
-
-uint64_t _rotl(uint64_t value, unsigned shift) {
-    if ((shift &= 63) == 0)
-      return value;
-    return (value << shift) | (value >> (64 - shift));
-}
-
-uint64_t _rotr(uint64_t value, unsigned shift) {
-    if ((shift &= 63) == 0)
-      return value;
-    return (value >> shift) | (value << (64 - shift));
-}
-
-uint64_t _add_to_hash(uint64_t hash, uint64_t value, unsigned idx) {
-  value = _rotl(value, idx);
-
-  hash += uint8_t(value);
-  hash += uint8_t(value>>8);
-  hash += uint8_t(value>>16);
-  hash += uint8_t(value>>24);
-
-  hash += uint8_t(value>>32);
-  hash += uint8_t(value>>40);
-  hash += uint8_t(value>>48);
-  hash += uint8_t(value>>56);
-  return hash;
-}
-
-uint64_t _sub_from_hash(uint64_t hash, uint64_t value, unsigned idx) {
-  value = _rotl(value, idx);
-
-  hash -= uint8_t(value);
-  hash -= uint8_t(value>>8);
-  hash -= uint8_t(value>>16);
-  hash -= uint8_t(value>>24);
-
-  hash -= uint8_t(value>>32);
-  hash -= uint8_t(value>>40);
-  hash -= uint8_t(value>>48);
-  hash -= uint8_t(value>>56);
-  return hash;
-}
-
-void ExecutionState::updateValUseFrequency(llvm::Instruction *inst, int valueIdx,
-                                       uint64_t useFreq, uint64_t totalUseFreq) {
-  StackFrame &sf = stack().back();
-  assert(valueIdx >= 0 && unsigned(valueIdx) < sf.kf->numRegisters);
-
-  bool active = useFreq > MaxUseFreqForMerge &&
-                useFreq > totalUseFreq*MaxUseFreqPctForMerge;
-
-  if (active) {
-    if (sf.localBlacklistMap.get(valueIdx))
-      return; // Already active
-
-    if (DebugLogMergeBlacklist) {
-      std::string str;
-      raw_string_ostream ostr(str);
-      ostr << "Adding new merge blacklist item: " <<
-               sf.kf->function->getName() << ":";
-      inst->getMetadata("uf")->print(ostr);
-      fprintf(stderr, "%s\n", ostr.str().c_str());
-    }
-
-    sf.localBlacklistMap.set(valueIdx);
-    sf.localBlacklistHash += valueIdx;
-
-    ref<Expr> &value = sf.locals[valueIdx].value;
-    if (!value.isNull() && isa<ConstantExpr>(value)) {
-      uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      sf.localBlacklistHash = _add_to_hash(sf.localBlacklistHash,
-                                           cvalue, valueIdx);
-    }
-  } else {
-    if (!sf.localBlacklistMap.get(valueIdx))
-      return; // Already inactive
-
-    if (DebugLogMergeBlacklist) {
-      std::string str;
-      raw_string_ostream ostr(str);
-      ostr << "Removing merge blacklist item: " <<
-               sf.kf->function->getName() << ":";
-      inst->getMetadata("uf")->print(ostr);
-      fprintf(stderr, "%s\n", ostr.str().c_str());
-    }
-
-    ref<Expr> &value = sf.locals[valueIdx].value;
-    if (!value.isNull() && isa<ConstantExpr>(value)) {
-      uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-      sf.localBlacklistHash = _sub_from_hash(sf.localBlacklistHash,
-                                             cvalue, valueIdx);
-    }
-
-    sf.localBlacklistHash -= valueIdx;
-    sf.localBlacklistMap.unset(valueIdx);
-  }
-
-  verifyLocalBlacklistHash();
-}
-
-void ExecutionState::updateLocalValue(KInstruction *target,
-                                      int valueIdx, ref<Expr> &newValue) {
-  if (valueIdx < 0)
-    return;
-
-  StackFrame &sf = stack().back();
-  assert(unsigned(valueIdx) < sf.kf->numRegisters);
-
-  if (!sf.localBlacklistMap.get(valueIdx))
-    return;
-
-  bool prevIsConcrete = false;
-  bool nextIsConcrete = false;
-
-  ref<Expr> &value = sf.locals[valueIdx].value;
-  if (!value.isNull() && isa<ConstantExpr>(value)) {
-    prevIsConcrete = true;
-    uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-    sf.localBlacklistHash = _sub_from_hash(sf.localBlacklistHash,
-                                           cvalue, valueIdx);
-  }
-
-  if (!newValue.isNull() && isa<ConstantExpr>(newValue)) {
-    nextIsConcrete = true;
-    uint64_t cvalue = cast<ConstantExpr>(newValue)->getZExtValue();
-    sf.localBlacklistHash = _add_to_hash(sf.localBlacklistHash,
-                                         cvalue, valueIdx);
-  }
-
-  if (prevIsConcrete && !nextIsConcrete && DebugLogMergeBlacklistVals) {
-    std::cerr << "*** Wrote symbolic value to blacklisted local:\n  ";
-    if (target)
-      target->dump();
-    std::cerr << " New value: "; newValue->dump();
-  }
-}
-
-void ExecutionState::verifyLocalBlacklistHash() {
-#ifdef DEBUG_MERGE_BLACKLIST_MAP
-#warning XXX slow
-
-  foreach (StackFrame &sf, stack()) {
-    uint64_t correctLocalBlacklistHash = hashInit();
-
-    for (unsigned i = 0; i < sf.kf->numRegisters; ++i) {
-      if (!sf.localBlacklistMap.get(i))
-        continue;
-
-      correctLocalBlacklistHash += i;
-
-      ref<Expr> &value = sf.locals[i].value;
-      if (!value.isNull() && isa<ConstantExpr>(value)) {
-        uint64_t cvalue = cast<ConstantExpr>(value)->getZExtValue();
-        correctLocalBlacklistHash = _add_to_hash(correctLocalBlacklistHash,
-                                                 cvalue, i);
-      }
-    }
-
-    assert(sf.localBlacklistHash == correctLocalBlacklistHash);
-  }
-#endif
 }
 
 /***/

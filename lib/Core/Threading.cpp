@@ -42,11 +42,15 @@ namespace klee {
 
 /* StackFrame Methods */
 
-StackFrame::StackFrame(KInstIterator _caller, uint64_t _callerExecIndex, KFunction *_kf)
+StackFrame::StackFrame(KInstIterator _caller, uint64_t _callerExecIndex, KFunction *_kf,
+                       StackFrame *parentFrame)
   : caller(_caller), kf(_kf), callPathNode(0),
     minDistToUncoveredOnReturn(0), varargs(0),
-    execIndexStack(1), localBlacklistMap(_kf->numRegisters, false),
-    localBlacklistHash(hashInit()) {
+    execIndexStack(1),
+    qceTotal(parentFrame ? parentFrame->qceTotal : 0),
+    qceTotalBase(parentFrame ? parentFrame->qceTotalBase : 0),
+    qceMap(parentFrame ? parentFrame->qceMap : QCEMap()),
+    qceLocalsTrackMap(_kf->numRegisters, false) {
 
   execIndexStack[0].loopID = uint64_t(-1);
   execIndexStack[0].index = hashUpdate(_callerExecIndex, (uintptr_t) _kf);
@@ -65,8 +69,11 @@ StackFrame::StackFrame(const StackFrame &s)
     varargs(s.varargs),
     execIndexStack(s.execIndexStack),
     isUserMain(s.isUserMain),
-    localBlacklistMap(s.localBlacklistMap, s.kf->numRegisters),
-    localBlacklistHash(s.localBlacklistHash) {
+    qceTotal(s.qceTotal),
+    qceTotalBase(s.qceTotalBase),
+    qceMap(s.qceMap),
+    qceLocalsTrackMap(s.qceLocalsTrackMap, s.kf->numRegisters),
+    qceLocalsTrackHash(s.qceLocalsTrackHash) {
 
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i=0; i<s.kf->numRegisters; i++)
@@ -83,8 +90,11 @@ StackFrame& StackFrame::operator=(const StackFrame &s) {
     varargs = s.varargs;
     execIndexStack = s.execIndexStack;
     isUserMain = s.isUserMain;
-    localBlacklistMap = BitArray(s.localBlacklistMap, s.kf->numRegisters);
-    localBlacklistHash = s.localBlacklistHash;
+    qceTotal = s.qceTotal;
+    qceTotalBase = s.qceTotalBase;
+    qceMap = s.qceMap;
+    qceLocalsTrackMap = BitArray(s.qceLocalsTrackMap, s.kf->numRegisters);
+    qceLocalsTrackHash = s.qceLocalsTrackHash;
 
     if (locals)
       delete []locals;
@@ -104,7 +114,6 @@ StackFrame::~StackFrame() {
 /* Thread class methods */
 
 Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
-  mergeBlacklistHash(hashInit()),
   enabled(true), waitingList(0), execIndex(hashInit()), mergeIndex(0) {
 
   execIndex = hashUpdate(execIndex, tid);
@@ -114,7 +123,7 @@ Thread::Thread(thread_id_t tid, process_id_t pid, KFunction * kf) :
   tuid = std::make_pair(tid, pid);
 
   if (kf) {
-    stack.push_back(StackFrame(0, execIndex, kf));
+    stack.push_back(StackFrame(0, execIndex, kf, NULL));
     topoIndex.push_back(TopoFrame(uint64_t(-1), 0));
 
     pc = kf->instructions;

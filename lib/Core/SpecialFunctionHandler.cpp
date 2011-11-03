@@ -266,11 +266,11 @@ bool SpecialFunctionHandler::writeConcreteValue(KInstruction *target,
 
   ref<Expr> offset = op.first->getOffsetExpr(address);
   ref<ConstantExpr> valueExpr = ConstantExpr::create(value, width);
-  state.verifyBlacklistHash();
-  state.updateMemoryValue(target, op.first, os, offset, valueExpr);
+  executor.verifyQceMap(state);
+  executor.updateQceMemoryValue(state, op.first, os, offset, valueExpr, target);
   os->write(offset, valueExpr);
   //os->write(op.first->getOffsetExpr(address), ConstantExpr::create(value, width));
-  state.verifyBlacklistHash();
+  executor.verifyQceMap(state);
 
   return true;
 }
@@ -1085,6 +1085,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
                                      "cannot make readonly object symbolic",
                                      "user.err");
     } else {
+      executor.updateQceMapOnFree(state, mo, target);
       executor.executeMakeSymbolic(*s, mo, os->isShared);
     }
   }
@@ -1227,6 +1228,7 @@ void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
                                                   KInstruction *target,
                                                   std::vector<ref<Expr> > &arguments)
 {
+#if 0
   assert(arguments.size()==3 &&
          "invalid number of arguments klee_merge_blacklist");
 
@@ -1241,6 +1243,7 @@ void SpecialFunctionHandler::handleMergeBlacklist(ExecutionState &state,
   uint64_t activate = cast<ConstantExpr>(arguments[2])->getZExtValue();
   state.updateMemoryUseFrequency(target->inst, address, size,
                                  activate ? INT_MAX : 0, INT_MAX);
+#endif
 
 #if 0
   ObjectPair op;
@@ -1277,6 +1280,7 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments)
 {
+#if 0
   /*
   assert(arguments.size()==0 &&
          "invalid number of arguments klee_use_freq");
@@ -1333,6 +1337,7 @@ void SpecialFunctionHandler::handleUseFreq(ExecutionState &state,
 
   state.updateUseFrequency(target->inst, address, size, useFreq, totalUseFreq);
   */
+#endif
 }
 
 void SpecialFunctionHandler::handleRendezVous(ExecutionState &state,

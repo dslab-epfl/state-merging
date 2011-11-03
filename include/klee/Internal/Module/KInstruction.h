@@ -22,8 +22,11 @@
 #endif
 #include <vector>
 
+#include "klee/Internal/Module/QCE.h"
+
 namespace llvm {
   class Instruction;
+  class Value;
 }
 
 namespace klee {
@@ -31,6 +34,16 @@ namespace klee {
   struct InstructionInfo;
   class KModule;
 
+  struct KQCEInfoItem {
+    HotValue hotValue;
+    double qce;
+    int vnumber;
+  };
+
+  struct KQCEInfo {
+    double total;
+    std::vector<KQCEInfoItem> vars;
+  };
 
   /// KInstruction - Intermediate instruction representation used
   /// during execution.
@@ -48,9 +61,13 @@ namespace klee {
 
     bool originallyCovered;
     bool isBBHead;
+
+    KQCEInfo* qceInfo;
+
   public:
     virtual ~KInstruction();
     void dump() const;
+    void print(llvm::raw_ostream &ostr) const;
   };
 
   struct KGEPInstruction : KInstruction {

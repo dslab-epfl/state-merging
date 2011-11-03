@@ -44,6 +44,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Analysis/Verifier.h"
+#include "llvm/ADT/APInt.h"
 
 #include <sstream>
 #include <fstream>
@@ -108,8 +109,8 @@ namespace {
       cl::desc("A file containing initial coverage values"));
 
   cl::opt<bool>
-  EnableUseFreq("enable-use-freq",
-      cl::desc("Enable use frequency analysis for state merging"),
+  EnableQCE("enable-qce",
+      cl::desc("Enable QCE analysis for state merging"),
       cl::init(true));
 
   cl::opt<bool>
@@ -468,6 +469,9 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
   // avoid creating stale uses.
 
   const llvm::Type *i8Ty = Type::getInt8Ty(getGlobalContext());
+  const llvm::Type *i16Ty = Type::getInt16Ty(getGlobalContext());
+  const llvm::Type *i32Ty = Type::getInt32Ty(getGlobalContext());
+  const llvm::Type *i64Ty = Type::getInt64Ty(getGlobalContext());
   forceImport(module, "memcpy", PointerType::getUnqual(i8Ty),
               PointerType::getUnqual(i8Ty),
               PointerType::getUnqual(i8Ty),
@@ -480,6 +484,13 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
               PointerType::getUnqual(i8Ty),
               Type::getInt32Ty(getGlobalContext()),
               targetData->getIntPtrType(getGlobalContext()), (Type*) 0);
+
+  forceImport(module, "uadds", i32Ty, i16Ty, i16Ty, (Type*) 0);
+  forceImport(module, "uadd",  i64Ty, i32Ty, i32Ty, (Type*) 0);
+
+  const llvm::Type *i64PairTy = StructType::get(getGlobalContext(),
+                                                i64Ty, i64Ty, (Type*) 0);
+  forceImport(module, "uaddl", i64PairTy, i64Ty, i64Ty, (Type*) 0);
 
   // FIXME: Missing force import for various math functions.
 
@@ -547,11 +558,11 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
     pm4.add(createLoopRotatePass());
     pm4.add(createLoopSimplifyPass());
     pm4.add(createIndVarSimplifyPass()); // Improves trip-count computation
-    if (EnableUseFreq)
-      pm4.add(new UseFrequencyAnalyzerPass(targetData));
     if (EnableExecIndex)
       pm4.add(new AnnotateLoopPass());
     pm4.add(new RendezVousPointPass());
+    if (EnableQCE)
+      pm4.add(new QCEAnalyzerPass());
     pm4.add(new PhiCleanerPass()); // LoopSimplify pass may have changed PHIs
     pm4.add(createVerifierPass());
     pm4.run(*module);
@@ -834,6 +845,7 @@ KFunction::KFunction(llvm::Function *_function,
           ki->operands[j+1] = getOperandNum(v, registerMap, km, ki);
         }
 
+#if 0
         if (kleeUseFreqFunc && cs.getCalledFunction() == kleeUseFreqFunc) {
           KUseFreqInstruction *ku = static_cast<KUseFreqInstruction*>(ki);
           MDNode *md = ki->inst->getMetadata("uf");
@@ -843,6 +855,7 @@ KFunction::KFunction(llvm::Function *_function,
           ku->numUses = cast<ConstantInt>(md->getOperand(2))->getZExtValue();
           ku->totalNumUses = cast<ConstantInt>(md->getOperand(3))->getZExtValue();
         }
+#endif
       }
       else {
         unsigned numOperands = it->getNumOperands(); 
@@ -863,6 +876,26 @@ KFunction::KFunction(llvm::Function *_function,
             ki->operands[j] = -(km->getConstantID(c, ki) + 2);
           }
         }
+      }
+
+      if (const MDNode *MD = it->getMetadata("qce")) {
+        ki->qceInfo = new KQCEInfo;
+        ki->qceInfo->total =
+            cast<ConstantInt>(MD->getOperand(0))->getValue().roundToDouble();
+        for (unsigned i = 1; i < MD->getNumOperands(); ++i) {
+          const MDNode *MDo = cast<const MDNode>(MD->getOperand(i));
+          ki->qceInfo->vars.push_back(KQCEInfoItem());
+          KQCEInfoItem &item = ki->qceInfo->vars.back();
+          item.hotValue = HotValue(
+            HotValueKind(cast<ConstantInt>(MDo->getOperand(0))->getZExtValue()),
+            MDo->getOperand(1));
+          item.qce =
+            cast<ConstantInt>(MDo->getOperand(2))->getValue().roundToDouble();
+          item.vnumber =
+            getOperandNum(item.hotValue.getValue(), registerMap, km, ki);
+        }
+      } else {
+        ki->qceInfo = 0;
       }
 
       instructions[i++] = ki;

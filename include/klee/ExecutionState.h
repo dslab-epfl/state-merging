@@ -255,7 +255,7 @@ public:
   uint64_t interleavedMergeIndex;
 
   bool isPCCompatible(const ExecutionState &b) const;
-  bool areMergeBlacklistsCompatible(const ExecutionState &b) const;
+  bool areQCEMemoryTrackMapsCompatible(const ExecutionState &b) const;
 
   /* Duplicate states management */
   std::set<ExecutionState*> duplicates;
@@ -275,7 +275,8 @@ public:
   ExecutionState *branch(bool copy = false);
 
   void pushFrame(Thread &t, KInstIterator caller, KFunction *kf) {
-    t.stack.push_back(StackFrame(caller, t.mergeIndex, kf));
+    t.stack.push_back(StackFrame(caller, t.mergeIndex, kf,
+                                 !t.stack.empty() ? &t.stack.back() : NULL));
     t.topoIndex.push_back(TopoFrame(uint64_t(-1), 0));
   }
   void pushFrame(KInstIterator caller, KFunction *kf) {
@@ -286,10 +287,8 @@ public:
     StackFrame &sf = t.stack.back();
     for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(),
            ie = sf.allocas.end(); it != ie; ++it) {
-      updateBlacklistOnFree(*it);
       processes.find(t.getPid())->second.addressSpace.unbindObject(*it);
     }
-    updateBlacklistBeforePopFrame();
     t.stack.pop_back();
     t.topoIndex.pop_back();
   }
@@ -320,22 +319,6 @@ public:
   void updateMemoryUseFrequency(llvm::Instruction *inst,
                                ref<ConstantExpr> address, uint64_t size,
                                uint64_t useFreq, uint64_t totalUseFreq);
-
-  void updateMemoryValue(KInstruction *ki,
-                         const MemoryObject *mo, ObjectState *os,
-                         ref<Expr> offset, ref<Expr> newValue);
-
-  void updateBlacklistOnFree(const MemoryObject* mo);
-  void updateBlacklistBeforePopFrame();
-  void verifyBlacklistMap();
-  void verifyBlacklistHash();
-
-  void dumpBlacklist();
-
-  void updateValUseFrequency(llvm::Instruction *inst, int valueIdx,
-                             uint64_t useFreq, uint64_t totalUseFreq);
-  void updateLocalValue(KInstruction *target, int valueIdx, ref<Expr>& newValue);
-  void verifyLocalBlacklistHash();
 
 };
 
