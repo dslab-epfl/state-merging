@@ -431,6 +431,17 @@ std::ostream &printStateStack(std::ostream &os, const ExecutionState &state) {
 	return os;
 }
 
+std::ostream &printStateTopoIndex(std::ostream &os, const ExecutionState &state) {
+  os << "{";
+  for (TopoIndex::const_iterator it = state.getTopoIndex().begin(),
+      ie = state.getTopoIndex().end(); it != ie; it++) {
+    os << "(" << it->bbID << "|" << it->count << ")";
+  }
+  os << "}";
+
+  return os;
+}
+
 
 std::ostream &printStateConstraints(std::ostream &os, const ExecutionState &state) {
 	ExprPPrinter::printConstraints(os, state.constraints());
@@ -470,7 +481,11 @@ std::ostream &operator<<(std::ostream &os, const MemoryMap &mm) {
 }
 
 std::ostream &operator<<(std::ostream &os, const ExecutionState &state) {
-	return klee::c9::printStateStack(os, state);
+	klee::c9::printStateStack(os, state);
+	os << " ";
+	klee::c9::printStateTopoIndex(os, state);
+	os << " [" << &state << "]";
+	return os;
 }
 
 bool ExecutionState::isPCCompatible(const ExecutionState &b) const {

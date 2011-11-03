@@ -90,6 +90,14 @@ typedef llvm::DenseMap<HotValue, QCEFrameInfo> QCEMap;
 
 #define QCE_LOCALS_MAGIC_VALUE 0xde1fa442ff3e32abL
 
+struct TopoFrame {
+  uint64_t bbID;
+  uint64_t count;
+
+  TopoFrame(uint64_t _bbID, uint64_t _count) : bbID(_bbID), count(_count) { }
+};
+typedef std::vector<TopoFrame> TopoIndex;
+
 struct StackFrame {
   KInstIterator caller;
   KFunction *kf;
@@ -143,6 +151,7 @@ class Thread {
   friend class Executor;
   friend class ExecutionState;
   friend class Process;
+  friend class SpecialFunctionHandler;
 private:
 
   KInstIterator pc, prevPC;
@@ -161,6 +170,8 @@ private:
 
   uint64_t execIndex;
   uint64_t mergeIndex;
+
+  TopoIndex topoIndex;
 
 public:
   Thread(thread_id_t tid, process_id_t pid, KFunction *start_function);

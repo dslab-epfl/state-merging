@@ -69,7 +69,7 @@ std::string getKleeLibraryPath() {
   std::string kleePathName = getKleePath();
 
   Path libraryPath(kleePathName);
-  libraryPath.appendComponent(RUNTIME_CONFIGURATION);
+  libraryPath.appendComponent(RUNTIME_CONFIGURATION "+Asserts");
   libraryPath.appendComponent("lib");
 
   return libraryPath.str();

@@ -79,6 +79,7 @@ namespace klee {
 class Executor : public Interpreter, public ::cloud9::worker::SymbolicEngine {
   friend class LazyMergingSearcher;
   friend class BumpMergingSearcher;
+  friend class StaticMergingSearcher;
   friend class MergingSearcher;
   friend class RandomPathSearcher;
   friend class OwningSearcher;
