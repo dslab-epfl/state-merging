@@ -380,7 +380,7 @@ def compute_time(exps=None):
         for exp_n, exp in tool_exps.iteritems():
             result_exp = [exp_n]
             for c in exps_c:
-                if exp.has_key(c):
+                if exp.has_key(c) and 'WallTime' in exp[c].stats:
                     fmt = '%.0f'
                     if not exp[c].is_done:
                         fmt = '>=' + fmt
