@@ -21,6 +21,7 @@ using namespace klee;
 
 namespace {
   enum MergingType {
+    None,
     Manual,
     Bump,
     Lazy,
@@ -69,7 +70,8 @@ namespace {
   
   cl::opt<MergingType>
   UseMerge("use-merge", cl::desc("Enable support for state merging"),
-      cl::values(clEnumValN(Manual, "manual", "klee_merge() (experimental)"),
+      cl::values(clEnumValN(None, "none", "disable merging"),
+                 clEnumValN(Manual, "manual", "klee_merge() (experimental)"),
                  clEnumValN(Bump, "bump", "klee_merge() (extra experimental)"),
                  clEnumValN(Lazy, "lazy", "lazy merging (research)"),
                  clEnumValN(Static, "static", "static merging (plain ol')"),
@@ -181,7 +183,7 @@ Searcher *klee::constructUserSearcher(Executor &executor, Searcher *original) {
     searcher = new BatchingSearcher(searcher, BatchTime, BatchInstructions);
   }
 
-  if (UseMerge) {
+  if (UseMerge && (UseMerge != None)) {
     switch (UseMerge) {
     case Manual:
       searcher = new MergingSearcher(executor, searcher);
