@@ -313,9 +313,9 @@ namespace {
           cl::init(false));
 
   cl::opt<float>
-  QceThreshold("qce-threshold", cl::init(0.00001));
+  QceThreshold("qce-threshold", cl::init(1e-8));
 
-  cl::opt<uint64_t>
+  cl::opt<float>
   QceAbsThreshold("qce-abs-threshold", cl::init(0));
 
   cl::opt<bool>

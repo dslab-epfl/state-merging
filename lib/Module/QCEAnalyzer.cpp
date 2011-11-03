@@ -23,7 +23,7 @@
 #define foreach BOOST_FOREACH
 
 #warning XXX: try making the following much larger
-#define MAX_DATAFLOW_DEPTH 24
+#define MAX_DATAFLOW_DEPTH 0
 
 #define DEFAULT_LOOP_TRIP_COUNT 10
 #define USE_QC_MAX
