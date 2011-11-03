@@ -329,7 +329,7 @@ def categorize_exps(exps=None):
 
     return ex
 
-def compute_diffsym(exps=None):
+def compute_diffsym(exps=None, timeout=3600.0):
     if exps is None:
         exps = el
 
@@ -338,7 +338,7 @@ def compute_diffsym(exps=None):
     for tool, tool_exps in exps.iteritems():
         for exp_n, exp in tool_exps.iteritems():
             lm_finished = klee_finished = False
-            lm_time = klee_time = 7200.0 # XXX
+            lm_time = klee_time = timeout # XXX
 
             if exp.has_key('lazy_merge'):
                 lm_finished = exp.lazy_merge.is_done
@@ -351,7 +351,7 @@ def compute_diffsym(exps=None):
             if exp.has_key('vanilla'):
                 klee_finished = exp.vanilla.is_done
                 # We are re-running vanilla experiments right now... hack to skip non-finished re-runs
-                if klee_finished or exp.vanilla.stats.ExecutionTime[-1] > 7200:
+                if klee_finished or exp.vanilla.stats.ExecutionTime[-1] > timeout:
                     klee_time = exp.vanilla.stats.ExecutionTime[-1]
 
             if lm_finished:
@@ -366,6 +366,44 @@ def compute_diffsym(exps=None):
         result[k].sort(cmp=lambda x, y: cmp(x[0], y[0]))
 
     return result
+
+def compute_time(exps=None):
+    if exps is None:
+        exps = el
+
+    exps_c = 'vanilla lazy static static_nfl'.split()
+
+    result = { None: [['n'] + exps_c] }
+    exps = categorize_exps(exps)
+    for tool, tool_exps in exps.iteritems():
+        result_tool = []
+        for exp_n, exp in tool_exps.iteritems():
+            result_exp = [exp_n]
+            for c in exps_c:
+                if exp.has_key(c):
+                    fmt = '%.0f'
+                    if not exp[c].is_done:
+                        fmt = '>=' + fmt
+                    result_exp.append(fmt % (exp[c].stats.WallTime[-1]))
+                else:
+                    result_exp.append('')
+            result_tool.append(result_exp)
+        result_tool.sort()
+        result['%7s' % tool] = result_tool
+
+    return result
+
+def print_time(exps=None):
+    t = compute_time(exps)
+
+    print ' '*8, ' '.join(['%8s' % c for c in t[None][0]])
+
+    for tool, tool_exps in t.iteritems():
+        if tool is None:
+            continue
+        print '%8s' % tool
+        for exp in tool_exps:
+            print ' '*8, ' '.join(['%8s' % c for c in exp])
 
 def print_diffsym(r):
     for tool, rl in r.iteritems():
@@ -402,6 +440,7 @@ if __name__ == '__main__':
     parser.add_argument('--timeout', type=int, default=0,
                         help='Timeout in seconds after which an experiment is considered completed')
     parser.add_argument('--diffsym', action='store_true', help='Compute and store diffsym results')
+    parser.add_argument('--time', action='store_true', help='Compute time for results')
     parser.add_argument('experiments', nargs='+', help='Experiments to analyze')
 
     args = parser.parse_args()
@@ -433,10 +472,13 @@ if __name__ == '__main__':
 
     if args.diffsym:
         print 'Computing diffsym data...'
-        r = compute_diffsym()
+        r = compute_diffsym(timeout)
         import pickle
         pickle.dump(r, open('diffsym.pickle', 'w'))
         print_diffsym(r)
+
+    if args.time:
+        print_time()
 
     #if not args.interactive:
     #    sys.exit(0)
