@@ -2216,12 +2216,19 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::Load: {
     ref<Expr> base = eval(ki, 0, state).value;
     if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
-      base = state.constraints().simplifyExpr(base);
+      ref<Expr> newBase = state.constraints().simplifyExpr(base);
       //if (!isa<ConstantExpr>(base))
       //  base = toUnique(state, base);
-      int vnumber = ki->operands[0];
-      if (vnumber >= 0)
-        state.stack().back().locals[vnumber].value = base;
+      if (base != newBase) {
+        int vnumber = ki->operands[0];
+        if (vnumber >= 0) {
+          verifyQceMap(state);
+          updateQceLocalsValue(state, vnumber, newBase, NULL);
+          state.stack().back().locals[vnumber].value = newBase;
+          verifyQceMap(state);
+        }
+        base = newBase;
+      }
     }
     executeMemoryOperation(state, false, base, 0, ki);
     break;
@@ -2230,12 +2237,19 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> base = eval(ki, 1, state).value;
     ref<Expr> value = eval(ki, 0, state).value;
     if (SimplifySymIndices && !isa<ConstantExpr>(base)) {
-      base = state.constraints().simplifyExpr(base);
+      ref<Expr> newBase = state.constraints().simplifyExpr(base);
       //if (!isa<ConstantExpr>(base))
       //  base = toUnique(state, base);
-      int vnumber = ki->operands[1];
-      if (vnumber >= 0)
-        state.stack().back().locals[vnumber].value = base;
+      if (base != newBase) {
+        int vnumber = ki->operands[1];
+        if (vnumber >= 0) {
+          verifyQceMap(state);
+          updateQceLocalsValue(state, vnumber, newBase, NULL);
+          state.stack().back().locals[vnumber].value = newBase;
+          verifyQceMap(state);
+        }
+        base = newBase;
+      }
     }
     executeMemoryOperation(state, true, base, value, ki);
     break;
@@ -2684,7 +2698,7 @@ void Executor::dumpQceMap(ExecutionState &state) {
   dbgs() << "\n";
 }
 
-#ifdef VERIFY_QCE_MAP
+#ifdef VERIFY_QCE_MAPS
 void Executor::verifyQceMap(ExecutionState &state) {
   unsigned stackSize = state.stack().size();
   StackFrame &sf = state.stack().back();
@@ -2845,18 +2859,15 @@ bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
 
   if (inVhAdd) {
     for (; size; --size, ++offset) {
-      QCEMemoryTrackSet &set = qceMemoryTrackMap.insert(
+      std::pair<QCEMemoryTrackMap::iterator, bool> res =
+       qceMemoryTrackMap.insert(
             std::make_pair(QCEMemoryTrackIndex(mo, offset),
-                           QCEMemoryTrackSet())).first->second;
-      bool inserted = set.insert(hotValue);
-      if (!inserted) {
-        //assert(res.first->second != hotValue);
-        //klee_warning("*** XXX: qce memory track item already exist. Aliasing?\n");
-        continue;
+                           QCEMemoryTrackSet()));
+      res.first->second.insert(hotValue);
+      if (res.second) {
+        unsigned value = op.second->read8c(offset);
+        qceMemoryTrackHash.addValueAt(APInt(32, value), mo, offset);
       }
-
-      unsigned value = op.second->read8c(offset);
-      qceMemoryTrackHash.addValueAt(APInt(32, value), mo, offset);
     }
   } else {
     for (; size; --size, ++offset) {
@@ -2875,11 +2886,12 @@ bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
         continue;
       }
 
-      if (it->second.empty())
+      if (it->second.empty()) {
         qceMemoryTrackMap.erase(it);
 
-      unsigned value = op.second->read8c(offset);
-      qceMemoryTrackHash.removeValueAt(APInt(32, value), mo, offset);
+        unsigned value = op.second->read8c(offset);
+        qceMemoryTrackHash.removeValueAt(APInt(32, value), mo, offset);
+      }
     }
   }
 
@@ -3152,7 +3164,15 @@ void Executor::updateQceMapOnExec(ExecutionState &state) {
 
       // Remove items with zero QCE
       if (frame.qce < 0.5 && !frame.inVhAdd) {
-        sf.qceMap.erase(qceMapIt);
+        if (stackSize > 1) {
+          QCEMap &pMap = state.stack()[stackSize-2].qceMap;
+          QCEMap::iterator pIt = pMap.find(item.hotValue);
+          if (pIt == pMap.end() || !pIt->second.inVhAdd) {
+            sf.qceMap.erase(qceMapIt);
+          }
+        } else {
+          sf.qceMap.erase(qceMapIt);
+        }
       }
     }
 
