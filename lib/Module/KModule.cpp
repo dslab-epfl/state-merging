@@ -562,7 +562,7 @@ void KModule::prepare(const Interpreter::ModuleOptions &opts,
       pm4.add(new AnnotateLoopPass());
     pm4.add(new RendezVousPointPass());
     if (EnableQCE)
-      pm4.add(new QCEAnalyzerPass());
+      pm4.add(new QCEAnalyzerPass(targetData));
     pm4.add(new PhiCleanerPass()); // LoopSimplify pass may have changed PHIs
     pm4.add(createVerifierPass());
     pm4.run(*module);
@@ -884,13 +884,12 @@ KFunction::KFunction(llvm::Function *_function,
             cast<ConstantInt>(MD->getOperand(0))->getValue().roundToDouble();
         for (unsigned i = 1; i < MD->getNumOperands(); ++i) {
           const MDNode *MDo = cast<const MDNode>(MD->getOperand(i));
+          std::pair<HotValue, APInt> hvPair = HotValue::fromMDNode(MDo);
+
           ki->qceInfo->vars.push_back(KQCEInfoItem());
           KQCEInfoItem &item = ki->qceInfo->vars.back();
-          item.hotValue = HotValue(
-            HotValueKind(cast<ConstantInt>(MDo->getOperand(0))->getZExtValue()),
-            MDo->getOperand(1));
-          item.qce =
-            cast<ConstantInt>(MDo->getOperand(2))->getValue().roundToDouble();
+          item.hotValue = hvPair.first;
+          item.qce = hvPair.second.roundToDouble();
           item.vnumber =
             getOperandNum(item.hotValue.getValue(), registerMap, km, ki);
         }

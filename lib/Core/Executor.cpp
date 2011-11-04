@@ -2647,7 +2647,7 @@ bool _qceListComparator(const QCEMap::value_type &a,
   return a.second.qce > b.second.qce;
 }
 
-bool _qceHotValueComparator(HotValue a, HotValue b) {
+bool _qceHotValueComparator(const HotValue &a, const HotValue &b) {
   if (a.getValue()->hasName() && b.getValue()->hasName())
     return strcmp(a.getValue()->getNameStr().c_str(),
                   b.getValue()->getNameStr().c_str()) < 0;
@@ -2656,7 +2656,7 @@ bool _qceHotValueComparator(HotValue a, HotValue b) {
   else if (b.getValue()->hasName())
     return false;
   else
-    return a.getValue() < b.getValue();
+    return a < b;
 }
 
 void Executor::dumpQceMap(ExecutionState &state) {
@@ -2676,15 +2676,15 @@ void Executor::dumpQceMap(ExecutionState &state) {
 
   dbgs() << "qceMemoryTrackMap:\n";
 
-  std::set<HotValue, bool (*)(HotValue, HotValue)>
+  std::set<HotValue, bool (*)(const HotValue&, const HotValue&)>
       qceMemoryTrackSet(_qceHotValueComparator);
   foreach (QCEMemoryTrackMap::value_type &p,
            state.crtThread().qceMemoryTrackMap) {
-    foreach (HotValue hv, p.second)
+    foreach (const HotValue &hv, p.second)
       qceMemoryTrackSet.insert(hv);
   }
 
-  foreach (HotValue hotValue, qceMemoryTrackSet) {
+  foreach (const HotValue &hotValue, qceMemoryTrackSet) {
     dbgs() << "  ";
     hotValue.dump();
   }
@@ -2732,7 +2732,7 @@ void Executor::verifyQceMap(ExecutionState &state) {
            state.crtThread().qceMemoryTrackMap) {
     assert(!p.second.empty());
 
-    foreach (HotValue hv, p.second)
+    foreach (const HotValue &hv, p.second)
       activeHotValues2.insert(hv);
 
     const MemoryObject *mo = p.first.first;
@@ -2788,7 +2788,8 @@ void Executor::verifyQceMap(ExecutionState &state) {
 }
 #endif
 
-bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
+bool Executor::modifyQceMemoryTrackMap(ExecutionState &state,
+                                       const HotValue &hotValue,
                                        int vnumber, bool inVhAdd,
                                        const char* reason,
                                        KInstruction *ki) {
@@ -2805,6 +2806,9 @@ bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
     return false; // XXX: tracked address is symbolic ?
   }
 
+  address = address->Add(ConstantExpr::create(hotValue.getOffset(),
+                                              address->getWidth()));
+
   // Resolve and check address
   ObjectPair op;
   bool ok = state.addressSpace().resolveOne(address, op);
@@ -2815,9 +2819,10 @@ bool Executor::modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
 
   const MemoryObject* mo = op.first;
 
-  Expr::Width width = getWidthForLLVMType(
-        cast<PointerType>(hotValue.getValue()->getType())->getElementType());
-  uint64_t size = Expr::getMinBytesForWidth(width);
+  //Expr::Width width = getWidthForLLVMType(
+  //      cast<PointerType>(hotValue.getValue()->getType())->getElementType());
+  //uint64_t size = Expr::getMinBytesForWidth(width);
+  uint64_t size = hotValue.getSize();
 
   ref<Expr> chk = op.first->getBoundsCheckPointer(address, size);
   assert(chk->isTrue() && "Invalid qce track item?");
@@ -3010,7 +3015,7 @@ void Executor::updateQceMapOnFree(ExecutionState &state, const MemoryObject *mo,
       continue;
     }
 
-    foreach (HotValue hotValue, bi->second) {
+    foreach (const HotValue &hotValue, bi->second) {
       QCEMap::iterator qceMapIt = state.stack().back().qceMap.find(hotValue);
       assert(qceMapIt != state.stack().back().qceMap.end());
 
@@ -3045,7 +3050,8 @@ void Executor::updateQceMapOnFree(ExecutionState &state, const MemoryObject *mo,
   }
 }
 
-bool Executor::modifyQceLocalsTrackMap(ExecutionState &state, HotValue hotValue,
+bool Executor::modifyQceLocalsTrackMap(ExecutionState &state,
+                                       const HotValue &hotValue,
                                        StackFrame &sf, int vnumber,
                                        bool inVhAdd,
                                        const char* reason,

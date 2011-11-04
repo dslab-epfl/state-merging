@@ -207,7 +207,7 @@ private:
   void updateQceMapOnFree(ExecutionState &state,
                           const MemoryObject *mo, KInstruction *ki = NULL);
 
-  bool modifyQceMemoryTrackMap(ExecutionState &state, HotValue hotValue,
+  bool modifyQceMemoryTrackMap(ExecutionState &state, const HotValue &hotValue,
                                int vnumber, bool inVhAdd,
                                const char *reason = NULL,
                                KInstruction *ki = NULL);
@@ -217,7 +217,7 @@ private:
                             ref<Expr> offset, ref<Expr> newValue,
                             KInstruction *ki = NULL);
 
-  bool modifyQceLocalsTrackMap(ExecutionState &state, HotValue hotValue,
+  bool modifyQceLocalsTrackMap(ExecutionState &state, const HotValue &hotValue,
                                StackFrame &sf, int vnumber, bool inVhAdd,
                                const char *reason = NULL,
                                KInstruction *ki = NULL);

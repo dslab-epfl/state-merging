@@ -143,7 +143,7 @@ struct StackFrame {
 };
 
 typedef std::pair<const MemoryObject*, uint64_t> QCEMemoryTrackIndex;
-typedef llvm::SmallPtrSet<HotValue, 1> QCEMemoryTrackSet;
+typedef llvm::DenseSet<HotValue> QCEMemoryTrackSet;
 typedef llvm::DenseMap<QCEMemoryTrackIndex, QCEMemoryTrackSet>
                   QCEMemoryTrackMap;
 

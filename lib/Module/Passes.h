@@ -208,6 +208,8 @@ public:
 };
 
 class QCEAnalyzerPass : public llvm::CallGraphSCCPass {
+  llvm::TargetData *m_targetData;
+
 public:
   static char ID;
   QCEAnalyzerPass(llvm::TargetData *TD = 0);

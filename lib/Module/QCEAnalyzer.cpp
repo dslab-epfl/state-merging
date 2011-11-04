@@ -47,7 +47,7 @@ typedef llvm::SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
 typedef llvm::ImmutableMap<HotValue, APInt> UseCountInfo;
 
 QCEAnalyzerPass::QCEAnalyzerPass(TargetData *TD)
-      : CallGraphSCCPass(ID) {
+      : CallGraphSCCPass(ID), m_targetData(TD) {
   initializeQCEAnalyzerPassPass(*PassRegistry::getPassRegistry());
 }
 
@@ -93,22 +93,40 @@ static bool isIgnored(const Value *hotValueDep) {
   return false;
 }
 
-static HotValue getPointerHotValue(Value* Ptr) {
-  assert(Ptr->getType()->isPointerTy());
+static unsigned computeGEPOffset(GetElementPtrInst *GEP, TargetData *TD) {
+  assert(GEP->hasAllConstantIndices());
+  SmallVector<Value*, 8> idx(GEP->op_begin() + 1, GEP->op_end());
+  return TD->getIndexedOffset(GEP->getPointerOperandType(), &idx[0], idx.size());
+}
+
+static HotValue getPointerHotValue(Value* Ptr, TargetData *TD,
+                                   unsigned offset, unsigned size) {
   if (Constant *C = dyn_cast<Constant>(Ptr)) {
     if (!C->isNullValue() && !isIgnored(Ptr))
-      return HotValue(HVPtr, Ptr);
-      //deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
+      return HotValue(HVPtr, Ptr, offset, size);
+
   } else if (isa<AllocaInst>(Ptr) || isa<Argument>(Ptr)) {
-    return HotValue(HVPtr, Ptr);
-    //deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
-  }
-#warning XXX: why is this commented out ?
-  /*else if (const CallInst *CI = dyn_cast<CallInst>(Ptr)) {
+    return HotValue(HVPtr, Ptr, offset, size);
+
+  } else if (CallInst *CI = dyn_cast<CallInst>(Ptr)) {
     if (CI->getCalledFunction()->getName() == "malloc")
-      deps->insert(std::make_pair(HotValue(HVPtr, Ptr), numUsesMult));
-  }*/
-  return HotValue(HVVal, NULL);
+      return HotValue(HVPtr, Ptr, offset, size);
+
+  } else if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(Ptr)) {
+    if (GEP->hasAllConstantIndices()) {
+      return getPointerHotValue(GEP->getPointerOperand(), TD,
+                                offset + computeGEPOffset(GEP, TD), size);
+    }
+
+  } else if (CastInst *CI = dyn_cast<CastInst>(Ptr)) {
+    // Cast is OK if it is between ints and ptr and is not losy
+    if (CI->getSrcTy()->isIntegerTy() || CI->getSrcTy()->isPointerTy()) {
+      if (TD->getTypeStoreSize(CI->getSrcTy()) >= TD->getPointerSize()) {
+        return getPointerHotValue(CI->getOperand(0), TD, offset, size);
+      }
+    }
+  }
+  return HotValue();
 }
 
 /// Traverse data flow dependencies of hotValue, gathering its dependencies
@@ -116,6 +134,7 @@ static HotValue getPointerHotValue(Value* Ptr) {
 /// Return a set of pointers to such memory locations.
 static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
                                const VisitedBBs &visitedBBs,
+                               TargetData* TD,
                                APInt numUsesMult = APInt(QCE_BWIDTH, 1)) {
   if (isa<Constant>(hotValueUse) || isa<MDNode>(hotValueUse))
     return; // We are not interested in constants
@@ -135,7 +154,11 @@ static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
       continue;
 
     if (LoadInst *LI = dyn_cast<LoadInst>(V)) {
-      HotValue hotValue = getPointerHotValue(LI->getPointerOperand());
+      const Type *PTy = LI->getPointerOperand()->getType();
+      unsigned size = TD->getTypeStoreSize(
+          cast<PointerType>(PTy)->getElementType());
+      HotValue hotValue =
+          getPointerHotValue(LI->getPointerOperand(), TD, 0, size);
       if (hotValue.getValue())
         deps->insert(std::make_pair(hotValue, numUsesMult));
       continue;
@@ -184,7 +207,8 @@ static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
 
 static void gatherCallSiteDeps(const CallSite CS,
                                APInt *totalUses, HotValueDeps *deps,
-                               const VisitedBBs &visitedBBs) {
+                               const VisitedBBs &visitedBBs,
+                               TargetData *TD) {
   const Function *F = CS.getCalledFunction();
   if (!F) {
     const ConstantExpr *CE = dyn_cast<ConstantExpr>(CS.getCalledValue());
@@ -208,15 +232,14 @@ static void gatherCallSiteDeps(const CallSite CS,
 
   for (unsigned i = 1; i < MD->getNumOperands(); ++i) {
     const MDNode *HMD = cast<const MDNode>(MD->getOperand(i));
-    HotValue HV = HotValue(
-          HotValueKind(cast<ConstantInt>(HMD->getOperand(0))->getZExtValue()),
-          HMD->getOperand(1));
-    APInt numUses = cast<ConstantInt>(HMD->getOperand(2))->getValue();
+    std::pair<HotValue, APInt> hvPair = HotValue::fromMDNode(HMD);
+    HotValue HV = hvPair.first;
+    APInt numUses = hvPair.second;
 
     if (HV.isVal()) {
       if (const Argument* A = dyn_cast<Argument>(HV.getValue())) {
         Value *V = CS.getArgument(A->getArgNo());
-        gatherHotValueDeps(V, deps, visitedBBs, numUses);
+        gatherHotValueDeps(V, deps, visitedBBs, TD, numUses);
       } else {
 #warning XXX
         //assert(0);
@@ -224,13 +247,9 @@ static void gatherCallSiteDeps(const CallSite CS,
     } else {
       if (const Argument* A = dyn_cast<Argument>(HV.getValue())) {
         Value *V = CS.getArgument(A->getArgNo());
-        if (V->getType()->isPointerTy()) {
-          HotValue hV = getPointerHotValue(V);
-          if (hV.getValue())
-            deps->insert(std::make_pair(hV, numUses));
-        } else {
-#warning Handle bitcasts
-        }
+        HotValue lHV = getPointerHotValue(V, TD, HV.getOffset(), HV.getSize());
+        if (lHV.getValue())
+          deps->insert(std::make_pair(lHV, numUses));
       } else if (isa<Constant>(HV.getValue())) {
         deps->insert(std::make_pair(HV, numUses));
       }
@@ -239,8 +258,8 @@ static void gatherCallSiteDeps(const CallSite CS,
 }
 
 static bool _annotationComparator(Value *l, Value *r) {
-  return cast<ConstantInt>(cast<MDNode>(l)->getOperand(2))->getValue().ugt(
-            cast<ConstantInt>(cast<MDNode>(r)->getOperand(2))->getValue());
+  return cast<ConstantInt>(cast<MDNode>(l)->getOperand(0))->getValue().ugt(
+            cast<ConstantInt>(cast<MDNode>(r)->getOperand(0))->getValue());
 }
 
 static void addAnnotationQC(Instruction *I, APInt totalUseCount,
@@ -252,10 +271,13 @@ static void addAnnotationQC(Instruction *I, APInt totalUseCount,
   Args.push_back(ConstantInt::get(Ctx, totalUseCount));
 
   foreach (UseCountInfo::value_type &p, useCountInfo) {
+    /*
     Value *NArgs[3] = { ConstantInt::get(Ctx, APInt(1, p.first.getKind())),
                         const_cast<Value*>(p.first.getValue()),
                         ConstantInt::get(Ctx, p.second) };
     Args.push_back(MDNode::get(Ctx, NArgs, 3));
+    */
+    Args.push_back(p.first.toMDNode(Ctx, p.second));
   }
 
   std::sort(Args.begin()+1, Args.end(), _annotationComparator);
@@ -431,7 +453,8 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       // Check whether a symbolic operand to the current instruction may
       // force KLEE to call the solver...
       if (CallSite CS = CallSite(I)) {
-        gatherCallSiteDeps(CS, &instTotalUseCount, &hotValueDeps, visitedBBs);
+        gatherCallSiteDeps(CS, &instTotalUseCount, &hotValueDeps,
+                           visitedBBs, m_targetData);
       } else {
         Value *V = 0;
 
@@ -450,7 +473,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         }
 
         if (V && !isa<Constant>(V)) {
-          gatherHotValueDeps(V, &hotValueDeps, visitedBBs);
+          gatherHotValueDeps(V, &hotValueDeps, visitedBBs, m_targetData);
           instTotalUseCount = 1;
         }
       }
