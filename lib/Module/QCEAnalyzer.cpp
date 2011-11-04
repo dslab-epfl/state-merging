@@ -26,7 +26,13 @@
 #define MAX_DATAFLOW_DEPTH 0
 
 #define DEFAULT_LOOP_TRIP_COUNT 10
-#define USE_QC_MAX
+//#define USE_QC_MAX
+
+// Path decay coefficient as a rational. When it is set to 0, every path is
+// considered feasible. When it is set to 1, only one path at each branch
+// is considered feasible.
+#define QC_SUM_MULT_NOM    2
+#define QC_SUM_MULT_DENOM  3
 
 namespace llvm {
   void initializeQCEAnalyzerPassPass(PassRegistry&);
@@ -315,6 +321,10 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     APInt &bbTotalUseCount = totalUseCountMap.insert(
           std::make_pair(BB, APInt(QCE_BWIDTH, 0))).first->second;
 
+#ifndef USE_QC_MAX
+    unsigned bbNumSuccessors = 0;
+#endif
+
     for (succ_iterator succIt = succ_begin(BB),
                        succE  = succ_end(BB); succIt != succE; ++succIt) {
 
@@ -354,8 +364,37 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         bbTotalUseCount = succTotalUseCount;
 #else
       bbTotalUseCount += succTotalUseCount;
+      bbNumSuccessors += 1;
+
+      // Check for overflow
+      assert(!bbTotalUseCount.isNegative());
 #endif
     }
+
+#ifndef USE_QC_MAX
+    if (bbNumSuccessors > 1) {
+      APInt nom(QCE_BWIDTH, QC_SUM_MULT_DENOM +
+                            QC_SUM_MULT_NOM * (bbNumSuccessors - 1));
+      APInt denom(QCE_BWIDTH, QC_SUM_MULT_DENOM);
+
+      UseCountInfo newBbUseCountInfo = useCountInfoFactory.getEmptyMap();
+      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        APInt count = (p.second * denom).udiv(nom);
+        newBbUseCountInfo = useCountInfoFactory.add(newBbUseCountInfo,
+                  p.first, count);
+      }
+      bbUseCountInfo = newBbUseCountInfo;
+
+      // Check for overflow
+      assert(bbTotalUseCount.getActiveBits() +
+             denom.getActiveBits() < QCE_BWIDTH);
+
+      bbTotalUseCount = (bbTotalUseCount * denom).udiv(nom);
+    }
+#endif
+
+    // Check for overflow
+    assert(!bbTotalUseCount.isNegative());
 
     if (!bbLoop) {
       // Filter out local vars that are defined strinctly after BB

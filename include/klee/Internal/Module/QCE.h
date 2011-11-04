@@ -6,7 +6,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/FoldingSet.h"
 
-#define QCE_BWIDTH 128
+#define QCE_BWIDTH 64
 
 namespace llvm {
   class raw_ostream;
