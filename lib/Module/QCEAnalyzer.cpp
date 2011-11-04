@@ -160,15 +160,18 @@ static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
       HotValue hotValue =
           getPointerHotValue(LI->getPointerOperand(), TD, 0, size);
       if (hotValue.getValue())
-        deps->insert(std::make_pair(hotValue, numUsesMult));
+        deps->insert(std::make_pair(
+                hotValue, APInt(QCE_BWIDTH, 0))).first->second += numUsesMult;
       continue;
 
     } else if (isa<Argument>(V)) {
-      deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
+      deps->insert(std::make_pair(
+        HotValue(HVVal, V), APInt(QCE_BWIDTH, 0))).first->second += numUsesMult;
       continue;
 
     } else if (PHINode *PHI = dyn_cast<PHINode>(V)) {
-      deps->insert(std::make_pair(HotValue(HVVal, V), numUsesMult));
+      deps->insert(std::make_pair(
+        HotValue(HVVal, V), APInt(QCE_BWIDTH, 0))).first->second += numUsesMult;
 #warning Try commenting/uncommenting the following
 #if MAX_DATAFLOW_DEPTH > 0
       if (depth >= MAX_DATAFLOW_DEPTH)
@@ -249,9 +252,11 @@ static void gatherCallSiteDeps(const CallSite CS,
         Value *V = CS.getArgument(A->getArgNo());
         HotValue lHV = getPointerHotValue(V, TD, HV.getOffset(), HV.getSize());
         if (lHV.getValue())
-          deps->insert(std::make_pair(lHV, numUses));
+          deps->insert(std::make_pair(
+                         lHV, APInt(QCE_BWIDTH, 0))).first->second += numUses;
       } else if (isa<Constant>(HV.getValue())) {
-        deps->insert(std::make_pair(HV, numUses));
+        deps->insert(std::make_pair(
+                       HV, APInt(QCE_BWIDTH, 0))).first->second += numUses;
       }
     }
   }
@@ -484,7 +489,11 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
               bbUseCountInfo, p.first,
               p.second * bbExecCount + (count ? *count : APInt(QCE_BWIDTH, 0)));
       }
+
+      assert(instTotalUseCount.getActiveBits() +
+             bbExecCount.getActiveBits() < QCE_BWIDTH);
       bbTotalUseCount += instTotalUseCount * bbExecCount;
+      assert(!bbTotalUseCount.isNegative());
     } // end of instructions traversal
 
     // Add zero-valued items for variables defined in this block
