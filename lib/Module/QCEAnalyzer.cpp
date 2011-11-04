@@ -75,12 +75,21 @@ static bool isIgnored(const Value *hotValueDep) {
 
   if (const ConstantExpr *C = dyn_cast<ConstantExpr>(hotValueDep)) {
     if (C->getOpcode() == Instruction::GetElementPtr) {
+      if (const GlobalVariable *GV =
+          dyn_cast<GlobalVariable>(C->getOperand(0))) {
+        if (GV->isConstant())
+          return true;
+      }
       StringRef name = C->getOperand(0)->getName();
       if (name == "__pdata" || name == "__net" || name == "__fs"
           /* || name == "_stdio_streams"*/)
         return true;
     }
   } else {
+    if (const GlobalVariable *GV = dyn_cast<GlobalVariable>(hotValueDep)) {
+      if (GV->isConstant())
+        return true;
+    }
     StringRef name = hotValueDep->getName();
     if (name == "__environ" || name == "__exit_slots" ||
         name == "__exit_count" || name == "__exit_cleanup" ||
