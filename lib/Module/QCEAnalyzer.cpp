@@ -525,7 +525,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
             rIt != rE; ++rIt) {
       Instruction *I = &*rIt;
 
-      assert(!(isa<AllocaInst>(I) && bbLoop));
+      //assert(!(isa<AllocaInst>(I) && bbLoop));
       assert(!isa<InvokeInst>(I) && "Invoke instruction is not supported!");
 
       // XXX: hack: annotate call instructions with the state after the call
