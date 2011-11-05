@@ -42,6 +42,7 @@ using cloud9::instrum::Timer;
 
 namespace klee {
 
+#if 0
 class ParallelSolver: public SolverImpl {
   friend void *subQuerySolverThread(void *ps);
   friend void *subSolversManagerThread(void *ps);
@@ -554,8 +555,11 @@ bool ParallelSolver::computeInitialValues(const Query& query,
   return success;
 }
 
+#endif
+
 Solver *createParallelSolver(unsigned solverCount, unsigned mainSolverTimeout, bool optimizeDivides, STPSolver *solver) {
-  return new Solver(new ParallelSolver(solverCount, mainSolverTimeout, optimizeDivides, solver));
+  //return new Solver(new ParallelSolver(solverCount, mainSolverTimeout, optimizeDivides, solver));
+  return NULL;
 }
 
 }

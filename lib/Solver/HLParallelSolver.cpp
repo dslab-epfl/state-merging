@@ -21,6 +21,7 @@ using namespace klee;
 
 namespace klee {
 
+#if 0
 class HLParallelSolver : public SolverImpl {
 private:
   Solver *solver;
@@ -822,9 +823,11 @@ bool HLParallelSolver::computeValue(const Query &query, ref<Expr> &value) {
 
   return result;
 }
+#endif
 
 Solver *createHLParallelSolver(Solver* _solver, unsigned subsolversCount) {
-  return new Solver(new HLParallelSolver(_solver, subsolversCount));
+  //return new Solver(new HLParallelSolver(_solver, subsolversCount));
+  return NULL;
 }
 
 } // namespace klee

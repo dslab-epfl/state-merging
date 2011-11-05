@@ -1086,10 +1086,6 @@ ExecutionState* Executor::merge(ExecutionState &current, ExecutionState &other) 
 
     ExecutionState *merged = current.merge(other, KeepMergedDuplicates);
     if (merged) {
-        if (!UseHLParallelSolver) {
-          // Merge conditions are useless in this case
-          merged->constraints().mergeConditions.clear();
-        }
         if (KeepMergedDuplicates) {
             addedStates.insert(merged);
 

@@ -34,7 +34,7 @@ public:
   ConstraintManager(const std::vector< ref<Expr> > &_constraints);
 
   ConstraintManager(const ConstraintManager &cs)
-      : constraints(cs.constraints), mergeConditions(cs.mergeConditions),
+      : constraints(cs.constraints),
         ranges(cs.ranges) {}
 
   typedef std::vector< ref<Expr> >::const_iterator constraint_iterator;
@@ -75,10 +75,6 @@ public:
   
 private:
   std::vector< ref<Expr> > constraints;
-
-public:
-  typedef std::set< ref<Expr> > merge_conditions_ty;
-  merge_conditions_ty mergeConditions;
 
 public:
 
@@ -149,10 +145,8 @@ public:
   typedef std::map<ref<Expr>, SRange> ranges_ty;
 
   ConstraintManager(const constraints_ty &_constraints,
-                    const merge_conditions_ty &_mergeConditions,
                     const ranges_ty &_ranges)
     : constraints(_constraints),
-      mergeConditions(_mergeConditions),
       ranges(_ranges) {}
 
   ranges_ty ranges;

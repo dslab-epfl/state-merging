@@ -997,20 +997,12 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
         mutated[it->first], inA, inB, useInA);
   }
 
-  ConstraintManager::merge_conditions_ty aMergeConditions;
-  aMergeConditions.swap(a.constraints().mergeConditions);
-
   a.constraints() = ConstraintManager();
 
   for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
          ie = commonConstraints.end(); it != ie; ++it)
     a.constraints().addConstraint(*it);
   a.constraints().addConstraint(OrExpr::create(inA, inB));
-
-  a.constraints().mergeConditions.swap(aMergeConditions);
-  a.constraints().mergeConditions.insert(b.constraints().mergeConditions.begin(),
-                                         b.constraints().mergeConditions.end());
-  a.constraints().mergeConditions.insert(useInA ? inA : inB);
 
   a.queryCost += b.queryCost;
   a.weight += b.weight;

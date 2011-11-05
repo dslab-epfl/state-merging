@@ -222,8 +222,7 @@ inline std::ostream &operator<<(std::ostream &os, const IndependentElementSet &i
 static 
 IndependentElementSet getIndependentConstraints(
                                 const Query& query,
-                                std::vector< ref<Expr> > &result,
-                                ConstraintManager::merge_conditions_ty &mergeConditions) {
+                                std::vector< ref<Expr> > &result) {
   IndependentElementSet eltsClosure(query.expr);
   std::vector< std::pair<ref<Expr>, IndependentElementSet> > worklist;
   //std::vector< std::pair<ref<Expr>, IndependentElementSet> > resultList;
@@ -251,7 +250,6 @@ IndependentElementSet getIndependentConstraints(
     worklist.swap(newWorklist);
   } while (!done);
 
-  mergeConditions = query.constraints.mergeConditions;
   /*
   for (ConstraintManager::merge_conditions_ty::iterator
               mi = query.constraints.mergeConditions.begin(),
@@ -309,30 +307,27 @@ public:
 bool IndependentSolver::computeValidity(const Query& query,
                                         Solver::Validity &result) {
   std::vector< ref<Expr> > required;
-  ConstraintManager::merge_conditions_ty mc;
   IndependentElementSet eltsClosure =
-    getIndependentConstraints(query, required, mc);
-  ConstraintManager tmp(required, mc, query.constraints.ranges);
+    getIndependentConstraints(query, required);
+  ConstraintManager tmp(required, query.constraints.ranges);
   return solver->impl->computeValidity(Query(tmp, query.expr), 
                                        result);
 }
 
 bool IndependentSolver::computeTruth(const Query& query, bool &isValid) {
   std::vector< ref<Expr> > required;
-  ConstraintManager::merge_conditions_ty mc;
   IndependentElementSet eltsClosure =
-    getIndependentConstraints(query, required, mc);
-  ConstraintManager tmp(required, mc, query.constraints.ranges);
+    getIndependentConstraints(query, required);
+  ConstraintManager tmp(required, query.constraints.ranges);
   return solver->impl->computeTruth(Query(tmp, query.expr), 
                                     isValid);
 }
 
 bool IndependentSolver::computeValue(const Query& query, ref<Expr> &result) {
   std::vector< ref<Expr> > required;
-  ConstraintManager::merge_conditions_ty mc;
   IndependentElementSet eltsClosure =
-    getIndependentConstraints(query, required, mc);
-  ConstraintManager tmp(required, mc, query.constraints.ranges);
+    getIndependentConstraints(query, required);
+  ConstraintManager tmp(required, query.constraints.ranges);
   return solver->impl->computeValue(Query(tmp, query.expr), result);
 }
 
