@@ -1032,6 +1032,8 @@ ExecutionState &LazyMergingSearcher::selectState() {
 void LazyMergingSearcher::update(ExecutionState *current,
                              const std::set<ExecutionState*> &addedStates,
                              const std::set<ExecutionState*> &removedStates) {
+  assert(!current || !current->isDuplicate);
+
   // At this point, the pc of current state corresponds to the instruction
   // that is not yet executed. It will be executed when the state is selected.
   if (current && !current->mergeDisabled() &&
@@ -1061,6 +1063,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
     // We would like to check it as soon as possible
     for (std::set<ExecutionState*>::const_iterator it = addedStates.begin(),
                                    ie = addedStates.end(); it != ie; ++it) {
+      assert(!(*it)->isDuplicate);
       if (canFastForwardState(*it)) {
         statesToForward.insert(*it);
         stats::fastForwardsStart += 1;
@@ -1071,6 +1074,7 @@ void LazyMergingSearcher::update(ExecutionState *current,
   for (std::set<ExecutionState*>::const_iterator it = removedStates.begin(),
                                  ie = removedStates.end(); it != ie; ++it) {
     ExecutionState *state = *it;
+    assert(!state->isDuplicate);
     statesToForward.erase(state);
     removeStateFromTraces(state);
   }
@@ -1197,6 +1201,7 @@ void CheckpointSearcher::update(ExecutionState *current,
 
   totalUpdatesRecv++;
 
+  std::set<ExecutionState*> newAdded;
   std::set<ExecutionState*> newRemoved;
 
   if (current && isCheckpoint(current)) {
@@ -1206,6 +1211,13 @@ void CheckpointSearcher::update(ExecutionState *current,
 
   for (std::set<ExecutionState*>::iterator it = addedStates.begin();
       it != addedStates.end(); it++) {
+    if (activeState == *it) {
+      // This happens when merged state is added. The solver might knows about
+      // it, so it should be notified when if it would be deleted.
+      assert(isCheckpoint(activeState));
+      newAdded.insert(activeState);
+      continue;
+    }
     if (!isCheckpoint(*it))
       addedUnchecked.insert(*it);
     else
@@ -1224,8 +1236,8 @@ void CheckpointSearcher::update(ExecutionState *current,
       newRemoved.insert(*it);
   }
 
-  if (newRemoved.size() > 0) {
-    baseSearcher->update(NULL, std::set<ExecutionState*>(), newRemoved);
+  if (!newRemoved.empty() || !newAdded.empty()) {
+    baseSearcher->update(NULL, newAdded, newRemoved);
     totalUpdatesSent++;
   }
 
