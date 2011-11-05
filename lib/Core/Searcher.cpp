@@ -611,7 +611,7 @@ void StaticMergingSearcher::update(ExecutionState *current,
   for (std::set<ExecutionState*>::const_iterator it = addedStates.begin(),
       ie = addedStates.end(); it != ie; it++) {
     ExecutionState *state = *it;
-    assert(!isAtRendezVous(state) && "state added while at rendez-vous point");
+    //assert(!isAtRendezVous(state) && "state added while at rendez-vous point");
     freeStates.insert(state);
     if (DebugStaticMerging)
     CLOUD9_DEBUG("New state added as free: " << *state);
