@@ -389,13 +389,11 @@ def compute_time(exps=None):
                     result_exp.append('')
             result_tool.append(result_exp)
         result_tool.sort()
-        result['%7s' % tool] = result_tool
+        result[tool] = result_tool
 
     return result
 
-def print_time(exps=None):
-    t = compute_time(exps)
-
+def print_time(t):
     print ' '*8, ' '.join(['%8s' % c for c in t[None][0]])
 
     for tool, tool_exps in t.iteritems():
@@ -478,7 +476,11 @@ if __name__ == '__main__':
         print_diffsym(r)
 
     if args.time:
-        print_time()
+        t = compute_time(el)
+        import pickle
+        import socket
+        pickle.dump(t, open('diffsym.%s.pickle' % socket.gethostname(), 'w'))
+        print_time(t)
 
     #if not args.interactive:
     #    sys.exit(0)
