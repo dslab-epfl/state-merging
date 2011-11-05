@@ -3139,11 +3139,40 @@ void Executor::updateQceMapOnExec(ExecutionState &state) {
 
     foreach (KQCEInfoItem &item, info->vars) {
       // Update QCE estimation
-      QCEMap::iterator qceMapIt = sf.qceMap.insert(
+      std::pair<QCEMap::iterator, bool> res = sf.qceMap.insert(
           std::make_pair(item.hotValue,
-                    QCEFrameInfo(state.stack().size()-1, item.vnumber))).first;
+                    QCEFrameInfo(state.stack().size()-1, item.vnumber)));
 
+      QCEMap::iterator qceMapIt = res.first;
       QCEFrameInfo &frame = qceMapIt->second;
+
+      if (res.second
+          && isa<Argument>(item.hotValue.getValue())
+          && ki->inst ==
+               ki->inst->getParent()->getParent()->getEntryBlock().begin()
+          && sf.caller) {
+
+        KInstruction *kCS = sf.caller;
+        assert(isa<CallInst>(kCS->inst) || isa<InvokeInst>(kCS->inst));
+
+        HotValueArgMap &argMap =
+            static_cast<KCallInstruction*>(kCS)->hotValueArgMap;
+        HotValueArgMap::iterator it = argMap.find(item.hotValue);
+        if (it != argMap.end()) {
+          assert(stackSize > 1);
+          StackFrame &tSf = state.stack()[stackSize-2];
+          foreach (const HotValue& hv, it->second) {
+            QCEMap::iterator qIt = tSf.qceMap.find(hv);
+            if (qIt != tSf.qceMap.end() && qIt->second.qce > frame.qceBase)
+              frame.qceBase = qIt->second.qce;
+          }
+        }
+      }
+
+      assert(
+        ki->inst == ki->inst->getParent()->getParent()->getEntryBlock().begin()
+        || frame.qce < 0.5 || frame.qce + 0.5 > frame.qceBase + item.qce);
+
       frame.qce = frame.qceBase + item.qce;
 
       // Now check whether to add the item to Vh
@@ -4925,7 +4954,8 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
 		char **envp) {
 
 	ExecutionState *state = createRootState(f);
-	initRootState(state, argc, argv, envp);
+        initRootState(state, argc, argv, envp);
+        updateQceMapOnExec(*state);
 
 	run(*state);
 

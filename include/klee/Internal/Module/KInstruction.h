@@ -22,6 +22,7 @@
 #endif
 #include <vector>
 
+#include "llvm/ADT/DenseMap.h"
 #include "klee/Internal/Module/QCE.h"
 
 namespace llvm {
@@ -44,6 +45,9 @@ namespace klee {
     double total;
     std::vector<KQCEInfoItem> vars;
   };
+
+  typedef llvm::DenseMap<HotValue, llvm::SmallVector<HotValue, 2> >
+            HotValueArgMap;
 
   /// KInstruction - Intermediate instruction representation used
   /// during execution.
@@ -85,6 +89,8 @@ namespace klee {
   struct KCallInstruction: KInstruction {
     bool vulnerable;    // Whether the result of this call is unchecked, and
                         // thus may lead to further errors
+    HotValueArgMap hotValueArgMap;
+
     static bool classof(const KInstruction *) { return true; }
   };
 

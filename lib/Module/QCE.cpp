@@ -33,7 +33,7 @@ std::pair<HotValue, APInt> HotValue::fromMDNode(const MDNode *MD) {
 }
 
 void HotValue::print(llvm::raw_ostream &ostr) const {
-  Function *function;
+  Function *function = NULL;
 
   ostr << (isPtr() ? "*  " : "   ");
   if (Instruction *I = dyn_cast<Instruction>(getValue())) {
@@ -57,7 +57,7 @@ void HotValue::print(llvm::raw_ostream &ostr) const {
   if (size)
     ostr << " (size:" << size << ")";
 
-  if (function)
+  if (function && function->hasName())
     ostr << " (at " << function->getName() << ")";
 }
 

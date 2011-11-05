@@ -856,6 +856,20 @@ KFunction::KFunction(llvm::Function *_function,
           ku->totalNumUses = cast<ConstantInt>(md->getOperand(3))->getZExtValue();
         }
 #endif
+        if (const MDNode *MD = it->getMetadata("qce_am")) {
+          HotValueArgMap &argMap =
+              static_cast<KCallInstruction*>(ki)->hotValueArgMap;
+          for (unsigned i = 0; i < MD->getNumOperands(); ++i) {
+            const MDNode *MDo = cast<MDNode>(MD->getOperand(i));
+            HotValue argHv = HotValue::fromMDNode(
+                  cast<MDNode>(MDo->getOperand(0))).first;
+            HotValueArgMap::mapped_type &vec = argMap[argHv];
+            for (unsigned j = 1; j < MDo->getNumOperands(); ++j) {
+              vec.push_back(HotValue::fromMDNode(
+                      cast<MDNode>(MDo->getOperand(j))).first);
+            }
+          }
+        }
       }
       else {
         unsigned numOperands = it->getNumOperands(); 

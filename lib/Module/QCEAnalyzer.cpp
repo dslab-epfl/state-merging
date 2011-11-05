@@ -14,6 +14,7 @@
 #include "llvm/Support/DataFlow.h"
 #include "llvm/Support/CFG.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 
 #include "klee/Internal/Module/QCE.h"
 
@@ -41,10 +42,14 @@ namespace llvm {
 using namespace llvm;
 using namespace klee;
 
+typedef llvm::ImmutableMap<HotValue, APInt> UseCountInfo;
+
 typedef DenseMap<HotValue, APInt> HotValueDeps;
 typedef llvm::SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
 
-typedef llvm::ImmutableMap<HotValue, APInt> UseCountInfo;
+typedef DenseMap<HotValue, SmallVector<HotValue, 4> > HotValueArgMap;
+
+static const APInt apZero(QCE_BWIDTH, 0);
 
 QCEAnalyzerPass::QCEAnalyzerPass(TargetData *TD)
       : CallGraphSCCPass(ID), m_targetData(TD) {
@@ -170,17 +175,17 @@ static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
           getPointerHotValue(LI->getPointerOperand(), TD, 0, size);
       if (hotValue.getValue())
         deps->insert(std::make_pair(
-                hotValue, APInt(QCE_BWIDTH, 0))).first->second += numUsesMult;
+                hotValue, apZero)).first->second += numUsesMult;
       continue;
 
     } else if (isa<Argument>(V)) {
       deps->insert(std::make_pair(
-        HotValue(HVVal, V), APInt(QCE_BWIDTH, 0))).first->second += numUsesMult;
+        HotValue(HVVal, V), apZero)).first->second += numUsesMult;
       continue;
 
     } else if (PHINode *PHI = dyn_cast<PHINode>(V)) {
       deps->insert(std::make_pair(
-        HotValue(HVVal, V), APInt(QCE_BWIDTH, 0))).first->second += numUsesMult;
+        HotValue(HVVal, V), apZero)).first->second += numUsesMult;
 #warning Try commenting/uncommenting the following
 #if MAX_DATAFLOW_DEPTH > 0
       if (depth >= MAX_DATAFLOW_DEPTH)
@@ -219,6 +224,7 @@ static void gatherHotValueDeps(Value* hotValueUse, HotValueDeps *deps,
 
 static void gatherCallSiteDeps(const CallSite CS,
                                APInt *totalUses, HotValueDeps *deps,
+                               HotValueArgMap *argMap,
                                const VisitedBBs &visitedBBs,
                                TargetData *TD) {
   const Function *F = CS.getCalledFunction();
@@ -251,7 +257,16 @@ static void gatherCallSiteDeps(const CallSite CS,
     if (HV.isVal()) {
       if (const Argument* A = dyn_cast<Argument>(HV.getValue())) {
         Value *V = CS.getArgument(A->getArgNo());
-        gatherHotValueDeps(V, deps, visitedBBs, TD, numUses);
+        HotValueDeps lDeps;
+        gatherHotValueDeps(V, &lDeps, visitedBBs, TD, numUses);
+        if (!lDeps.empty()) {
+          HotValueArgMap::mapped_type &aList = (*argMap)[HV];
+          foreach (HotValueDeps::value_type &p, lDeps) {
+            aList.push_back(p.first);
+            deps->insert(std::make_pair(
+                   p.first, apZero)).first->second += p.second;
+          }
+        }
       } else {
 #warning XXX
         //assert(0);
@@ -260,12 +275,14 @@ static void gatherCallSiteDeps(const CallSite CS,
       if (const Argument* A = dyn_cast<Argument>(HV.getValue())) {
         Value *V = CS.getArgument(A->getArgNo());
         HotValue lHV = getPointerHotValue(V, TD, HV.getOffset(), HV.getSize());
-        if (lHV.getValue())
+        if (lHV.getValue()) {
           deps->insert(std::make_pair(
-                         lHV, APInt(QCE_BWIDTH, 0))).first->second += numUses;
+                         lHV, apZero)).first->second += numUses;
+          (*argMap)[HV].push_back(lHV);
+        }
       } else if (isa<Constant>(HV.getValue())) {
         deps->insert(std::make_pair(
-                       HV, APInt(QCE_BWIDTH, 0))).first->second += numUses;
+                       HV, apZero)).first->second += numUses;
       }
     }
   }
@@ -280,10 +297,12 @@ static void addAnnotationQC(Instruction *I, APInt totalUseCount,
                             const UseCountInfo& useCountInfo,
                             const char* mdName = "qce") {
   LLVMContext &Ctx = I->getContext();
-  assert(I->getMetadata("qce") == NULL);
+  assert(I->getMetadata(mdName) == NULL);
+
   llvm::SmallVector<Value*, 32> Args;
   Args.push_back(ConstantInt::get(Ctx, totalUseCount));
 
+  //DenseSet<HotValue> s;
   foreach (UseCountInfo::value_type &p, useCountInfo) {
     /*
     Value *NArgs[3] = { ConstantInt::get(Ctx, APInt(1, p.first.getKind())),
@@ -291,10 +310,29 @@ static void addAnnotationQC(Instruction *I, APInt totalUseCount,
                         ConstantInt::get(Ctx, p.second) };
     Args.push_back(MDNode::get(Ctx, NArgs, 3));
     */
+    //bool ok = s.insert(p.first).second;
+    //assert(ok);
     Args.push_back(p.first.toMDNode(Ctx, p.second));
   }
 
   std::sort(Args.begin()+1, Args.end(), _annotationComparator);
+
+  I->setMetadata(mdName, MDNode::get(Ctx, Args));
+}
+
+static void addAnnotationAM(Instruction *I, const HotValueArgMap &argMap,
+                            const char* mdName = "qce_am") {
+  LLVMContext &Ctx = I->getContext();
+  assert(I->getMetadata(mdName) == NULL);
+
+  SmallVector<Value*, 32> Args;
+  foreach (const HotValueArgMap::value_type &v, argMap) {
+    SmallVector<Value*, 32> lArgs;
+    lArgs.push_back(v.first.toMDNode(Ctx, apZero));
+    foreach (const HotValue& hv, v.second)
+      lArgs.push_back(hv.toMDNode(Ctx, apZero));
+    Args.push_back(MDNode::get(Ctx, lArgs));
+  }
 
   I->setMetadata(mdName, MDNode::get(Ctx, Args));
 }
@@ -355,7 +393,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     UseCountInfo &bbUseCountInfo = useCountMap.insert(
           std::make_pair(BB, useCountInfoFactory.getEmptyMap())).first->second;
     APInt &bbTotalUseCount = totalUseCountMap.insert(
-          std::make_pair(BB, APInt(QCE_BWIDTH, 0))).first->second;
+          std::make_pair(BB, apZero)).first->second;
 
 #ifndef USE_QC_MAX
     unsigned bbNumSuccessors = 0;
@@ -389,7 +427,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 #else
           bbUseCountInfo = useCountInfoFactory.add(
                 bbUseCountInfo, p.first,
-                p.second + (count ? *count : APInt(QCE_BWIDTH, 0)));
+                p.second + (count ? *count : apZero));
 #endif
         }
       }
@@ -442,6 +480,9 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       }
     }
 
+    // Store a set of HotValues added in this block
+    DenseSet<HotValue> bbNewHotValues;
+
     // Go through BB instructions in reverse order, updating useCountInfo
     for (BasicBlock::InstListType::reverse_iterator
             rIt = BB->getInstList().rbegin(), rE = BB->getInstList().rend();
@@ -453,8 +494,12 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 
       // XXX: hack: annotate call instructions with the state after the call
       if (isa<CallInst>(I) && !bbLoop) {
+        UseCountInfo cUseCountInfo = bbUseCountInfo;
+        foreach (const HotValue& hv, bbNewHotValues) {
+          cUseCountInfo = useCountInfoFactory.add(cUseCountInfo, hv, apZero);
+        }
         addAnnotationQC(llvm::next(BasicBlock::iterator(I)),
-                        bbTotalUseCount, bbUseCountInfo);
+                        bbTotalUseCount, cUseCountInfo);
       }
 
       // NOTE: we don't do any path-sensitive analysis, moreover we don't
@@ -467,8 +512,11 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       // Check whether a symbolic operand to the current instruction may
       // force KLEE to call the solver...
       if (CallSite CS = CallSite(I)) {
-        gatherCallSiteDeps(CS, &instTotalUseCount, &hotValueDeps,
+        HotValueArgMap argMap;
+        gatherCallSiteDeps(CS, &instTotalUseCount, &hotValueDeps, &argMap,
                            visitedBBs, m_targetData);
+        if (!argMap.empty())
+          addAnnotationAM(I, argMap);
       } else {
         Value *V = 0;
 
@@ -496,7 +544,9 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         const APInt *count = bbUseCountInfo.lookup(p.first);
         bbUseCountInfo = useCountInfoFactory.add(
               bbUseCountInfo, p.first,
-              p.second * bbExecCount + (count ? *count : APInt(QCE_BWIDTH, 0)));
+              p.second * bbExecCount + (count ? *count : apZero));
+        if (!count)
+          bbNewHotValues.insert(p.first);
       }
 
       assert(instTotalUseCount.getActiveBits() +
@@ -526,7 +576,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         const APInt *succCount = succUseCountInfo.lookup(p.first);
         if (!succCount)
           succUseCountInfo = useCountInfoFactory.add(succUseCountInfo,
-                                                     p.first, APInt(QCE_BWIDTH, 0));
+                                                     p.first, apZero);
       }
     }
   } // end of BB traversal
@@ -599,7 +649,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         const APInt *count = bbUseCountInfo.lookup(p.first);
         if (!count || *count != p.second)
           diffUseCount = useCountInfoFactory.add(diffUseCount,
-                                    p.first, count ? *count : APInt(QCE_BWIDTH, 0));
+                                    p.first, count ? *count : apZero);
       }
 
       // Check whether bbUseCount has items that are not in predUseCount
