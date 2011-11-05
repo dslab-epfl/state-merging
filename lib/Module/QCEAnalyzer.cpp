@@ -123,7 +123,9 @@ static HotValue getPointerHotValue(Value* Ptr, TargetData *TD,
     return HotValue(HVPtr, Ptr, offset, size);
 
   } else if (CallInst *CI = dyn_cast<CallInst>(Ptr)) {
-    if (CI->getCalledFunction()->getName() == "malloc")
+    if (CI->getCalledFunction() &&
+        CI->getCalledFunction()->hasName() &&
+        CI->getCalledFunction()->getName() == "malloc")
       return HotValue(HVPtr, Ptr, offset, size);
 
   } else if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(Ptr)) {
