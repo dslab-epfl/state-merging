@@ -66,12 +66,14 @@ public:
 } // namespace klee
 
 namespace llvm {
+  /*
   template<> struct FoldingSetTrait<klee::HotValue> {
     static inline void Profile(const klee::HotValue &hv, FoldingSetNodeID& ID) {
       ID.AddPointer(hv.getValue());
       ID.AddInteger(hv.getExtra());
     }
   };
+  */
 
   template<> struct DenseMapInfo<klee::HotValue> {
     static inline klee::HotValue getEmptyKey() {

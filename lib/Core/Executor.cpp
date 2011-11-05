@@ -3169,9 +3169,11 @@ void Executor::updateQceMapOnExec(ExecutionState &state) {
         }
       }
 
+      /*
       assert(
         ki->inst == ki->inst->getParent()->getParent()->getEntryBlock().begin()
         || frame.qce < 0.5 || frame.qce + 0.5 > frame.qceBase + item.qce);
+        */
 
       frame.qce = frame.qceBase + item.qce;
 

@@ -42,10 +42,10 @@ namespace llvm {
 using namespace llvm;
 using namespace klee;
 
-typedef llvm::ImmutableMap<HotValue, APInt> UseCountInfo;
+typedef DenseMap<HotValue, APInt> UseCountInfo;
 
 typedef DenseMap<HotValue, APInt> HotValueDeps;
-typedef llvm::SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
+typedef SmallPtrSet<const BasicBlock*, 256> VisitedBBs;
 
 typedef DenseMap<HotValue, SmallVector<HotValue, 4> > HotValueArgMap;
 
@@ -302,16 +302,16 @@ static void addAnnotationQC(Instruction *I, APInt totalUseCount,
   llvm::SmallVector<Value*, 32> Args;
   Args.push_back(ConstantInt::get(Ctx, totalUseCount));
 
-  //DenseSet<HotValue> s;
-  foreach (UseCountInfo::value_type &p, useCountInfo) {
+  DenseSet<HotValue> s;
+  foreach (const UseCountInfo::value_type &p, useCountInfo) {
     /*
     Value *NArgs[3] = { ConstantInt::get(Ctx, APInt(1, p.first.getKind())),
                         const_cast<Value*>(p.first.getValue()),
                         ConstantInt::get(Ctx, p.second) };
     Args.push_back(MDNode::get(Ctx, NArgs, 3));
     */
-    //bool ok = s.insert(p.first).second;
-    //assert(ok);
+    bool ok = s.insert(p.first).second;
+    assert(ok);
     Args.push_back(p.first.toMDNode(Ctx, p.second));
   }
 
@@ -352,7 +352,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
   DominatorTree &DT = getAnalysis<DominatorTree>(F);
 
   // Use count after BB for all hot values
-  UseCountInfo::Factory useCountInfoFactory;
+  //UseCountInfo::Factory useCountInfoFactory;
 
   // For every BB in a function we store an upper estimate of how many times
   // each hot value is used after the first instruction in that BB.
@@ -391,7 +391,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     // Initially set useCountInfo for the current BB to be a maximum of
     // useCountInfo for all BB's successors
     UseCountInfo &bbUseCountInfo = useCountMap.insert(
-          std::make_pair(BB, useCountInfoFactory.getEmptyMap())).first->second;
+          std::make_pair(BB, UseCountInfo())).first->second;
     APInt &bbTotalUseCount = totalUseCountMap.insert(
           std::make_pair(BB, apZero)).first->second;
 
@@ -407,30 +407,51 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         continue; // This is a back edge, skip it for now
 
       UseCountInfo &succUseCountInfo = succUseCountIt->second;
+#if 0
       if (bbUseCountInfo.isEmpty()) {
         // Copy initial info from the first successor
         bbUseCountInfo = succUseCountInfo;
 
         // Do not propagete zero-valued items
+        for (UseCountInfo::iterator it = bbUseCountInfo.begin(),
+                                    ie = bbUseCountInfo.end(); it != ie;) {
+          if (!it->second) {
+            bbUseCountInfo.erase(it++);
+          } else {
+            ++it;
+          }
+        }
+        /*
         foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
           if (!p.second)
             bbUseCountInfo = useCountInfoFactory.remove(bbUseCountInfo,
                                                         p.first);
+                                                        */
         }
       } else {
+#endif
         foreach (UseCountInfo::value_type &p, succUseCountInfo) {
-          const APInt *count = bbUseCountInfo.lookup(p.first);
+          if (!p.second)
+            continue; // Do not propagate zero-valued items
+
+          //const APInt *count = bbUseCountInfo.lookup(p.first);
+          UseCountInfo::iterator it = bbUseCountInfo.insert(
+                std::make_pair(p.first, apZero)).first;
 #ifdef USE_QC_MAX
-          if ((!count || count->ult(p.second)) && !!p.second)
-            bbUseCountInfo = useCountInfoFactory.add(
-                  bbUseCountInfo, p.first, p.second);
+          if (it->second.ult(p.second))
+            it->second = p.second;
+            //bbUseCountInfo = useCountInfoFactory.add(
+            //      bbUseCountInfo, p.first, p.second);
 #else
-          bbUseCountInfo = useCountInfoFactory.add(
-                bbUseCountInfo, p.first,
-                p.second + (count ? *count : apZero));
+          it->second += p.second;
+          //bbUseCountInfo = useCountInfoFactory.add(
+          //      bbUseCountInfo, p.first,
+          //      p.second + (count ? *count : apZero));
 #endif
         }
+#if 0
       }
+#endif
 
       const APInt succTotalUseCount = totalUseCountMap.lookup(*succIt);
 #ifdef USE_QC_MAX
@@ -451,6 +472,10 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
                             QC_SUM_MULT_NOM * (bbNumSuccessors - 1));
       APInt denom(QCE_BWIDTH, QC_SUM_MULT_DENOM);
 
+      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        p.second = (p.second * denom).udiv(nom);
+      }
+      /*
       UseCountInfo newBbUseCountInfo = useCountInfoFactory.getEmptyMap();
       foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
         APInt count = (p.second * denom).udiv(nom);
@@ -458,6 +483,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
                   p.first, count);
       }
       bbUseCountInfo = newBbUseCountInfo;
+      */
 
       // Check for overflow
       assert(bbTotalUseCount.getActiveBits() +
@@ -472,12 +498,22 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
 
     if (!bbLoop) {
       // Filter out local vars that are defined strinctly after BB
-      foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
-        if (const Instruction *I = dyn_cast<Instruction>(p.first.getValue())) {
-          if (I->getParent() != BB && DT.dominates(BB, I->getParent()))
-            bbUseCountInfo = useCountInfoFactory.remove(bbUseCountInfo, p.first);
+      for (UseCountInfo::iterator p = bbUseCountInfo.begin(),
+                                  pE = bbUseCountInfo.end(); p != pE;) {
+        if (const Instruction *I = dyn_cast<Instruction>(p->first.getValue())) {
+          if (I->getParent() != BB && DT.dominates(BB, I->getParent())) {
+            bbUseCountInfo.erase(p++);
+            continue;
+          }
         }
+        ++p;
       }
+      //foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+      //  if (const Instruction *I = dyn_cast<Instruction>(p.first.getValue())) {
+      //    if (I->getParent() != BB && DT.dominates(BB, I->getParent()))
+      //      bbUseCountInfo = useCountInfoFactory.remove(bbUseCountInfo, p.first);
+      //  }
+      //}
     }
 
     // Store a set of HotValues added in this block
@@ -496,7 +532,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       if (isa<CallInst>(I) && !bbLoop) {
         UseCountInfo cUseCountInfo = bbUseCountInfo;
         foreach (const HotValue& hv, bbNewHotValues) {
-          cUseCountInfo = useCountInfoFactory.add(cUseCountInfo, hv, apZero);
+          cUseCountInfo.insert(std::make_pair(hv, apZero));
         }
         addAnnotationQC(llvm::next(BasicBlock::iterator(I)),
                         bbTotalUseCount, cUseCountInfo);
@@ -541,12 +577,19 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       }
 
       foreach (HotValueDeps::value_type &p, hotValueDeps) {
+        std::pair<UseCountInfo::iterator, bool> res =
+            bbUseCountInfo.insert(std::make_pair(p.first, apZero));
+        res.first->second += (p.second * bbExecCount);
+        if (res.second)
+          bbNewHotValues.insert(p.first);
+        /*
         const APInt *count = bbUseCountInfo.lookup(p.first);
         bbUseCountInfo = useCountInfoFactory.add(
               bbUseCountInfo, p.first,
               p.second * bbExecCount + (count ? *count : apZero));
         if (!count)
           bbNewHotValues.insert(p.first);
+          */
       }
 
       assert(instTotalUseCount.getActiveBits() +
@@ -573,10 +616,13 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
         continue; // backedge?
       UseCountInfo &succUseCountInfo = succUseCountIt->second;
       foreach (UseCountInfo::value_type &p, bbUseCountInfo) {
+        succUseCountInfo.insert(std::make_pair(p.first, apZero));
+        /*
         const APInt *succCount = succUseCountInfo.lookup(p.first);
         if (!succCount)
           succUseCountInfo = useCountInfoFactory.add(succUseCountInfo,
                                                      p.first, apZero);
+        */
       }
     }
   } // end of BB traversal
