@@ -427,26 +427,27 @@ def compute_lcov(exps=None):
                 t = exp[c].stats.WallTime[-1]
                 if t < min_time:
                     min_time = t
-            else:
-                min_time = 0
-                break
-        if not min_time:
-            continue
 
         result_tool = []
         for c in exps_c:
-            result_tool.append(int(get_stat_at(exp[c],
-                'GloballyCoveredInstructions', min_time)))
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                result_tool.append(int(get_stat_at(exp[c],
+                    'GloballyCoveredInstructions', min_time)))
+            else:
+                result_tool.append(0)
 
         for c in exps_c:
-            total_insts = exp[c].stats.GloballyCoveredInstructions[0] + \
-                          exp[c].stats.GloballyUncoveredInstructions[0]
-            pct = float(get_stat_at(exp[c], 'GloballyCoveredInstructions',
-                            min_time)) / total_insts
-            if exp[c].is_done:
-                result_tool.append('* %.2f' % pct)
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                total_insts = exp[c].stats.GloballyCoveredInstructions[0] + \
+                              exp[c].stats.GloballyUncoveredInstructions[0]
+                pct = float(get_stat_at(exp[c], 'GloballyCoveredInstructions',
+                                min_time)) / total_insts
+                if exp[c].is_done:
+                    result_tool.append('* %.2f' % pct)
+                else:
+                    result_tool.append('  %.2f' % pct)
             else:
-                result_tool.append('  %.2f' % pct)
+                result_tool.append('')
 
         result[tool] = result_tool
 
