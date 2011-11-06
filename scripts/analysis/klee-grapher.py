@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 import sys
+import pickle
+import socket
 from data import Experiment, ClassDict
 from itertools import izip
 from scipy import *
@@ -403,6 +405,61 @@ def print_time(t):
         for exp in tool_exps:
             print ' '*8, ' '.join(['%8s' % c for c in exp])
 
+def get_stat_at(e, stat, t):
+    idx = where(e.stats.WallTime >= t)[0][:1]
+    if idx:
+        return e.stats[stat][idx[0]]
+    else:
+        return None
+
+def compute_lcov(exps=None):
+    if exps is None:
+        exps = el
+
+    exps_c = 'vanilla lazy static'.split()
+
+    result = { None: exps_c }
+    exps = categorize_exps(exps)
+    for tool, exp in exps.iteritems():
+        min_time = 3600
+        for c in exps_c:
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                t = exp[c].stats.WallTime[-1]
+                if t < min_time:
+                    min_time = t
+            else:
+                min_time = 0
+                break
+        if not min_time:
+            continue
+
+        result_tool = []
+        for c in exps_c:
+            result_tool.append(int(get_stat_at(exp[c],
+                'GloballyCoveredInstructions', min_time)))
+
+        for c in exps_c:
+            total_insts = exp[c].stats.GloballyCoveredInstructions[0] + \
+                          exp[c].stats.GloballyUncoveredInstructions[0]
+            pct = float(get_stat_at(exp[c], 'GloballyCoveredInstructions',
+                            min_time)) / total_insts
+            if exp[c].is_done:
+                result_tool.append('* %.2f' % pct)
+            else:
+                result_tool.append('  %.2f' % pct)
+
+        result[tool] = result_tool
+
+    return result
+
+def print_lcov(l):
+    print ' '*8, ' '.join(['%8s' % c for c in l[None]])
+
+    for tool, exp in l.iteritems():
+        if tool is None:
+            continue
+        print '%8s' % tool, ' '.join(['%8s' % c for c in exp])
+
 def print_diffsym(r):
     for tool, rl in r.iteritems():
         print tool + ':'
@@ -439,6 +496,7 @@ if __name__ == '__main__':
                         help='Timeout in seconds after which an experiment is considered completed')
     parser.add_argument('--diffsym', action='store_true', help='Compute and store diffsym results')
     parser.add_argument('--time', action='store_true', help='Compute time for results')
+    parser.add_argument('--lcov', action='store_true', help='Compute lcov for results')
     parser.add_argument('experiments', nargs='+', help='Experiments to analyze')
 
     args = parser.parse_args()
@@ -471,16 +529,18 @@ if __name__ == '__main__':
     if args.diffsym:
         print 'Computing diffsym data...'
         r = compute_diffsym(timeout)
-        import pickle
         pickle.dump(r, open('diffsym.pickle', 'w'))
         print_diffsym(r)
 
     if args.time:
         t = compute_time(el)
-        import pickle
-        import socket
         pickle.dump(t, open('diffsym.%s.pickle' % socket.gethostname(), 'w'))
         print_time(t)
+
+    if args.lcov:
+        l = compute_lcov(el)
+        pickle.dump(l, open('lcov.%s.pickle' % socket.gethostname(), 'w'))
+        print_lcov(l)
 
     #if not args.interactive:
     #    sys.exit(0)
