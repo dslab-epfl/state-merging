@@ -410,7 +410,7 @@ def get_stat_at(e, stat, t):
     if idx:
         return e.stats[stat][idx[0]]
     else:
-        return None
+        return 0
 
 def compute_lcov(exps=None):
     if exps is None:
