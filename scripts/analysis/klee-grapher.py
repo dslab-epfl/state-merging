@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 
 import sys
 import pickle
@@ -516,7 +516,8 @@ def compute_pcov(exps=None):
     if exps is None:
         exps = el
 
-    result = { None: ['vanilla', 'lazy', 'ratio', 'c1', 'c2',] }
+    result = { None: ['vanilla', 'lazy', 'ratio', 'c1', 'c2', 'min_time', 'klee_done', 'lazy_done',
+                      'dup_time', 'dup_dup_time'] }
     exps = categorize_exps(exps)
     for tool, exp in exps.iteritems():
         if 'lazy_dup' not in exp:
@@ -560,8 +561,12 @@ def compute_pcov(exps=None):
             result_tool.append(0.0)
             result_tool.append(0.0)
 
-        #result_tool.append(klee_done)
-        #result_tool.append(lazy_done)
+        result_tool.append(min_time)
+        result_tool.append(klee_done)
+        result_tool.append(lazy_done)
+
+        result_tool.append(exp['lazy_dup'].stats.ExecutionTime[-1])
+        result_tool.append(exp['lazy_dup'].stats.ExecutionDuplicatesTime[-1])
 
         result[tool] = result_tool
 
@@ -645,7 +650,7 @@ if __name__ == '__main__':
 
     if args.diffsym:
         print 'Computing diffsym data...'
-        r = compute_diffsym(timeout)
+        r = compute_diffsym(el, args.timeout)
         pickle.dump(r, open('diffsym.pickle', 'w'))
         print_diffsym(r)
 
