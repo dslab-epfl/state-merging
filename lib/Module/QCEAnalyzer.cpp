@@ -372,6 +372,12 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
   // Visited blocks (to track backedges)
   VisitedBBs visitedBBs;
 
+  // Temporary var used to gather hot value dependencies
+  HotValueDeps hotValueDeps;
+
+  // Temporary var used to store new hot values added in the current BB
+  DenseSet<HotValue> bbNewHotValues;
+
   // Post-order traversal
   for (po_iterator<BasicBlock*> poIt = po_begin(entryBB),
                                 poE  = po_end(entryBB); poIt != poE; ++poIt) {
@@ -519,7 +525,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
     }
 
     // Store a set of HotValues added in this block
-    DenseSet<HotValue> bbNewHotValues;
+    bbNewHotValues.clear();
 
     // Go through BB instructions in reverse order, updating useCountInfo
     for (BasicBlock::InstListType::reverse_iterator
@@ -544,7 +550,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
       // track values in registers. To avoid to much false negatives, we
       // intentionally do not track stores that may overwrite hot values
 
-      HotValueDeps hotValueDeps;
+      hotValueDeps.clear();
       APInt instTotalUseCount(QCE_BWIDTH, 0);
 
       // Check whether a symbolic operand to the current instruction may
@@ -576,6 +582,7 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
           gatherHotValueDeps(V, &hotValueDeps, visitedBBs, m_targetData);
           instTotalUseCount = 1;
         }
+
       }
 
       foreach (HotValueDeps::value_type &p, hotValueDeps) {
@@ -598,6 +605,31 @@ bool QCEAnalyzerPass::runOnFunction(CallGraphNode &CGNode) {
              bbExecCount.getActiveBits() < QCE_BWIDTH);
       bbTotalUseCount += instTotalUseCount * bbExecCount;
       assert(!bbTotalUseCount.isNegative());
+
+      // If one writes to the frequently-used value, what's writen becomes
+      // frequently used as well
+      if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+        const Type *PTy = SI->getPointerOperand()->getType();
+        unsigned size = m_targetData->getTypeStoreSize(
+                          cast<PointerType>(PTy)->getElementType());
+        HotValue hv = getPointerHotValue(SI->getPointerOperand(),
+                                         m_targetData, 0, size);
+        if (hv.getValue()) {
+          UseCountInfo::iterator it = bbUseCountInfo.find(hv);
+          if (it != bbUseCountInfo.end()) {
+            hotValueDeps.clear();
+            gatherHotValueDeps(SI->getValueOperand(), &hotValueDeps,
+                               visitedBBs, m_targetData, it->second);
+            foreach (HotValueDeps::value_type &p, hotValueDeps) {
+              std::pair<UseCountInfo::iterator, bool> res =
+                  bbUseCountInfo.insert(std::make_pair(p.first, apZero));
+              res.first->second += (p.second * bbExecCount);
+              if (res.second)
+                bbNewHotValues.insert(p.first);
+            }
+          }
+        }
+      }
     } // end of instructions traversal
 
     // Add zero-valued items for variables defined in this block
