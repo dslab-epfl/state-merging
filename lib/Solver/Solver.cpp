@@ -480,6 +480,8 @@ public:
                             bool &hasSolution);
 
   void cancelPendingJobs();
+
+  void printSimplified(const Query&);
 };
 
 static void stp_error_handler(const char* err_msg) {

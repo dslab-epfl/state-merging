@@ -50,7 +50,8 @@ MemoryObject *MemoryManager::allocate(ExecutionState *state, uint64_t size, bool
 }
 
 MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
-                                           const llvm::Value *allocSite) {
+                                           const llvm::Value *allocSite,
+                                           const char* name) {
 #ifndef NDEBUG
   for (objects_ty::iterator it = objects.begin(), ie = objects.end();
        it != ie; ++it) {
@@ -63,6 +64,8 @@ MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
   ++stats::allocations;
   MemoryObject *res = new MemoryObject(address, size, false, true, true,
                                        allocSite);
+  if (name)
+    res->setName(name);
   objects.push_back(res);
   return res;
 }

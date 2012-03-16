@@ -18,6 +18,7 @@ namespace klee {
   class ConstraintManager;
   class Expr;
   class SolverImpl;
+  class ExecutionState;
 
   struct Query {
     static const ConstraintManager emptyConstraintManager;
@@ -241,7 +242,7 @@ namespace klee {
   Solver *createPCLoggingSolver(Solver *s, std::string path);
 
   /// setPCLoggingSolverState - Set current state for PCLoggingSolver
-  void setPCLoggingSolverStateID(Solver *s, uint64_t stateID);
+  void setPCLoggingSolverStateID(Solver *s, ExecutionState* stateID);
 
   /// createParallelSolver - Create a solver which will solve high-level
   /// disjunctions in parallel.

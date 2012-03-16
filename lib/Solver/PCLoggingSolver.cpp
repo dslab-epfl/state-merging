@@ -15,8 +15,12 @@
 #include "klee/util/ExprPPrinter.h"
 #include "klee/Internal/Support/QueryLog.h"
 #include "klee/Internal/System/Time.h"
+#include "klee/ExecutionState.h"
+#include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
 
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_os_ostream.h"
 
 #include <fstream>
 
@@ -32,7 +36,7 @@ class PCLoggingSolver : public SolverImpl {
   ExprPPrinter *printer;
   unsigned queryCount;
   double startTime;
-  uint64_t stateID;
+  ExecutionState* state;
 
   void startQuery(const Query& query, const char *typeName,
                   const ref<Expr> *evalExprsBegin = 0,
@@ -43,8 +47,17 @@ class PCLoggingSolver : public SolverImpl {
     uint64_t instructions = S ? S->getValue() : 0;
     os << "# Query " << queryCount++ << " -- "
        << "Type: " << typeName << ", "
-       << "StateID: 0x" << std::hex << stateID << std::dec << ", "
+       << "StateID: 0x" << std::hex << state << std::dec << ", "
        << "Instructions: " << instructions << "\n";
+
+    if (state) {
+        if (state->isDuplicate)
+            os << "# (Duplicate)\n";
+        KInstruction* ki = state->prevPC();
+        os << "# Instruction at " << ki->info->file << ":" << ki->info->line
+             << " (assembly line " << ki->info->assemblyLine << ")\n";
+    }
+
     printer->printQuery(os, query.constraints, query.expr,
                         evalExprsBegin, evalExprsEnd,
                         evalArraysBegin, evalArraysEnd);
@@ -65,7 +78,7 @@ public:
     os(path.c_str(), std::ios::trunc),
     printer(ExprPPrinter::create(os)),
     queryCount(0),
-    stateID(0) {
+    state(0) {
   }                                                      
   ~PCLoggingSolver() {
     delete printer;
@@ -141,8 +154,8 @@ public:
     return success;
   }
 
-  void setCurrentStateID(uint64_t _stateID) {
-    stateID = _stateID;
+  void setCurrentStateID(ExecutionState* _state) {
+    state = _state;
   }
 
   void cancelPendingJobs() { solver->impl->cancelPendingJobs(); }
@@ -154,6 +167,6 @@ Solver *klee::createPCLoggingSolver(Solver *_solver, std::string path) {
   return new Solver(new PCLoggingSolver(_solver, path));
 }
 
-void klee::setPCLoggingSolverStateID(Solver *s, uint64_t stateID) {
-  s->impl->setCurrentStateID(stateID);
+void klee::setPCLoggingSolverStateID(Solver *s, ExecutionState* state) {
+  s->impl->setCurrentStateID(state);
 }

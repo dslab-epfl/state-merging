@@ -59,7 +59,7 @@ namespace klee {
 
     virtual void cancelPendingJobs() = 0;
 
-    virtual void setCurrentStateID(uint64_t) {}
+    virtual void setCurrentStateID(ExecutionState*) {}
 };
 
 }

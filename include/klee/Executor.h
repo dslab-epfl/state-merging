@@ -70,6 +70,9 @@ namespace klee {
   struct StackFrame;
   class StatsTracker;
   class TimingSolver;
+  class Solver;
+  class STPSolver;
+  class PCLoggingSolver;
   class TreeStreamWriter;
 
   /// \todo Add a context object to keep track of data only live
@@ -111,6 +114,7 @@ private:
 
   ExternalDispatcher *externalDispatcher;
   TimingSolver *solver;
+  std::vector<Solver*> loggingSolvers;
   MemoryManager *memory;
   std::set<ExecutionState*> states;
   StatsTracker *statsTracker;
@@ -183,6 +187,15 @@ private:
 
   std::ostream* constraintsLog;
 
+  /// Hack to try the same concretization in duplicates
+  mutable std::vector< ref<Expr> > getValuePreferences;
+
+  Solver *constructSolverChain(STPSolver *stpSolver,
+                               std::string queryLogPath,
+                               std::string stpQueryLogPath,
+                               std::string queryPCLogPath,
+                               std::string stpQueryPCLogPath);
+
   llvm::Function* getCalledFunction(llvm::CallSite &cs, ExecutionState &state);
   
   void executeInstruction(ExecutionState &state, KInstruction *ki);
@@ -229,7 +242,7 @@ private:
   // Given a concrete object in our [klee's] address space, add it to
   // objects checked code can reference.
   MemoryObject *addExternalObject(ExecutionState &state, void *addr, 
-                                  unsigned size, bool isReadOnly);
+                                  unsigned size, bool isReadOnly, const char* name);
 
   void initializeGlobalObject(ExecutionState &state, ObjectState *os, 
 			      llvm::Constant *c,

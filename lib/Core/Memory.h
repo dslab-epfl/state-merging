@@ -32,6 +32,7 @@ namespace klee {
 class BitArray;
 class MemoryManager;
 class Solver;
+class KInstruction;
 
 class MemoryObject {
   friend class STPBuilder;
@@ -103,7 +104,7 @@ public:
   /// Get an identifying string for this allocation.
 	template<class OStream>
 	void getAllocInfo(OStream &info) const {
-		info << "MO" << id << "[" << size << "]";
+        info << "MO" << id << "(" << name << ")[" << size << "]";
 
 		if (allocSite) {
 			info << " allocated at ";

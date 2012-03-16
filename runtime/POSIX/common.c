@@ -56,6 +56,7 @@ const char *__concretize_string(const char *s) {
 
   for (i=0; ; ++i) {
     char c = *sc;
+      /*
     if (!(i&(i-1))) {
       if (!c) {
         *sc++ = 0;
@@ -64,11 +65,12 @@ const char *__concretize_string(const char *s) {
         *sc++ = '/';
       }
     } else {
+    */
       char cc = (char) klee_get_valuel((long)c);
       klee_assume(cc == c);
       *sc++ = cc;
       if (!cc) break;
-    }
+    //}
   }
 
   return s;

@@ -629,8 +629,11 @@ static bool areAddressSpacesCompatible(const AddressSpace &a, const AddressSpace
       return false;
     }
     if (ai->second != bi->second) {
-      //if (DebugLogStateMerge)
-      //  std::cerr << "\t\tmutated: " << ai->first->id << "\n";
+      if (DebugLogStateMerge) {
+        std::string str;
+        ai->first->getAllocInfo(str);
+        std::cerr << "\t\tmutated: " << str << "\n";
+      }
       mutated.insert(ai->first);
 #if 0
       // XXX: for now we refuse to merge states that has different concrete
@@ -1002,7 +1005,18 @@ ExecutionState* ExecutionState::merge(const ExecutionState &b, bool copy) {
   for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
          ie = commonConstraints.end(); it != ie; ++it)
     a.constraints().addConstraint(*it);
+
+#if 1
   a.constraints().addConstraint(OrExpr::create(inA, inB));
+#else
+  for (std::set< ref<Expr> >::iterator itA = aSuffix.begin(),
+         ieA = aSuffix.end(); itA != ieA; ++itA) {
+    for (std::set< ref<Expr> >::iterator itB = bSuffix.begin(),
+           ieB = bSuffix.end(); itB != ieB; ++itB) {
+      a.constraints().addConstraint(OrExpr::create(*itA, *itB));
+    }
+  }
+#endif
 
   a.queryCost += b.queryCost;
   a.weight += b.weight;

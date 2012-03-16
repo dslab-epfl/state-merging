@@ -329,7 +329,7 @@ namespace klee {
   RNG theRNG;
 }
 
-Solver *constructSolverChain(STPSolver *stpSolver,
+Solver *Executor::constructSolverChain(STPSolver *stpSolver,
                              std::string queryLogPath,
                              std::string stpQueryLogPath,
                              std::string queryPCLogPath,
@@ -349,9 +349,11 @@ Solver *constructSolverChain(STPSolver *stpSolver,
   }
 
 
-  if (UseSTPQueryPCLog)
+  if (UseSTPQueryPCLog) {
     solver = createPCLoggingSolver(solver, 
                                    stpQueryLogPath);
+    loggingSolvers.push_back(solver);
+  }
 
   if (UseFastCexSolver)
     solver = createFastCexSolver(solver);
@@ -368,9 +370,11 @@ Solver *constructSolverChain(STPSolver *stpSolver,
   if (DebugValidateSolver)
     solver = createValidatingSolver(solver, stpSolver);
 
-  if (UseQueryPCLog)
+  if (UseQueryPCLog) {
     solver = createPCLoggingSolver(solver, 
                                    queryPCLogPath);
+    loggingSolvers.push_back(solver);
+  }
   
   return solver;
 }
@@ -505,9 +509,10 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
 
 MemoryObject * Executor::addExternalObject(ExecutionState &state, 
                                            void *addr, unsigned size, 
-                                           bool isReadOnly) {
+                                           bool isReadOnly,
+                                           const char* name) {
   MemoryObject *mo = memory->allocateFixed((uint64_t) (unsigned long) addr, 
-                                           size, 0);
+                                           size, 0, name);
   ObjectState *os = bindObjectInState(state, mo, false);
   for(unsigned i = 0; i < size; i++)
     os->write8(i, ((uint8_t*)addr)[i]);
@@ -553,7 +558,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 #ifndef DARWIN
   /* From /usr/include/errno.h: it [errno] is a per-thread variable. */
   int *errno_addr = __errno_location();
-  addExternalObject(state, (void *)errno_addr, sizeof *errno_addr, false);
+  addExternalObject(state, (void *)errno_addr, sizeof *errno_addr, false, "errno_addr");
 
   /* from /usr/include/ctype.h:
        These point into arrays of 384, so they can be indexed by any `unsigned
@@ -561,18 +566,18 @@ void Executor::initializeGlobals(ExecutionState &state) {
        [-128,-1).  ISO C requires that the ctype functions work for `unsigned */
   const uint16_t **addr = __ctype_b_loc();
   addExternalObject(state, (void *)(*addr-128), 
-                    384 * sizeof **addr, true);
-  addExternalObject(state, addr, sizeof(*addr), true);
+                    384 * sizeof **addr, true, "__ctype_b_loc_m128");
+  addExternalObject(state, addr, sizeof(*addr), true, "__ctype_b_loc");
     
   const int32_t **lower_addr = __ctype_tolower_loc();
   addExternalObject(state, (void *)(*lower_addr-128), 
-                    384 * sizeof **lower_addr, true);
-  addExternalObject(state, lower_addr, sizeof(*lower_addr), true);
+                    384 * sizeof **lower_addr, true, "__ctype_tolower_loc_m128");
+  addExternalObject(state, lower_addr, sizeof(*lower_addr), true, "__ctype_tolower_loc");
   
   const int32_t **upper_addr = __ctype_toupper_loc();
   addExternalObject(state, (void *)(*upper_addr-128), 
-                    384 * sizeof **upper_addr, true);
-  addExternalObject(state, upper_addr, sizeof(*upper_addr), true);
+                    384 * sizeof **upper_addr, true, "__ctype_toupper_loc_m128");
+  addExternalObject(state, upper_addr, sizeof(*upper_addr), true, "__ctype_toupper_loc");
 #endif
 #endif
 #endif
@@ -646,7 +651,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
           klee_message("NOTE: allocated global at asm specified address: %#08llx"
                        " (%llu bytes)",
                        (long long) address, (unsigned long long) size);
-          mo = memory->allocateFixed(address, size, &*i);
+          mo = memory->allocateFixed(address, size, &*i, 0);
           mo->isUserSpecified = true; // XXX hack;
         }
       }
@@ -1292,11 +1297,41 @@ void Executor::executeGetValue(ExecutionState &state,
     seedMap.find(&state);
   if (it==seedMap.end() || isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    bool success = solver->getValue(state, e, value);
-    assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
-    //CLOUD9_DEBUG("Concrete value: " << value);
-    bindLocal(target, state, value);
+
+    if (KeepMergedDuplicates && state.isDuplicate
+            && !getValuePreferences.empty()) {
+      ExecutionState tmp(state);
+      std::vector< ref<Expr> >::const_iterator pi =
+          getValuePreferences.begin(), pie = getValuePreferences.end();
+      for (; pi != pie; ++pi) {
+        bool mustBeTrue;
+        bool success = solver->mustBeTrue(tmp, Expr::createIsZero(*pi),
+                                          mustBeTrue);
+        assert(success);
+        if (!mustBeTrue) {
+            tmp.addConstraint(*pi);
+        } else {
+            continue;
+        }
+      }
+
+      bool success = solver->getValue(tmp, e, value);
+      assert(success && "FIXME: Unhandled solver failure");
+      (void) success;
+      //CLOUD9_DEBUG("Concrete value: " << value);
+      bindLocal(target, state, value);
+
+    } else {
+      bool success = solver->getValue(state, e, value);
+      assert(success && "FIXME: Unhandled solver failure");
+      (void) success;
+      //CLOUD9_DEBUG("Concrete value: " << value);
+      bindLocal(target, state, value);
+
+      if (KeepMergedDuplicates && !state.isDuplicate) {
+          getValuePreferences.push_back(EqExpr::create(e, value));
+      }
+    }
   } else {
     std::set< ref<Expr> > values;
     for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
@@ -3426,11 +3461,13 @@ void Executor::bindModuleConstants() {
 
 void Executor::stepInState(ExecutionState *state) {
   assert(addedStates.count(state) == 0);
+  assert(state->duplicates.empty() || state->multiplicity > 1);
 
   std::set<ExecutionState*> duplicates;
   duplicates.swap(state->duplicates);
   state->multiplicityExact = std::max(duplicates.size(), 1ul);
 
+  getValuePreferences.clear();
   KInstruction *ki = state->pc();
 
 #if 0
@@ -3469,8 +3506,10 @@ void Executor::stepInState(ExecutionState *state) {
   uint64_t executionTime = 0, duplicatesExecutionTime = 0;
   resetTimers();
 
-  if (UseQueryPCLog)
-    setPCLoggingSolverStateID(solver->solver, uint64_t(state));
+  if (UseQueryPCLog) {
+    foreach(Solver* s, loggingSolvers)
+      setPCLoggingSolverStateID(s, state);
+  }
 
   assert(addedStates.size() == 0);
 
@@ -3496,8 +3535,10 @@ void Executor::stepInState(ExecutionState *state) {
   foreach (ExecutionState* addedState, addedStates)
     updateQceMapOnExec(*addedState);
 
-  if (UseQueryPCLog)
-    setPCLoggingSolverStateID(solver->solver, uint64_t(0));
+  if (UseQueryPCLog) {
+    foreach(Solver* s, loggingSolvers)
+      setPCLoggingSolverStateID(s, 0);
+  }
   state->stateTime++; // Each instruction takes one unit of time
 
   processTimers(state, MaxInstructionTime);
@@ -3527,13 +3568,18 @@ void Executor::stepInState(ExecutionState *state) {
       assert(duplicate->isDuplicate);
       //assert(/*stateIsTerminated || */duplicate->pc() == state->prevPC());
       // XXX
-      if (duplicate->pc() != state->prevPC())
+      if (duplicate->pc() != state->prevPC()) {
+        klee_warning("*** Duplicate diverged");
+        delete duplicate;
         continue;
+      }
       ki = duplicate->pc();
       duplicate->setPrevPC(duplicate->pc());
       duplicate->setPC(duplicate->pc().next());
-      if (UseQueryPCLog)
-        setPCLoggingSolverStateID(solver->solver, uint64_t(duplicate));
+      if (UseQueryPCLog) {
+        foreach(Solver* s, loggingSolvers)
+          setPCLoggingSolverStateID(s, duplicate);
+      }
       {
         WallTimer timer;
         duplicate->lastResolveResult = 0;
@@ -3542,8 +3588,10 @@ void Executor::stepInState(ExecutionState *state) {
         duplicatesExecutionTime += time;
         stats::duplicatesExecutionTime += time;
       }
-      if (UseQueryPCLog)
-        setPCLoggingSolverStateID(solver->solver, 0);
+      if (UseQueryPCLog) {
+        foreach(Solver* s, loggingSolvers)
+          setPCLoggingSolverStateID(s, 0);
+      }
       duplicate->stateTime++;
 
       //assert(stats::forks.getValue() == forks + addedStates.size());
@@ -3581,7 +3629,7 @@ void Executor::stepInState(ExecutionState *state) {
             if (match) {
               //assert(!found);
               if (found) {
-                klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
+                klee_warning("*** Cannot match duplicate (more than one candidate)! Paths computation are no longer exact.");
               }
               found = true;
               nextMain->duplicates.insert(addedState);
@@ -3590,7 +3638,7 @@ void Executor::stepInState(ExecutionState *state) {
           }
           //assert(found);
           if (!found) {
-            klee_warning("*** Cannot match duplicate! Paths computation are no longer exact.");
+            klee_warning("*** Cannot match duplicate (no candidates)! Paths computation are no longer exact.");
             // These will be fixed later, when states will diverge
             foreach (ExecutionState* nextMain, nextStates) {
               nextMain->duplicates.insert(addedState);
@@ -3627,7 +3675,7 @@ void Executor::stepInState(ExecutionState *state) {
   }
 
   if (KeepMergedDuplicates && DebugMergeSlowdown &&
-      executionTime > 50 && executionTime > 10*duplicatesExecutionTime) {
+      executionTime > 50 && executionTime > 5*duplicatesExecutionTime) {
     klee_warning("Merged state is slow: %g instead of %g for individual states",
                  executionTime / 1000000., duplicatesExecutionTime / 1000000.);
     KInstruction *ki = (KInstruction*) state->prevPC();
@@ -3723,7 +3771,9 @@ void Executor::stepInState(ExecutionState *state) {
 
 	fireControlFlowEvent(state, ::cloud9::worker::STEP);
 
-	updateStates(state);
+    updateStates(state);
+
+    getValuePreferences.clear();
 }
 
 void Executor::run(ExecutionState &initialState) {
@@ -4999,7 +5049,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
   if (!NoPreferCex) {
     for (unsigned i = 0; i != state.symbolics.size(); ++i) {
       const MemoryObject *mo = state.symbolics[i].first;
-      std::vector< ref<Expr> >::const_iterator pi = 
+      std::vector< ref<Expr> >::const_iterator pi =
         mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
       for (; pi != pie; ++pi) {
         bool mustBeTrue;
