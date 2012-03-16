@@ -1,6 +1,9 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 
 import sys
+import pickle
+import socket
+import math
 from data import Experiment, ClassDict
 from itertools import izip
 from scipy import *
@@ -403,6 +406,180 @@ def print_time(t):
         for exp in tool_exps:
             print ' '*8, ' '.join(['%8s' % c for c in exp])
 
+def compute_ttime(exps=None):
+    if exps is None:
+        exps = el
+
+    exps_c = ['inf', '1', '1e-2', '1e-4', '1e-6', '1e-8', '1e-10', '1e-12', '1e-14', '1e-16', '1e-18', '1e-20', '0t']
+    exps_c = [x.replace('-', '_') for x in exps_c]
+
+    result = { None: exps_c }
+    exps = categorize_exps(exps)
+    for tool, exp in exps.iteritems():
+        result_tool = []
+        for c in exps_c:
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                fmt = '%.0f'
+                if not exp[c].is_done:
+                    fmt = '>=' + fmt
+                result_tool.append(fmt % (exp[c].stats.WallTime[-1]))
+            else:
+                result_tool.append('')
+        result[tool] = result_tool
+
+    return result
+
+def print_ttime(t):
+    print ' '*8, ' '.join(['%8s' % c for c in t[None]])
+
+    for tool, exp in t.iteritems():
+        if tool is None:
+            continue
+        print '%8s' % tool, ' '.join(['%8s' % c for c in exp])
+
+def get_stat_at(e, stat, t, x='WallTime'):
+    idx = where(e.stats[x] >= t)[0][:1]
+    if idx:
+        return e.stats[stat][idx[0]]
+    else:
+        return 0
+
+def compute_lcov(exps=None):
+    if exps is None:
+        exps = el
+
+    exps_c = 'vanilla lazy static'.split()
+
+    result = { None: exps_c + ['total'] + exps_c }
+    exps = categorize_exps(exps)
+    for tool, exp in exps.iteritems():
+        min_time = 3600
+        for c in exps_c:
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                t = exp[c].stats.WallTime[-1]
+                if t < min_time:
+                    min_time = t
+
+        result_tool = []
+        total_insts = 0
+        for c in exps_c:
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                result_tool.append(int(get_stat_at(exp[c],
+                    'GloballyCoveredInstructions', min_time)))
+                total_insts = exp[c].stats.GloballyCoveredInstructions[0] + \
+                              exp[c].stats.GloballyUncoveredInstructions[0]
+            else:
+                result_tool.append(0)
+
+        result_tool.append(total_insts)
+
+        lsm_done = False
+        ssm_done = False
+
+        for c in exps_c:
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                pct = float(get_stat_at(exp[c], 'GloballyCoveredInstructions',
+                                min_time)) / total_insts
+                if exp[c].is_done:
+                    result_tool.append('* %.2f' % pct)
+                    if c == 'lazy':
+                        lsm_done = True
+                    elif c == 'static':
+                        ssm_done = True
+                else:
+                    result_tool.append('  %.2f' % pct)
+            else:
+                result_tool.append('')
+
+        if not lsm_done and not ssm_done:
+            result[tool] = result_tool
+
+    return result
+
+def print_lcov(l):
+    print ' '*8, ' '.join(['%8s' % c for c in l[None]])
+
+    for tool, exp in l.iteritems():
+        if tool is None:
+            continue
+        print '%8s' % tool, ' '.join(['%8s' % c for c in exp])
+
+def fit_c1c2(el):
+    el.pfit = polyfit(log(el.stats.ForksMult+1), log(el.stats.ForksMultExact+1), 1)
+    return el.pfit
+
+def compute_forks_estimate(el, pfit):
+    el.stats['ForksEstimate'] = ((el.stats.ForksMult+1) ** (pfit[0]*1.00)) * (math.e**(pfit[1])) 
+    return el.stats.ForksEstimate
+
+def compute_pcov(exps=None):
+    if exps is None:
+        exps = el
+
+    result = { None: ['vanilla', 'lazy', 'ratio', 'c1', 'c2', 'min_time', 'klee_done', 'lazy_done',
+                      'dup_time', 'dup_dup_time'] }
+    exps = categorize_exps(exps)
+    for tool, exp in exps.iteritems():
+        if 'lazy_dup' not in exp:
+            print 'WARNING: no lazy_dup for', tool
+            continue
+
+        min_time = 3600
+        for c in ('vanilla', 'lazy'):
+            if exp.has_key(c) and 'WallTime' in exp[c].stats:
+                t = exp[c].stats.WallTime[-1]
+                if t < min_time:
+                    min_time = t
+
+        klee_done = False
+        lazy_done = False
+
+        result_tool = []
+        if exp.has_key('vanilla') and 'WallTime' in exp['vanilla'].stats:
+            result_tool.append(float(get_stat_at(exp['vanilla'],
+                                            'Forks', min_time, x='WallTime')))
+            klee_done = exp['vanilla'].is_done
+        else:
+            result_tool.append(0.0)
+
+        if exp.has_key('lazy') and 'WallTime' in exp['lazy'].stats:
+            pfit = fit_c1c2(exp['lazy_dup'])
+            compute_forks_estimate(exp['lazy'], pfit)
+            result_tool.append(float(get_stat_at(exp['lazy'],
+                                            'ForksEstimate' if klee_done else 'ForksMult',
+                                            min_time, x='WallTime')))
+            if result_tool[0]:
+                result_tool.append(result_tool[1] / result_tool[0])
+            else:
+                result_tool.append(0)
+            result_tool.append(pfit[1])
+            result_tool.append(pfit[0])
+            lazy_done = exp['lazy'].is_done
+        else:
+            result_tool.append(0.0)
+            result_tool.append(0.0)
+            result_tool.append(0.0)
+            result_tool.append(0.0)
+
+        result_tool.append(min_time)
+        result_tool.append(klee_done)
+        result_tool.append(lazy_done)
+
+        result_tool.append(exp['lazy_dup'].stats.ExecutionTime[-1])
+        result_tool.append(exp['lazy_dup'].stats.ExecutionDuplicatesTime[-1])
+
+        result[tool] = result_tool
+
+    return result
+
+def print_pcov(l):
+    print ' '*8, ' '.join(['%8s' % c for c in l[None]])
+
+    for tool, exp in l.iteritems():
+        if tool is None:
+            continue
+        print '%8s' % tool, ' '.join(['%8.3g' % c for c in exp])
+
 def print_diffsym(r):
     for tool, rl in r.iteritems():
         print tool + ':'
@@ -439,6 +616,9 @@ if __name__ == '__main__':
                         help='Timeout in seconds after which an experiment is considered completed')
     parser.add_argument('--diffsym', action='store_true', help='Compute and store diffsym results')
     parser.add_argument('--time', action='store_true', help='Compute time for results')
+    parser.add_argument('--ttime', action='store_true', help='Compute ttime for results')
+    parser.add_argument('--lcov', action='store_true', help='Compute lcov for results')
+    parser.add_argument('--pcov', action='store_true', help='Compute pcov for results')
     parser.add_argument('experiments', nargs='+', help='Experiments to analyze')
 
     args = parser.parse_args()
@@ -470,17 +650,29 @@ if __name__ == '__main__':
 
     if args.diffsym:
         print 'Computing diffsym data...'
-        r = compute_diffsym(timeout)
-        import pickle
+        r = compute_diffsym(el, args.timeout)
         pickle.dump(r, open('diffsym.pickle', 'w'))
         print_diffsym(r)
 
     if args.time:
         t = compute_time(el)
-        import pickle
-        import socket
         pickle.dump(t, open('diffsym.%s.pickle' % socket.gethostname(), 'w'))
         print_time(t)
+
+    if args.ttime:
+        t = compute_ttime(el)
+        pickle.dump(t, open('ttime.%s.pickle' % socket.gethostname(), 'w'))
+        print_ttime(t)
+
+    if args.lcov:
+        l = compute_lcov(el)
+        pickle.dump(l, open('lcov.%s.pickle' % socket.gethostname(), 'w'))
+        print_lcov(l)
+
+    if args.pcov:
+        p = compute_pcov(el)
+        pickle.dump(p, open('pcov.%s.pickle' % socket.gethostname(), 'w'))
+        print_pcov(p)
 
     #if not args.interactive:
     #    sys.exit(0)
