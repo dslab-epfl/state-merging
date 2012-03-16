@@ -16,11 +16,11 @@ STP_LIBS := stp_c_interface.a stp_AST.a stp_bitvec.a stp_constantbv.a stp_sat.a 
 	stp_simplifier.a
 # FIXME: Ideally we wouldn't have any LLVM dependencies here, which
 # means kicking out klee's Support.
-USEDLIBS = kleaverSolver.a kleaverExpr.a kleeSupport.a kleeBasic.a cloud9instrum.a cloud9common.a 
+USEDLIBS = kleaverSolver.a kleaverExpr.a kleeCore.a kleeSupport.a kleeBasic.a cloud9instrum.a cloud9common.a 
 ifeq ($(ENABLE_EXT_STP),0)
   USEDLIBS += $(STP_LIBS)
 endif
-LINK_COMPONENTS = support
+LINK_COMPONENTS = linker support
 
 include $(LEVEL)/Makefile.common
 
