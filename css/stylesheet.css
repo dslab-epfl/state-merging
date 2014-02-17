@@ -57,31 +57,37 @@ body {
 }
 
 a {
-  color: #d5000d;
+  /*color: #d5000d;*/
+  color: #222;
 }
 a:hover {
-  color: #c5000c;
+  /*color: #c5000c;*/
+  color: #222;
 }
 
 header {
   padding-top: 35px;
   padding-bottom: 25px;
+  text-align: center;
 }
 
 header h1 {
-  font-family: 'Chivo', 'Helvetica Neue', Helvetica, Arial, serif; font-weight: 900;
-  letter-spacing: -1px;
-  font-size: 48px;
+  font-weight: bold;
+  font-size: 25px;
   color: #303030;
   line-height: 1.2;
+  margin-bottom: 25px;
 }
 
 header h2 {
-  letter-spacing: -1px;
-  font-size: 24px;
+  font-size: 14px;
   color: #aaa;
   font-weight: normal;
-  line-height: 1.3;
+  line-height: 1.1;
+}
+
+header hr {
+  margin-top: 25px;
 }
 
 #container {
@@ -90,16 +96,12 @@ header h2 {
 }
 
 .inner {
-  width: 620px;
+  width: 700px;
   margin: 0 auto;
 }
 
 #container .inner img {
   max-width: 100%;
-}
-
-#downloads {
-  margin-bottom: 40px;
 }
 
 a.button {
@@ -165,6 +167,26 @@ a.button span {
   margin-right: 0;
 }
 
+#publications {
+    margin-top: 25px;
+}
+
+.highlight {
+    display: inline-block;
+    width: 45% !important;
+}
+
+.highlight-pic {
+    padding: 10px;
+    display: inline-block;
+    width: 45%;
+    height: 100px;
+}
+
+pre {
+    margin-bottom: 0 !important;
+}
+
 code, pre {
   font-family: Monaco, "Bitstream Vera Sans Mono", "Lucida Console", Terminal;
   color: #222;
@@ -173,21 +195,16 @@ code, pre {
 }
 
 code {
-  background-color: #f2f2f2;
   border: solid 1px #ddd;
   padding: 0 3px;
 }
 
 pre {
-  padding: 20px;
-  background: #303030;
-  color: #f2f2f2;
+  padding: 10px;
   text-shadow: none;
   overflow: auto;
 }
 pre code {
-  color: #f2f2f2;
-  background-color: #303030;
   border: none;
   padding: 0;
 }
@@ -252,7 +269,8 @@ h2 {
 } 
 
 h3 {
-  color: #d5000d;
+  /*color: #d5000d;*/
+  color: #222;
   font-size: 18px;
   font-weight: bold;
   margin-bottom: 8px;
@@ -351,9 +369,6 @@ footer a:hover {
   header {
     padding-top: 10px;
     padding-bottom: 10px;
-  }
-  #downloads {
-    margin-bottom: 25px;
   }
   #download-zip, #download-tar-gz {
     display: none;
