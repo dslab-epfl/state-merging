@@ -65,13 +65,13 @@ private:
 
 	PartitioningStrategy *getPartitioningStrategy();
 
-	void processResponse(LBResponseMessage &response);
+//	void processResponse(LBResponseMessage &response);
 
 	void updateLogPrefix();
 
-	void sendJobStatistics(WorkerReportMessage &message);
-	void sendCoverageUpdates(WorkerReportMessage &message);
-	void sendPartitionStatistics(WorkerReportMessage &message);
+//	void sendJobStatistics(WorkerReportMessage &message);
+//	void sendCoverageUpdates(WorkerReportMessage &message);
+//	void sendPartitionStatistics(WorkerReportMessage &message);
 
 public:
 	LBConnection(boost::asio::io_service &service, JobManager *jobManager);

@@ -51,7 +51,7 @@ CXX.Flags += -DKLEE_DIR=\"$(PROJ_OBJ_ROOT)\"
 
 #LD.Flags += -lrt
 
-%.pb.cc %.pb.h: %.proto
-	$(PROTOC) --proto_path=$$(dirname $<) --cpp_out=./ $<
-	mkdir -p $(PROJ_OBJ_ROOT)/include/cloud9
-	cp $(basename $@).h $(PROJ_OBJ_ROOT)/include/cloud9
+#%.pb.cc %.pb.h: %.proto
+#	$(PROTOC) --proto_path=$$(dirname $<) --cpp_out=./ $<
+#	mkdir -p $(PROJ_OBJ_ROOT)/include/cloud9
+#	cp $(basename $@).h $(PROJ_OBJ_ROOT)/include/cloud9

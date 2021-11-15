@@ -16,7 +16,7 @@
 #include "../simplifier/bvsolver.h"
 
 #include "cloud9/instrum/InstrumentationManager.h"
-#include "DIMACSSerializer.h"
+//#include "DIMACSSerializer.h"
 
 #include "llvm/Support/CommandLine.h"
 
@@ -69,7 +69,7 @@ namespace BEEV {
  bool BeevMgr::toSATandSolve(MINISAT::Solver& newS, BeevMgr::ClauseList& cll)
  {
     CountersAndStats("SAT Solver");
-    DIMACSSerializer dimacs;
+    //DIMACSSerializer dimacs;
 
     //iterate through the list (conjunction) of ASTclauses cll
     BeevMgr::ClauseList::const_iterator i = cll.begin(), iend = cll.end();
@@ -84,7 +84,7 @@ namespace BEEV {
     for(; i!=iend; i++) {    
       //Clause for the SATSolver
       MINISAT::vec<MINISAT::Lit> satSolverClause;
-      DIMACSSerializer::Clause dimacsClause;
+      //DIMACSSerializer::Clause dimacsClause;
       
       //now iterate through the internals of the ASTclause itself
       ASTVec::const_iterator j = (*i)->begin(), jend = (*i)->end();
@@ -100,14 +100,14 @@ namespace BEEV {
 	MINISAT::Lit l(v, negate);
 	satSolverClause.push(l);
 
-	if (DumpSAT)
-	  dimacsClause.push_back(std::make_pair(v+1, negate));
+	//if (DumpSAT)
+	//  dimacsClause.push_back(std::make_pair(v+1, negate));
 
       }
       newS.addClause(satSolverClause);
 
-      if (DumpSAT)
-        dimacs.addClause(dimacsClause);
+      //if (DumpSAT)
+      //  dimacs.addClause(dimacsClause);
 
       // clause printing.
       // (printClause<MINISAT::vec<MINISAT::Lit> >)(satSolverClause);
@@ -144,8 +144,8 @@ namespace BEEV {
     if (DumpSAT) {
       sprintf(fName, "sat%05d.cnf", counter);
 
-      dimacs.setVarCount(newS.nVars());
-      dimacs.serialize(fName);
+      //dimacs.setVarCount(newS.nVars());
+      //dimacs.serialize(fName);
     }
 
     Timer t;
@@ -160,8 +160,8 @@ namespace BEEV {
       os << t;
       os.flush();
 
-      dimacs.setDescription(os.str());
-      dimacs.serialize(fName);
+      //dimacs.setDescription(os.str());
+      //dimacs.serialize(fName);
     }
 
     counter++;

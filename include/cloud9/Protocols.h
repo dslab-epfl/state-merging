@@ -33,8 +33,8 @@
 #ifndef PROTOCOLS_H_
 #define PROTOCOLS_H_
 
-// TODO Fix this hack in the Makefile
-#include "cloud9/Cloud9Data.pb.h"
+// // TODO Fix this hack in the Makefile
+//#include "cloud9/Cloud9Data.pb.h"
 
 #include "cloud9/Logger.h"
 #include "cloud9/ExecutionPath.h"
@@ -169,11 +169,11 @@ ExecutionPathSetPin parseExecutionPathSet(const cloud9::data::ExecutionPathSet &
 void serializeExecutionPathSet(ExecutionPathSetPin &set,
 			cloud9::data::ExecutionPathSet &result);
 
-void parseStatisticUpdate(const cloud9::data::StatisticUpdate &update,
-		cov_update_t &data);
+//void parseStatisticUpdate(const cloud9::data::StatisticUpdate &update,
+//		cov_update_t &data);
 
-void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
-		cloud9::data::StatisticUpdate &update);
+//void serializeStatisticUpdate(const std::string &name, const cov_update_t &data,
+//		cloud9::data::StatisticUpdate &update);
  
 void connectSocket(boost::asio::io_service &service, tcp::socket &socket,
 		std::string &address, int port, boost::system::error_code &error);

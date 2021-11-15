@@ -1,5 +1,8 @@
 /* -*- mode: c++; c-basic-offset: 2; -*- */
 
+// SOLAL
+#include <unistd.h>
+
 // FIXME: This does not belong here.
 #include "../lib/Core/Common.h"
 

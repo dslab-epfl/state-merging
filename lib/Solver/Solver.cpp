@@ -49,6 +49,9 @@
 #include <signal.h>
 #include <pthread.h>
 
+// SOLAL
+#include <unistd.h>
+
 #include <iostream>
 #include <fstream>
 

@@ -1,3 +1,16 @@
+Run:
+
+```
+ln -s /usr/lib/x86_64-linux-gnu/libboost_thread.so /usr/lib/x86_64-linux-gnu/libboost_thread-mt.so
+ln -s /usr/lib/x86_64-linux-gnu/libboost_system.so /usr/lib/x86_64-linux-gnu/libboost_system-mt.so
+```
+
+Run `./configure` passing the LLVM folder as `--with-llvm`.
+
+Then `make`.
+
+---
+
 //===----------------------------------------------------------------------===//
 // Klee Symbolic Virtual Machine
 //===----------------------------------------------------------------------===//

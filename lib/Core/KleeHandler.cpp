@@ -44,6 +44,8 @@
 #include "Common.h"
 #include "cloud9/worker/WorkerCommon.h"
 
+// SOLAL
+#include <unistd.h>
 
 #include "klee/Config/config.h"
 #include "klee/Internal/System/Time.h"
